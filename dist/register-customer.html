@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>M | حساب عميل</title>
+<link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body class="auth-page">
+<main class="auth-card">
+<header class="auth-card-head">
+<a class="brand-lockup" href="index.html">
+<span class="brand-mark">M</span>
+<b>M</b>
+</a>
+<div class="language-switch">
+<button data-lang="ar">ع</button>
+<button data-lang="en">EN</button>
+</div>
+</header>
+<form class="auth-card-body register-form" data-role="client">
+<h1 data-ar="إنشاء حساب عميل" data-en="Create customer account">إنشاء حساب عميل</h1>
+<p data-ar="ارفع طلباتك وقارن العروض دون كشف هويتك للمورد." data-en="Upload requests and compare offers without revealing your identity.">ارفع طلباتك وقارن العروض دون كشف هويتك للمورد.</p>
+<div class="form-grid">
+<div class="field">
+<label data-ar="الاسم" data-en="Name">الاسم</label>
+<input name="name" required>
+</div>
+<div class="field">
+<label data-ar="الشركة" data-en="Company">الشركة</label>
+<input name="company" required>
+</div>
+<div class="field full">
+<label data-ar="البريد الإلكتروني" data-en="Email">البريد الإلكتروني</label>
+<input name="email" type="email" required>
+</div><div class="field full"><label for="accountPhone" data-ar="رقم التواصل مع رمز الدولة (للإدارة فقط)" data-en="Phone with country code (admin only)">رقم التواصل مع رمز الدولة (للإدارة فقط)</label><input id="accountPhone" name="phone" type="tel" autocomplete="tel" required>
+</div>
+<div class="field">
+<label data-ar="الدولة" data-en="Country">الدولة</label>
+<input name="country" required>
+</div>
+<div class="field">
+<label data-ar="كلمة المرور" data-en="Password">كلمة المرور</label>
+<input name="password" type="password" minlength="8" required>
+</div>
+</div>
+<div class="form-error">
+</div>
+<button class="btn btn-primary btn-wide" type="submit" data-ar="إنشاء حساب العميل" data-en="Create customer account">إنشاء حساب العميل</button>
+<div class="login-row">
+<a class="text-button" href="login.html?role=client" data-ar="لدي حساب بالفعل" data-en="I already have an account">لدي حساب بالفعل</a>
+</div>
+</form>
+</main>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/common.js">
+</script>
+<script src="assets/js/moderation.js"></script>
+<script src="assets/js/auth.js">
+</script>
+</body>
+</html>

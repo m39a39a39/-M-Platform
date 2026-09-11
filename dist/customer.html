@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>M | لوحة العميل</title>
+<link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+<header class="topbar">
+<a class="brand-lockup" href="index.html">
+<span class="brand-mark">M</span>
+<span>
+<b class="brand-name">M</b>
+<small class="brand-note" data-ar="مساحة العميل" data-en="Customer workspace">مساحة العميل</small>
+</span>
+</a>
+<div class="top-actions">
+<div class="language-switch">
+<button data-lang="ar">ع</button>
+<button data-lang="en">EN</button>
+</div>
+<div class="user-pill">
+<span class="avatar" data-avatar>ع</span>
+<span class="user-copy">
+<b class="user-name" data-user-name>
+</b>
+<small class="user-role" data-user-role>
+</small>
+</span>
+<button class="logout-btn" data-logout type="button">×</button>
+</div>
+</div>
+</header>
+<div class="app-shell">
+<aside class="sidebar">
+<div class="side-caption" data-ar="مساحة العمل" data-en="Workspace">مساحة العمل</div>
+<nav class="side-nav">
+<a class="nav-btn active" href="#requests" data-ar="الطلبات" data-en="Requests">الطلبات</a>
+<a class="nav-btn" href="#market" data-ar="العروض العامة" data-en="Public offers">العروض العامة</a>
+</nav>
+<div class="trust-card">
+<b data-ar="الخصوصية أولًا" data-en="Privacy first">الخصوصية أولًا</b>
+<p data-ar="لن يرى المورد اسمك أو بيانات تواصلك." data-en="Suppliers never see your name or contact details.">لن يرى المورد اسمك أو بيانات تواصلك.</p>
+</div>
+</aside>
+<main class="main" id="overview">
+<div class="page-head">
+<div>
+<h1 data-setting="customerTitle" data-ar="لوحة العميل" data-en="Customer dashboard">لوحة العميل</h1>
+<p data-setting="customerSubtitle" data-ar="ارفع طلباتك وتابع العروض المجهولة." data-en="Upload requests and track anonymous offers.">ارفع طلباتك وتابع العروض المجهولة.</p>
+</div>
+<button class="btn btn-primary" data-open-dialog="requestDialog" data-ar="+ طلب جديد" data-en="+ New request">+ طلب جديد</button>
+</div>
+<div class="stats">
+<div class="stat-card">
+<span class="stat-label" data-ar="طلباتي" data-en="My requests">طلباتي</span>
+<b class="stat-value" id="requestCount">0</b>
+</div>
+<div class="stat-card">
+<span class="stat-label" data-ar="قيد المراجعة" data-en="Under review">قيد المراجعة</span>
+<b class="stat-value" id="reviewCount">0</b>
+</div>
+<div class="stat-card">
+<span class="stat-label" data-ar="طلبات نشطة" data-en="Active requests">طلبات نشطة</span>
+<b class="stat-value" id="quoteCount">0</b>
+</div>
+<div class="stat-card">
+<span class="stat-label" data-ar="مكتملة أو تم اختيار عرض" data-en="Completed or quote selected">مكتملة أو تم اختيار عرض</span>
+<b class="stat-value" id="selectedCount">0</b>
+</div>
+</div>
+<section class="card" id="requests">
+<div class="card-head">
+<div>
+<h2 data-ar="طلباتي" data-en="My requests">طلباتي</h2>
+<p data-ar="لا تظهر هوية المورد في أي عرض." data-en="Supplier identity is hidden in every quote.">لا تظهر هوية المورد في أي عرض.</p>
+</div>
+</div>
+<div class="card-body" id="customerRequests">
+</div>
+</section>
+</main>
+</div>
+<div class="dialog-backdrop hidden" id="requestDialog">
+<section class="dialog large">
+<header class="dialog-head">
+<div>
+<h2 data-ar="طلب عرض سعر جديد" data-en="New quotation request">طلب عرض سعر جديد</h2>
+<p data-ar="أضف حتى 5 صور." data-en="Add up to 5 images.">أضف حتى 5 صور.</p>
+</div>
+<button class="dialog-close" data-close-dialog="requestDialog">×</button>
+</header>
+<form id="requestForm">
+<div class="dialog-body">
+<div class="form-grid">
+<div class="field full">
+<label data-ar="صور المنتج" data-en="Product images">صور المنتج</label>
+<div class="multi-uploader">
+<label class="upload-box compact">
+<input id="requestImages" type="file" accept="image/*" multiple>
+<span class="upload-content">
+<strong data-ar="اختر الصور" data-en="Choose images">اختر الصور</strong>
+<span data-ar="بحد أقصى 5" data-en="Maximum 5">بحد أقصى 5</span>
+</span>
+</label>
+<div class="image-preview-grid" id="requestPreview">
+</div>
+</div>
+</div>
+<div class="field">
+<label data-ar="اسم المنتج" data-en="Product name">اسم المنتج</label>
+<input id="requestProduct" required>
+</div>
+<div class="field">
+<label data-ar="الكمية" data-en="Quantity">الكمية</label>
+<input id="requestQty" type="number" min="1" required>
+</div>
+<div class="field">
+<label data-ar="دولة التسليم" data-en="Delivery country">دولة التسليم</label>
+<input id="requestCountry" required>
+</div>
+<div class="field">
+<label data-ar="تاريخ الحاجة" data-en="Needed date">تاريخ الحاجة</label>
+<input id="requestDate" type="date">
+</div>
+<div class="field full">
+<label data-ar="المواصفات" data-en="Specifications">المواصفات</label>
+<textarea id="requestSpecs" required>
+</textarea>
+</div>
+</div>
+<div class="form-error" id="requestError">
+</div>
+</div>
+<footer class="dialog-footer">
+<button type="button" class="btn btn-outline" data-close-dialog="requestDialog" data-ar="إلغاء" data-en="Cancel">إلغاء</button>
+<button type="submit" class="btn btn-primary" data-ar="إرسال للإدارة" data-en="Send to admin">إرسال للإدارة</button>
+</footer>
+</form>
+</section>
+</div>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/common.js">
+</script>
+<script src="assets/js/moderation.js"></script>
+<script src="assets/js/workflow.js"></script>
+<script src="assets/js/search.js"></script>
+<script src="assets/js/customer.js">
+</script>
+</body>
+</html>
