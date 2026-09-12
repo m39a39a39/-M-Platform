@@ -2,7 +2,10 @@ export class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }
 }
 export function config() {
-  const {SUPABASE_URL:url,SUPABASE_ANON_KEY:anon,SUPABASE_SERVICE_ROLE_KEY:service,APP_ORIGIN:origin}=process.env;
+  const {SUPABASE_URL:url,SUPABASE_ANON_KEY:anon,SUPABASE_SERVICE_ROLE_KEY:service,APP_ORIGIN:explicitOrigin,VERCEL_ENV:environment,VERCEL_BRANCH_URL:branchHost,VERCEL_URL:deploymentHost}=process.env;
+  // Use only Vercel-provided hostnames for preview fallback, never request headers.
+  const previewHost=environment==='preview'?(branchHost||deploymentHost):undefined;
+  const origin=explicitOrigin||(previewHost?`https://${previewHost}`:undefined);
   if(!url || !anon || !service || !origin || url.includes('YOUR_PROJECT')) throw new HttpError(503,'أكمل إعداد Supabase والخادم أولًا / Server configuration required');
   return {url:url.replace(/\/$/,''),anon,service,origin};
 }
