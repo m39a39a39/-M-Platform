@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>M | لوحة العميل</title>
 <link rel="stylesheet" href="assets/css/styles.css">
+<style>
+.customer-stats{grid-template-columns:repeat(5,minmax(0,1fr))}
+.new-quote-badge{display:inline-flex;align-items:center;justify-content:center;padding:5px 9px;border-radius:999px;background:var(--brand-soft);color:var(--brand-dark);font-size:.75rem;font-weight:850;white-space:nowrap}
+@media(max-width:1100px){.customer-stats{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:620px){.customer-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
 </head>
 <body>
 <header class="topbar">
@@ -52,7 +58,7 @@
 </div>
 <button class="btn btn-primary" data-open-dialog="requestDialog" data-ar="+ طلب جديد" data-en="+ New request">+ طلب جديد</button>
 </div>
-<div class="stats">
+<div class="stats customer-stats">
 <div class="stat-card">
 <span class="stat-label" data-ar="طلباتي" data-en="My requests">طلباتي</span>
 <b class="stat-value" id="requestCount">0</b>
@@ -64,6 +70,10 @@
 <div class="stat-card">
 <span class="stat-label" data-ar="طلبات نشطة" data-en="Active requests">طلبات نشطة</span>
 <b class="stat-value" id="quoteCount">0</b>
+</div>
+<div class="stat-card">
+<span class="stat-label" data-ar="عروض جديدة" data-en="New quotes">عروض جديدة</span>
+<b class="stat-value" id="newQuoteCount">0</b>
 </div>
 <div class="stat-card">
 <span class="stat-label" data-ar="مكتملة أو تم اختيار عرض" data-en="Completed or quote selected">مكتملة أو تم اختيار عرض</span>
