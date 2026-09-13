@@ -20,13 +20,13 @@ document.addEventListener('m:ready', async () => {
   function chosen(r,s){return r.selectedQuoteId || (s.quotes.some(q=>q.id===s.selectedQuote&&q.requestId===r.id)?s.selectedQuote:null);}
   function quoteCard(q,r,s) {
     const selected=chosen(r,s),enabled=R.userActive()&&R.requestOpen(r,s)&&R.offerOpen(q,s);
-    return '<article class="offer-card"><span class="offer-code">#'+E(q.id)+'</span><div class="offer-price">'+E(q.currency)+' '+E(q.unitPrice)+'</div>'+W.gallery(q.images)+
+    return '<article class="offer-card"><span class="offer-code">#'+E(W.ref(q))+'</span><div class="offer-price">'+E(q.currency)+' '+E(q.unitPrice)+'</div>'+W.gallery(q.images)+
       '<p class="preserve-lines">'+E(W.copy(q,'description'))+'</p><div class="offer-facts"><div>MOQ: '+E(q.moq)+'</div><div>'+M.tr('الإنتاج بالأيام','Production days')+': '+E(q.leadTime)+'</div><div>'+M.tr('العينة','Sample')+': '+E(q.sampleCost)+'</div></div>'+
       '<button class="btn btn-outline choose-quote" data-id="'+E(q.id)+'" '+(selected||!enabled?'disabled':'')+'>'+(!enabled?M.tr('غير متاح حاليًا','Currently unavailable'):selected===q.id?M.tr('تم اختيار هذا العرض','Selected'):selected?M.tr('اختير عرض آخر لهذا الطلب','Another quote selected'):M.tr('اختيار العرض','Select quote'))+'</button></article>';
   }
   function requestCard(r,s) {
     const quotes=s.quotes.filter(q=>q.requestId===r.id&&q.status==='published'&&R.offerVisible(q,s));
-    return '<article class="invite-card"><span class="request-id">#'+E(r.id)+'</span><h3>'+E(r.product)+'</h3>'+W.badge(R.stateLabel(r))+
+    return '<article class="invite-card"><span class="request-id">#'+E(W.ref(r))+'</span><h3>'+E(r.product)+'</h3>'+W.badge(R.stateLabel(r))+
       '<p>'+E(W.date(r.createdAt))+'</p>'+W.gallery(r.images)+'<p class="preserve-lines">'+E(r.specs)+'</p><div class="meta-list"><span class="meta-chip">'+M.tr('الكمية','Quantity')+': '+E(r.quantity)+'</span><span class="meta-chip">'+E(r.country)+'</span><span class="meta-chip">'+M.tr('تاريخ الاحتياج','Needed date')+': '+E(r.neededDate||'—')+'</span></div>'+
       '<details><summary>'+M.tr('سجل الطلب','Request history')+'</summary>'+W.history(r)+'</details><div class="offer-grid">'+quotes.filter(q=>view!=='selected'||q.id===chosen(r,s)).map(q=>quoteCard(q,r,s)).join('')+'</div></article>';
   }
@@ -40,15 +40,15 @@ document.addEventListener('m:ready', async () => {
     section.querySelector('.card-head p').textContent=M.tr('بيانات حسابك فقط — جميع الأطراف مجهولة الهوية.','Your account only — counterpart identities stay hidden.');
     let html='';
     if(view==='market') {
-      html='<div class="market-offer-grid">'+s.publicOffers.filter(W.available).filter(o=>search.match(o,[o.id,W.copy(o,'title'),W.copy(o,'description')])).map(o=>W.offerCard(o,user)).join('')+'</div>';
-      if(!s.publicOffers.filter(W.available).some(o=>search.match(o,[o.id,W.copy(o,'title'),W.copy(o,'description')])))html=W.empty();
+      html='<div class="market-offer-grid">'+s.publicOffers.filter(W.available).filter(o=>search.match(o,[W.ref(o),W.copy(o,'title'),W.copy(o,'description')])).map(o=>W.offerCard(o,user)).join('')+'</div>';
+      if(!s.publicOffers.filter(W.available).some(o=>search.match(o,[W.ref(o),W.copy(o,'title'),W.copy(o,'description')])))html=W.empty();
     } else if(view==='interests') {
-      html=s.interests.filter(i=>i.customerId===user.id).filter(i=>{const o=s.publicOffers.find(o=>o.id===i.offerId&&R.offerOpen(o,s));return search.match({...i,country:o?.country,status:i.status||'pending'},[i.offerId,o?W.copy(o,'title'):'']);}).map(i=>{
+      html=s.interests.filter(i=>i.customerId===user.id).filter(i=>{const o=s.publicOffers.find(o=>o.id===i.offerId&&R.offerOpen(o,s));return search.match({...i,country:o?.country,status:i.status||'pending'},[o?W.ref(o):'',o?W.copy(o,'title'):'']);}).map(i=>{
         const offer=s.publicOffers.find(o=>o.id===i.offerId&&R.offerOpen(o,s));
-        return '<article class="invite-card"><span>#'+E(i.offerId)+'</span><h3>'+E(offer?W.copy(offer,'title'):M.tr('عرض مؤرشف','Archived offer'))+'</h3>'+W.badge(i.status||'pending')+'<p>'+E(W.date(i.createdAt||i.requestedAt))+'</p>'+ (offer?W.gallery(offer.images):'')+W.history(i)+'</article>';
+        return '<article class="invite-card"><span>#'+E(W.ref(offer))+'</span><h3>'+E(offer?W.copy(offer,'title'):M.tr('عرض مؤرشف','Archived offer'))+'</h3>'+W.badge(i.status||'pending')+'<p>'+E(W.date(i.createdAt||i.requestedAt))+'</p>'+ (offer?W.gallery(offer.images):'')+W.history(i)+'</article>';
       }).join('')||W.empty();
     } else {
-      const filtered=mine.filter(r=>search.match(r,[r.id,r.product,r.specs,...s.quotes.filter(q=>q.requestId===r.id&&q.status==='published'&&R.offerVisible(q,s)).map(q=>q.id)])).filter(r=>view==='review'?r.status==='review':view==='sent'?r.status==='sent':view==='quotes'?quotes.some(q=>q.requestId===r.id):view==='selected'?chosen(r,s):true);
+      const filtered=mine.filter(r=>search.match(r,[W.ref(r),r.product,r.specs,...s.quotes.filter(q=>q.requestId===r.id&&q.status==='published'&&R.offerVisible(q,s)).map(q=>W.ref(q))])).filter(r=>view==='review'?r.status==='review':view==='sent'?r.status==='sent':view==='quotes'?quotes.some(q=>q.requestId===r.id):view==='selected'?chosen(r,s):true);
       html=filtered.map(r=>requestCard(r,s)).join('')||W.empty();
     }
     body.innerHTML=(!R.userActive()?'<p class="account-restriction">'+M.tr('الحساب موقوف؛ الإرسال والاختيار غير متاحين.','Account disabled; submissions and selection are unavailable.')+'</p>':'')+html; M.applySettings();
