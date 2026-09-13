@@ -36,7 +36,13 @@
     form.innerHTML='<input name="query" type="search" autocomplete="off"><button type="button" class="admin-search-clear" aria-label="Clear">×</button>';
     wrap.append(toggle,form);parent.append(wrap);
     const input=form.elements.query,clear=form.querySelector('.admin-search-clear');
-    const labels=()=>{const text=M.tr('بحث برقم الطلب أو العرض أو اسم العميل أو المورد','Search by request/offer number, customer or supplier name');input.placeholder=text;input.setAttribute('aria-label',text);toggle.title=M.tr('بحث','Search');toggle.querySelector('.sr-only').textContent=M.tr('بحث','Search');};
+    const labels=()=>{
+      const role=M.session()?.role;
+      const text=role==='admin'
+        ? M.tr('بحث برقم الطلب أو العرض أو اسم العميل أو المورد','Search by request/offer number, customer or supplier name')
+        : M.tr('بحث برقم الطلب أو العرض أو اسم المنتج','Search by request/offer number or product name');
+      input.placeholder=text;input.setAttribute('aria-label',text);toggle.title=M.tr('بحث','Search');toggle.querySelector('.sr-only').textContent=M.tr('بحث','Search');
+    };
     const update=()=>change();
     toggle.onclick=()=>{const open=form.classList.toggle('hidden')===false;toggle.setAttribute('aria-expanded',String(open));if(open)input.focus();};
     form.onsubmit=e=>{e.preventDefault();update();};
