@@ -12,7 +12,7 @@
     return data;
   }
   async function refresh(){snapshot=await request('state');return snapshot;}
-  const metadata=new Set(['id','version','createdAt','updatedAt','customerId','supplierId','customerName','supplierName','history','moderationHistory']);
+  const metadata=new Set(['id','displayNo','version','createdAt','updatedAt','customerId','supplierId','customerName','supplierName','history','moderationHistory']);
   async function storeImage(src){return src?.startsWith('data:')?(await request('uploads',{source:src})).src:src;}
   async function save(next){
     if(saving)throw Error('عملية حفظ جارية / Save in progress');saving=true;
