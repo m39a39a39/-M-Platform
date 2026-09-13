@@ -75,7 +75,7 @@ document.addEventListener('m:ready', async () => {
     try{await M.save(s);}catch{error.textContent=M.tr('تعذر الحفظ؛ تحقق من الاتصال بالخادم.','Could not save: check the server connection.');return;}
     e.target.reset();uploader.reset();pictures=[];error.textContent='';M.closeDialog('requestDialog');go('review');
   });
-  body.addEventListener('click', async e =>{
+  document.addEventListener('click', async e =>{
     const details=e.target.closest('.customer-request-detail');if(details){showRequestDetails(details.dataset.id);return;}
     const select=e.target.closest('.choose-quote');
     if(select) {
