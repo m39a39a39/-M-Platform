@@ -46,7 +46,7 @@ document.addEventListener('m:ready', async () => {
     Object.entries(counts).forEach(([id,n])=>document.getElementById(id).textContent=n);
     const title=views.find(x=>x[0]===view)||views[0];
     section.querySelector('h2').textContent=M.tr(title[1],title[2]);
-    section.querySelector('.card-head p').textContent=M.tr('بيانات حسابك فقط — جميع الأطراف مجهولة الهوية.','Your account only — counterpart identities stay hidden.');
+    section.querySelector('.card-head p').textContent=M.tr('الطلبات والعروض تتم بهوية محمية للطرفين.','Requests and offers use protected identities for both parties.');
     let html='';
     if(view==='market') {
       html='<div class="market-offer-grid">'+s.publicOffers.filter(W.available).filter(o=>search.match(o,[W.ref(o),W.copy(o,'title')])).map(o=>W.offerCard(o,user)).join('')+'</div>';
