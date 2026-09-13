@@ -1,8 +1,24 @@
 document.addEventListener('m:ready',()=>{
   const params=new URLSearchParams(location.search);
   let role=params.get('role')==='supplier'?'supplier':'client';
-  const go=()=>{const u=M.session();const page=u.role==='client'?'customer':u.role==='supplier'?'supplier':'admin';const offer=params.get('offer');location.href=page+'.html'+(offer&&u.role==='client'?'?offer='+encodeURIComponent(offer)+'#market':'');};
-  function setRole(value){role=value;document.querySelectorAll('[data-auth-role]').forEach(b=>b.classList.toggle('active',b.dataset.authRole===value));const link=document.getElementById('registerLink');if(link)link.href=`register-${role==='supplier'?'supplier':'customer'}.html`;}
+  const go=()=>{
+    const u=M.session(),page=u.role==='client'?'customer':u.role==='supplier'?'supplier':'admin';
+    const offer=params.get('offer'),action=params.get('action');
+    if(offer&&u.role==='client'){location.href=page+'.html?offer='+encodeURIComponent(offer)+'#market';return;}
+    if(action==='newRequest'&&u.role==='client'){location.href=page+'.html?action=newRequest';return;}
+    location.href=page+'.html';
+  };
+  function setRole(value){
+    role=value;
+    document.querySelectorAll('[data-auth-role]').forEach(b=>b.classList.toggle('active',b.dataset.authRole===value));
+    const link=document.getElementById('registerLink');
+    if(link){
+      const target=new URLSearchParams(),action=params.get('action'),offer=params.get('offer');
+      if(action&&role==='client')target.set('action',action);
+      if(offer&&role==='client')target.set('offer',offer);
+      link.href=`register-${role==='supplier'?'supplier':'customer'}.html${target.toString()?'?'+target.toString():''}`;
+    }
+  }
   function signupCooldown(button,error){
     let seconds=60;
     button.disabled=true;
