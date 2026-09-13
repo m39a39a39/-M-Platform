@@ -11,7 +11,7 @@ export function anonymous(row,kind,user){
   const result={id:row.id,displayNo:row.display_no,version:row.version,createdAt:row.created_at,status:d.status,translation:d.translation||{},images:d.images||[],country:d.country||''};
   const fields=kind==='requests'?['quantity','neededDate']:['unitPrice','currency','moq','leadTime','sampleCost','stock','validUntil'];
   for(const key of fields)if(d[key]!==undefined)result[key]=d[key];
-  if(kind==='requests')result.supplierIds=[user.id];
+  if(kind==='requests'){result.supplierIds=[user.id];result.quoteSelected=!!d.selectedQuoteId;}
   if(row.request_id)result.requestId=row.request_id;
   return result;
 }
