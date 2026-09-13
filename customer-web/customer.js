@@ -6,18 +6,29 @@ document.addEventListener('m:ready', async () => {
     ['requests','الطلبات','Requests'],['market','العروض العامة','Public offers'],
     ['interests','العروض التي طلبتها','Requested offers']
   ];
-  let view=location.hash.slice(1)||'requests',statusFilter='';
+  let view=location.hash.slice(1)||'requests',statusFilter='',newOnly=false;
   const section=document.getElementById('requests'), body=document.getElementById('customerRequests');
   const search=Search.createAdmin(document.querySelector('.top-actions'),()=>render());
   let pictures=[];
   const uploader=M.setupImages('requestImages','requestPreview',v=>{pictures=[...v];});
   function go(key){
     const filters={review:'review',sent:'active',quotes:'active',selected:'completed'};
-    statusFilter=filters[key]||'';
+    statusFilter=filters[key]||'';newOnly=key==='newQuotes';
     view=views.some(x=>x[0]===key)?key:'requests';history.replaceState(null,'','#'+view);render();
   }
   function myRequests(){return M.state().requests.filter(x=>x.customerId===user.id&&R.requestVisible(x));}
   function chosen(r,s){return r.selectedQuoteId || (s.quotes.some(q=>q.id===s.selectedQuote&&q.requestId===r.id)?s.selectedQuote:null);}
+  function quoteTime(q){const value=q.publishedAt||q.updatedAt||q.createdAt||'';return Date.parse(value)||0;}
+  function unseenQuotes(r,s){
+    const seen=r.lastSeenQuoteAt?Date.parse(r.lastSeenQuoteAt)||0:0;
+    return s.quotes.filter(q=>q.requestId===r.id&&q.status==='published'&&R.offerVisible(q,s)&&quoteTime(q)>seen);
+  }
+  function unseenCount(r,s){return unseenQuotes(r,s).length;}
+  function unseenBadge(r,s){
+    const count=unseenCount(r,s);if(!count)return '';
+    const label=count===1?M.tr('عرض جديد','New quote'):M.tr(count+' عروض جديدة',count+' new quotes');
+    return '<span class="new-quote-badge">'+E(label)+'</span>';
+  }
   function statusMatch(r){
     if(!statusFilter)return true;
     const raw=R.stateLabel(r),group=r.selectedQuoteId||['completed','selected','accepted'].includes(raw)?'completed':['review','pending'].includes(raw)?'review':['sent','published','coordinating','active'].includes(raw)?'active':raw;
@@ -29,12 +40,26 @@ document.addEventListener('m:ready', async () => {
       '<p class="preserve-lines">'+E(W.copy(q,'description'))+'</p><div class="offer-facts"><div>MOQ: '+E(q.moq)+'</div><div>'+M.tr('الإنتاج بالأيام','Production days')+': '+E(q.leadTime)+'</div><div>'+M.tr('العينة','Sample')+': '+E(q.sampleCost)+'</div></div>'+
       '<button class="btn btn-outline choose-quote" data-id="'+E(q.id)+'" '+(selected||!enabled?'disabled':'')+'>'+(!enabled?M.tr('غير متاح حاليًا','Currently unavailable'):selected===q.id?M.tr('تم اختيار هذا العرض','Selected'):selected?M.tr('اختير عرض آخر لهذا الطلب','Another quote selected'):M.tr('اختيار العرض','Select quote'))+'</button></article>';
   }
-  function requestRow(r){
-    return '<article class="admin-request-row"><span class="request-id">#'+E(W.ref(r))+'</span><h3>'+E(r.product)+'</h3>'+W.badge(R.stateLabel(r))+'<time>'+E(W.date(r.createdAt))+'</time><button class="customer-request-detail admin-detail-button" data-id="'+E(r.id)+'" aria-label="'+E(M.tr('عرض التفاصيل','View details'))+'"><span>'+M.tr('التفاصيل','Details')+'</span><b aria-hidden="true">›</b></button></article>';
+  function requestRow(r,s){
+    return '<article class="admin-request-row"><span class="request-id">#'+E(W.ref(r))+'</span><h3>'+E(r.product)+'</h3>'+W.badge(R.stateLabel(r))+unseenBadge(r,s)+'<time>'+E(W.date(r.createdAt))+'</time><button class="customer-request-detail admin-detail-button" data-id="'+E(r.id)+'" aria-label="'+E(M.tr('عرض التفاصيل','View details'))+'"><span>'+M.tr('التفاصيل','Details')+'</span><b aria-hidden="true">›</b></button></article>';
   }
-  function showRequestDetails(id){
-    const s=M.state(),r=s.requests.find(x=>x.id===id&&x.customerId===user.id&&R.requestVisible(x));if(!r)return;
-    const quotes=s.quotes.filter(q=>q.requestId===r.id&&q.status==='published'&&R.offerVisible(q,s));
+  async function showRequestDetails(id){
+    let s=M.state(),r=s.requests.find(x=>x.id===id&&x.customerId===user.id&&R.requestVisible(x));if(!r)return;
+    let quotes=s.quotes.filter(q=>q.requestId===r.id&&q.status==='published'&&R.offerVisible(q,s));
+    const latest=Math.max(0,...quotes.map(quoteTime)),seen=r.lastSeenQuoteAt?Date.parse(r.lastSeenQuoteAt)||0:0;
+    if(latest>seen){
+      const latestQuote=quotes.reduce((best,q)=>quoteTime(q)>quoteTime(best||{})?q:best,null);
+      if(latestQuote){
+        try{
+          r.lastSeenQuoteAt=latestQuote.publishedAt||latestQuote.updatedAt||latestQuote.createdAt;
+          await M.save(s);
+          s=M.state();r=s.requests.find(x=>x.id===id&&x.customerId===user.id&&R.requestVisible(x));if(!r)return;
+          quotes=s.quotes.filter(q=>q.requestId===r.id&&q.status==='published'&&R.offerVisible(q,s));render();
+        }catch(error){
+          M.toast('تعذر تحديث حالة العرض','Could not update quote status',error.message,error.message);
+        }
+      }
+    }
     const offers=quotes.length?'<div class="offer-grid">'+quotes.map(q=>quoteCard(q,r,s)).join('')+'</div>':'<p>'+M.tr('لا توجد عروض منشورة بعد.','No published quotes yet.')+'</p>';
     const content=W.gallery(r.images)+'<h3>'+M.tr('المواصفات','Specifications')+'</h3><p class="preserve-lines">'+E(r.specs||'—')+'</p><div class="meta-list"><span class="meta-chip">'+M.tr('الكمية','Quantity')+': '+E(r.quantity)+'</span><span class="meta-chip">'+E(r.country||'—')+'</span><span class="meta-chip">'+M.tr('تاريخ الاحتياج','Needed date')+': '+E(r.neededDate||'—')+'</span></div><h3>'+M.tr('العروض المستلمة','Received quotes')+'</h3>'+offers+'<h3>'+M.tr('سجل الطلب','Request history')+'</h3>'+W.history(r);
     W.modal('#'+W.ref(r)+' — '+r.product,content);
@@ -42,10 +67,10 @@ document.addEventListener('m:ready', async () => {
   function render() {
     const s=M.state(),mine=myRequests(),quotes=s.quotes.filter(q=>q.status==='published'&&R.offerVisible(q,s)&&mine.some(r=>r.id===q.requestId));
     W.nav(views,view,go);
-    const counts={requestCount:mine.length,reviewCount:mine.filter(x=>x.status==='review').length,quoteCount:mine.filter(r=>r.status==='sent'&&!chosen(r,s)&&!r.suspendedAt).length,selectedCount:mine.filter(r=>chosen(r,s)||r.status==='completed').length};
+    const counts={requestCount:mine.length,reviewCount:mine.filter(x=>x.status==='review').length,quoteCount:mine.filter(r=>r.status==='sent'&&!chosen(r,s)&&!r.suspendedAt).length,newQuoteCount:mine.reduce((total,r)=>total+unseenCount(r,s),0),selectedCount:mine.filter(r=>chosen(r,s)||r.status==='completed').length};
     Object.entries(counts).forEach(([id,n])=>document.getElementById(id).textContent=n);
     const title=views.find(x=>x[0]===view)||views[0];
-    section.querySelector('h2').textContent=M.tr(title[1],title[2]);
+    section.querySelector('h2').textContent=newOnly?M.tr('طلبات لديها عروض جديدة','Requests with new quotes'):M.tr(title[1],title[2]);
     section.querySelector('.card-head p').textContent=M.tr('الطلبات والعروض تتم بهوية محمية للطرفين.','Requests and offers use protected identities for both parties.');
     let html='';
     if(view==='market') {
@@ -57,12 +82,12 @@ document.addEventListener('m:ready', async () => {
         return '<article class="invite-card"><span>#'+E(W.ref(offer))+'</span><h3>'+E(offer?W.copy(offer,'title'):M.tr('عرض مؤرشف','Archived offer'))+'</h3>'+W.badge(i.status||'pending')+'<p>'+E(W.date(i.createdAt||i.requestedAt))+'</p>'+ (offer?W.gallery(offer.images):'')+W.history(i)+'</article>';
       }).join('')||W.empty();
     } else {
-      const filtered=mine.filter(statusMatch).filter(r=>search.match(r,[W.ref(r),r.product,...s.quotes.filter(q=>q.requestId===r.id&&q.status==='published'&&R.offerVisible(q,s)).map(q=>W.ref(q))])).filter(r=>view==='review'?r.status==='review':view==='sent'?r.status==='sent':view==='quotes'?quotes.some(q=>q.requestId===r.id):view==='selected'?chosen(r,s):true);
-      html='<div class="admin-request-list">'+(filtered.map(requestRow).join('')||W.empty())+'</div>';
+      const filtered=mine.filter(statusMatch).filter(r=>!newOnly||unseenCount(r,s)>0).filter(r=>search.match(r,[W.ref(r),r.product,...s.quotes.filter(q=>q.requestId===r.id&&q.status==='published'&&R.offerVisible(q,s)).map(q=>W.ref(q))])).filter(r=>view==='review'?r.status==='review':view==='sent'?r.status==='sent':view==='quotes'?quotes.some(q=>q.requestId===r.id):view==='selected'?chosen(r,s):true);
+      html='<div class="admin-request-list">'+(filtered.map(r=>requestRow(r,s)).join('')||W.empty())+'</div>';
     }
     body.innerHTML=(!R.userActive()?'<p class="account-restriction">'+M.tr('الحساب موقوف؛ الإرسال والاختيار غير متاحين.','Account disabled; submissions and selection are unavailable.')+'</p>':'')+html; M.applySettings();
   }
-  const stats=['requests','review','quotes','selected'];
+  const stats=['requests','review','quotes','newQuotes','selected'];
   document.querySelectorAll('.stat-card').forEach((card,i)=>{card.setAttribute('role','button');card.tabIndex=0;card.onclick=()=>go(stats[i]);card.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();go(stats[i]);}};});
   document.getElementById('requestForm').addEventListener('submit', async e =>{
     e.preventDefault();
@@ -76,7 +101,7 @@ document.addEventListener('m:ready', async () => {
     e.target.reset();uploader.reset();pictures=[];error.textContent='';M.closeDialog('requestDialog');go('review');
   });
   document.addEventListener('click', async e =>{
-    const details=e.target.closest('.customer-request-detail');if(details){showRequestDetails(details.dataset.id);return;}
+    const details=e.target.closest('.customer-request-detail');if(details){await showRequestDetails(details.dataset.id);return;}
     const select=e.target.closest('.choose-quote');
     if(select) {
       const s=M.state(),q=s.quotes.find(x=>x.id===select.dataset.id&&x.status==='published'),r=s.requests.find(x=>x.id===q?.requestId&&x.customerId===user.id);
