@@ -19,8 +19,12 @@ document.addEventListener('m:ready', async () => {
     document.getElementById('adminQuoteCount').textContent = state.quotes.filter(item => !item.deletedAt&&item.status === 'pending').length;
     document.getElementById('adminPublicCount').textContent = state.publicOffers.filter(item => !item.deletedAt&&item.status === 'pending').length;
     document.getElementById('interestCount').textContent = state.interests.length;
-    const list = pendingItems().filter(item=>{const owner=state.accounts.find(a=>a.id===(item.customerId||item.supplierId)),request=state.requests.find(r=>r.id===item.requestId);return !window.adminSearch||window.adminSearch.match({...item,country:item.country||request?.country||owner?.country},[item.id,item.requestId,item.title,item.identity,request?.product,owner?.name,owner?.company,owner?.phone,owner?.email]);});
-    document.getElementById('adminQueue').innerHTML = list.length ? list.map(item => `<article class="invite-card"><div class="invite-top"><div><span class="request-id">#${W.escape(item.id)}</span><h3>${W.escape(item.title)}</h3><p>${M.tr('صاحب المحتوى: ','Owner: ')}${W.escape(item.identity || '—')}</p></div><span class="status status-warning">${M.tr('بانتظار المراجعة','Pending')}</span></div><div class="invite-footer" style="margin-top:14px"><span>${item.images?.length || 0} ${M.tr('صور','images')}</span><button class="btn btn-primary btn-sm review-item" data-id="${W.escape(item.id)}">${M.tr('مراجعة وترجمة','Review & translate')}</button></div>${R.buttons(item.kind==='public'?'public':item.kind,item)}</article>`).join('') : `<div class="empty-state"><strong>${M.tr('لا توجد عناصر معلقة','No pending items')}</strong></div>`;
+    const list = pendingItems().filter(item=>{
+      const owner=state.accounts.find(a=>a.id===(item.customerId||item.supplierId)),request=state.requests.find(r=>r.id===item.requestId);
+      const client=request?state.accounts.find(a=>a.id===request.customerId):(item.customerId?owner:null),supplier=item.supplierId?owner:null;
+      return !window.adminSearch||window.adminSearch.match(item,[W.ref(item),client?.name||'',supplier?.name||'']);
+    });
+    document.getElementById('adminQueue').innerHTML = list.length ? list.map(item => `<article class="invite-card"><div class="invite-top"><div><span class="request-id">#${W.escape(W.ref(item))}</span><h3>${W.escape(item.title)}</h3><p>${M.tr('صاحب المحتوى: ','Owner: ')}${W.escape(item.identity || '—')}</p></div><span class="status status-warning">${M.tr('بانتظار المراجعة','Pending')}</span></div><div class="invite-footer" style="margin-top:14px"><span>${item.images?.length || 0} ${M.tr('صور','images')}</span><button class="btn btn-primary btn-sm review-item" data-id="${W.escape(item.id)}">${M.tr('مراجعة وترجمة','Review & translate')}</button></div>${R.buttons(item.kind==='public'?'public':item.kind,item)}</article>`).join('') : `<div class="empty-state"><strong>${M.tr('لا توجد عناصر معلقة','No pending items')}</strong></div>`;
   }
 
   function resetTranslation() {
@@ -43,7 +47,7 @@ document.addEventListener('m:ready', async () => {
     if (!item) return;
     const card = document.getElementById('review');
     card.dataset.kind = item.kind; card.dataset.id = item.id;
-    document.getElementById('reviewTitle').textContent = `#${item.id} — ${item.title}`;
+    document.getElementById('reviewTitle').textContent = `#${W.ref(item)} — ${item.title}`;
     document.getElementById('reviewIdentity').textContent = `${M.tr('الهوية الأصلية: ','Source identity: ')}${item.identity || '—'}`;
     document.getElementById('reviewSource').textContent = item.source || '—';
     reviewImages=[...(item.images||[])];
