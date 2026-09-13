@@ -4,7 +4,12 @@
   let saving=false;
   async function request(path,body){
     const response=await fetch('/api/'+path,{credentials:'same-origin',method:body===undefined?'GET':'POST',headers:body===undefined?{}:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
-    const data=await response.json();if(!response.ok)throw Error(data.error||'تعذر الاتصال بالخادم / Server unavailable');return data;
+    const data=await response.json();
+    if(!response.ok){
+      if(response.status===429)throw Error('تم إرسال محاولات كثيرة خلال وقت قصير. انتظر دقيقة ثم حاول مرة واحدة فقط / Too many attempts. Wait one minute and try once.');
+      throw Error(data.error||'تعذر الاتصال بالخادم / Server unavailable');
+    }
+    return data;
   }
   async function refresh(){snapshot=await request('state');return snapshot;}
   const metadata=new Set(['id','version','createdAt','updatedAt','customerId','supplierId','customerName','supplierName','history','moderationHistory']);
