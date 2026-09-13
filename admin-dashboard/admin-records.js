@@ -19,9 +19,9 @@ document.addEventListener('m:ready', async () =>{
   function match(x){
     const s=M.state();
     if(x.role)return adminSearch.match(x,[x.name]);
-    const owner=account(x.customerId||x.supplierId),request=s.requests.find(r=>r.id===x.requestId),client=request?account(request.customerId):(x.customerId?owner:null),supplier=x.supplierId?owner:null;
+    const owner=account(x.customerId||x.supplierId),request=s.requests.find(r=>r.id===x.requestId),offer=s.publicOffers.find(o=>o.id===x.offerId),client=request?account(request.customerId):(x.customerId?owner:null),supplier=x.supplierId?owner:null;
     const invited=x.supplierIds?.map(id=>account(id)?.name||'')||[];
-    return adminSearch.match(x,[x.displayNo||'',client?.name||'',supplier?.name||'',...invited]);
+    return adminSearch.match(x,[x.displayNo||'',request?.displayNo||'',offer?.displayNo||'',client?.name||'',supplier?.name||'',...invited]);
   }
   function accountRow(a){return '<article class="invite-card"><h3>'+E(a.name)+'</h3><p>'+E(a.company)+'</p>'+W.badge(R.stateLabel(a))+'<button class="btn btn-outline account-detail" data-id="'+E(a.id)+'">'+M.tr('البيانات والسجل','Contact & history')+'</button>'+R.buttons('account',a)+R.log(a)+'</article>';}
   function requestRow(x){
