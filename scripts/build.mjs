@@ -5,5 +5,6 @@ await mkdir('dist/assets/css', {recursive:true});
 for (const [dir, files] of Object.entries(groups)) for (const f of files) await copyFile(`${dir}/${f}`,`dist/${f}`);
 for (const dir of ['shared/js','customer-web','supplier-web','admin-dashboard']) for (const f of await readdir(dir)) if(f.endsWith('.js')) await copyFile(`${dir}/${f}`,`dist/assets/js/${f}`);
 await copyFile('shared/css/styles.css','dist/assets/css/styles.css');
+await copyFile('shared/css/home.css','dist/assets/css/home.css');
 await appendFile('dist/assets/css/styles.css','\n'+await readFile('admin-dashboard/admin.css','utf8'));
 console.log('Built three interfaces and shared assets. API stays server-side.');
