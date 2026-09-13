@@ -1,12 +1,10 @@
 (() => {
-  const header=document.querySelector('.page-head');
   const stats=document.querySelector('.customer-stats');
   const nav=document.querySelector('.side-nav');
-  if(!header||!stats||!nav)return;
+  if(!stats||!nav)return;
 
   const sync=()=>{
     const publicOffersOpen=!!nav.querySelector('[data-view="market"].active');
-    header.classList.toggle('hidden',publicOffersOpen);
     stats.classList.toggle('hidden',publicOffersOpen);
   };
 
