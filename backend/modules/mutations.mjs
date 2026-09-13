@@ -47,10 +47,17 @@ export async function mutate(user,body){
     }
   }else if(!isAdmin){
     if(collection==='requests'&&user.role==='client'&&original.owner_id===user.id){
-      assert(changes.length===1&&changes[0]==='selectedQuoteId');
-      const r=await assertOpenRequest(id),q=await one('quotes',patch.selectedQuoteId);
-      assert(!r.data.selectedQuoteId&&r.data.status==='sent'&&open(q)&&q.request_id===id&&q.data.status==='published'&&active(await one('profiles',q.owner_id)),409,'العرض غير متاح أو سبق اختيار عرض / Quote unavailable or already selected');
-      data.selectedQuoteId=q.id;
+      assert(changes.length===1&&['selectedQuoteId','lastSeenQuoteAt'].includes(changes[0]));
+      if(changes[0]==='selectedQuoteId'){
+        const r=await assertOpenRequest(id),q=await one('quotes',patch.selectedQuoteId);
+        assert(!r.data.selectedQuoteId&&r.data.status==='sent'&&open(q)&&q.request_id===id&&q.data.status==='published'&&active(await one('profiles',q.owner_id)),409,'العرض غير متاح أو سبق اختيار عرض / Quote unavailable or already selected');
+        data.selectedQuoteId=q.id;
+      }else{
+        const published=await db('quotes',`request_id=eq.${encodeURIComponent(id)}&data->>status=eq.published&data->>deletedAt=is.null`);
+        const latest=published.map(q=>q.data.publishedAt||q.data.updatedAt||q.data.reviewedAt||q.created_at).filter(Boolean).sort().at(-1);
+        assert(latest,409,'لا توجد عروض منشورة / No published quotes');
+        data.lastSeenQuoteAt=latest;
+      }
     }else if(collection==='quotes'&&user.role==='supplier'&&original.owner_id===user.id){
       assert(changes.length&&changes.every(k=>contentFields.quotes.includes(k)),400,'يمكن تعديل بيانات العرض فقط / Only offer fields can be edited');
       const r=await assertOpenRequest(original.request_id);
@@ -76,6 +83,7 @@ export async function mutate(user,body){
         if(key==='status')assert((collection==='requests'?['review','sent','completed']:collection==='interests'?['pending','coordinating','accepted','completed','cancelled']:['pending','published']).includes(patch[key]),400);
         else {assert(collection==='requests'&&Array.isArray(patch[key])&&patch[key].length>0&&patch[key].length<=100,400);for(const supplierId of patch[key]){assert(/^[a-f0-9-]{36}$/.test(supplierId),400);const p=await one('profiles',supplierId);assert(active(p)&&p.role==='supplier',400);}}
         data[key]=patch[key];
+        if(collection==='quotes'&&key==='status'&&patch[key]==='published')data.publishedAt=now;
       }else if(key==='reviewedAt'){
         assert(can(user,editPermission)||can(user,'translate')||can(user,'publish'));data.reviewedAt=now;
       }else if((contentFields[collection]||[]).includes(key)){
