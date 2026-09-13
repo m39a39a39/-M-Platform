@@ -1,4 +1,4 @@
-import { mkdir, copyFile, readdir, appendFile, readFile } from 'node:fs/promises';
+import { mkdir, copyFile, readdir, appendFile, readFile, writeFile } from 'node:fs/promises';
 const groups = {'customer-web':['customer.html','register-customer.html'], 'supplier-web':['supplier.html','register-supplier.html'], 'admin-dashboard':['admin.html'], 'shared/pages':['index.html','offers.html','login.html']};
 await mkdir('dist/assets/js', {recursive:true});
 await mkdir('dist/assets/css', {recursive:true});
@@ -7,4 +7,8 @@ for (const dir of ['shared/js','customer-web','supplier-web','admin-dashboard'])
 await copyFile('shared/css/styles.css','dist/assets/css/styles.css');
 await copyFile('shared/css/home.css','dist/assets/css/home.css');
 await appendFile('dist/assets/css/styles.css','\n'+await readFile('admin-dashboard/admin.css','utf8'));
+let home=await readFile('dist/index.html','utf8');
+home=home.replace('<span class="status status-info" data-ar="بدون تواصل مباشر بين الطرفين" data-en="No direct contact between parties">بدون تواصل مباشر بين الطرفين</span>\n','');
+home=home.replace('Guangzhou MIG Trading Co., Ltd.','Guangzhou MIG Trading Co.Ltd.');
+await writeFile('dist/index.html',home);
 console.log('Built three interfaces and shared assets. API stays server-side.');
