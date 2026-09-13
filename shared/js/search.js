@@ -28,5 +28,29 @@
     document.querySelectorAll('[data-lang]').forEach(b=>b.addEventListener('click',()=>{el.querySelectorAll('option[value]').forEach(o=>{if(o.value)o.textContent=W.status(o.value);});}));
     return {match:(item,text)=>matches(item,text,values()),el,setStatus:value=>{el.elements.status.value=value;}};
   }
-  window.Search={matches,create};
+  function createAdmin(parent,change){
+    const wrap=document.createElement('div');wrap.className='admin-search';
+    const toggle=document.createElement('button');toggle.type='button';toggle.className='icon-btn admin-search-toggle';toggle.setAttribute('aria-expanded','false');
+    toggle.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="m16 16 4 4"></path></svg><span class="sr-only"></span>';
+    const form=document.createElement('form');form.className='admin-search-popover hidden';
+    form.innerHTML='<input name="query" type="search" autocomplete="off"><button type="button" class="admin-search-clear" aria-label="Clear">×</button>';
+    wrap.append(toggle,form);parent.append(wrap);
+    const input=form.elements.query,clear=form.querySelector('.admin-search-clear');
+    const labels=()=>{
+      const role=M.session()?.role;
+      const text=role==='admin'
+        ? M.tr('بحث برقم الطلب أو العرض أو اسم العميل أو المورد','Search by request/offer number, customer or supplier name')
+        : M.tr('بحث برقم الطلب أو العرض أو اسم المنتج','Search by request/offer number or product name');
+      input.placeholder=text;input.setAttribute('aria-label',text);toggle.title=M.tr('بحث','Search');toggle.querySelector('.sr-only').textContent=M.tr('بحث','Search');
+    };
+    const update=()=>change();
+    toggle.onclick=()=>{const open=form.classList.toggle('hidden')===false;toggle.setAttribute('aria-expanded',String(open));if(open)input.focus();};
+    form.onsubmit=e=>{e.preventDefault();update();};
+    input.oninput=update;
+    clear.onclick=()=>{input.value='';update();input.focus();};
+    input.onkeydown=e=>{if(e.key==='Escape'){form.classList.add('hidden');toggle.setAttribute('aria-expanded','false');toggle.focus();}};
+    document.querySelectorAll('[data-lang]').forEach(b=>b.addEventListener('click',labels));labels();
+    return {match:(item,text)=>matches(item,text,{query:input.value}),el:wrap,query:()=>input.value};
+  }
+  window.Search={matches,create,createAdmin};
 })();

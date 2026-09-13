@@ -3,12 +3,12 @@ import {can,profile} from './auth.mjs';
 export const tables={requests:'requests',quotes:'quotes',publicOffers:'public_offers',interests:'interests'};
 export const active=p=>p&&!p.blocked_at&&!p.deleted_at;
 export const open=r=>r&&!r.data.deletedAt&&!r.data.suspendedAt;
-export function unpack(row,kind){return {...row.data,id:row.id,version:row.version,createdAt:row.created_at,...(kind==='requests'||kind==='interests'?{customerId:row.owner_id}:{supplierId:row.owner_id}),...(row.request_id?{requestId:row.request_id}:{}),...(row.offer_id?{offerId:row.offer_id}:{})};}
+export function unpack(row,kind){return {...row.data,id:row.id,displayNo:row.display_no,version:row.version,createdAt:row.created_at,...(kind==='requests'||kind==='interests'?{customerId:row.owner_id}:{supplierId:row.owner_id}),...(row.request_id?{requestId:row.request_id}:{}),...(row.offer_id?{offerId:row.offer_id}:{})};}
 export function ownRecord(row,kind){const item=unpack(row,kind);delete item.supplierIds;delete item.moderationHistory;delete item.reviewedAt;return item;}
 // Pure projection: never serialize raw source text or counterpart identity.
 export function anonymous(row,kind,user){
   const d=row.data;
-  const result={id:row.id,version:row.version,createdAt:row.created_at,status:d.status,translation:d.translation||{},images:d.images||[],country:d.country||''};
+  const result={id:row.id,displayNo:row.display_no,version:row.version,createdAt:row.created_at,status:d.status,translation:d.translation||{},images:d.images||[],country:d.country||''};
   const fields=kind==='requests'?['quantity','neededDate']:['unitPrice','currency','moq','leadTime','sampleCost','stock','validUntil'];
   for(const key of fields)if(d[key]!==undefined)result[key]=d[key];
   if(kind==='requests')result.supplierIds=[user.id];
