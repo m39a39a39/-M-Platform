@@ -35,6 +35,8 @@ export async function mutate(user,body){
     if(collection==='quotes'){
       const r=await assertOpenRequest(patch.requestId);
       assert(r.data.status==='sent'&&!r.data.selectedQuoteId&&r.data.supplierIds?.includes(user.id));
+      const existing=await db('quotes',`request_id=eq.${encodeURIComponent(patch.requestId)}&owner_id=eq.${encodeURIComponent(user.id)}&data->>deletedAt=is.null&limit=1`);
+      assert(!existing.length,409,'سبق أن قدمت عرضًا على هذا الطلب / You already submitted an offer for this request');
     }else if(collection==='interests'){
       const offer=await one('public_offers',patch.offerId);
       assert(open(offer)&&offer.data.status==='published'&&active(await one('profiles',offer.owner_id))&&(!offer.data.validUntil||offer.data.validUntil>=now.slice(0,10)),409);
@@ -44,10 +46,23 @@ export async function mutate(user,body){
       if(collection!=='quotes')assert(data.images?.length,400,'أضف صورة / Image required');
     }
   }else if(!isAdmin){
-    assert(collection==='requests'&&user.role==='client'&&original.owner_id===user.id&&changes.length===1&&changes[0]==='selectedQuoteId');
-    const r=await assertOpenRequest(id),q=await one('quotes',patch.selectedQuoteId);
-    assert(!r.data.selectedQuoteId&&r.data.status==='sent'&&open(q)&&q.request_id===id&&q.data.status==='published'&&active(await one('profiles',q.owner_id)),409,'العرض غير متاح أو سبق اختيار عرض / Quote unavailable or already selected');
-    data.selectedQuoteId=q.id;
+    if(collection==='requests'&&user.role==='client'&&original.owner_id===user.id){
+      assert(changes.length===1&&changes[0]==='selectedQuoteId');
+      const r=await assertOpenRequest(id),q=await one('quotes',patch.selectedQuoteId);
+      assert(!r.data.selectedQuoteId&&r.data.status==='sent'&&open(q)&&q.request_id===id&&q.data.status==='published'&&active(await one('profiles',q.owner_id)),409,'العرض غير متاح أو سبق اختيار عرض / Quote unavailable or already selected');
+      data.selectedQuoteId=q.id;
+    }else if(collection==='quotes'&&user.role==='supplier'&&original.owner_id===user.id){
+      assert(changes.length&&changes.every(k=>contentFields.quotes.includes(k)),400,'يمكن تعديل بيانات العرض فقط / Only offer fields can be edited');
+      const r=await assertOpenRequest(original.request_id);
+      assert(r.data.status==='sent'&&!r.data.selectedQuoteId&&r.data.supplierIds?.includes(user.id),409,'لا يمكن تعديل العرض بعد إغلاق الطلب أو اختيار عرض / Offer cannot be edited after request closure or selection');
+      assert(['pending','published'].includes(data.status),409,'العرض غير قابل للتعديل / Offer is not editable');
+      for(const key of changes)data[key]=patch[key];
+      validateContent('quotes',data);
+      await checkImages(data.images||[],user,original.data.images||[]);
+      data.status='pending';
+      data.translation={};
+      data.reviewedAt=null;
+    }else assert(false,403,'غير مصرح بهذا التعديل / Unauthorized change');
   }else{
     assert(open(original),409);
     const editPermission=collection==='requests'?'requests.edit':'offers.edit';
