@@ -41,7 +41,7 @@ document.addEventListener('m:ready', async () => {
     const inviteMatches=invites.filter(r=>search.match(r,[W.ref(r),W.copy(r,'title')]));
     document.getElementById('inviteList').innerHTML='<div class="admin-request-list">'+(inviteMatches.map(inviteRow).join('')||W.empty())+'</div>';
     const offerRow=o=>{
-      const r=s.requests.find(r=>r.id===o.requestId),edit=o.requestId&&['pending','published'].includes(o.status)&&R.offerOpen(o,s)?'<div class="invite-actions"><button type="button" class="btn btn-outline btn-sm edit-quote" data-id="'+E(o.id)+'">'+M.tr('تعديل العرض','Edit offer')+'</button></div>':'';
+      const r=s.requests.find(r=>r.id===o.requestId),edit=o.requestId&&['pending','published'].includes(o.status)&&!r?.quoteSelected&&R.offerOpen(o,s)?'<div class="invite-actions"><button type="button" class="btn btn-outline btn-sm edit-quote" data-id="'+E(o.id)+'">'+M.tr('تعديل العرض','Edit offer')+'</button></div>':'';
       return '<article class="invite-card"><span>#'+E(W.ref(o))+'</span><h3>'+E(o.product||r?.product||M.tr('عرض','Offer'))+'</h3>'+W.badge(o.status)+'<p>'+E(o.currency)+' '+E(o.unitPrice)+' · MOQ '+E(o.moq)+'</p><p>'+E(W.date(o.createdAt))+'</p><p>'+M.tr('الإنتاج بالأيام / تكلفة العينة','Production days / sample cost')+': '+E(o.leadTime||'—')+' / '+E(o.sampleCost||'—')+'</p>'+W.gallery(o.images)+'<p class="preserve-lines">'+E(o.specs||o.notes||'')+'</p>'+edit+W.history(o)+'</article>';
     };
     document.getElementById('supplierOffers').innerHTML=pub.filter(matchOffer).map(offerRow).join('')||W.empty();
@@ -79,7 +79,7 @@ document.addEventListener('m:ready', async () => {
 
   function openQuote(id) {
     const state=M.state(),request = state.requests.find(item => item.id === id && allowed(item));
-    if (!request || state.quotes.some(q=>q.supplierId===user.id&&q.requestId===id&&!q.deletedAt)) return;
+    if (!request || request.quoteSelected || state.quotes.some(q=>q.supplierId===user.id&&q.requestId===id&&!q.deletedAt)) return;
     editingQuoteId=null;activeRequest=id;
     document.getElementById('quoteForm').reset();quoteUploader.reset();quoteImages=[];document.getElementById('quoteError').textContent='';
     document.getElementById('quoteRequest').textContent = `#${W.ref(request)} — ${translatedRequest(request).title}`;
@@ -90,7 +90,7 @@ document.addEventListener('m:ready', async () => {
 
   function editQuote(id){
     const state=M.state(),quote=state.quotes.find(q=>q.id===id&&q.supplierId===user.id&&!q.deletedAt),request=state.requests.find(r=>r.id===quote?.requestId);
-    if(!quote||!request||!['pending','published'].includes(quote.status)||!R.offerOpen(quote,state))return;
+    if(!quote||!request||request.quoteSelected||!['pending','published'].includes(quote.status)||!R.offerOpen(quote,state))return;
     editingQuoteId=quote.id;activeRequest=quote.requestId;
     const form=document.getElementById('quoteForm');form.reset();quoteUploader.reset();quoteImages=[];document.getElementById('quoteError').textContent='';
     document.getElementById('quotePrice').value=quote.unitPrice||'';
@@ -122,15 +122,15 @@ document.addEventListener('m:ready', async () => {
     const state = M.state();
     const fields={unitPrice:document.getElementById('quotePrice').value,currency:document.getElementById('quoteCurrency').value,moq:document.getElementById('quoteMoq').value,leadTime:document.getElementById('quoteLead').value,sampleCost:document.getElementById('quoteSample').value,notes};
     if(editingQuoteId){
-      const quote=state.quotes.find(q=>q.id===editingQuoteId&&q.supplierId===user.id&&!q.deletedAt);
-      if(!quote)return;
+      const quote=state.quotes.find(q=>q.id===editingQuoteId&&q.supplierId===user.id&&!q.deletedAt),request=state.requests.find(r=>r.id===quote?.requestId);
+      if(!quote||request?.quoteSelected)return;
       Object.assign(quote,fields);if(quoteImages.length)quote.images=[...quoteImages];
       try{await M.save(state);}catch(e){error.textContent=e.message;return;}
       M.closeDialog('quoteDialog');editingQuoteId=null;quoteUploader.reset();quoteImages=[];go('submitted');
       M.toast('تم تحديث العرض','Offer updated','أُرسل العرض المعدل إلى الإدارة للمراجعة.','The updated offer was sent to admin for review.');
       return;
     }
-    if (!state.requests.some(r=>r.id===activeRequest&&allowed(r))||state.quotes.some(q=>q.supplierId===user.id&&q.requestId===activeRequest&&!q.deletedAt)) return;
+    if (!state.requests.some(r=>r.id===activeRequest&&allowed(r)&&!r.quoteSelected)||state.quotes.some(q=>q.supplierId===user.id&&q.requestId===activeRequest&&!q.deletedAt)) return;
     state.quotes.push({ id:M.id('Q'), requestId:activeRequest, supplierId:user.id, supplierName:user.company || user.name, ...fields, images:[...quoteImages], status:'pending' });
     try{await M.save(state);}catch(e){error.textContent=e.message;return;}
     M.closeDialog('quoteDialog');quoteUploader.reset();quoteImages=[];go('submitted');
