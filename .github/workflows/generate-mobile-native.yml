@@ -1,0 +1,65 @@
+name: Generate Capacitor Native Projects
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'mobile-app/package.json'
+      - 'mobile-app/capacitor.config.ts'
+      - '.github/workflows/generate-mobile-native.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate-native:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: mobile-app/package-lock.json
+
+      - name: Install dependencies
+        working-directory: mobile-app
+        run: npm install
+
+      - name: Build web bundle
+        working-directory: mobile-app
+        run: npm run build
+
+      - name: Generate or sync Android
+        working-directory: mobile-app
+        run: |
+          if [ -d android ]; then
+            npx cap sync android
+          else
+            npx cap add android
+          fi
+
+      - name: Generate or sync iOS
+        working-directory: mobile-app
+        run: |
+          if [ -d ios ]; then
+            npx cap sync ios
+          else
+            npx cap add ios
+          fi
+
+      - name: Commit native projects
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add mobile-app/ios mobile-app/android mobile-app/package-lock.json
+          if git diff --cached --quiet; then
+            echo "No native project changes to commit."
+          else
+            git commit -m "Generate Capacitor native projects [skip ci]"
+            git push
+          fi
