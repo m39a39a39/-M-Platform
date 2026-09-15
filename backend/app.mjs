@@ -19,7 +19,7 @@ export default async function handler(req,res){
     // Keep the existing web API working while exposing a stable versioned API for native apps.
     const path=rawPath.startsWith('/api/v1/')?'/api/'+rawPath.slice('/api/v1/'.length):rawPath;
     if(path==='/api/health'){
-      assert(req.method==='GET',405);config();res.setHeader('Content-Type','application/json');res.end(JSON.stringify({ok:true,configured:true,apiVersion:1,nativeAuth:true,pushReady:true}));return;
+      assert(req.method==='GET',405);config();res.setHeader('Content-Type','application/json');res.end(JSON.stringify({ok:true,configured:true,apiVersion:1,nativeAuth:true,pushApiPrepared:true}));return;
     }
     const c=config();
     assert(['GET','POST'].includes(req.method),405);
