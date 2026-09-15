@@ -2,6 +2,8 @@ import {sb,one,config,assert,HttpError} from '../lib/supabase.mjs';
 export const permissions=['requests.read','requests.edit','offers.read','offers.edit','translate','publish','accounts.read','moderate','trash','settings','team'];
 export const can=(user,p)=>user?.role==='admin'&&(user.is_owner||user.permissions?.includes(p));
 export const profile=p=>p?{...p.data,id:p.id,role:p.role,isOwner:p.is_owner,permissions:p.permissions,blockedAt:p.blocked_at,deletedAt:p.deleted_at,version:p.version}:null;
+export const isNativeClient=req=>!req.headers.origin&&['native','ios','android'].includes(String(req.headers['x-m-client']||'').toLowerCase());
+const nativeTokens=result=>result?.access_token?{accessToken:result.access_token,refreshToken:result.refresh_token,expiresIn:result.expires_in,expiresAt:result.expires_at,tokenType:result.token_type||'bearer'}:null;
 export function cookies(req){return Object.fromEntries((req.headers.cookie||'').split(';').filter(x=>x.includes('=')).map(x=>{const i=x.indexOf('=');return [x.slice(0,i).trim(),decodeURIComponent(x.slice(i+1))];}));}
 export function setCookies(res,tokens){
   const secure=config().origin.startsWith('https:')?'; Secure':'';
@@ -24,10 +26,17 @@ export async function identify(req,res,optional=false){
   return {...p,token};
 }
 export async function authRoute(action,req,res,body){
+  const native=isNativeClient(req),bearer=req.headers.authorization?.match(/^Bearer (.+)$/)?.[1];
   if(action==='logout'){
-    const token=cookies(req).m_access;
+    const token=bearer||cookies(req).m_access;
     if(token)try{await sb('/auth/v1/logout',{method:'POST',token,publicKey:true});}catch{}
-    setCookies(res,null);return {ok:true};
+    if(!native)setCookies(res,null);return {ok:true};
+  }
+  if(action==='refresh'){
+    assert(native,403,'هذا المسار لتطبيق الجوال فقط / Native client only');
+    const refreshToken=String(body.refreshToken||'');assert(refreshToken.length>=20&&refreshToken.length<=4096,400,'رمز التجديد غير صالح / Invalid refresh token');
+    const result=await sb('/auth/v1/token?grant_type=refresh_token',{method:'POST',body:{refresh_token:refreshToken},publicKey:true});
+    return {tokens:nativeTokens(result)};
   }
   const email=String(body.email||'').trim().toLowerCase(),password=String(body.password||'');
   assert(email.length<255&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)&&password.length>=8&&password.length<=128,400,'تحقق من البريد وكلمة المرور (8 أحرف على الأقل) / Check email and password');
@@ -37,11 +46,12 @@ export async function authRoute(action,req,res,body){
     for(const k of ['name','company','phone','country','category'])data[k]=String(body[k]||'').trim().slice(0,200);
     assert(data.name&&data.phone&&data.country,400,'أكمل بيانات التسجيل / Complete registration');
     const result=await sb('/auth/v1/signup',{method:'POST',publicKey:true,body:{email,password,data}});
-    if(result.access_token)setCookies(res,result);
-    return {confirmationRequired:!result.access_token};
+    if(result.access_token&&!native)setCookies(res,result);
+    return {confirmationRequired:!result.access_token,...(native&&result.access_token?{tokens:nativeTokens(result)}:{})};
   }
   assert(action==='login',404);
   const result=await sb('/auth/v1/token?grant_type=password',{method:'POST',publicKey:true,body:{email,password}});
   const p=await one('profiles',result.user.id);assert(p&&!p.blocked_at&&!p.deleted_at,403);
-  setCookies(res,result);return {user:profile(p)};
+  if(!native)setCookies(res,result);
+  return {user:profile(p),...(native?{tokens:nativeTokens(result)}:{})};
 }

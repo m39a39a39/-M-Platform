@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": { "node": "22.x" },
   "scripts": {
     "build": "node scripts/build.mjs",
     "dev": "node --env-file-if-exists=.env backend/local.mjs",

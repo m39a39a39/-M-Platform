@@ -9,9 +9,20 @@ export function config() {
   if(!url || !anon || !service || !origin || url.includes('YOUR_PROJECT')) throw new HttpError(503,'أكمل إعداد Supabase والخادم أولًا / Server configuration required');
   return {url:url.replace(/\/$/,''),anon,service,origin};
 }
+const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 export async function sb(path,{method='GET',body,token,publicKey=false,headers={}}={}) {
   const c=config(),key=publicKey?c.anon:c.service;
-  const response=await fetch(c.url+path,{method,headers:{apikey:key,Authorization:`Bearer ${token||key}`,'Content-Type':'application/json',...headers},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(15000)});
+  const request=()=>fetch(c.url+path,{method,headers:{apikey:key,Authorization:`Bearer ${token||key}`,'Content-Type':'application/json',...headers},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(15000)});
+  let response,lastError;
+  // Retry only safe reads. Never repeat writes automatically.
+  for(let attempt=0;attempt<(method==='GET'?2:1);attempt++){
+    try{
+      response=await request();
+      if(response.status<500||attempt===1)break;
+    }catch(error){lastError=error;if(attempt===1)throw new HttpError(502,'تعذر تنفيذ العملية / Service unavailable');}
+    await sleep(180);
+  }
+  if(!response){console.error('Supabase request failed',JSON.stringify({path:path.split('?')[0],error:lastError?.name||'network'}));throw new HttpError(502,'تعذر تنفيذ العملية / Service unavailable');}
   const text=await response.text();let result;try{result=text?JSON.parse(text):null;}catch{result=null;}
   if(!response.ok){
     console.error('Supabase request failed',JSON.stringify({path:path.split('?')[0],status:response.status,code:result?.code||null}));

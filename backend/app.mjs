@@ -1,5 +1,5 @@
 import {config,HttpError,assert,db} from './lib/supabase.mjs';
-import {identify,authRoute,can} from './modules/auth.mjs';
+import {identify,authRoute,can,isNativeClient} from './modules/auth.mjs';
 import {snapshot} from './modules/records.mjs';
 import {mutate,moderate,saveSettings} from './modules/mutations.mjs';
 import {upload,media} from './modules/media.mjs';
@@ -11,19 +11,22 @@ export async function readBody(req){
   try{return text?JSON.parse(text):{};}catch{throw new HttpError(400,'Invalid JSON');}
 }
 export default async function handler(req,res){
-  res.setHeader('Cache-Control','private, no-store');res.setHeader('X-Content-Type-Options','nosniff');
+  res.setHeader('Cache-Control','private, no-store');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('X-API-Version','1');
   try{
-    const url=new URL(req.url,'http://localhost'),path=url.searchParams.has('route')?'/api/'+url.searchParams.get('route'):url.pathname;
+    const url=new URL(req.url,'http://localhost'),rawPath=url.searchParams.has('route')?'/api/'+url.searchParams.get('route'):url.pathname;
+    // Keep the existing web API working while exposing a stable versioned API for native apps.
+    const path=rawPath.startsWith('/api/v1/')?'/api/'+rawPath.slice('/api/v1/'.length):rawPath;
     if(path==='/api/health'){
-      assert(req.method==='GET',405);config();res.setHeader('Content-Type','application/json');res.end(JSON.stringify({ok:true,configured:true}));return;
+      assert(req.method==='GET',405);config();res.setHeader('Content-Type','application/json');res.end(JSON.stringify({ok:true,configured:true,apiVersion:1,nativeAuth:true}));return;
     }
     const c=config();
     assert(['GET','POST'].includes(req.method),405);
     if(req.method==='POST'){
-      // Browser writes must originate from the configured site. Native clients
-      // may use a verified Supabase Bearer token without a browser Origin.
-      const bearer=/^Bearer /.test(req.headers.authorization||'');
-      assert(req.headers.origin===c.origin||bearer&&!req.headers.origin,403,'مصدر الطلب غير مسموح / Invalid origin');
+      // Browser writes must originate from the configured site. Protected native
+      // writes require a Supabase Bearer token. Native auth endpoints are public
+      // by design and use the client marker only to select token transport.
+      const bearer=/^Bearer /.test(req.headers.authorization||''),nativeAuth=isNativeClient(req)&&path.startsWith('/api/auth/');
+      assert(req.headers.origin===c.origin||bearer&&!req.headers.origin||nativeAuth&&!req.headers.origin,403,'مصدر الطلب غير مسموح / Invalid origin');
       assert((req.headers['content-type']||'').includes('application/json'),415);
     }
     const body=req.method==='POST'?await readBody(req):{};
