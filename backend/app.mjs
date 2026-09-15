@@ -7,6 +7,18 @@ import {team} from './modules/team.mjs';
 import {listNotifications,markNotificationsRead} from './modules/notifications.mjs';
 import {registerPushDevice,unregisterPushDevice} from './modules/push.mjs';
 import {publicAppConfig} from './modules/app-config.mjs';
+
+const NATIVE_ORIGINS=new Set(['capacitor://localhost','http://localhost','https://localhost']);
+const nativeOrigin=req=>NATIVE_ORIGINS.has(String(req.headers.origin||''));
+const setNativeCors=(req,res,isV1)=>{
+  if(!isV1||!nativeOrigin(req))return;
+  res.setHeader('Access-Control-Allow-Origin',req.headers.origin);
+  res.setHeader('Vary','Origin');
+  res.setHeader('Access-Control-Allow-Methods','GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers','Authorization, Content-Type, X-M-Client');
+  res.setHeader('Access-Control-Max-Age','86400');
+};
+
 export async function readBody(req){
   const size=Number(req.headers['content-length']||0);assert(size<=1800000,413);
   if(req.body!==undefined){const data=typeof req.body==='string'?JSON.parse(req.body):req.body;assert(Buffer.byteLength(JSON.stringify(data))<=1800000,413);return data;}
@@ -17,9 +29,15 @@ export default async function handler(req,res){
   res.setHeader('Cache-Control','private, no-store');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('X-API-Version','1');
   try{
     const url=new URL(req.url,'http://localhost'),rawPath=url.searchParams.has('route')?'/api/'+url.searchParams.get('route'):url.pathname;
-    const path=rawPath.startsWith('/api/v1/')?'/api/'+rawPath.slice('/api/v1/'.length):rawPath;
+    const isV1=rawPath.startsWith('/api/v1/');
+    setNativeCors(req,res,isV1);
+    if(req.method==='OPTIONS'){
+      assert(isV1&&nativeOrigin(req),403,'مصدر الطلب غير مسموح / Invalid origin');
+      res.statusCode=204;res.end();return;
+    }
+    const path=isV1?'/api/'+rawPath.slice('/api/v1/'.length):rawPath;
     if(path==='/api/health'){
-      assert(req.method==='GET',405);config();res.setHeader('Content-Type','application/json');res.end(JSON.stringify({ok:true,configured:true,apiVersion:1,nativeAuth:true,pushApiPrepared:true}));return;
+      assert(req.method==='GET',405);config();res.setHeader('Content-Type','application/json');res.end(JSON.stringify({ok:true,configured:true,apiVersion:1,nativeAuth:true,pushApiPrepared:true,capacitorCors:true}));return;
     }
     const c=config();
     if(path==='/api/app-config'){
@@ -27,8 +45,9 @@ export default async function handler(req,res){
     }
     assert(['GET','POST'].includes(req.method),405);
     if(req.method==='POST'){
-      const bearer=/^Bearer /.test(req.headers.authorization||''),nativeAuth=isNativeClient(req)&&path.startsWith('/api/auth/');
-      assert(req.headers.origin===c.origin||bearer&&!req.headers.origin||nativeAuth&&!req.headers.origin,403,'مصدر الطلب غير مسموح / Invalid origin');
+      const bearer=/^Bearer /.test(req.headers.authorization||''),markedNative=isNativeClient(req),trustedNative=isV1&&nativeOrigin(req)&&markedNative;
+      const nativeNoOrigin=markedNative&&!req.headers.origin;
+      assert(req.headers.origin===c.origin||trustedNative||bearer&&nativeNoOrigin||path.startsWith('/api/auth/')&&nativeNoOrigin,403,'مصدر الطلب غير مسموح / Invalid origin');
       assert((req.headers['content-type']||'').includes('application/json'),415);
     }
     const body=req.method==='POST'?await readBody(req):{};
