@@ -1,9 +1,11 @@
-import {config,HttpError,assert,db} from './lib/supabase.mjs';
-import {identify,authRoute,can,isNativeClient} from './modules/auth.mjs';
+import {config,HttpError,assert} from './lib/supabase.mjs';
+import {identify,authRoute,isNativeClient} from './modules/auth.mjs';
 import {snapshot} from './modules/records.mjs';
 import {mutate,moderate,saveSettings} from './modules/mutations.mjs';
 import {upload,media} from './modules/media.mjs';
 import {team} from './modules/team.mjs';
+import {listNotifications,markNotificationsRead} from './modules/notifications.mjs';
+import {registerPushDevice,unregisterPushDevice} from './modules/push.mjs';
 export async function readBody(req){
   const size=Number(req.headers['content-length']||0);assert(size<=1800000,413);
   if(req.body!==undefined){const data=typeof req.body==='string'?JSON.parse(req.body):req.body;assert(Buffer.byteLength(JSON.stringify(data))<=1800000,413);return data;}
@@ -17,7 +19,7 @@ export default async function handler(req,res){
     // Keep the existing web API working while exposing a stable versioned API for native apps.
     const path=rawPath.startsWith('/api/v1/')?'/api/'+rawPath.slice('/api/v1/'.length):rawPath;
     if(path==='/api/health'){
-      assert(req.method==='GET',405);config();res.setHeader('Content-Type','application/json');res.end(JSON.stringify({ok:true,configured:true,apiVersion:1,nativeAuth:true}));return;
+      assert(req.method==='GET',405);config();res.setHeader('Content-Type','application/json');res.end(JSON.stringify({ok:true,configured:true,apiVersion:1,nativeAuth:true,pushReady:true}));return;
     }
     const c=config();
     assert(['GET','POST'].includes(req.method),405);
@@ -38,8 +40,7 @@ export default async function handler(req,res){
       if(path==='/api/state'){assert(req.method==='GET',405);result=await snapshot(user);}
       else if(path.startsWith('/api/media/')){assert(req.method==='GET',405);await media(user,path.split('/').at(-1),res);return;}
       else if(path==='/api/notifications'){
-        assert(user,401);assert(req.method==='GET',405);
-        result=await db('notifications',`user_id=eq.${user.id}&order=created_at.desc&limit=50`);
+        assert(user,401);assert(req.method==='GET',405);result=await listNotifications(user);
       }else{
         assert(req.method==='POST',405);assert(user,401);
         if(path==='/api/mutations')result=await mutate(user,body);
@@ -47,6 +48,9 @@ export default async function handler(req,res){
         else if(path==='/api/settings')result=await saveSettings(user,body);
         else if(path==='/api/team')result=await team(user,body);
         else if(path==='/api/uploads')result=await upload(user,body);
+        else if(path==='/api/notifications/read')result=await markNotificationsRead(user,body);
+        else if(path==='/api/push/register')result=await registerPushDevice(user,body);
+        else if(path==='/api/push/unregister')result=await unregisterPushDevice(user,body);
         else throw new HttpError(404,'Not found');
       }
     }
