@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b2236" />
+  <title>M Platform</title>
+  <link rel="stylesheet" href="/src/styles.css" />
+</head>
+<body>
+  <main id="app" class="app-shell">
+    <section class="brand-block">
+      <div class="brand-mark">M</div>
+      <div>
+        <strong>M Platform</strong>
+        <p data-i18n="tagline">اطلب ما تحتاجه، وقارن العروض بثقة.</p>
+      </div>
+      <button id="langBtn" class="ghost-btn" type="button">EN</button>
+    </section>
+
+    <section id="loginView" class="card auth-card">
+      <div class="eyebrow" data-i18n="secure">دخول آمن</div>
+      <h1 data-i18n="loginTitle">تسجيل الدخول</h1>
+      <p class="muted" data-i18n="loginSubtitle">استخدم نفس حسابك الموجود على المنصة.</p>
+      <form id="loginForm">
+        <label>
+          <span data-i18n="email">البريد الإلكتروني</span>
+          <input id="email" type="email" autocomplete="email" required />
+        </label>
+        <label>
+          <span data-i18n="password">كلمة المرور</span>
+          <input id="password" type="password" autocomplete="current-password" minlength="8" required />
+        </label>
+        <button id="loginBtn" class="primary-btn" type="submit" data-i18n="login">تسجيل الدخول</button>
+      </form>
+      <p id="message" class="message" aria-live="polite"></p>
+    </section>
+
+    <section id="homeView" class="card hidden">
+      <div class="eyebrow" data-i18n="welcome">مرحبًا</div>
+      <h1 id="userName">M Platform</h1>
+      <p id="roleLabel" class="muted"></p>
+      <div class="action-grid">
+        <button id="primaryAction" class="primary-btn" type="button"></button>
+        <button id="notificationsBtn" class="secondary-btn" type="button" data-i18n="notifications">الإشعارات</button>
+      </div>
+      <button id="logoutBtn" class="ghost-wide" type="button" data-i18n="logout">تسجيل الخروج</button>
+    </section>
+  </main>
+  <script type="module" src="/src/app.js"></script>
+</body>
+</html>
