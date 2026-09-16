@@ -11,7 +11,7 @@ const text={
   en:{tagline:'Request what you need, and compare offers with confidence.',eyebrow:'Trusted sourcing platform',title:'Request what you need, and compare offers with confidence.',subtitle:'A secure platform that connects you with qualified suppliers while we handle offer review, product verification, translation, reliable shipping, and warranty follow-up.',browse:'Browse offers',login:'Sign in',customer:'Create customer account',supplier:'Create supplier account',kicker:'Browse without an account',offers:'Public offers',reload:'Refresh',loading:'Loading offers...',empty:'No public offers are currently published.',price:'Price',moq:'MOQ',production:'Production',days:'days',stock:'Stock',details:'Offer details',back:'Back to home',error:'Could not load offers. Check your internet connection.'}
 };
 const t=k=>text[lang][k]||k;
-const esc=v=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+const esc=v=>String(v??'').replace(/[&<>'\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[c]));
 const ref=o=>o?.displayNo||String(o?.id||'').slice(0,8)||'—';
 const title=o=>{const x=o?.translation||{};return (lang==='ar'?(x.titleAr||x.titleEn):(x.titleEn||x.titleAr))||o?.product||o?.title||`#${ref(o)}`;};
 const description=o=>{const x=o?.translation||{};return (lang==='ar'?(x.descriptionAr||x.descriptionEn):(x.descriptionEn||x.descriptionAr))||o?.specs||'';};
@@ -39,9 +39,13 @@ async function hydrateImages(){
     img.dataset.loaded='1';try{const url=await imageUrl(img.dataset.media);if(url)img.src=url;}catch{}
   }
 }
+function offerImages(o){
+  const images=(o.images||[]).slice(0,5);
+  if(!images.length)return '<div class="guest-offer-images count-1"><div class="guest-offer-image guest-offer-placeholder">M</div></div>';
+  return `<div class="guest-offer-images count-${images.length}">${images.map(src=>`<div class="guest-offer-image"><img alt="" data-media="${esc(src)}" /></div>`).join('')}</div>`;
+}
 function offerCard(o){
-  const first=o.images?.[0];
-  return `<article class="guest-offer-card" data-guest-offer="${esc(o.id)}">${first?`<div class="guest-offer-image"><img alt="" data-media="${esc(first)}" /></div>`:'<div class="guest-offer-image guest-offer-placeholder">M</div>'}<div class="guest-offer-body"><small>#${esc(ref(o))}</small><h3>${esc(title(o))}</h3><p>${esc(description(o))}</p><div class="guest-facts"><span><b>${esc(t('price'))}</b>${esc(o.currency||'')} ${esc(o.unitPrice||'—')}</span><span><b>${esc(t('moq'))}</b>${esc(o.moq||'—')}</span><span><b>${esc(t('production'))}</b>${esc(o.leadTime||'—')} ${esc(t('days'))}</span></div></div></article>`;
+  return `<article class="guest-offer-card" data-guest-offer="${esc(o.id)}">${offerImages(o)}<div class="guest-offer-body"><small>#${esc(ref(o))}</small><h3>${esc(title(o))}</h3><p>${esc(description(o))}</p><div class="guest-facts"><span><b>${esc(t('price'))}</b>${esc(o.currency||'')} ${esc(o.unitPrice||'—')}</span><span><b>${esc(t('moq'))}</b>${esc(o.moq||'—')}</span><span><b>${esc(t('production'))}</b>${esc(o.leadTime||'—')} ${esc(t('days'))}</span></div></div></article>`;
 }
 function renderOffers(){
   const offers=(state?.publicOffers||[]).filter(o=>o.status==='published');
