@@ -8,45 +8,50 @@
   <link rel="stylesheet" href="/src/styles.css" />
 </head>
 <body>
-  <main id="app" class="app-shell">
-    <section class="brand-block">
-      <div class="brand-mark">M</div>
-      <div>
-        <strong>M Platform</strong>
-        <p data-i18n="tagline">اطلب ما تحتاجه، وقارن العروض بثقة.</p>
-      </div>
-      <button id="langBtn" class="ghost-btn" type="button">EN</button>
+  <div id="app" class="app-shell">
+    <section id="loginView" class="auth-wrap">
+      <header class="brand-block">
+        <div class="brand-mark">M</div>
+        <div class="brand-copy"><strong>M Platform</strong><p data-i18n="tagline">اطلب ما تحتاجه، وقارن العروض بثقة.</p></div>
+        <button id="langBtn" class="icon-btn" type="button">EN</button>
+      </header>
+      <section class="card auth-card">
+        <div class="eyebrow" data-i18n="secure">دخول آمن</div>
+        <h1 data-i18n="loginTitle">تسجيل الدخول</h1>
+        <p class="muted" data-i18n="loginSubtitle">استخدم نفس حسابك الموجود على المنصة.</p>
+        <form id="loginForm" class="form-stack">
+          <label><span data-i18n="email">البريد الإلكتروني</span><input id="email" type="email" autocomplete="email" required /></label>
+          <label><span data-i18n="password">كلمة المرور</span><input id="password" type="password" autocomplete="current-password" minlength="8" required /></label>
+          <button id="loginBtn" class="primary-btn" type="submit" data-i18n="login">تسجيل الدخول</button>
+        </form>
+        <p id="message" class="message" aria-live="polite"></p>
+      </section>
     </section>
 
-    <section id="loginView" class="card auth-card">
-      <div class="eyebrow" data-i18n="secure">دخول آمن</div>
-      <h1 data-i18n="loginTitle">تسجيل الدخول</h1>
-      <p class="muted" data-i18n="loginSubtitle">استخدم نفس حسابك الموجود على المنصة.</p>
-      <form id="loginForm">
-        <label>
-          <span data-i18n="email">البريد الإلكتروني</span>
-          <input id="email" type="email" autocomplete="email" required />
-        </label>
-        <label>
-          <span data-i18n="password">كلمة المرور</span>
-          <input id="password" type="password" autocomplete="current-password" minlength="8" required />
-        </label>
-        <button id="loginBtn" class="primary-btn" type="submit" data-i18n="login">تسجيل الدخول</button>
-      </form>
-      <p id="message" class="message" aria-live="polite"></p>
+    <section id="appView" class="hidden mobile-workspace">
+      <header class="app-header">
+        <div class="brand-mini"><span class="brand-mark small">M</span><div><strong>M Platform</strong><small id="headerRole"></small></div></div>
+        <div class="header-actions"><button id="refreshBtn" class="icon-btn" type="button" aria-label="Refresh">↻</button><button id="appLangBtn" class="icon-btn" type="button">EN</button></div>
+      </header>
+      <main id="screen" class="screen" aria-live="polite"></main>
+      <nav id="bottomNav" class="bottom-nav" aria-label="Main navigation">
+        <button data-screen="home" class="active"><span>⌂</span><b data-nav="home">الرئيسية</b></button>
+        <button data-screen="requests"><span>▤</span><b data-nav="requests">الطلبات</b></button>
+        <button data-screen="offers"><span>◇</span><b data-nav="offers">العروض</b></button>
+        <button data-screen="notifications"><span>♢</span><b data-nav="notifications">الإشعارات</b><i id="navUnread" class="nav-badge hidden"></i></button>
+        <button data-screen="account"><span>○</span><b data-nav="account">الحساب</b></button>
+      </nav>
     </section>
+  </div>
 
-    <section id="homeView" class="card hidden">
-      <div class="eyebrow" data-i18n="welcome">مرحبًا</div>
-      <h1 id="userName">M Platform</h1>
-      <p id="roleLabel" class="muted"></p>
-      <div class="action-grid">
-        <button id="primaryAction" class="primary-btn" type="button"></button>
-        <button id="notificationsBtn" class="secondary-btn" type="button" data-i18n="notifications">الإشعارات</button>
-      </div>
-      <button id="logoutBtn" class="ghost-wide" type="button" data-i18n="logout">تسجيل الخروج</button>
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-backdrop" data-close-modal></div>
+    <section class="modal-sheet">
+      <header class="modal-head"><div><small id="modalKicker"></small><h2 id="modalTitle"></h2></div><button class="modal-close" type="button" data-close-modal>×</button></header>
+      <div id="modalBody" class="modal-body"></div>
     </section>
-  </main>
+  </div>
+  <div id="toast" class="toast hidden"></div>
   <script type="module" src="/src/app.js"></script>
 </body>
 </html>
