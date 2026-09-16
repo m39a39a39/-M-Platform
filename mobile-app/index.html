@@ -6,15 +6,45 @@
   <meta name="theme-color" content="#0b2236" />
   <title>M Platform</title>
   <link rel="stylesheet" href="/src/styles.css" />
+  <link rel="stylesheet" href="/src/guest.css" />
 </head>
 <body>
   <div id="app" class="app-shell">
-    <section id="loginView" class="auth-wrap">
+    <section id="guestView" class="guest-wrap">
+      <header class="guest-header">
+        <div class="brand-mini guest-brand"><span class="brand-mark small">M</span><div><strong>M Platform</strong><small id="guestTagline">اطلب ما تحتاجه، وقارن العروض بثقة.</small></div></div>
+        <button id="guestLangBtn" class="icon-btn" type="button">EN</button>
+      </header>
+
+      <main class="guest-main">
+        <section class="guest-hero">
+          <span class="eyebrow" id="guestEyebrow">منصة شراء وتوريد موثوقة</span>
+          <h1 id="guestTitle">اطلب ما تحتاجه، وقارن العروض بثقة.</h1>
+          <p id="guestSubtitle">منصة آمنة تربطك بموردين مؤهلين، بينما نتولى مراجعة العروض، التحقق من البضاعة، الترجمة، الشحن الموثوق، ومتابعة الضمان.</p>
+          <div class="guest-actions">
+            <button id="guestBrowseBtn" class="primary-btn" type="button">تصفح العروض</button>
+            <button id="guestLoginBtn" class="secondary-btn" type="button">تسجيل الدخول</button>
+          </div>
+          <div class="guest-register-row">
+            <a id="guestCustomerRegister" href="https://m-platform-tan.vercel.app/customer-web/register-customer.html" target="_blank" rel="noreferrer">إنشاء حساب عميل</a>
+            <a id="guestSupplierRegister" href="https://m-platform-tan.vercel.app/supplier-web/register-supplier.html" target="_blank" rel="noreferrer">إنشاء حساب مورد</a>
+          </div>
+        </section>
+
+        <section id="guestOffersSection" class="guest-offers-section">
+          <div class="section-title guest-section-title"><div><small id="guestOffersKicker">تصفح دون حساب</small><h2 id="guestOffersTitle">العروض العامة</h2></div><button id="guestReloadBtn" class="text-btn" type="button">تحديث</button></div>
+          <div id="guestOffers" class="guest-offers-grid"><div class="guest-loading">جارٍ تحميل العروض...</div></div>
+        </section>
+      </main>
+    </section>
+
+    <section id="loginView" class="hidden auth-wrap">
       <header class="brand-block">
         <div class="brand-mark">M</div>
         <div class="brand-copy"><strong>M Platform</strong><p data-i18n="tagline">اطلب ما تحتاجه، وقارن العروض بثقة.</p></div>
         <button id="langBtn" class="icon-btn" type="button">EN</button>
       </header>
+      <button id="backToGuestBtn" class="back-home-btn" type="button">← <span>العودة للرئيسية</span></button>
       <section class="card auth-card">
         <div class="eyebrow" data-i18n="secure">دخول آمن</div>
         <h1 data-i18n="loginTitle">تسجيل الدخول</h1>
@@ -53,5 +83,6 @@
   </div>
   <div id="toast" class="toast hidden"></div>
   <script type="module" src="/src/app.js"></script>
+  <script type="module" src="/src/guest.js"></script>
 </body>
 </html>
