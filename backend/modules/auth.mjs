@@ -2,7 +2,12 @@ import {sb,one,config,assert,HttpError} from '../lib/supabase.mjs';
 export const permissions=['requests.read','requests.edit','offers.read','offers.edit','translate','publish','accounts.read','moderate','trash','settings','team'];
 export const can=(user,p)=>user?.role==='admin'&&(user.is_owner||user.permissions?.includes(p));
 export const profile=p=>p?{...p.data,id:p.id,role:p.role,isOwner:p.is_owner,permissions:p.permissions,blockedAt:p.blocked_at,deletedAt:p.deleted_at,version:p.version}:null;
-export const isNativeClient=req=>!req.headers.origin&&['native','ios','android'].includes(String(req.headers['x-m-client']||'').toLowerCase());
+const NATIVE_ORIGINS=new Set(['capacitor://localhost','http://localhost','https://localhost']);
+export const isNativeClient=req=>{
+  const marked=['native','ios','android'].includes(String(req.headers['x-m-client']||'').toLowerCase());
+  const origin=String(req.headers.origin||'');
+  return marked&&(!origin||NATIVE_ORIGINS.has(origin));
+};
 const nativeTokens=result=>result?.access_token?{accessToken:result.access_token,refreshToken:result.refresh_token,expiresIn:result.expires_in,expiresAt:result.expires_at,tokenType:result.token_type||'bearer'}:null;
 export function cookies(req){return Object.fromEntries((req.headers.cookie||'').split(';').filter(x=>x.includes('=')).map(x=>{const i=x.indexOf('=');return [x.slice(0,i).trim(),decodeURIComponent(x.slice(i+1))];}));}
 export function setCookies(res,tokens){
