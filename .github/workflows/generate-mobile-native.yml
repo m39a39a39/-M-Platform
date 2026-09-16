@@ -5,6 +5,9 @@ on:
     branches: [main]
     paths:
       - 'mobile-app/package.json'
+      - 'mobile-app/package-lock.json'
+      - 'mobile-app/index.html'
+      - 'mobile-app/src/**'
       - 'mobile-app/capacitor.config.ts'
       - '.github/workflows/generate-mobile-native.yml'
   workflow_dispatch:
