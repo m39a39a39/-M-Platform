@@ -33,7 +33,7 @@ body {
 }
 
 .hidden {
-  display: none;
+  display: none !important;
 }
 
 button,input,textarea,select {
