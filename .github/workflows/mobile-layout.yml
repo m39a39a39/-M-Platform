@@ -1,0 +1,38 @@
+name: Mobile layout regression
+on:
+  push:
+    branches: [main, fix/mobile-layout-single-shell]
+    paths: ['mobile-app/**', '.github/workflows/mobile-layout.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  layout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: mobile-app
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - run: npm ci
+      - run: npm run build
+      - name: Install browser test tools
+        run: npm install --no-save --package-lock=false playwright@1.58.2
+      - run: npx playwright install --with-deps chromium webkit
+      - name: Test actual bundle at phone sizes
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/mobile-preview.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail http://127.0.0.1:4173 > /dev/null; then break; fi
+            sleep 1
+          done
+          node tests/layout.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mobile-layout-results
+          path: mobile-app/layout-results
