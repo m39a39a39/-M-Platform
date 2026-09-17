@@ -1,125 +1,89 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createSession, SessionError } from '../src/session-core.js';
+import { createSession } from '../src/session-core.js';
 
-function makeResponse(status, body) {
-  return {
-    status,
-    ok: status >= 200 && status < 300,
-    async json() { return body; }
-  };
+const reply = (data, status=200) => new Response(JSON.stringify(data), {status});
+const tokens = id => ({accessToken:id,refreshToken:`refresh-${id}`,expiresAt:10000});
+const user = id => ({id,role:id==='admin'?'admin':'client'});
+function fixture(handler) {
+  let saved=null;
+  const storage={get:async()=>saved,set:async value=>{saved=structuredClone(value);},remove:async()=>{saved=null;}};
+  const fetchImpl=async(url,options)=>handler(new URL(url).pathname,options);
+  const session=createSession({storage,fetchImpl,now:()=>100000});
+  return {session,storage,fetchImpl,get saved(){return saved;}};
 }
-
-function memoryStorage(initial = null) {
-  let value = initial;
-  return {
-    async get() { return value; },
-    async set(next) { value = next; },
-    async remove() { value = null; },
-    peek() { return value; }
-  };
-}
-
-test('restore returns false when no saved session exists', async () => {
-  const storage = memoryStorage(null);
-  const session = createSession({ storage, fetchImpl: async () => { throw new Error('unexpected fetch'); } });
-  assert.equal(await session.restore(), false);
-  assert.equal(session.active, false);
+const loginReply=id=>reply({user:user(id),tokens:tokens(id)});
+test('restores saved credentials, verifies identity, and persists rotated refresh token',async()=>{
+  const f=fixture((path,o)=>path.endsWith('/login')?loginReply('client'):path.endsWith('/refresh')?reply({tokens:tokens('rotated')}):reply({user:user('client')}));
+  await f.session.login({});
+  await f.storage.set({...f.saved,expiresAt:1});
+  const next=createSession({storage:f.storage,fetchImpl:f.fetchImpl,now:()=>100000});
+  assert.equal(await next.restore(),true);
+  assert.equal((await next.state()).user.id,'client');
+  assert.equal(f.saved.refreshToken,'refresh-rotated');
+  await next.logout();assert.equal(f.saved,null);assert.equal(next.active,false);
 });
-
-test('restore accepts a complete saved session', async () => {
-  const storage = memoryStorage({ accessToken: 'a', refreshToken: 'r', expiresAt: 9999999999, userId: 'u1' });
-  const session = createSession({ storage, fetchImpl: async () => makeResponse(200, { user: { id: 'u1', role: 'client' } }) });
-  assert.equal(await session.restore(), true);
-  assert.equal(session.active, true);
-});
-
-test('restore clears malformed saved session instead of activating it', async () => {
-  const storage = memoryStorage({ accessToken: 'a' });
-  const session = createSession({ storage, fetchImpl: async () => { throw new Error('unexpected fetch'); } });
-  assert.equal(await session.restore(), false);
-  assert.equal(storage.peek(), null);
-});
-
-test('state verifies restored user identity and role', async () => {
-  const storage = memoryStorage({ accessToken: 'a', refreshToken: 'r', expiresAt: 9999999999, userId: 'u1' });
-  const session = createSession({ storage, fetchImpl: async () => makeResponse(200, { user: { id: 'u1', role: 'client' } }) });
-  await session.restore();
-  const state = await session.state();
-  assert.equal(state.user.id, 'u1');
-});
-
-test('state rejects a restored session for a different user', async () => {
-  const storage = memoryStorage({ accessToken: 'a', refreshToken: 'r', expiresAt: 9999999999, userId: 'u1' });
-  const session = createSession({ storage, fetchImpl: async () => makeResponse(200, { user: { id: 'u2', role: 'client' } }) });
-  await session.restore();
-  await assert.rejects(() => session.state(), error => error instanceof SessionError && error.code === 'session_expired');
-  assert.equal(storage.peek(), null);
-});
-
-test('expired access token refreshes before state request', async () => {
-  const now = 2_000_000_000_000;
-  const storage = memoryStorage({ accessToken: 'old', refreshToken: 'r1', expiresAt: Math.floor(now / 1000) - 1, userId: 'u1' });
-  const calls = [];
-  const session = createSession({
-    storage,
-    now: () => now,
-    fetchImpl: async (url, options) => {
-      calls.push([url, options]);
-      if (url.endsWith('/api/v1/auth/refresh')) return makeResponse(200, { tokens: { accessToken: 'new', refreshToken: 'r2', expiresIn: 3600 } });
-      return makeResponse(200, { user: { id: 'u1', role: 'client' } });
-    }
+test('parallel 401 responses share one refresh request',async()=>{
+  let refreshes=0;
+  const f=fixture(async(path,o)=>{
+    if(path.endsWith('/login'))return loginReply('client');
+    if(path.endsWith('/refresh')){refreshes++;await new Promise(r=>setTimeout(r,10));return reply({tokens:tokens('rotated')});}
+    return o.headers.Authorization==='Bearer rotated'?reply({ok:true}):reply({error:'expired'},401);
   });
-  await session.restore();
-  const state = await session.state();
-  assert.equal(state.user.id, 'u1');
-  assert.match(calls[1][1].headers.Authorization, /new/);
+  await f.session.login({});
+  assert.deepEqual(await Promise.all([f.session.request('/one'),f.session.request('/two')]),[{ok:true},{ok:true}]);
+  assert.equal(refreshes,1);
 });
-
-test('401 refreshes once and retries authenticated request', async () => {
-  const storage = memoryStorage({ accessToken: 'old', refreshToken: 'r1', expiresAt: 9999999999, userId: 'u1' });
-  let stateCalls = 0;
-  const session = createSession({
-    storage,
-    fetchImpl: async (url, options) => {
-      if (url.endsWith('/api/v1/auth/refresh')) return makeResponse(200, { tokens: { accessToken: 'new', refreshToken: 'r2', expiresIn: 3600 } });
-      if (url.endsWith('/api/v1/state')) {
-        stateCalls++;
-        if (stateCalls === 1) return makeResponse(401, { error: 'expired' });
-        assert.equal(options.headers.Authorization, 'Bearer new');
-        return makeResponse(200, { user: { id: 'u1', role: 'client' } });
-      }
-      throw new Error('unexpected request');
-    }
+test('HTTP 200 public snapshot triggers refresh before displaying authenticated state',async()=>{
+  let calls=0;
+  const f=fixture((path,o)=>path.endsWith('/login')?loginReply('client'):path.endsWith('/refresh')?(calls++,reply({tokens:tokens('rotated')})):reply({user:o.headers.Authorization==='Bearer rotated'?user('client'):null}));
+  await f.session.login({});assert.equal((await f.session.state()).user.id,'client');assert.equal(calls,1);
+});
+test('wrong account identity and rejected refresh clear saved credentials',async()=>{
+  for(const mode of ['identity','expired']) {
+    const f=fixture(path=>path.endsWith('/login')?loginReply('client'):path.endsWith('/refresh')?reply({error:'expired'},400):reply({user:mode==='identity'?user('other'):null}));
+    await f.session.login({});await assert.rejects(f.session.state(),{code:'session_expired'});assert.equal(f.saved,null);assert.equal(f.session.active,false);
+  }
+});
+test('late administrator response cannot survive logout and customer login',async()=>{
+  let release,started;const ready=new Promise(r=>started=r);
+  const f=fixture(async(path,o)=>{
+    if(path.endsWith('/login'))return loginReply(JSON.parse(o.body).id);
+    if(path==='/slow'){started();await new Promise(r=>release=r);return reply({user:user('admin')});}
+    return reply({user:user('client')});
   });
-  await session.restore();
-  assert.equal((await session.state()).user.id, 'u1');
-  assert.equal(stateCalls, 2);
+  await f.session.login({id:'admin'});
+  const slow=assert.rejects(f.session.request('/slow'),{code:'session_changed'});
+  await ready;await f.session.logout();await f.session.login({id:'client'});release();await slow;
+  assert.equal((await f.session.state()).user.id,'client');assert.equal(f.saved.userId,'client');
 });
-
-test('invalid refresh clears session', async () => {
-  const storage = memoryStorage({ accessToken: 'old', refreshToken: 'r1', expiresAt: 1, userId: 'u1' });
-  const session = createSession({
-    storage,
-    now: () => 100000,
-    fetchImpl: async url => url.endsWith('/api/v1/auth/refresh') ? makeResponse(401, { error: 'invalid refresh' }) : makeResponse(500, {})
+test('refresh finishing after logout cannot recreate the stored session',async()=>{
+  let release,started;const ready=new Promise(r=>started=r);
+  const f=fixture(async path=>{
+    if(path.endsWith('/login'))return loginReply('admin');
+    if(path.endsWith('/refresh')){started();await new Promise(r=>release=r);return reply({tokens:tokens('old-admin')});}
+    return reply({error:'expired'},401);
   });
-  await session.restore();
-  await assert.rejects(() => session.state(), error => error instanceof SessionError && error.code === 'session_expired');
-  assert.equal(storage.peek(), null);
+  await f.session.login({});const pending=assert.rejects(f.session.request('/private'),{code:'session_changed'});
+  await ready;await f.session.logout();release();await pending;assert.equal(f.saved,null);assert.equal(f.session.active,false);
 });
-
-test('logout clears local session immediately', async () => {
-  const storage = memoryStorage({ accessToken: 'a', refreshToken: 'r', expiresAt: 9999999999, userId: 'u1' });
-  const session = createSession({ storage, fetchImpl: async () => makeResponse(200, {}) });
-  await session.restore();
-  await session.logout();
-  assert.equal(session.active, false);
-  assert.equal(storage.peek(), null);
+test('network errors preserve credentials for retry and are distinct from bad login',async()=>{
+  const f=fixture(path=>{if(path.endsWith('/login'))return loginReply('client');throw new Error('offline');});
+  await f.session.login({});await assert.rejects(f.session.state(),{code:'network'});assert.equal(f.session.active,true);assert.ok(f.saved);
 });
-
-test('storage failure is surfaced distinctly', async () => {
-  const storage = { async get() { throw new Error('keychain unavailable'); }, async set() {}, async remove() {} };
-  const session = createSession({ storage, fetchImpl: async () => makeResponse(200, {}) });
-  await assert.rejects(() => session.restore(), error => error instanceof SessionError && error.code === 'storage_failed');
+test('registration with and without email confirmation follows server response',async()=>{
+  for(const confirmationRequired of [false,true]){
+    const f=fixture(path=>path.endsWith('/register')?reply(confirmationRequired?{confirmationRequired}:{tokens:tokens('new')}):reply({user:user('new')}));
+    await f.session.register({role:'client'});assert.equal(f.session.active,!confirmationRequired);
+    if(!confirmationRequired){await f.session.state();assert.equal(f.saved.userId,'new');}else assert.equal(f.saved,null);
+  }
+});
+test('secure storage failure prevents entering a partially saved session',async()=>{
+  const f=fixture(()=>loginReply('client'));f.storage.set=async()=>{throw new Error('Keychain locked');};
+  await assert.rejects(f.session.login({}),{code:'storage_failed'});assert.equal(f.session.active,false);assert.equal(f.saved,null);
+});
+test('local logout does not wait for the remote logout endpoint',async()=>{
+  let release;
+  const f=fixture(async path=>path.endsWith('/login')?loginReply('client'):new Promise(r=>{release=()=>r(reply({ok:true}));}));
+  await f.session.login({});await f.session.logout();assert.equal(f.saved,null);assert.equal(f.session.active,false);release();
 });
