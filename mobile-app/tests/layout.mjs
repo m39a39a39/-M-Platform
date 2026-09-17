@@ -44,6 +44,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
   const label=`${engine}-${width}-${language}-${role}`;
   const context=await browser.newContext({viewport:{width,height:844},deviceScaleFactor:1,isMobile:true,hasTouch:true});
   const page=await context.newPage();
+  page.setDefaultTimeout(10000);
   const errors=[];
   page.on('pageerror',e=>errors.push(e.message));
   await page.addInitScript(lang=>localStorage.setItem('CapacitorStorage.language',lang),language);
@@ -58,7 +59,12 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
     else if(path.endsWith('/state')) body={user:accounts.find(a=>a.role===role),requests,quotes,publicOffers,accounts,interests:[]};
     else if(path.endsWith('/notifications')) body=notes;
     else if(path.endsWith('/app-config')) body={apiVersion:1};
-    else throw new Error(`Unexpected API call ${path}`);
+    else if(path.endsWith('/mutations')) {
+      const mutation=route.request().postDataJSON();
+      if(mutation.collection!=='requests' || Object.keys(mutation.patch).join()!=='lastSeenQuoteAt') errors.push('Unexpected fixture mutation');
+      body={ok:true}; // Opening a customer request marks its quotes as seen.
+    }
+    else { errors.push(`Unexpected API call ${path}`); return route.fulfill({status:500,json:{error:'Unexpected fixture endpoint'}}); }
     await route.fulfill({json:body});
   });
   try {
