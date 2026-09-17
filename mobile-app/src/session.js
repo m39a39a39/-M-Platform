@@ -15,13 +15,17 @@ const storage = {
   },
   async set(value) {
     if (!Capacitor.isNativePlatform()) { webSession = value; return; }
-    await SecureStoragePlugin.set({key,value:JSON.stringify(value)});
+    const result=await SecureStoragePlugin.set({key,value:JSON.stringify(value)});
+    if(result.value===false)throw new Error('Secure storage write failed');
   },
   async remove() {
     webSession = null;
     if (Capacitor.isNativePlatform()) {
       const keys = await SecureStoragePlugin.keys();
-      if (keys.value.includes(key)) await SecureStoragePlugin.remove({key});
+      if (keys.value.includes(key)) {
+        const result=await SecureStoragePlugin.remove({key});
+        if(result.value===false)throw new Error('Secure storage removal failed');
+      }
     }
   }
 };

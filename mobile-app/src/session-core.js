@@ -28,7 +28,8 @@ export function createSession({ storage, fetchImpl = (...args) => fetch(...args)
     const next = { accessToken: value.accessToken, refreshToken: value.refreshToken,
       expiresAt: Number(value.expiresAt) || Math.floor(now()/1000) + (Number(value.expiresIn)||3600),
       userId: value.userId || tokens?.userId || null };
-    await enqueue(async () => { guard(version); await storage.set(next); });
+    try { await enqueue(async () => { guard(version); await storage.set(next); }); }
+    catch (error) { guard(version); throw new SessionError('storage_failed'); }
     guard(version); tokens = next;
   }
   async function send(path, { method = 'GET', body, token } = {}, version = epoch) {
@@ -137,7 +138,9 @@ export function createSession({ storage, fetchImpl = (...args) => fetch(...args)
     await clear('logout');
     if (old?.accessToken) {
       // Logout must never refresh a session that the user has just discarded.
-      try { await send('/api/v1/auth/logout',{method:'POST',body:{},token:old.accessToken}); } catch {}
+      // Local sign-out must not wait for an unavailable network. A subsequent login
+      // aborts this old request along with all other work from the previous epoch.
+      void send('/api/v1/auth/logout',{method:'POST',body:{},token:old.accessToken}).catch(()=>{});
     }
   }
   return { raw, request, state, restore, logout, clear,
