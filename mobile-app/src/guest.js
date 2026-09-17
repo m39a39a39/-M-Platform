@@ -1,4 +1,5 @@
-import { Preferences } from '@capacitor/preferences';
+import { languageReady, getLanguage, onLanguageChange, toggleLanguage } from './language.js';
+import { showView } from './views.js';
 
 const API='https://m-platform-tan.vercel.app';
 const $=id=>document.getElementById(id);
@@ -26,12 +27,12 @@ function apply(){
 }
 
 async function api(path){
-  const r=await fetch(API+path,{headers:{'X-M-Client':'native'}});if(!r.ok)throw new Error(`HTTP ${r.status}`);return r.json();
+  const r=await fetch(API+path,{credentials:'omit',headers:{'X-M-Client':'native'}});if(!r.ok)throw new Error(`HTTP ${r.status}`);return r.json();
 }
 async function imageUrl(src){
   if(mediaCache.has(src))return mediaCache.get(src);
   const path=src.replace(/^\/api\/media\//,'/api/v1/media/');
-  const r=await fetch(API+path,{headers:{'X-M-Client':'native'}});if(!r.ok)return '';
+  const r=await fetch(API+path,{credentials:'omit',headers:{'X-M-Client':'native'}});if(!r.ok)return '';
   const url=URL.createObjectURL(await r.blob());mediaCache.set(src,url);return url;
 }
 async function hydrateImages(){
@@ -56,12 +57,8 @@ async function load(){
   $('guestOffers').innerHTML=`<div class="guest-loading">${esc(t('loading'))}</div>`;
   try{state=await api('/api/v1/state');renderOffers();}catch(error){console.error(error);$('guestOffers').innerHTML=`<div class="guest-empty">${esc(t('error'))}</div>`;}
 }
-function showGuest(){
-  $('loginView').classList.add('hidden');$('appView').classList.add('hidden');$('guestView').classList.remove('hidden');window.scrollTo({top:0,behavior:'instant'});
-}
-function showLogin(){
-  $('guestView').classList.add('hidden');$('loginView').classList.remove('hidden');window.scrollTo({top:0,behavior:'instant'});
-}
+function showGuest(){showView('guestView');}
+function showLogin(){showView('loginView');}
 function openOffer(id){
   const o=(state?.publicOffers||[]).find(x=>x.id===id);if(!o)return;
   $('modalKicker').textContent=`#${ref(o)}`;$('modalTitle').textContent=title(o);
@@ -74,16 +71,9 @@ $('guestLoginBtn').addEventListener('click',showLogin);
 $('backToGuestBtn').addEventListener('click',showGuest);
 $('guestBrowseBtn').addEventListener('click',()=>$('guestOffersSection').scrollIntoView({behavior:'smooth',block:'start'}));
 $('guestReloadBtn').addEventListener('click',load);
-$('guestLangBtn').addEventListener('click',async()=>{lang=lang==='ar'?'en':'ar';await Preferences.set({key:'language',value:lang});apply();});
+$('guestLangBtn').addEventListener('click',toggleLanguage);
+onLanguageChange(value=>{lang=value;apply();});
 $('guestOffers').addEventListener('click',e=>{const card=e.target.closest('[data-guest-offer]');if(card)openOffer(card.dataset.guestOffer);});
 $('modal').addEventListener('click',e=>{if(e.target.closest('.guest-modal-login')){$('modal').classList.add('hidden');showLogin();}});
 
-const appObserver=new MutationObserver(()=>{
-  if($('appView').classList.contains('hidden')&&!$('loginView').classList.contains('hidden')&&!$('guestView').classList.contains('hidden'))return;
-  if($('appView').classList.contains('hidden')&&!$('loginView').classList.contains('hidden')&&$('guestView').classList.contains('hidden')&&document.activeElement?.id!=='email'&&document.activeElement?.id!=='password'){
-    // Keep the login page visible after an explicit login attempt; logout is handled when the form is not active.
-  }
-});
-appObserver.observe($('appView'),{attributes:true,attributeFilter:['class']});
-
-(async()=>{const saved=await Preferences.get({key:'language'});lang=saved.value==='en'?'en':'ar';apply();await load();})();
+(async()=>{await languageReady;lang=getLanguage();apply();await load();})();

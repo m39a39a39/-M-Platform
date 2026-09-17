@@ -9,12 +9,14 @@
     "preview": "vite preview",
     "cap:sync": "npx cap sync",
     "cap:ios": "npx cap open ios",
-    "cap:android": "npx cap open android"
+    "cap:android": "npx cap open android",
+    "test": "node --test tests/session.test.mjs"
   },
   "dependencies": {
     "@capacitor/app": "^7.0.0",
     "@capacitor/core": "^7.0.0",
-    "@capacitor/preferences": "^7.0.0"
+    "@capacitor/preferences": "^7.0.0",
+    "capacitor-secure-storage-plugin": "0.12.0"
   },
   "devDependencies": {
     "@capacitor/android": "^7.0.0",

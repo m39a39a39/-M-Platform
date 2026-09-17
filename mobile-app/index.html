@@ -9,7 +9,8 @@
 </head>
 <body>
   <div id="app" class="app-shell">
-    <section id="guestView" class="guest-wrap">
+    <section id="bootView" class="auth-wrap"><div class="card"><p data-auth-copy="loading">جارٍ التحقق من الجلسة...</p></div></section>
+    <section id="guestView" class="hidden guest-wrap">
       <header class="guest-header">
         <div class="brand-mini guest-brand"><span class="brand-mark small">M</span><div><strong>M Platform</strong><small id="guestTagline">اطلب ما تحتاجه، وقارن العروض بثقة.</small></div></div>
         <button id="guestLangBtn" class="icon-btn" type="button">EN</button>
@@ -25,8 +26,8 @@
             <button id="guestLoginBtn" class="secondary-btn" type="button">تسجيل الدخول</button>
           </div>
           <div class="guest-register-row">
-            <a id="guestCustomerRegister" href="https://m-platform-tan.vercel.app/customer-web/register-customer.html" target="_blank" rel="noreferrer">إنشاء حساب عميل</a>
-            <a id="guestSupplierRegister" href="https://m-platform-tan.vercel.app/supplier-web/register-supplier.html" target="_blank" rel="noreferrer">إنشاء حساب مورد</a>
+            <button id="guestCustomerRegister" class="text-btn" type="button">إنشاء حساب عميل</button>
+            <button id="guestSupplierRegister" class="text-btn" type="button">إنشاء حساب مورد</button>
           </div>
         </section>
 
@@ -57,6 +58,36 @@
       </section>
     </section>
 
+    <section id="registerView" class="hidden auth-wrap">
+      <header class="brand-block"><div class="brand-mark">M</div><div class="brand-copy"><strong>M Platform</strong></div><button id="registerLangBtn" class="icon-btn" type="button">EN</button></header>
+      <button id="registerBackBtn" class="back-home-btn" type="button" data-auth-copy="back">العودة للرئيسية</button>
+      <section class="card auth-card">
+        <h1 id="registerTitle">إنشاء حساب عميل</h1>
+        <p class="muted" data-auth-copy="registerIntro">أنشئ حسابك للمتابعة داخل التطبيق.</p>
+        <div class="segmented"><button type="button" data-register-role="client" data-auth-copy="client">عميل</button><button type="button" data-register-role="supplier" data-auth-copy="supplier">مورد</button></div>
+        <form id="registerForm" class="form-stack">
+          <label><span data-auth-copy="name">الاسم</span><input id="registerName" name="name" autocomplete="name" maxlength="200" required /></label>
+          <label><span data-auth-copy="company">اسم الشركة</span><input id="registerCompany" name="company" autocomplete="organization" maxlength="200" /></label>
+          <label><span data-auth-copy="email">البريد الإلكتروني</span><input id="registerEmail" name="email" type="email" autocomplete="email" maxlength="254" required /></label>
+          <label><span data-auth-copy="phone">رقم التواصل مع رمز الدولة (للإدارة فقط)</span><input id="registerPhone" name="phone" type="tel" autocomplete="tel" maxlength="200" required /></label>
+          <label><span data-auth-copy="country">الدولة</span><input id="registerCountry" name="country" autocomplete="country-name" maxlength="200" required /></label>
+          <label id="registerCategoryField" class="hidden"><span data-auth-copy="category">فئة المنتجات</span><input id="registerCategory" name="category" maxlength="200" /></label>
+          <label><span data-auth-copy="password">كلمة المرور (8 أحرف على الأقل)</span><input id="registerPassword" name="password" type="password" autocomplete="new-password" minlength="8" maxlength="128" required /></label>
+          <label><span data-auth-copy="confirmPassword">تأكيد كلمة المرور</span><input id="registerConfirm" name="confirmPassword" type="password" autocomplete="new-password" minlength="8" maxlength="128" required /></label>
+          <p id="registerMessage" class="message" role="status" aria-live="polite"></p>
+          <button id="registerBtn" class="primary-btn" type="submit" data-auth-copy="register">إنشاء الحساب</button>
+        </form>
+        <button id="registerLoginBtn" class="text-btn full" type="button" data-auth-copy="already">لدي حساب بالفعل</button>
+      </section>
+    </section>
+    <section id="sessionView" class="hidden auth-wrap">
+      <section class="card form-stack">
+        <p id="sessionMessage" class="message" role="status"></p>
+        <button id="sessionRetryBtn" class="primary-btn" type="button" data-auth-copy="retry">إعادة المحاولة</button>
+        <button id="sessionLogoutBtn" class="secondary-btn" type="button" data-auth-copy="logout">تسجيل الخروج</button>
+      </section>
+    </section>
+
     <section id="appView" class="hidden mobile-workspace">
       <header class="app-header">
         <div class="brand-mini"><span class="brand-mark small">M</span><div><strong>M Platform</strong><small id="headerRole"></small></div></div>
@@ -81,8 +112,8 @@
     </section>
   </div>
   <div id="toast" class="toast hidden"></div>
-  <script type="module" src="/src/admin-mobile.js"></script>
   <script type="module" src="/src/app.js"></script>
   <script type="module" src="/src/guest.js"></script>
 </body>
 </html>
+

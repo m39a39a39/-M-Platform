@@ -1,11 +1,10 @@
-import { Preferences } from '@capacitor/preferences';
+import { session } from './session.js';
+import { languageReady, getLanguage, onLanguageChange, toggleLanguage } from './language.js';
+import { showView } from './views.js';
+import { configureAdmin, updateAdminState, resetAdmin, renderAdminScreen } from './admin-mobile.js';
 import { App } from '@capacitor/app';
 
-const API='https://m-platform-tan.vercel.app';
-let accessToken=null;
-let refreshToken=null;
 let currentUser=null;
-let appConfig=null;
 let platformState=null;
 let notifications=[];
 let lang='ar';
@@ -15,8 +14,8 @@ let busy=false;
 const mediaCache=new Map();
 
 const copy={
-  ar:{tagline:'اطلب ما تحتاجه، وقارن العروض بثقة.',secure:'دخول آمن',loginTitle:'تسجيل الدخول',loginSubtitle:'استخدم نفس حسابك الموجود على المنصة.',email:'البريد الإلكتروني',password:'كلمة المرور',login:'تسجيل الدخول',loading:'جارٍ تسجيل الدخول...',failed:'تعذر تسجيل الدخول. تحقق من البريد وكلمة المرور.',home:'الرئيسية',requests:'الطلبات',invites:'الدعوات',offers:'العروض',notifications:'الإشعارات',account:'الحساب',client:'عميل',supplier:'مورد',admin:'إدارة',refreshing:'جارٍ التحديث...',empty:'لا توجد بيانات حاليًا.',details:'التفاصيل',status:'الحالة',quantity:'الكمية',country:'الدولة',neededDate:'تاريخ الاحتياج',receivedQuotes:'العروض المستلمة',newRequest:'طلب جديد',publicOffers:'العروض العامة',requestedOffers:'العروض التي طلبتها',submittedOffers:'العروض المقدمة',myPublicOffers:'عروضي العامة',interestRequests:'طلبات الاهتمام',newPublicOffer:'عرض عام جديد',submitQuote:'تقديم عرض سعر',editQuote:'تعديل العرض',selectQuote:'اختيار العرض',selected:'تم اختيار العرض',requestOffer:'طلب هذا العرض',requested:'تم الطلب',price:'السعر',moq:'الحد الأدنى',leadTime:'مدة الإنتاج',sampleCost:'تكلفة العينة',stock:'المخزون',validUntil:'صالح حتى',specifications:'المواصفات',product:'المنتج',notes:'ملاحظات',currency:'العملة',images:'الصور',submit:'إرسال',save:'حفظ',logout:'تسجيل الخروج',profile:'بيانات الحساب',newQuotes:'عروض جديدة',underReview:'قيد المراجعة',activeRequests:'طلبات نشطة',published:'منشور',pending:'قيد المراجعة',completed:'مكتمل',sent:'تم الإرسال للموردين',review:'قيد المراجعة',coordinating:'قيد التنسيق',accepted:'مقبول',cancelled:'ملغي',markAllRead:'تحديد الكل كمقروء',noNotifications:'لا توجد إشعارات.',unread:'جديد',uploading:'جارٍ رفع الصور...',saving:'جارٍ الحفظ...',created:'تم الإرسال بنجاح.',chooseImages:'اختر حتى 5 صور، بحد أقصى 1 MB للصورة.',sessionNote:'هذه نسخة اختبار. جلسة الدخول تبقى أثناء تشغيل التطبيق فقط.',adminMobile:'واجهة الإدارة الكاملة ستضاف في مرحلة منفصلة. يمكنك حاليًا مشاهدة ملخص البيانات والإشعارات.'},
-  en:{tagline:'Request what you need, and compare offers with confidence.',secure:'Secure access',loginTitle:'Sign in',loginSubtitle:'Use the same account you already have on the platform.',email:'Email address',password:'Password',login:'Sign in',loading:'Signing in...',failed:'Unable to sign in. Check your email and password.',home:'Home',requests:'Requests',invites:'Invites',offers:'Offers',notifications:'Notifications',account:'Account',client:'Customer',supplier:'Supplier',admin:'Admin',refreshing:'Refreshing...',empty:'No data available.',details:'Details',status:'Status',quantity:'Quantity',country:'Country',neededDate:'Needed date',receivedQuotes:'Received quotes',newRequest:'New request',publicOffers:'Public offers',requestedOffers:'Requested offers',submittedOffers:'Submitted offers',myPublicOffers:'My public offers',interestRequests:'Interest requests',newPublicOffer:'New public offer',submitQuote:'Submit quote',editQuote:'Edit offer',selectQuote:'Select offer',selected:'Selected',requestOffer:'Request this offer',requested:'Requested',price:'Price',moq:'MOQ',leadTime:'Production time',sampleCost:'Sample cost',stock:'Stock',validUntil:'Valid until',specifications:'Specifications',product:'Product',notes:'Notes',currency:'Currency',images:'Images',submit:'Submit',save:'Save',logout:'Sign out',profile:'Account details',newQuotes:'New offers',underReview:'Under review',activeRequests:'Active requests',published:'Published',pending:'Under review',completed:'Completed',sent:'Sent to suppliers',review:'Under review',coordinating:'Coordinating',accepted:'Accepted',cancelled:'Cancelled',markAllRead:'Mark all as read',noNotifications:'No notifications.',unread:'New',uploading:'Uploading images...',saving:'Saving...',created:'Submitted successfully.',chooseImages:'Choose up to 5 images, max 1 MB each.',sessionNote:'This is a test build. Your sign-in session lasts while the app is running.',adminMobile:'The full admin mobile interface will be added separately. For now you can view a data summary and notifications.'}
+  ar:{tagline:'اطلب ما تحتاجه، وقارن العروض بثقة.',secure:'دخول آمن',loginTitle:'تسجيل الدخول',loginSubtitle:'استخدم نفس حسابك الموجود على المنصة.',email:'البريد الإلكتروني',password:'كلمة المرور',login:'تسجيل الدخول',loading:'جارٍ تسجيل الدخول...',failed:'تعذر تسجيل الدخول. تحقق من البريد وكلمة المرور.',home:'الرئيسية',requests:'الطلبات',invites:'الدعوات',offers:'العروض',notifications:'الإشعارات',account:'الحساب',client:'عميل',supplier:'مورد',admin:'إدارة',refreshing:'جارٍ التحديث...',empty:'لا توجد بيانات حاليًا.',details:'التفاصيل',status:'الحالة',quantity:'الكمية',country:'الدولة',neededDate:'تاريخ الاحتياج',receivedQuotes:'العروض المستلمة',newRequest:'طلب جديد',publicOffers:'العروض العامة',requestedOffers:'العروض التي طلبتها',submittedOffers:'العروض المقدمة',myPublicOffers:'عروضي العامة',interestRequests:'طلبات الاهتمام',newPublicOffer:'عرض عام جديد',submitQuote:'تقديم عرض سعر',editQuote:'تعديل العرض',selectQuote:'اختيار العرض',selected:'تم اختيار العرض',requestOffer:'طلب هذا العرض',requested:'تم الطلب',price:'السعر',moq:'الحد الأدنى',leadTime:'مدة الإنتاج',sampleCost:'تكلفة العينة',stock:'المخزون',validUntil:'صالح حتى',specifications:'المواصفات',product:'المنتج',notes:'ملاحظات',currency:'العملة',images:'الصور',submit:'إرسال',save:'حفظ',logout:'تسجيل الخروج',profile:'بيانات الحساب',newQuotes:'عروض جديدة',underReview:'قيد المراجعة',activeRequests:'طلبات نشطة',published:'منشور',pending:'قيد المراجعة',completed:'مكتمل',sent:'تم الإرسال للموردين',review:'قيد المراجعة',coordinating:'قيد التنسيق',accepted:'مقبول',cancelled:'ملغي',markAllRead:'تحديد الكل كمقروء',noNotifications:'لا توجد إشعارات.',unread:'جديد',uploading:'جارٍ رفع الصور...',saving:'جارٍ الحفظ...',created:'تم الإرسال بنجاح.',chooseImages:'اختر حتى 5 صور، بحد أقصى 1 MB للصورة.',sessionNote:'يمكنك تسجيل الخروج لإنهاء جلستك على هذا الجهاز.',adminMobile:'واجهة الإدارة الكاملة ستضاف في مرحلة منفصلة. يمكنك حاليًا مشاهدة ملخص البيانات والإشعارات.'},
+  en:{tagline:'Request what you need, and compare offers with confidence.',secure:'Secure access',loginTitle:'Sign in',loginSubtitle:'Use the same account you already have on the platform.',email:'Email address',password:'Password',login:'Sign in',loading:'Signing in...',failed:'Unable to sign in. Check your email and password.',home:'Home',requests:'Requests',invites:'Invites',offers:'Offers',notifications:'Notifications',account:'Account',client:'Customer',supplier:'Supplier',admin:'Admin',refreshing:'Refreshing...',empty:'No data available.',details:'Details',status:'Status',quantity:'Quantity',country:'Country',neededDate:'Needed date',receivedQuotes:'Received quotes',newRequest:'New request',publicOffers:'Public offers',requestedOffers:'Requested offers',submittedOffers:'Submitted offers',myPublicOffers:'My public offers',interestRequests:'Interest requests',newPublicOffer:'New public offer',submitQuote:'Submit quote',editQuote:'Edit offer',selectQuote:'Select offer',selected:'Selected',requestOffer:'Request this offer',requested:'Requested',price:'Price',moq:'MOQ',leadTime:'Production time',sampleCost:'Sample cost',stock:'Stock',validUntil:'Valid until',specifications:'Specifications',product:'Product',notes:'Notes',currency:'Currency',images:'Images',submit:'Submit',save:'Save',logout:'Sign out',profile:'Account details',newQuotes:'New offers',underReview:'Under review',activeRequests:'Active requests',published:'Published',pending:'Under review',completed:'Completed',sent:'Sent to suppliers',review:'Under review',coordinating:'Coordinating',accepted:'Accepted',cancelled:'Cancelled',markAllRead:'Mark all as read',noNotifications:'No notifications.',unread:'New',uploading:'Uploading images...',saving:'Saving...',created:'Submitted successfully.',chooseImages:'Choose up to 5 images, max 1 MB each.',sessionNote:'Sign out to end your session on this device.',adminMobile:'The full admin mobile interface will be added separately. For now you can view a data summary and notifications.'}
 };
 
 const $=id=>document.getElementById(id);
@@ -36,42 +35,30 @@ function newQuoteCount(request){const seen=Date.parse(request?.lastSeenQuoteAt||
 function cardBadge(status,extra=''){return `<span class="status-pill status-${esc(status)}">${esc(statusLabel(status))}</span>${extra}`;}
 function id(){return crypto.randomUUID();}
 
-async function refreshSession(){
-  if(!refreshToken)return false;
-  const r=await fetch(API+'/api/v1/auth/refresh',{method:'POST',headers:{'Content-Type':'application/json','X-M-Client':'native'},body:JSON.stringify({refreshToken})});
-  if(!r.ok)return false;
-  const data=await r.json();accessToken=data.tokens?.accessToken||null;refreshToken=data.tokens?.refreshToken||refreshToken;return !!accessToken;
-}
-async function rawFetch(path,{method='GET',body,auth=false}={}){
-  const headers={'X-M-Client':'native'};
-  if(body!==undefined)headers['Content-Type']='application/json';
-  if(auth&&accessToken)headers.Authorization=`Bearer ${accessToken}`;
-  let response=await fetch(API+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body)});
-  if(response.status===401&&auth&&await refreshSession()){
-    headers.Authorization=`Bearer ${accessToken}`;
-    response=await fetch(API+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body)});
-  }
-  return response;
-}
-async function request(path,options={}){
-  const response=await rawFetch(path,options),data=await response.json().catch(()=>({}));
-  if(!response.ok)throw new Error(data.error||`HTTP ${response.status}`);
-  return data;
-}
-async function login(email,password){
-  const data=await request('/api/v1/auth/login',{method:'POST',body:{email,password}});
-  accessToken=data.tokens?.accessToken||null;refreshToken=data.tokens?.refreshToken||null;currentUser=data.user||null;
-  if(!accessToken||!refreshToken||!currentUser)throw new Error('Missing native session');
-}
+const rawFetch=(path,options={})=>session.raw(path,options);
+const request=(path,options={})=>session.request(path,options);
 async function mutate(collection,itemId,version,patch){return request('/api/v1/mutations',{method:'POST',auth:true,body:{collection,id:itemId,version:Number(version||0),patch}});}
 
 async function loadData({render=true}={}){
-  platformState=await request('/api/v1/state',{auth:true});
-  currentUser=platformState.user||currentUser;
-  notifications=await request('/api/v1/notifications',{auth:true}).catch(()=>[]);
-  updateShell();
+  const epoch=session.epoch;
+  const next=await session.state();
+  const nextNotifications=await request('/api/v1/notifications').catch(error=>{if(error.code==='session_expired'||error.code==='session_changed')throw error;return [];});
+  if(epoch!==session.epoch)return;
+  platformState=next;currentUser=next.user;notifications=nextNotifications;
+  updateAdminState(next);updateShell();
   if(render)renderScreen();
 }
+configureAdmin({reload:()=>loadData({render:false})});
+session.onReset(reason=>{
+  currentUser=null;platformState=null;notifications=[];activeScreen='home';activeSub='primary';
+  resetAdmin();closeModal();
+  for(const url of mediaCache.values())URL.revokeObjectURL(url);
+  mediaCache.clear();$('screen').replaceChildren();$('headerRole').textContent='';
+  $('navUnread').classList.add('hidden');$('toast').classList.add('hidden');
+  document.querySelectorAll('#bottomNav button').forEach(b=>b.classList.toggle('active',b.dataset.screen==='home'));
+  if(reason==='logout')showView('bootView');
+  if(reason==='expired'){showView('loginView');setMessage(tr('انتهت جلسة الدخول. سجّل الدخول مجددًا.','Your session expired. Please sign in again.'));}
+});
 
 function updateShell(){
   const role=currentUser?.role||'client';
@@ -92,17 +79,18 @@ function applyLanguage(){
   if(currentUser){updateShell();renderScreen();}
 }
 
-function showToast(text){const el=$('toast');el.textContent=text;el.classList.remove('hidden');clearTimeout(showToast.timer);showToast.timer=setTimeout(()=>el.classList.add('hidden'),2200);}
+function showToast(text){if(!currentUser)return;const el=$('toast');el.textContent=text;el.classList.remove('hidden');clearTimeout(showToast.timer);showToast.timer=setTimeout(()=>el.classList.add('hidden'),2200);}
 function openModal(title,kicker,html){$('modalTitle').textContent=title;$('modalKicker').textContent=kicker||'';$('modalBody').innerHTML=html;$('modal').classList.remove('hidden');hydrateImages($('modalBody'));}
 function closeModal(){$('modal').classList.add('hidden');$('modalBody').innerHTML='';}
 
 function gallery(images=[]){if(!images.length)return '';return `<div class="media-grid">${images.map(src=>`<div class="media-placeholder"><img alt="" data-media="${esc(src)}" /></div>`).join('')}</div>`;}
 async function hydrateImages(root=document){
+  const epoch=session.epoch;
   for(const img of root.querySelectorAll('img[data-media]:not([data-loaded])')){
     img.dataset.loaded='1';const src=img.dataset.media;if(mediaCache.has(src)){img.src=mediaCache.get(src);continue;}
     try{
       const path=src.replace(/^\/api\/media\//,'/api/v1/media/');const response=await rawFetch(path,{auth:true});if(!response.ok)continue;
-      const url=URL.createObjectURL(await response.blob());mediaCache.set(src,url);img.src=url;
+      const blob=await response.blob();if(epoch!==session.epoch)return;const url=URL.createObjectURL(blob);mediaCache.set(src,url);if(img.isConnected)img.src=url;
     }catch{}
   }
 }
@@ -173,7 +161,7 @@ function renderAccount(){
   $('screen').innerHTML=pageHeader(t('account'))+`<section class="profile-card"><div class="avatar">${esc((u.name||u.company||u.email||'M').charAt(0).toUpperCase())}</div><h2>${esc(u.name||u.company||'M Platform')}</h2><p>${esc(t(u.role))}</p><dl><div><dt>${esc(t('email'))}</dt><dd>${esc(u.email||'—')}</dd></div>${u.company?`<div><dt>${tr('الشركة','Company')}</dt><dd>${esc(u.company)}</dd></div>`:''}${u.country?`<div><dt>${esc(t('country'))}</dt><dd>${esc(u.country)}</dd></div>`:''}</dl><p class="session-note">${esc(t('sessionNote'))}</p><button class="danger-btn" data-action="logout">${esc(t('logout'))}</button></section>`;
 }
 function renderAdminCollection(kind){const rows=kind==='requests'?(platformState.requests||[]):[...(platformState.quotes||[]),...(platformState.publicOffers||[])];$('screen').innerHTML=pageHeader(kind==='requests'?t('requests'):t('offers'),t('adminMobile'))+`<div class="list-stack">${rows.slice(0,50).map(x=>itemCard(x,{subtitle:descriptionOf(x),badge:cardBadge(x.status),meta:`#${ref(x)} · ${date(x.createdAt)}`})).join('')||empty()}</div>`;}
-function renderScreen(){if(!currentUser||!platformState)return;updateShell();if(activeScreen==='home')renderHome();else if(activeScreen==='requests')renderRequests();else if(activeScreen==='offers')renderOffers();else if(activeScreen==='notifications')renderNotifications();else renderAccount();hydrateImages($('screen'));}
+function renderScreen(){if(!currentUser||!platformState)return;updateShell();if(renderAdminScreen(activeScreen))return;if(activeScreen==='home')renderHome();else if(activeScreen==='requests')renderRequests();else if(activeScreen==='offers')renderOffers();else if(activeScreen==='notifications')renderNotifications();else renderAccount();hydrateImages($('screen'));}
 
 async function openClientRequest(requestId){
   let r=(platformState.requests||[]).find(x=>x.id===requestId);if(!r)return;
@@ -224,16 +212,94 @@ async function handleAction(target){
   if(target.dataset.notification){const n=notifications.find(x=>String(x.id)===String(target.dataset.notification));if(!n)return;if(!n.readAt)await request('/api/v1/notifications/read',{method:'POST',auth:true,body:{id:Number(n.id)}}).catch(()=>{});await loadData({render:false});if(n.target?.screen==='supplierRequest')return openSupplierRequest(n.target.requestId);if(n.target?.screen==='customerRequest')return openClientRequest(n.target.requestId);renderScreen();return;}
 }
 
-async function logout(){try{if(accessToken)await request('/api/v1/auth/logout',{method:'POST',auth:true,body:{}});}catch{}accessToken=null;refreshToken=null;currentUser=null;platformState=null;notifications=[];$('appView').classList.add('hidden');$('loginView').classList.remove('hidden');$('loginForm').reset();setMessage('');}
-
-$('loginForm').addEventListener('submit',async e=>{e.preventDefault();if(busy)return;busy=true;setMessage(t('loading'));$('loginBtn').disabled=true;try{await login($('email').value.trim(),$('password').value);await loadData({render:false});$('loginView').classList.add('hidden');$('appView').classList.remove('hidden');activeScreen='home';activeSub='primary';setMessage('');renderScreen();}catch(error){console.error(error);setMessage(t('failed'));}finally{busy=false;$('loginBtn').disabled=false;}});
-$('langBtn').addEventListener('click',async()=>{lang=lang==='ar'?'en':'ar';await Preferences.set({key:'language',value:lang});applyLanguage();});
-$('appLangBtn').addEventListener('click',async()=>{lang=lang==='ar'?'en':'ar';await Preferences.set({key:'language',value:lang});applyLanguage();});
-$('refreshBtn').addEventListener('click',async()=>{if(busy)return;busy=true;$('refreshBtn').classList.add('spin');try{await loadData();showToast(t('refreshing'));}catch(e){showToast(e.message);}finally{busy=false;$('refreshBtn').classList.remove('spin');}});
-$('bottomNav').addEventListener('click',e=>{const b=e.target.closest('button[data-screen]');if(!b)return;activeScreen=b.dataset.screen;if(activeScreen==='offers')activeSub='primary';renderScreen();});
+function errorText(error,stage='data'){
+  if(error.code==='network')return tr('تعذر الاتصال. تحقق من الإنترنت وحاول مجددًا.','Connection failed. Check your internet connection and try again.');
+  if(error.code==='storage_failed')return tr('تعذر الوصول إلى التخزين الآمن للجلسة. أعد فتح التطبيق وحاول مجددًا.','Secure session storage is unavailable. Reopen the app and try again.');
+  if(error.code==='session_expired')return tr('انتهت جلسة الدخول. سجّل الدخول مجددًا.','Your session expired. Please sign in again.');
+  if(error.status===429)return tr('محاولات كثيرة. انتظر قليلًا ثم حاول مجددًا.','Too many attempts. Please wait before trying again.');
+  if(error.status>=500||error.code==='server_error')return tr('الخدمة غير متاحة مؤقتًا. حاول مجددًا.','The service is temporarily unavailable. Please try again.');
+  if(stage==='data')return tr('تم تسجيل الدخول، لكن تعذر تحميل بيانات الحساب. أعد المحاولة.','You are signed in, but account data could not be loaded. Please retry.');
+  return error.code==='invalid_session'?tr('تعذر بدء جلسة التطبيق. حاول مجددًا.','Could not start the app session. Please try again.'):error.message||t('failed');
+}
+async function logout(){
+  if(busy)return;busy=true;
+  try{await session.logout();$('loginForm').reset();$('registerForm').reset();setMessage('');showView('guestView');}
+  catch(error){showView('sessionView');$('sessionMessage').textContent=errorText(error);}
+  finally{busy=false;}
+}
+async function enterWorkspace(){
+  await loadData({render:false});
+  if(!currentUser)return;
+  showView('appView');activeScreen='home';activeSub='primary';renderScreen();
+}
+function recovery(error){showView('sessionView');$('sessionMessage').textContent=errorText(error);}
+$('loginForm').addEventListener('submit',async e=>{
+  e.preventDefault();if(busy)return;busy=true;setMessage(t('loading'));$('loginBtn').disabled=true;
+  let stage='auth';
+  try{
+    await session.login({email:$('email').value.trim(),password:$('password').value});
+    $('password').value='';stage='data';await enterWorkspace();setMessage('');
+  }catch(error){if(error.code!=='session_changed'){if(stage==='data'&&session.active)recovery(error);else setMessage(errorText(error,stage));}}
+  finally{busy=false;$('loginBtn').disabled=false;}
+});
+$('langBtn').addEventListener('click',toggleLanguage);
+$('appLangBtn').addEventListener('click',toggleLanguage);
+onLanguageChange(value=>{lang=value;applyLanguage();applyRegistrationLanguage();});
+$('refreshBtn').addEventListener('click',async()=>{if(busy)return;busy=true;$('refreshBtn').classList.add('spin');try{await loadData();showToast(t('refreshing'));}catch(e){showToast(errorText(e));}finally{busy=false;$('refreshBtn').classList.remove('spin');}});
+$('bottomNav').addEventListener('click',e=>{const b=e.target.closest('button[data-screen]');if(!b)return;activeScreen=b.dataset.screen;if(activeScreen==='offers')activeSub='primary';renderScreen();$('screen').scrollTop=0;});
 $('screen').addEventListener('click',e=>{const sub=e.target.closest('[data-sub]');if(sub){activeSub=sub.dataset.sub;renderScreen();return;}const target=e.target.closest('[data-action],[data-request],[data-supplier-request],[data-public-offer],[data-edit-quote],[data-quote-request],[data-select-quote],[data-interest],[data-notification]');if(target)handleAction(target);});
 $('modal').addEventListener('click',e=>{if(e.target.closest('[data-close-modal]')){closeModal();return;}const target=e.target.closest('[data-edit-quote],[data-quote-request],[data-select-quote],[data-interest]');if(target)handleAction(target);});
 
 App.addListener('appUrlOpen',async event=>{const url=event.url||'';if(!currentUser)return;if(url.includes('/notifications')){activeScreen='notifications';renderScreen();return;}const m=url.match(/\/requests\/([^?]+)/);if(m){if(currentUser.role==='supplier')openSupplierRequest(decodeURIComponent(m[1]));else openClientRequest(decodeURIComponent(m[1]));}});
 
-(async function boot(){const saved=await Preferences.get({key:'language'});lang=saved.value==='en'?'en':'ar';applyLanguage();try{appConfig=await request('/api/v1/app-config');console.info('App config loaded',appConfig.apiVersion);}catch(error){console.error('App config',error);}})();
+
+const authCopy={
+ ar:{register:'إنشاء الحساب',registerClient:'إنشاء حساب عميل',registerSupplier:'إنشاء حساب مورد',client:'عميل',supplier:'مورد',name:'الاسم',company:'اسم الشركة',email:'البريد الإلكتروني',phone:'رقم التواصل مع رمز الدولة (للإدارة فقط)',country:'الدولة',category:'فئة المنتجات',password:'كلمة المرور (8 أحرف على الأقل)',confirmPassword:'تأكيد كلمة المرور',already:'لدي حساب بالفعل',back:'العودة للرئيسية',retry:'إعادة المحاولة',logout:'تسجيل الخروج',loading:'جارٍ التحقق من الجلسة...',registerIntro:'أنشئ حسابك للمتابعة داخل التطبيق.'},
+ en:{register:'Create account',registerClient:'Create customer account',registerSupplier:'Create supplier account',client:'Customer',supplier:'Supplier',name:'Name',company:'Company',email:'Email address',phone:'Phone with country code (admin only)',country:'Country',category:'Product category',password:'Password (at least 8 characters)',confirmPassword:'Confirm password',already:'I already have an account',back:'Back to home',retry:'Try again',logout:'Sign out',loading:'Checking your session...',registerIntro:'Create your account to continue in the app.'}
+};
+let registerRole='client';
+function applyRegistrationLanguage(){
+ document.querySelectorAll('[data-auth-copy]').forEach(el=>{el.textContent=authCopy[lang][el.dataset.authCopy]||'';});
+ $('registerTitle').textContent=authCopy[lang][registerRole==='supplier'?'registerSupplier':'registerClient'];
+ $('registerLangBtn').textContent=lang==='ar'?'EN':'AR';
+}
+function setRegisterRole(role){
+ registerRole=role==='supplier'?'supplier':'client';
+ document.querySelectorAll('[data-register-role]').forEach(b=>{const selected=b.dataset.registerRole===registerRole;b.classList.toggle('active',selected);b.setAttribute('aria-pressed',String(selected));});
+ $('registerCategoryField').classList.toggle('hidden',registerRole!=='supplier');
+ $('registerCategory').required=registerRole==='supplier';$('registerCompany').required=registerRole==='supplier';
+ applyRegistrationLanguage();
+}
+function showRegistration(role){if(busy)return;setRegisterRole(role);$('registerMessage').textContent='';showView('registerView');}
+$('guestCustomerRegister').addEventListener('click',()=>showRegistration('client'));
+$('guestSupplierRegister').addEventListener('click',()=>showRegistration('supplier'));
+$('registerLangBtn').addEventListener('click',toggleLanguage);
+document.querySelectorAll('[data-register-role]').forEach(b=>b.addEventListener('click',()=>{if(!busy)setRegisterRole(b.dataset.registerRole);}));
+$('registerBackBtn').addEventListener('click',()=>{if(!busy){$('registerPassword').value='';$('registerConfirm').value='';showView('guestView');}});
+$('registerLoginBtn').addEventListener('click',()=>{if(!busy){$('registerPassword').value='';$('registerConfirm').value='';setMessage('');showView('loginView');}});
+$('registerForm').addEventListener('submit',async e=>{
+ e.preventDefault();if(busy)return;
+ const f=e.currentTarget,message=$('registerMessage');
+ if(f.password.value!==f.confirmPassword.value){message.textContent=tr('كلمتا المرور غير متطابقتين.','Passwords do not match.');return;}
+ busy=true;$('registerBtn').disabled=true;message.textContent=tr('جارٍ إنشاء الحساب...','Creating your account...');let stage='auth';
+ try{
+   const body=Object.fromEntries(new FormData(f));delete body.confirmPassword;body.role=registerRole;
+   for(const key of ['name','company','email','phone','country','category'])body[key]=(body[key]||'').trim();
+   const result=await session.register(body);
+   $('registerPassword').value='';$('registerConfirm').value='';
+   if(result.confirmationRequired){showView('loginView');$('email').value=body.email;setMessage(tr('تم إرسال رابط التأكيد إن كان البريد متاحًا للتسجيل. تحقق من بريدك أو سجّل الدخول بحسابك الحالي.','Check your email for a confirmation link, or sign in if you already have an account.'));return;}
+   stage='data';await enterWorkspace();f.reset();message.textContent='';
+ }catch(error){if(error.code!=='session_changed'){if(stage==='data'&&session.active)recovery(error);else message.textContent=errorText(error,stage);}}
+ finally{busy=false;$('registerBtn').disabled=false;}
+});
+async function resumeSession(){
+ if(busy)return;busy=true;
+ try{
+   if(session.active||await session.restore())await enterWorkspace();else showView('guestView');
+ }catch(error){if(error.code==='session_expired'){showView('loginView');setMessage(errorText(error));}else if(error.code!=='session_changed')recovery(error);}
+ finally{busy=false;}
+}
+$('sessionRetryBtn').addEventListener('click',resumeSession);
+$('sessionLogoutBtn').addEventListener('click',logout);
+App.addListener('appStateChange',({isActive})=>{if(isActive&&session.active&&!busy)loadData().catch(error=>{if(currentUser)showToast(errorText(error));});});
+(async function boot(){await languageReady;lang=getLanguage();applyLanguage();setRegisterRole('client');await resumeSession();})();
