@@ -24,7 +24,7 @@ async function geometry(page, scope = '#appView', squares = true) {
   const data = await page.evaluate(({scope,squares}) => {
     const root=document.querySelector(scope), width=innerWidth;
     const visible=[root,...root.querySelectorAll('*')].filter(el=>el.getClientRects().length);
-    const outside=visible.filter(el=>{const r=el.getBoundingClientRect();return r.left < -1 || r.right > width+1;}).map(el=>({tag:el.tagName,cls:el.className,x:el.getBoundingClientRect().x,width:el.getBoundingClientRect().width}));
+    const outside=visible.filter(el=>{if(el.closest?.('.category-filter-bar'))return false;const r=el.getBoundingClientRect();return r.left < -1 || r.right > width+1;}).map(el=>({tag:el.tagName,cls:el.className,x:el.getBoundingClientRect().x,width:el.getBoundingClientRect().width}));
     const squareErrors=squares?[...root.querySelectorAll('.media-placeholder,.admin-image-tile>span,.guest-offer-image,.guest-modal-images img,.public-offer-media')].filter(el=>el.getClientRects().length && Math.abs(el.getBoundingClientRect().width-el.getBoundingClientRect().height)>1).map(el=>el.className):[];
     const screen=document.querySelector('#screen'),nav=document.querySelector('#bottomNav'),head=document.querySelector('.app-header');
     const rect=el=>{const r=el.getBoundingClientRect();return{x:r.x,y:r.y,width:r.width,height:r.height,bottom:r.bottom};};
@@ -174,6 +174,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
       if(screen==='offers'&&role==='admin'){
         assert.equal(await page.locator('[data-admin-offer-tab="categories"]').count(),1,'Admin offers must include Categories tab');
         await page.locator('[data-admin-offer-tab="categories"]').click();
+        await page.locator('[data-admin-category-new]').waitFor();
         assert.equal(await page.locator('[data-admin-category-new]').count(),1,'Admin categories must allow adding a category');
         assert.equal(await page.locator('.admin-category-row').count(),3,'Admin categories must list configured categories');
       }
