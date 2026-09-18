@@ -53,13 +53,15 @@ function setRoot(view,html){
   const template=document.createElement('template');
   template.innerHTML=`<div data-admin-root="${view}" data-admin-key="${esc(key)}" data-admin-lang="${lang()}">${html}</div>`;
   const next=template.content.firstElementChild;
-  if(current?.dataset.adminRoot===view && current.dataset.adminLang===lang() && current.querySelector('[data-admin-results]')){
-    // Keep the exact input DOM node alive. Replacing/refocusing it closes iOS's keyboard.
+  if(current?.dataset.adminRoot===view && current.dataset.adminLang===lang() && current.querySelector('[data-admin-results]') && next.querySelector('[data-admin-results]') && current.querySelector('[data-admin-search]') && next.querySelector('[data-admin-search]')){
+    // Keep the exact search input DOM node alive so iOS does not close the keyboard.
     current.querySelector('[data-admin-results]').replaceChildren(...next.querySelector('[data-admin-results]').childNodes);
     const input=current.querySelector('[data-admin-search]');
     if(input && input.value!==searchText())input.value=searchText();
     const tabs=current.querySelector('.segmented'),nextTabs=next.querySelector('.segmented');
     if(tabs&&nextTabs)tabs.replaceChildren(...nextTabs.childNodes);
+    const filters=current.querySelector('.admin-request-filters'),nextFilters=next.querySelector('.admin-request-filters');
+    if(filters&&nextFilters)filters.replaceWith(nextFilters);
     current.dataset.adminKey=key;
   }else s.replaceChildren(next);
   hydrate(s);
