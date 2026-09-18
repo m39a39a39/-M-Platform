@@ -8,19 +8,28 @@ let lang='ar';
 let state=null;
 let loadTask=null;
 let offersPage=1;
+let category='all';
 const PAGE_SIZE=20;
 const MEDIA_CONCURRENCY=6;
 const mediaTasks=new Map();
 
 const text={
-  ar:{tagline:'اطلب ما تحتاجه، وقارن العروض بثقة.',eyebrow:'منصة شراء وتوريد موثوقة',title:'اطلب ما تحتاجه، وقارن العروض بثقة.',subtitle:'منصة آمنة تربطك بموردين مؤهلين، بينما نتولى مراجعة العروض، التحقق من البضاعة، الترجمة، الشحن الموثوق، ومتابعة الضمان.',browse:'تصفح العروض',login:'تسجيل الدخول',customer:'إنشاء حساب عميل',supplier:'إنشاء حساب مورد',kicker:'تصفح دون حساب',offers:'العروض العامة',reload:'تحديث',loading:'جارٍ تحميل العروض...',empty:'لا توجد عروض عامة منشورة حاليًا.',price:'السعر',moq:'الحد الأدنى',production:'الإنتاج',days:'يوم',stock:'المخزون',details:'تفاصيل العرض',back:'العودة للرئيسية',error:'تعذر تحميل العروض. تحقق من اتصال الإنترنت.',previous:'السابق',next:'التالي',page:'صفحة',companyDescription:'منصة تساعدك في طلب المنتجات، مقارنة العروض، ومتابعة التوريد بسهولة.',contact:'تواصل معنا',copyright:'© 2026 MIG COMPANY — جميع الحقوق محفوظة'},
-  en:{tagline:'Request what you need, and compare offers with confidence.',eyebrow:'Trusted sourcing platform',title:'Request what you need, and compare offers with confidence.',subtitle:'A secure platform that connects you with qualified suppliers while we handle offer review, product verification, translation, reliable shipping, and warranty follow-up.',browse:'Browse offers',login:'Sign in',customer:'Create customer account',supplier:'Create supplier account',kicker:'Browse without an account',offers:'Public offers',reload:'Refresh',loading:'Loading offers...',empty:'No public offers are currently published.',price:'Price',moq:'MOQ',production:'Production',days:'days',stock:'Stock',details:'Offer details',back:'Back to home',error:'Could not load offers. Check your internet connection.',previous:'Previous',next:'Next',page:'Page',companyDescription:'A platform that helps you request products, compare offers, and follow your sourcing process with ease.',contact:'Contact us',copyright:'© 2026 MIG COMPANY — All rights reserved.'}
+  ar:{tagline:'اطلب ما تحتاجه، وقارن العروض بثقة.',eyebrow:'منصة شراء وتوريد موثوقة',title:'اطلب ما تحتاجه، وقارن العروض بثقة.',subtitle:'منصة آمنة تربطك بموردين مؤهلين، بينما نتولى مراجعة العروض، التحقق من البضاعة، الترجمة، الشحن الموثوق، ومتابعة الضمان.',browse:'تصفح العروض',login:'تسجيل الدخول',customer:'إنشاء حساب عميل',supplier:'إنشاء حساب مورد',kicker:'تصفح دون حساب',offers:'العروض العامة',reload:'تحديث',loading:'جارٍ تحميل العروض...',empty:'لا توجد عروض عامة منشورة حاليًا.',price:'السعر',moq:'الحد الأدنى',production:'الإنتاج',days:'يوم',stock:'المخزون',details:'تفاصيل العرض',back:'العودة للرئيسية',error:'تعذر تحميل العروض. تحقق من اتصال الإنترنت.',previous:'السابق',next:'التالي',page:'صفحة',companyDescription:'منصة تساعدك في طلب المنتجات، مقارنة العروض، ومتابعة التوريد بسهولة.',contact:'تواصل معنا',copyright:'© 2026 MIG COMPANY — جميع الحقوق محفوظة',allCategories:'الكل'},
+  en:{tagline:'Request what you need, and compare offers with confidence.',eyebrow:'Trusted sourcing platform',title:'Request what you need, and compare offers with confidence.',subtitle:'A secure platform that connects you with qualified suppliers while we handle offer review, product verification, translation, reliable shipping, and warranty follow-up.',browse:'Browse offers',login:'Sign in',customer:'Create customer account',supplier:'Create supplier account',kicker:'Browse without an account',offers:'Public offers',reload:'Refresh',loading:'Loading offers...',empty:'No public offers are currently published.',price:'Price',moq:'MOQ',production:'Production',days:'days',stock:'Stock',details:'Offer details',back:'Back to home',error:'Could not load offers. Check your internet connection.',previous:'Previous',next:'Next',page:'Page',companyDescription:'A platform that helps you request products, compare offers, and follow your sourcing process with ease.',contact:'Contact us',copyright:'© 2026 MIG COMPANY — All rights reserved.',allCategories:'All'}
 };
 const t=k=>text[lang][k]||k;
 const esc=v=>String(v??'').replace(/[&<>'\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[c]));
 const ref=o=>o?.displayNo||String(o?.id||'').slice(0,8)||'—';
 const title=o=>{const x=o?.translation||{};return (lang==='ar'?(x.titleAr||x.titleEn):(x.titleEn||x.titleAr))||o?.product||o?.title||`#${ref(o)}`;};
 const description=o=>{const x=o?.translation||{};return (lang==='ar'?(x.descriptionAr||x.descriptionEn):(x.descriptionEn||x.descriptionAr))||o?.specs||'';};
+const categories=()=>{const rows=Array.isArray(state?.settings?.categories)?state.settings.categories:[];return rows.filter(cat=>cat.active!==false).sort((a,b)=>(a.order||0)-(b.order||0));};
+const filteredOffers=()=>{const offers=(state?.publicOffers||[]).filter(o=>o.status==='published');return category==='all'?offers:offers.filter(o=>o.categoryId===category);};
+function renderCategories(){
+  const rows=categories();
+  if(category!=='all'&&!rows.some(cat=>cat.id===category))category='all';
+  $('guestCategoryFilters').innerHTML=rows.length?`<button type="button" data-guest-category="all" class="${category==='all'?'active':''}">${esc(t('allCategories'))}</button>${rows.map(cat=>`<button type="button" data-guest-category="${esc(cat.id)}" class="${category===cat.id?'active':''}">${esc(lang==='ar'?cat.nameAr:cat.nameEn)}</button>`).join('')}`:'';
+  $('guestCategoryFilters').classList.toggle('hidden',!rows.length);
+}
 
 function apply(){
   document.documentElement.lang=lang;document.documentElement.dir=lang==='ar'?'rtl':'ltr';
@@ -68,7 +77,8 @@ function offerCard(o){
   return `<article class="guest-offer-card" data-guest-offer="${esc(o.id)}">${offerImages(o)}<div class="guest-offer-body"><h3>${esc(title(o))}</h3><p>${esc(description(o)||'—')}</p><div class="guest-facts"><span><b>${esc(t('price'))}</b>${esc(o.currency||'')} ${esc(o.unitPrice||'—')}</span><span><b>${esc(t('moq'))}</b>${esc(o.moq||'—')}</span></div></div></article>`;
 }
 function renderOffers(){
-  const offers=(state?.publicOffers||[]).filter(o=>o.status==='published');
+  renderCategories();
+  const offers=filteredOffers();
   const totalPages=Math.max(1,Math.ceil(offers.length/PAGE_SIZE));
   offersPage=Math.min(Math.max(offersPage,1),totalPages);
   const pageOffers=offers.slice((offersPage-1)*PAGE_SIZE,offersPage*PAGE_SIZE);
@@ -107,9 +117,10 @@ $('backToGuestBtn').addEventListener('click',showGuest);
 $('guestBrowseBtn').addEventListener('click',()=>$('guestOffersSection').scrollIntoView({behavior:'smooth',block:'start'}));
 $('guestReloadBtn').addEventListener('click',()=>{state=null;void load();});
 $('guestPrevPage').addEventListener('click',()=>{if(offersPage>1){offersPage--;renderOffers();$('guestOffersSection').scrollIntoView({behavior:'smooth',block:'start'});}});
-$('guestNextPage').addEventListener('click',()=>{const total=Math.max(1,Math.ceil(((state?.publicOffers||[]).filter(o=>o.status==='published').length)/PAGE_SIZE));if(offersPage<total){offersPage++;renderOffers();$('guestOffersSection').scrollIntoView({behavior:'smooth',block:'start'});}});
+$('guestNextPage').addEventListener('click',()=>{const total=Math.max(1,Math.ceil(filteredOffers().length/PAGE_SIZE));if(offersPage<total){offersPage++;renderOffers();$('guestOffersSection').scrollIntoView({behavior:'smooth',block:'start'});}});
 $('guestLangBtn').addEventListener('click',toggleLanguage);
 onLanguageChange(value=>{lang=value;apply();});
+$('guestCategoryFilters').addEventListener('click',e=>{const b=e.target.closest('[data-guest-category]');if(!b)return;category=b.dataset.guestCategory;offersPage=1;renderOffers();});
 $('guestOffers').addEventListener('click',e=>{const card=e.target.closest('[data-guest-offer]');if(card)openOffer(card.dataset.guestOffer);});
 $('modal').addEventListener('click',e=>{if(e.target.closest('.guest-modal-login')){$('modal').classList.add('hidden');showLogin();}});
 window.addEventListener('mplatform:view',e=>{if(e.detail?.id==='guestView')ensureLoaded();});
