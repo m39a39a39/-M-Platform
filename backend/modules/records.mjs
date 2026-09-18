@@ -9,7 +9,7 @@ export function ownRecord(row,kind){const item=unpack(row,kind);delete item.supp
 export function anonymous(row,kind,user){
   const d=row.data;
   const result={id:row.id,displayNo:row.display_no,version:row.version,createdAt:row.created_at,status:d.status,translation:d.translation||{},images:d.images||[],country:d.country||''};
-  const fields=kind==='requests'?['quantity','neededDate']:['unitPrice','currency','moq','leadTime','sampleCost','stock','validUntil'];
+  const fields=kind==='requests'?['quantity','neededDate']:['unitPrice','currency','moq','leadTime','sampleCost','stock','validUntil','categoryId'];
   for(const key of fields)if(d[key]!==undefined)result[key]=d[key];
   if(kind==='requests'){result.supplierIds=[user.id];result.quoteSelected=!!d.selectedQuoteId;}
   if(kind==='quotes')result.publishedAt=d.publishedAt||d.updatedAt||d.reviewedAt||row.created_at;
