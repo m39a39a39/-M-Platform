@@ -22,7 +22,7 @@ async function geometry(page, scope = '#appView', squares = true) {
     const root=document.querySelector(scope), width=innerWidth;
     const visible=[root,...root.querySelectorAll('*')].filter(el=>el.getClientRects().length);
     const outside=visible.filter(el=>{const r=el.getBoundingClientRect();return r.left < -1 || r.right > width+1;}).map(el=>({tag:el.tagName,cls:el.className,x:el.getBoundingClientRect().x,width:el.getBoundingClientRect().width}));
-    const squareErrors=squares?[...root.querySelectorAll('.media-placeholder,.admin-image-tile>span,.guest-offer-image,.guest-modal-images img')].filter(el=>el.getClientRects().length && Math.abs(el.getBoundingClientRect().width-el.getBoundingClientRect().height)>1).map(el=>el.className):[];
+    const squareErrors=squares?[...root.querySelectorAll('.media-placeholder,.admin-image-tile>span,.guest-offer-image,.guest-modal-images img,.public-offer-media')].filter(el=>el.getClientRects().length && Math.abs(el.getBoundingClientRect().width-el.getBoundingClientRect().height)>1).map(el=>el.className):[];
     const screen=document.querySelector('#screen'),nav=document.querySelector('#bottomNav'),head=document.querySelector('.app-header');
     const rect=el=>{const r=el.getBoundingClientRect();return{x:r.x,y:r.y,width:r.width,height:r.height,bottom:r.bottom};};
     return {width,documentWidth:document.documentElement.scrollWidth,outside,squareErrors,nav:rect(nav),head:rect(head),screenWidth:screen.scrollWidth,screenClient:screen.clientWidth};
@@ -71,11 +71,20 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
     await page.goto('http://127.0.0.1:4173');
     await page.locator('.guest-offer-card').first().waitFor();
     await geometry(page,'#guestView');
+    assert.equal(await page.locator('#guestOffers').evaluate(el=>getComputedStyle(el).gridTemplateColumns.split(' ').length),2,'Guest public offers must use two columns');
+    assert.equal(await page.locator('.guest-offer-card').first().locator('.guest-facts span').count(),2,'Guest offer card must show only price and MOQ');
+    assert.ok(await page.locator('.guest-offer-card').first().locator('h3').evaluate(el=>getComputedStyle(el).whiteSpace==='nowrap'),'Guest offer title must stay on one line');
+    assert.ok(await page.locator('.guest-offer-card').first().locator('p').evaluate(el=>getComputedStyle(el).whiteSpace==='nowrap'),'Guest offer description must stay on one line');
     await page.locator('.guest-offer-card').first().click();
     await geometry(page,'#modal');
     await page.locator('.modal-close').click();
     await page.locator('#guestLoginBtn').click();
     await geometry(page,'#loginView');
+    assert.equal(await page.locator('#loginCustomerRegister,#loginSupplierRegister').count(),2,'Login must expose separate customer and supplier registration buttons');
+    await page.locator('#loginCustomerRegister').click();
+    await page.locator('#registerView').waitFor({state:'visible'});
+    await page.locator('#registerLoginBtn').click();
+    await page.locator('#loginView').waitFor({state:'visible'});
     await page.locator('#email').fill('layout@example.test');
     await page.locator('#password').fill('fixture-password');
     await page.locator('#loginBtn').click();
@@ -93,6 +102,19 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
       assert.deepEqual(after.nav,before.nav,'Navigation moved when content scrolled');
       assert.deepEqual(after.head,before.head,'Header moved when content scrolled');
       await page.locator('#screen').evaluate(el=>el.scrollTop=0);
+      if(screen==='offers'&&role==='client'){
+        const firstOffer=page.locator('.public-offer-card').first();
+        await firstOffer.waitFor();
+        assert.equal(await page.locator('.public-offers-grid').evaluate(el=>getComputedStyle(el).gridTemplateColumns.split(' ').length),2,'Authenticated public offers must use two columns');
+        assert.equal(await firstOffer.locator('.public-offer-facts span').count(),2,'Authenticated offer card must show only price and MOQ');
+        assert.ok(await firstOffer.locator('h3').evaluate(el=>getComputedStyle(el).whiteSpace==='nowrap'),'Authenticated offer title must stay on one line');
+        assert.ok(await firstOffer.locator('p').evaluate(el=>getComputedStyle(el).whiteSpace==='nowrap'),'Authenticated offer description must stay on one line');
+        await firstOffer.click();
+        await page.locator('#modal').waitFor({state:'visible'});
+        assert.ok((await page.locator('#modalBody').textContent()).includes('30'),'Production time must remain in offer details');
+        assert.equal(await page.locator('#modal [data-interest]').count(),1,'Request-this-offer button must remain in offer details');
+        await page.locator('.modal-close').click();
+      }
       if(screen==='requests'){
         assert.ok(await page.locator('#screen').evaluate(el=>el.scrollHeight>el.clientHeight),'Long list did not scroll');
         await page.screenshot({path:`${output}/${label}-requests.png`});

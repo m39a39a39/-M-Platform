@@ -99,6 +99,10 @@ function statCard(value,label,action=''){return `<button class="stat-card" ${act
 function pageHeader(title,subtitle='',action=''){return `<div class="page-head"><div><h1>${esc(title)}</h1>${subtitle?`<p>${esc(subtitle)}</p>`:''}</div>${action}</div>`;}
 function empty(){return `<div class="empty-state"><span>◇</span><p>${esc(t('empty'))}</p></div>`;}
 function itemCard(item,{subtitle='',meta='',badge='',action='',images=false}={}){return `<article class="list-card" ${action}><div class="list-card-main"><div class="list-card-title"><small>#${esc(ref(item))}</small><h3>${esc(titleOf(item))}</h3></div>${badge}</div>${subtitle?`<p>${esc(subtitle)}</p>`:''}${meta?`<div class="meta-line">${meta}</div>`:''}${images?gallery(item.images):''}<div class="chevron">›</div></article>`;}
+function publicOfferCard(item){
+  const image=(item.images||[])[0];
+  return `<article class="public-offer-card" data-public-offer="${esc(item.id)}"><div class="public-offer-media">${image?`<img alt="" data-media="${esc(image)}" />`:'<div class="public-offer-placeholder">M</div>'}</div><div class="public-offer-content"><h3>${esc(titleOf(item))}</h3><p>${esc(descriptionOf(item)||'—')}</p><div class="public-offer-facts"><span><b>${esc(t('price'))}</b><strong>${money(item.unitPrice,item.currency)}</strong></span><span><b>${esc(t('moq'))}</b><strong>${esc(item.moq||'—')}</strong></span></div></div></article>`;
+}
 
 function renderHome(){
   const role=currentUser.role;
@@ -135,7 +139,7 @@ function renderOffers(){
     const tabs=segment([['market',t('publicOffers')],['interests',t('requestedOffers')]]);
     if(activeSub==='market'){
       const offers=platformState.publicOffers||[];
-      $('screen').innerHTML=pageHeader(t('offers'))+tabs+`<div class="list-stack">${offers.map(o=>itemCard(o,{subtitle:descriptionOf(o),meta:`${money(o.unitPrice,o.currency)} · MOQ ${o.moq||'—'} · ${t('leadTime')}: ${o.leadTime||'—'}`,badge:cardBadge(o.status),action:`data-public-offer="${esc(o.id)}"`,images:true})).join('')||empty()}</div>`;
+      $('screen').innerHTML=pageHeader(t('offers'))+tabs+`<div class="public-offers-grid">${offers.map(publicOfferCard).join('')||empty()}</div>`;
     }else{
       const interests=platformState.interests||[];
       $('screen').innerHTML=pageHeader(t('requestedOffers'))+tabs+`<div class="list-stack">${interests.map(i=>{const offer=(platformState.publicOffers||[]).find(o=>o.id===i.offerId);return itemCard(offer||i,{subtitle:offer?descriptionOf(offer):tr('عرض غير متاح','Offer unavailable'),meta:date(i.createdAt),badge:cardBadge(i.status),action:offer?`data-public-offer="${esc(offer.id)}"`:''});}).join('')||empty()}</div>`;
@@ -273,6 +277,8 @@ function setRegisterRole(role){
 function showRegistration(role){if(busy)return;setRegisterRole(role);$('registerMessage').textContent='';showView('registerView');}
 $('guestCustomerRegister').addEventListener('click',()=>showRegistration('client'));
 $('guestSupplierRegister').addEventListener('click',()=>showRegistration('supplier'));
+$('loginCustomerRegister')?.addEventListener('click',()=>showRegistration('client'));
+$('loginSupplierRegister')?.addEventListener('click',()=>showRegistration('supplier'));
 $('registerLangBtn').addEventListener('click',toggleLanguage);
 document.querySelectorAll('[data-register-role]').forEach(b=>b.addEventListener('click',()=>{if(!busy)setRegisterRole(b.dataset.registerRole);}));
 $('registerBackBtn').addEventListener('click',()=>{if(!busy){$('registerPassword').value='';$('registerConfirm').value='';showView('guestView');}});

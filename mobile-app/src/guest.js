@@ -41,12 +41,12 @@ async function hydrateImages(){
   }
 }
 function offerImages(o){
-  const images=(o.images||[]).slice(0,5);
-  if(!images.length)return '<div class="guest-offer-images count-1"><div class="guest-offer-image guest-offer-placeholder">M</div></div>';
-  return `<div class="guest-offer-images count-${images.length}">${images.map(src=>`<div class="guest-offer-image"><img alt="" data-media="${esc(src)}" /></div>`).join('')}</div>`;
+  const src=(o.images||[])[0];
+  if(!src)return '<div class="guest-offer-images"><div class="guest-offer-image guest-offer-placeholder">M</div></div>';
+  return `<div class="guest-offer-images"><div class="guest-offer-image"><img alt="" data-media="${esc(src)}" /></div></div>`;
 }
 function offerCard(o){
-  return `<article class="guest-offer-card" data-guest-offer="${esc(o.id)}">${offerImages(o)}<div class="guest-offer-body"><small>#${esc(ref(o))}</small><h3>${esc(title(o))}</h3><p>${esc(description(o))}</p><div class="guest-facts"><span><b>${esc(t('price'))}</b>${esc(o.currency||'')} ${esc(o.unitPrice||'—')}</span><span><b>${esc(t('moq'))}</b>${esc(o.moq||'—')}</span><span><b>${esc(t('production'))}</b>${esc(o.leadTime||'—')} ${esc(t('days'))}</span></div></div></article>`;
+  return `<article class="guest-offer-card" data-guest-offer="${esc(o.id)}">${offerImages(o)}<div class="guest-offer-body"><h3>${esc(title(o))}</h3><p>${esc(description(o)||'—')}</p><div class="guest-facts"><span><b>${esc(t('price'))}</b>${esc(o.currency||'')} ${esc(o.unitPrice||'—')}</span><span><b>${esc(t('moq'))}</b>${esc(o.moq||'—')}</span></div></div></article>`;
 }
 function renderOffers(){
   const offers=(state?.publicOffers||[]).filter(o=>o.status==='published');
