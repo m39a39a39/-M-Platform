@@ -50,6 +50,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
   page.setDefaultTimeout(10000);
   const errors=[];
   let stateCalls=0;
+  let publicOfferMutation=null;
   page.on('pageerror',e=>errors.push(e.message));
   await page.addInitScript(lang=>localStorage.setItem('CapacitorStorage.language',lang),language);
   await page.route('https://m-platform-tan.vercel.app/**',async route=>{
@@ -65,7 +66,8 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
     else if(path.endsWith('/app-config')) body={apiVersion:1};
     else if(path.endsWith('/mutations')) {
       const mutation=route.request().postDataJSON();
-      if(mutation.collection!=='requests' || Object.keys(mutation.patch).join()!=='lastSeenQuoteAt') errors.push('Unexpected fixture mutation');
+      if(mutation.collection==='publicOffers') publicOfferMutation=mutation;
+      else if(mutation.collection!=='requests' || Object.keys(mutation.patch).join()!=='lastSeenQuoteAt') errors.push('Unexpected fixture mutation');
       body={ok:true}; // Opening a customer request marks its quotes as seen.
     }
     else { errors.push(`Unexpected API call ${path}`); return route.fulfill({status:500,json:{error:'Unexpected fixture endpoint'}}); }
@@ -172,7 +174,23 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
         assert.ok(await firstOffer.locator('p').evaluate(el=>getComputedStyle(el).whiteSpace==='nowrap'),'Ready-product description must stay on one line');
       }
       if(screen==='offers'&&role==='admin'){
-        assert.equal(await page.locator('[data-admin-offer-tab="categories"]').count(),1,'Admin offers must include Categories tab');
+        await page.locator('[data-admin-offer-tab="all"]').click();
+        await page.locator('[data-admin-open="public"]').first().click();
+        await page.locator('#adminPublicOfferForm').waitFor();
+        assert.equal(await page.locator('#adminPublicOfferForm input[name="product"]').count(),1,'Admin must be able to edit public offer product');
+        assert.equal(await page.locator('#adminPublicOfferForm input[name="unitPrice"]').count(),1,'Admin must be able to edit public offer price');
+        assert.equal(await page.locator('#adminPublicOfferForm select[name="categoryId"]').count(),1,'Admin must be able to edit public offer category');
+        assert.equal(await page.locator('#adminPublicOfferForm select[name="status"]').count(),1,'Admin owner must be able to edit publication status');
+        assert.equal(await page.locator('#adminPublicOfferForm #adminPublicFiles[accept="image/*"]').count(),1,'Admin public offer editor must accept large image selections for compression');
+        await page.locator('#adminPublicOfferForm input[name="unitPrice"]').fill('19.75');
+        await page.locator('#adminPublicOfferForm [data-admin-public-redaction]').check();
+        await page.locator('#adminPublicOfferForm button[type="submit"]').click();
+        await page.locator('#modal').waitFor({state:'hidden'});
+        assert.equal(publicOfferMutation?.collection,'publicOffers','Admin public offer edit must submit a publicOffers mutation');
+        assert.equal(publicOfferMutation?.patch?.unitPrice,'19.75','Admin public offer edit must submit edited price');
+        assert.equal(publicOfferMutation?.patch?.images?.length,publicOffers[0].images.length,'Admin public offer edit must preserve selected images');
+        assert.equal(publicOfferMutation?.redactionConfirmed,true,'Published public offer edits must confirm privacy review');
+        publicOfferMutation=null;
         await page.locator('[data-admin-offer-tab="categories"]').click();
         await page.locator('[data-admin-category-new]').waitFor();
         assert.equal(await page.locator('[data-admin-category-new]').count(),1,'Admin categories must allow adding a category');
