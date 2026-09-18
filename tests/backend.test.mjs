@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {can} from '../backend/modules/auth.mjs';
 import {anonymous,ownRecord} from '../backend/modules/records.mjs';
-import {validateContent} from '../backend/modules/mutations.mjs';
+import {validateContent,normalizeCategories,TRACKING_STATUSES} from '../backend/modules/mutations.mjs';
 import {decodeImage} from '../backend/modules/media.mjs';
 
 test('client cannot grant itself admin permission',()=>{
@@ -31,4 +31,13 @@ test('invalid amounts, contacts and non-image upload rejected',()=>{
  assert.throws(()=>validateContent('requests',{quantity:1,product:'Product',specs:'name@example.com'}));
  assert.throws(()=>decodeImage('data:image/svg+xml;base64,PHN2Zz4='));
  assert.throws(()=>decodeImage('data:image/png;base64,'+Buffer.from('not actually an image').toString('base64')));
+});
+
+
+test('categories normalize safely and tracking stages are complete',()=>{
+ const rows=normalizeCategories([{id:'mobile',nameAr:'جوال',nameEn:'Mobile',active:true},{id:'home',nameAr:'منزل',nameEn:'Home',active:false}]);
+ assert.equal(rows[0].order,0);
+ assert.equal(rows[1].active,false);
+ assert.throws(()=>normalizeCategories([{id:'x',nameAr:'مكرر',nameEn:'Same'},{id:'y',nameAr:'مكرر',nameEn:'Other'}]));
+ for(const status of ['received','reviewing','sourcing','quotes_available','quote_selected','payment_confirmation','production','quality_check','ready_to_ship','shipped','in_delivery','delivered','completed','customer_action','on_hold','cancelled'])assert.ok(TRACKING_STATUSES.includes(status));
 });
