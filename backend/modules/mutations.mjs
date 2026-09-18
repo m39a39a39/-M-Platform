@@ -2,13 +2,48 @@ import {one,db,rpc,assert} from '../lib/supabase.mjs';
 import {can} from './auth.mjs';
 import {tables,assertOpenRequest,active,open} from './records.mjs';
 const contact=v=>/(?:https?:\/\/|www\.|wa\.me|@[a-z0-9]|[\w.+-]+@[\w.-]+\.[a-z]{2,}|(?:\+|00)\d[\d\s()-]{7,})/i.test(String(v));
-const contentFields={requests:['product','specs','quantity','country','neededDate','images'],quotes:['unitPrice','currency','moq','leadTime','sampleCost','notes','images'],publicOffers:['product','specs','country','unitPrice','currency','moq','stock','leadTime','validUntil','images']};
+const contentFields={requests:['product','specs','quantity','country','neededDate','images'],quotes:['unitPrice','currency','moq','leadTime','sampleCost','notes','images'],publicOffers:['product','specs','country','unitPrice','currency','moq','stock','leadTime','validUntil','images','categoryId']};
+export const TRACKING_FLOW=['received','reviewing','sourcing','quotes_available','quote_selected','payment_confirmation','production','quality_check','ready_to_ship','shipped','in_delivery','delivered','completed'];
+export const TRACKING_EXCEPTIONS=['customer_action','on_hold','cancelled'];
+export const TRACKING_STATUSES=[...TRACKING_FLOW,...TRACKING_EXCEPTIONS];
+const trackingRank=s=>TRACKING_FLOW.indexOf(s);
+function setTracking(data,status,now,note=''){
+  data.trackingStatus=status;data.trackingNote=String(note||'').slice(0,1000);data.trackingUpdatedAt=now;
+  data.trackingHistory=[...(Array.isArray(data.trackingHistory)?data.trackingHistory:[]),{at:now,status,note:data.trackingNote}].slice(-200);
+}
+function advanceTracking(data,status,now){
+  if(TRACKING_EXCEPTIONS.includes(data.trackingStatus))return false;
+  const current=trackingRank(data.trackingStatus||'received'),next=trackingRank(status);
+  if(next<0||next<=current)return false;
+  setTracking(data,status,now,'');return true;
+}
+export function normalizeCategories(input){
+  assert(Array.isArray(input)&&input.length<=100,400,'تصنيفات غير صالحة / Invalid categories');
+  const ids=new Set(),namesAr=new Set(),namesEn=new Set();
+  return input.map((raw,index)=>{
+    assert(raw&&typeof raw==='object'&&!Array.isArray(raw),400);
+    const id=String(raw.id||'').trim(),nameAr=String(raw.nameAr||'').trim(),nameEn=String(raw.nameEn||'').trim();
+    assert(/^[A-Za-z0-9-]{1,80}$/.test(id)&&nameAr&&nameAr.length<=80&&nameEn&&nameEn.length<=80,400,'بيانات التصنيف غير صالحة / Invalid category');
+    const ar=nameAr.toLowerCase(),en=nameEn.toLowerCase();
+    assert(!ids.has(id)&&!namesAr.has(ar)&&!namesEn.has(en),400,'التصنيف مكرر / Duplicate category');
+    ids.add(id);namesAr.add(ar);namesEn.add(en);
+    return {id,nameAr,nameEn,active:raw.active!==false,order:index};
+  });
+}
+async function assertCategory(categoryId,{required=false,activeOnly=false}={}){
+  const settings=await one('settings','site'),categories=Array.isArray(settings?.data?.categories)?settings.data.categories:[];
+  const active=categories.filter(c=>c?.active!==false);
+  if(!categoryId){assert(!(required&&active.length),400,'اختر التصنيف / Choose a category');return;}
+  const category=categories.find(c=>c?.id===categoryId);
+  assert(category&&(!activeOnly||category.active!==false),400,'التصنيف غير متاح / Category unavailable');
+}
 export function validateContent(kind,d){
   for(const key of kind==='requests'?['quantity']:['unitPrice','moq','leadTime'])assert(Number.isFinite(Number(d[key]))&&Number(d[key])>0&&Number(d[key])<=1e9,400,'تحقق من الكمية والسعر ومدة الإنتاج / Invalid quantities or price');
   if(kind!=='requests')assert(['USD','SAR','AED','CNY','EUR'].includes(d.currency),400,'عملة غير مدعومة / Unsupported currency');
   for(const k of ['product','specs','notes','sampleCost'])if(d[k]!==undefined)assert(typeof d[k]==='string'&&d[k].length<=10000&&!contact(d[k]),400,'احذف بيانات التواصل وتحقق من طول النص / Check text and remove contact details');
   if(kind!=='quotes')assert(d.product?.trim()&&d.specs?.trim(),400,'أكمل اسم المنتج والوصف / Product and description required');
   for(const key of ['country','neededDate','validUntil','stock'])if(d[key]!==undefined)assert(typeof d[key]==='string'&&d[key].length<=100,400);
+  if(d.categoryId!==undefined)assert(typeof d.categoryId==='string'&&d.categoryId.length<=80,400,'تصنيف غير صالح / Invalid category');
 }
 export async function checkImages(images,user,old=[]){
   assert(Array.isArray(images)&&images.length<=5,400,'الحد الأقصى خمس صور / Maximum five images');
@@ -32,6 +67,7 @@ export async function mutate(user,body){
     assert(changes.every(k=>allowed.includes(k)),400);
     data=Object.fromEntries(changes.filter(k=>!['status','requestId','offerId'].includes(k)).map(k=>[k,patch[k]]));
     data.status=collection==='requests'?'review':'pending';data.createdAt=now;
+    if(collection==='requests')setTracking(data,'received',now,'');
     if(collection==='quotes'){
       const r=await assertOpenRequest(patch.requestId);
       assert(r.data.status==='sent'&&!r.data.selectedQuoteId&&r.data.supplierIds?.includes(user.id));
@@ -43,6 +79,7 @@ export async function mutate(user,body){
     }
     if(collection!=='interests'){
       validateContent(collection,data);await checkImages(data.images||[],user);
+      if(collection==='publicOffers')await assertCategory(data.categoryId,{required:true,activeOnly:true});
       if(collection!=='quotes')assert(data.images?.length,400,'أضف صورة / Image required');
     }
   }else if(!isAdmin){
@@ -51,7 +88,7 @@ export async function mutate(user,body){
       if(changes[0]==='selectedQuoteId'){
         const r=await assertOpenRequest(id),q=await one('quotes',patch.selectedQuoteId);
         assert(!r.data.selectedQuoteId&&r.data.status==='sent'&&open(q)&&q.request_id===id&&q.data.status==='published'&&active(await one('profiles',q.owner_id)),409,'العرض غير متاح أو سبق اختيار عرض / Quote unavailable or already selected');
-        data.selectedQuoteId=q.id;
+        data.selectedQuoteId=q.id;setTracking(data,'quote_selected',now,'');
       }else{
         const published=await db('quotes',`request_id=eq.${encodeURIComponent(id)}&data->>status=eq.published&data->>deletedAt=is.null`);
         const latest=published.map(q=>q.data.publishedAt||q.data.updatedAt||q.data.reviewedAt||q.created_at).filter(Boolean).sort().at(-1);
@@ -86,10 +123,18 @@ export async function mutate(user,body){
         if(collection==='quotes'&&key==='status'&&patch[key]==='published')data.publishedAt=now;
       }else if(key==='reviewedAt'){
         assert(can(user,editPermission)||can(user,'translate')||can(user,'publish'));data.reviewedAt=now;
+      }else if(collection==='requests'&&key==='trackingStatus'){
+        assert(can(user,'requests.edit')||can(user,'publish'));assert(TRACKING_STATUSES.includes(patch[key]),400,'حالة متابعة غير صالحة / Invalid tracking status');data.trackingStatus=patch[key];
+      }else if(collection==='requests'&&key==='trackingNote'){
+        assert(can(user,'requests.edit')||can(user,'publish'));assert(typeof patch[key]==='string'&&patch[key].length<=1000,400,'ملاحظة المتابعة طويلة / Tracking note too long');data.trackingNote=patch[key];
       }else if((contentFields[collection]||[]).includes(key)){
         assert(can(user,editPermission));data[key]=patch[key];
       }else assert(false,400,'حقل غير قابل للتعديل / Field not editable');
     }
+    if(collection==='requests'&&(changes.includes('trackingStatus')||changes.includes('trackingNote')))setTracking(data,data.trackingStatus||'received',now,changes.includes('trackingNote')?patch.trackingNote:(data.trackingNote||''));
+    if(collection==='requests'&&data.status==='sent'&&original.data.status!=='sent')advanceTracking(data,'sourcing',now);
+    if(collection==='requests'&&data.status==='completed'&&original.data.status!=='completed')setTracking(data,'completed',now,'');
+    if(collection==='publicOffers'&&changes.includes('categoryId'))await assertCategory(data.categoryId,{required:data.status==='published'});
     if(collection!=='interests'){
       await checkImages(data.images||[],user,original.data.images||[]);
       assert(active(await one('profiles',ownerId)),409);
@@ -103,13 +148,25 @@ export async function mutate(user,body){
   }
   data.updatedAt=now;
   data.history=[...(original?.data.history||[]),{at:now,status:data.selectedQuoteId&&!original?.data.selectedQuoteId?'selected':data.status}].slice(-200);
-  await rpc('commit_changes',{actor:user.id,changes:[{table,id,version:Number(version),ownerId,requestId:original?.request_id||patch.requestId,offerId:original?.offer_id||patch.offerId,data,action:original?'update':'create'}]});
+  const commitBatch=[{table,id,version:Number(version),ownerId,requestId:original?.request_id||patch.requestId,offerId:original?.offer_id||patch.offerId,data,action:original?'update':'create'}];
+  if(collection==='quotes'&&isAdmin&&data.status==='published'&&original?.data.status!=='published'&&original?.request_id){
+    const requestRow=await one('requests',original.request_id);
+    if(requestRow&&open(requestRow)){
+      const requestData=structuredClone(requestRow.data);
+      if(advanceTracking(requestData,'quotes_available',now)){
+        requestData.updatedAt=now;
+        commitBatch.push({table:'requests',id:requestRow.id,version:requestRow.version,ownerId:requestRow.owner_id,data:requestData,action:'tracking'});
+      }
+    }
+  }
+  await rpc('commit_changes',{actor:user.id,changes:commitBatch});
   return {ok:true};
 }
 export async function saveSettings(user,body){
   assert(can(user,'settings'));const row=await one('settings','site');assert(row.version===body.version,409);
-  const data={};const prefixes=['homeTitle','homeSubtitle','customerTitle','customerSubtitle','supplierTitle','supplierSubtitle','adminTitle','adminSubtitle'];
+  const data=structuredClone(row.data||{}),prefixes=['homeTitle','homeSubtitle','customerTitle','customerSubtitle','supplierTitle','supplierSubtitle','adminTitle','adminSubtitle'];
   for(const [k,v] of Object.entries(body.data||{})){
+    if(k==='categories'){data.categories=normalizeCategories(v);continue;}
     assert(['logo','logoText',...prefixes.flatMap(k=>[k+'Ar',k+'En'])].includes(k)&&typeof v==='string'&&v.length<=10000,400);
     if(k==='logo'&&v)await checkImages([v],user,row.data.logo?[row.data.logo]:[]);
     data[k]=v;
