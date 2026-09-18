@@ -71,7 +71,7 @@ async function hydrateImages(){
 function offerImages(o){
   const src=(o.images||[])[0];
   if(!src)return '<div class="guest-offer-images"><div class="guest-offer-image guest-offer-placeholder">M</div></div>';
-  return `<div class="guest-offer-images"><div class="guest-offer-image"><img alt="" data-media="${esc(src)}" /></div></div>`;
+  return `<div class="guest-offer-images" data-viewer-gallery><div class="guest-offer-image"><img alt="" data-media="${esc(src)}" data-image-viewer /></div></div>`;
 }
 function offerCard(o){
   return `<article class="guest-offer-card" data-guest-offer="${esc(o.id)}">${offerImages(o)}<div class="guest-offer-body"><h3>${esc(title(o))}</h3><p>${esc(description(o)||'—')}</p><div class="guest-facts"><span><b>${esc(t('price'))}</b>${esc(o.currency||'')} ${esc(o.unitPrice||'—')}</span><span><b>${esc(t('moq'))}</b>${esc(o.moq||'—')}</span></div></div></article>`;
@@ -107,7 +107,7 @@ function showLogin(){showView('loginView');}
 function openOffer(id){
   const o=(state?.publicOffers||[]).find(x=>x.id===id);if(!o)return;
   $('modalKicker').textContent=`#${ref(o)}`;$('modalTitle').textContent=title(o);
-  $('modalBody').innerHTML=`${o.images?.length?`<div class="guest-modal-images">${o.images.map(src=>`<img alt="" data-guest-modal-media="${esc(src)}" />`).join('')}</div>`:''}<p class="guest-modal-description">${esc(description(o)||'—')}</p><div class="guest-modal-facts"><div><span>${esc(t('price'))}</span><strong>${esc(o.currency||'')} ${esc(o.unitPrice||'—')}</strong></div><div><span>${esc(t('moq'))}</span><strong>${esc(o.moq||'—')}</strong></div><div><span>${esc(t('production'))}</span><strong>${esc(o.leadTime||'—')} ${esc(t('days'))}</strong></div>${o.stock?`<div><span>${esc(t('stock'))}</span><strong>${esc(o.stock)}</strong></div>`:''}</div><button class="primary-btn guest-modal-login" type="button">${esc(t('login'))}</button>`;
+  $('modalBody').innerHTML=`${o.images?.length?`<div class="guest-modal-images" data-viewer-gallery>${o.images.map(src=>`<img alt="" data-guest-modal-media="${esc(src)}" data-image-viewer />`).join('')}</div>`:''}<p class="guest-modal-description">${esc(description(o)||'—')}</p><div class="guest-modal-facts"><div><span>${esc(t('price'))}</span><strong>${esc(o.currency||'')} ${esc(o.unitPrice||'—')}</strong></div><div><span>${esc(t('moq'))}</span><strong>${esc(o.moq||'—')}</strong></div><div><span>${esc(t('production'))}</span><strong>${esc(o.leadTime||'—')} ${esc(t('days'))}</strong></div>${o.stock?`<div><span>${esc(t('stock'))}</span><strong>${esc(o.stock)}</strong></div>`:''}</div><button class="primary-btn guest-modal-login" type="button">${esc(t('login'))}</button>`;
   $('modal').classList.remove('hidden');
   document.querySelectorAll('[data-guest-modal-media]').forEach(async img=>{try{const url=await imageUrl(img.dataset.guestModalMedia);if(url)img.src=url;}catch{}});
 }
