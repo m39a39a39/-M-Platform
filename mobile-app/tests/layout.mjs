@@ -120,7 +120,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
     await page.locator('#imageViewer:not(.hidden)').waitFor();
     assert.equal(await page.locator('#imageViewerImage').count(),1,'Guest image must open in the full-screen viewer');
     await page.locator('[data-image-viewer-close]').click();
-    await page.locator('#imageViewer.hidden').waitFor();
+    await page.locator('#imageViewer').waitFor({state:'hidden'});
     await page.locator('.modal-close').click();
     await page.locator('#guestLoginBtn').click();
     await geometry(page,'#loginView');
@@ -232,7 +232,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
         await page.locator('[data-admin-interest-tracking-status]').selectOption('production');
         await page.locator('[data-admin-interest-tracking-note]').fill('بدأ الإنتاج');
         await page.locator('[data-admin-save-interest-tracking]').click();
-        await page.locator('#modal.hidden').waitFor();
+        await page.locator('#modal').waitFor({state:'hidden'});
         assert.equal(interestMutation?.collection,'interests','Ready-product tracking must update the interest record');
         assert.equal(interestMutation?.patch?.trackingStatus,'production','Admin must save the selected ready-product tracking stage');
         assert.equal(interestMutation?.redactionConfirmed,false,'Tracking-only ready-product updates must not require redaction');
@@ -270,7 +270,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
         if(role==='admin'){
           await page.locator('#modal [data-admin-tracking-status]').selectOption('production');
           await page.locator('#modal [data-admin-save-tracking]').click();
-          await page.locator('#modal.hidden').waitFor();
+          await page.locator('#modal').waitFor({state:'hidden'});
           assert.equal(requestTrackingMutation?.collection,'requests','Admin request tracking must submit a requests mutation');
           assert.equal(requestTrackingMutation?.patch?.trackingStatus,'production','Admin must save the selected request tracking status');
           assert.equal(requestTrackingMutation?.redactionConfirmed,false,'Tracking-only request updates must not require redaction');
