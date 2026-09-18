@@ -54,7 +54,9 @@ for(const [engine,type] of Object.entries({chromium,webkit}))for(const language 
   await logout();
   for(const role of ['client','supplier']){
     await login(role);
-    for(const screen of ['home','requests','offers','account']){
+    const roleScreens=role==='client'?['home','requests','account']:['home','requests','offers','account'];
+    if(role==='client')assert.equal(await page.locator('#bottomNav [data-screen="offers"]:visible').count(),0);
+    for(const screen of roleScreens){
       await nav(screen);assert.equal(await page.locator('[data-admin-root]').count(),0);
       assert.equal((await page.locator('#screen').innerText()).includes('SecretAdmin'),false);
     }
