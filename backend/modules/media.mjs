@@ -14,7 +14,7 @@ async function publishedPublicImage(src){
 export function decodeImage(source){
   const m=typeof source==='string'&&source.match(/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/);
   assert(m,400,'صيغة الصورة غير مدعومة / Unsupported image');
-  const bytes=Buffer.from(m[2],'base64');assert(bytes.length>12&&bytes.length<=1048576,413,'الحد الأقصى للصورة 1 MB / Image exceeds 1 MB');
+  const bytes=Buffer.from(m[2],'base64');assert(bytes.length>12&&bytes.length<=5242880,413,'الحد الأقصى للصورة بعد الضغط 5 MB / Image exceeds 5 MB after compression');
   const mime=bytes[0]===255&&bytes[1]===216&&bytes[2]===255?'image/jpeg':bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]))?'image/png':bytes.toString('ascii',0,4)==='RIFF'&&bytes.toString('ascii',8,12)==='WEBP'?'image/webp':null;
   assert(mime===m[1],400,'محتوى الصورة غير صالح / Invalid image content');return {bytes,mime};
 }
