@@ -4,6 +4,7 @@ import { showView } from './views.js';
 import { configureAdmin, updateAdminState, resetAdmin, renderAdminScreen } from './admin-mobile.js';
 import { App } from '@capacitor/app';
 import { filesToCompressedSources } from './image-upload.js';
+import './image-viewer.js';
 
 let currentUser=null;
 let platformState=null;
@@ -49,6 +50,17 @@ const TRACKING_FLOW=[
   ['delivered','تم التسليم','Delivered'],
   ['completed','مكتمل','Completed']
 ];
+const READY_TRACKING_FLOW=[
+  ['received','تم استلام الطلب','Request received'],
+  ['payment_confirmation','تأكيد الطلب والدفع','Order & payment confirmation'],
+  ['production','قيد الإنتاج','In production'],
+  ['quality_check','الفحص والجودة','Quality inspection'],
+  ['ready_to_ship','جاهز للشحن','Ready to ship'],
+  ['shipped','تم الشحن','Shipped'],
+  ['in_delivery','قيد التوصيل','In delivery'],
+  ['delivered','تم التسليم','Delivered'],
+  ['completed','مكتمل','Completed']
+];
 const TRACKING_EXCEPTIONS={customer_action:['بانتظار إجراء من العميل','Waiting for customer action'],on_hold:['معلق','On hold'],cancelled:['ملغي','Cancelled']};
 function statusLabel(status){return t(status)||status||'—';}
 function trackingLabel(status){
@@ -57,6 +69,10 @@ function trackingLabel(status){
 }
 function requestTrackingStatus(item){
   return item?.trackingStatus||(item?.status==='completed'?'completed':item?.selectedQuoteId?'quote_selected':item?.status==='sent'?'sourcing':'received');
+}
+function readyTrackingStatus(item){
+  if(item?.trackingStatus)return item.trackingStatus;
+  return item?.status==='completed'?'completed':item?.status==='cancelled'?'cancelled':['coordinating','accepted'].includes(item?.status)?'payment_confirmation':'received';
 }
 function categories(activeOnly=true){
   const rows=Array.isArray(platformState?.settings?.categories)?platformState.settings.categories:[];
@@ -71,12 +87,12 @@ function categoryFilters(){
   if(!rows.length)return '';
   return `<div class="category-filter-bar" role="tablist"><button type="button" data-category="all" class="${readyCategory==='all'?'active':''}">${esc(t('allCategories'))}</button>${rows.map(cat=>`<button type="button" data-category="${esc(cat.id)}" class="${readyCategory===cat.id?'active':''}">${esc(lang==='ar'?cat.nameAr:cat.nameEn)}</button>`).join('')}</div>`;
 }
-function trackingTimeline(requestItem){
-  const current=requestTrackingStatus(requestItem),exception=TRACKING_EXCEPTIONS[current];
-  const history=Array.isArray(requestItem.trackingHistory)?requestItem.trackingHistory:[];
-  const lastLinear=exception?[...history].reverse().find(h=>TRACKING_FLOW.some(x=>x[0]===h.status))?.status||'received':current;
-  const currentIndex=Math.max(0,TRACKING_FLOW.findIndex(x=>x[0]===lastLinear));
-  return `<section class="tracking-card"><div class="tracking-head"><div><small>${esc(t('tracking'))}</small><strong>${esc(trackingLabel(current))}</strong></div>${requestItem.trackingUpdatedAt?`<span>${esc(t('lastUpdate'))}: ${esc(date(requestItem.trackingUpdatedAt))}</span>`:''}</div>${exception?`<div class="tracking-exception">${esc(trackingLabel(current))}</div>`:''}<div class="tracking-timeline">${TRACKING_FLOW.map((step,i)=>`<div class="tracking-step ${i<currentIndex?'done':i===currentIndex&&!exception?'current':''}"><span class="tracking-dot">${i<currentIndex?'✓':i+1}</span><b>${esc(lang==='ar'?step[1]:step[2])}</b></div>`).join('')}</div>${requestItem.trackingNote?`<p class="tracking-note"><b>${esc(t('trackingNote'))}:</b> ${esc(requestItem.trackingNote)}</p>`:''}</section>`;
+function trackingTimeline(item,{flow=TRACKING_FLOW,statusResolver=requestTrackingStatus}={}){
+  const current=statusResolver(item),exception=TRACKING_EXCEPTIONS[current];
+  const history=Array.isArray(item.trackingHistory)?item.trackingHistory:[];
+  const lastLinear=exception?[...history].reverse().find(h=>flow.some(x=>x[0]===h.status))?.status||flow[0][0]:current;
+  const found=flow.findIndex(x=>x[0]===lastLinear),currentIndex=Math.max(0,found);
+  return `<section class="tracking-card"><div class="tracking-head"><div><small>${esc(t('tracking'))}</small><strong>${esc(trackingLabel(current))}</strong></div>${item.trackingUpdatedAt?`<span>${esc(t('lastUpdate'))}: ${esc(date(item.trackingUpdatedAt))}</span>`:''}</div>${exception?`<div class="tracking-exception">${esc(trackingLabel(current))}</div>`:''}<div class="tracking-timeline">${flow.map((step,i)=>`<div class="tracking-step ${i<currentIndex?'done':i===currentIndex&&!exception?'current':''}"><span class="tracking-dot">${i<currentIndex?'✓':i+1}</span><b>${esc(lang==='ar'?step[1]:step[2])}</b></div>`).join('')}</div>${item.trackingNote?`<p class="tracking-note"><b>${esc(t('trackingNote'))}:</b> ${esc(item.trackingNote)}</p>`:''}</section>`;
 }
 function titleOf(item){const x=item?.translation||{};return (lang==='ar'?(x.titleAr||x.titleEn):(x.titleEn||x.titleAr))||item?.product||item?.title||`#${ref(item)}`;}
 function descriptionOf(item){const x=item?.translation||{};return (lang==='ar'?(x.descriptionAr||x.descriptionEn):(x.descriptionEn||x.descriptionAr))||item?.specs||item?.notes||'';}
@@ -139,7 +155,7 @@ function showToast(text){if(!currentUser)return;const el=$('toast');el.textConte
 function openModal(title,kicker,html){$('modalTitle').textContent=title;$('modalKicker').textContent=kicker||'';$('modalBody').innerHTML=html;$('modal').classList.remove('hidden');hydrateImages($('modalBody'));}
 function closeModal(){$('modal').classList.add('hidden');$('modalBody').innerHTML='';}
 
-function gallery(images=[]){if(!images.length)return '';return `<div class="media-grid">${images.map(src=>`<div class="media-placeholder"><img alt="" data-media="${esc(src)}" /></div>`).join('')}</div>`;}
+function gallery(images=[]){if(!images.length)return '';return `<div class="media-grid" data-viewer-gallery>${images.map(src=>`<div class="media-placeholder"><img alt="" data-media="${esc(src)}" data-image-viewer /></div>`).join('')}</div>`;}
 async function mediaUrl(src){
   if(mediaCache.has(src))return mediaCache.get(src);
   if(mediaTasks.has(src))return mediaTasks.get(src);
@@ -172,7 +188,7 @@ function empty(){return `<div class="empty-state"><span>◇</span><p>${esc(t('em
 function itemCard(item,{subtitle='',meta='',badge='',action='',images=false}={}){return `<article class="list-card" ${action}><div class="list-card-main"><div class="list-card-title"><small>#${esc(ref(item))}</small><h3>${esc(titleOf(item))}</h3></div>${badge}</div>${subtitle?`<p>${esc(subtitle)}</p>`:''}${meta?`<div class="meta-line">${meta}</div>`:''}${images?gallery(item.images):''}<div class="chevron">›</div></article>`;}
 function publicOfferCard(item){
   const image=(item.images||[])[0];
-  return `<article class="public-offer-card" data-public-offer="${esc(item.id)}"><div class="public-offer-media">${image?`<img alt="" data-media="${esc(image)}" />`:'<div class="public-offer-placeholder">M</div>'}</div><div class="public-offer-content"><h3>${esc(titleOf(item))}</h3><p>${esc(descriptionOf(item)||'—')}</p><div class="public-offer-facts"><span><b>${esc(t('price'))}</b><strong>${money(item.unitPrice,item.currency)}</strong></span><span><b>${esc(t('moq'))}</b><strong>${esc(item.moq||'—')}</strong></span></div></div></article>`;
+  return `<article class="public-offer-card" data-public-offer="${esc(item.id)}"><div class="public-offer-media" data-viewer-gallery>${image?`<img alt="" data-media="${esc(image)}" data-image-viewer />`:'<div class="public-offer-placeholder">M</div>'}</div><div class="public-offer-content"><h3>${esc(titleOf(item))}</h3><p>${esc(descriptionOf(item)||'—')}</p><div class="public-offer-facts"><span><b>${esc(t('price'))}</b><strong>${money(item.unitPrice,item.currency)}</strong></span><span><b>${esc(t('moq'))}</b><strong>${esc(item.moq||'—')}</strong></span></div></div></article>`;
 }
 function productPagination(page,totalPages){
   if(totalPages<=1)return '';
@@ -210,13 +226,13 @@ function renderRequests(){
     const rows=platformState.requests||[];
     const interests=platformState.interests||[];
     const newQuotes=rows.reduce((n,r)=>n+newQuoteCount(r),0);
-    const active=rows.filter(r=>!['completed','cancelled'].includes(requestTrackingStatus(r))).length+interests.filter(i=>!['accepted','cancelled','completed'].includes(i.status)).length;
+    const active=rows.filter(r=>!['completed','cancelled'].includes(requestTrackingStatus(r))).length+interests.filter(i=>!['completed','cancelled'].includes(readyTrackingStatus(i))).length;
     const readyRows=interests.map(i=>({interest:i,offer:(platformState.publicOffers||[]).find(o=>o.id===i.offerId)}));
     $('screen').innerHTML=
       pageHeader(t('requests'),tr('كل طلباتك ومتابعتها في مكان واحد.','All your requests and their progress in one place.'),`<button class="primary-small" data-action="new-request">+ ${esc(t('sendCustomRequest'))}</button>`)+
       `<div class="stats-grid client-request-stats">${statCard(rows.length+interests.length,t('totalRequests'))}${statCard(newQuotes,t('newQuotes'))}${statCard(active,t('activeRequests'))}${statCard(interests.length,t('readyProductRequests'))}</div>`+
       `<section class="request-group" data-client-request-group="custom"><div class="section-title"><h2>${esc(t('customRequests'))}</h2></div><div class="list-stack">${rows.map(r=>itemCard(r,{subtitle:descriptionOf(r),meta:`${t('quantity')}: ${r.quantity||'—'} · ${r.country||'—'} · ${date(r.createdAt)}`,badge:cardBadge(requestTrackingStatus(r),newQuoteCount(r)?`<span class="new-pill">${newQuoteCount(r)}</span>`:''),action:`data-request="${esc(r.id)}"`,images:true})).join('')||empty()}</div></section>`+
-      `<section class="request-group" data-client-request-group="ready"><div class="section-title"><h2>${esc(t('readyProductRequests'))}</h2></div><div class="list-stack">${readyRows.map(({interest,offer})=>itemCard(offer||interest,{subtitle:offer?descriptionOf(offer):tr('المنتج غير متاح حاليًا','Product currently unavailable'),meta:date(interest.createdAt),badge:cardBadge(interest.status),action:offer?`data-public-offer="${esc(offer.id)}"`:'',images:!!offer})).join('')||empty()}</div></section>`;
+      `<section class="request-group" data-client-request-group="ready"><div class="section-title"><h2>${esc(t('readyProductRequests'))}</h2></div><div class="list-stack">${readyRows.map(({interest,offer})=>itemCard(offer||interest,{subtitle:offer?descriptionOf(offer):tr('المنتج غير متاح حاليًا','Product currently unavailable'),meta:date(interest.createdAt),badge:cardBadge(readyTrackingStatus(interest)),action:offer?`data-public-offer="${esc(offer.id)}"`:'',images:!!offer})).join('')||empty()}</div></section>`;
   }else if(currentUser.role==='supplier'){
     const answered=new Set((platformState.quotes||[]).map(q=>q.requestId)),rows=(platformState.requests||[]).filter(r=>!answered.has(r.id));
     $('screen').innerHTML=pageHeader(t('invites'),tr('طلبات أرسلتها الإدارة إليك لتقديم عرض.','Requests sent to you by admin for quotation.'))+`<div class="list-stack">${rows.map(r=>itemCard(r,{subtitle:descriptionOf(r),meta:`${t('quantity')}: ${r.quantity||'—'} · ${r.country||'—'} · ${t('neededDate')}: ${r.neededDate||'—'}`,badge:cardBadge(r.status),action:`data-supplier-request="${esc(r.id)}"`,images:true})).join('')||empty()}</div>`;
@@ -263,7 +279,8 @@ async function openClientRequest(requestId){
 async function openPublicOffer(offerId){
   const o=(platformState.publicOffers||[]).find(x=>x.id===offerId);if(!o)return;
   const interest=(platformState.interests||[]).find(i=>i.offerId===o.id);
-  openModal(titleOf(o),`#${ref(o)}`,`${gallery(o.images)}<div class="quote-price">${money(o.unitPrice,o.currency)}</div><div class="facts"><span>MOQ ${esc(o.moq||'—')}</span><span>${esc(t('stock'))}: ${esc(o.stock||'—')}</span><span>${esc(t('leadTime'))}: ${esc(o.leadTime||'—')}</span><span>${esc(t('validUntil'))}: ${esc(o.validUntil||'—')}</span></div><p class="long-copy">${esc(descriptionOf(o)||'—')}</p>${currentUser.role==='client'?`<button class="primary-btn full" data-interest="${esc(o.id)}" ${interest?'disabled':''}>${esc(interest?t('requested'):t('requestOffer'))}</button>`:''}`);
+  const progress=currentUser.role==='client'&&interest?trackingTimeline(interest,{flow:READY_TRACKING_FLOW,statusResolver:readyTrackingStatus}):'';
+  openModal(titleOf(o),`#${ref(o)}`,`${progress}${gallery(o.images)}<div class="quote-price">${money(o.unitPrice,o.currency)}</div><div class="facts"><span>MOQ ${esc(o.moq||'—')}</span><span>${esc(t('stock'))}: ${esc(o.stock||'—')}</span><span>${esc(t('leadTime'))}: ${esc(o.leadTime||'—')}</span><span>${esc(t('validUntil'))}: ${esc(o.validUntil||'—')}</span></div><p class="long-copy">${esc(descriptionOf(o)||'—')}</p>${currentUser.role==='client'?`<button class="primary-btn full" data-interest="${esc(o.id)}" ${interest?'disabled':''}>${esc(interest?t('requested'):t('requestOffer'))}</button>`:''}`);
 }
 function openSupplierRequest(requestId){
   const r=(platformState.requests||[]).find(x=>x.id===requestId);if(!r)return;
