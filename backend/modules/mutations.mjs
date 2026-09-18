@@ -124,10 +124,18 @@ export async function mutate(user,body){
         data.translation=Object.fromEntries(['titleAr','titleEn','descriptionAr','descriptionEn'].map(k=>[k,patch.translation[k].trim()]));
       }else if(key==='status'||key==='supplierIds'){
         assert(can(user,'publish'));
-        if(key==='status')assert((collection==='requests'?['review','sent','completed']:collection==='interests'?['pending','coordinating','accepted','completed','cancelled']:['pending','published']).includes(patch[key]),400);
-        else {assert(collection==='requests'&&Array.isArray(patch[key])&&patch[key].length>0&&patch[key].length<=100,400);for(const supplierId of patch[key]){assert(/^[a-f0-9-]{36}$/.test(supplierId),400);const p=await one('profiles',supplierId);assert(active(p)&&p.role==='supplier',400);}}
-        data[key]=patch[key];
-        if(collection==='quotes'&&key==='status'&&patch[key]==='published')data.publishedAt=now;
+        if(key==='status'){
+          if(collection==='interests'){
+            assert(['pending','coordinating','accepted','completed','cancelled','active'].includes(patch[key]),400);
+            const mapped=patch[key]==='completed'?'completed':patch[key]==='cancelled'?'cancelled':['coordinating','accepted'].includes(patch[key])?'payment_confirmation':'received';
+            setTracking(data,mapped,now,data.trackingNote||'');
+            data.status=mapped==='completed'?'completed':mapped==='cancelled'?'cancelled':'active';
+          }else{
+            assert((collection==='requests'?['review','sent','completed']:['pending','published']).includes(patch[key]),400);
+            data[key]=patch[key];
+            if(collection==='quotes'&&patch[key]==='published')data.publishedAt=now;
+          }
+        }else {assert(collection==='requests'&&Array.isArray(patch[key])&&patch[key].length>0&&patch[key].length<=100,400);for(const supplierId of patch[key]){assert(/^[a-f0-9-]{36}$/.test(supplierId),400);const p=await one('profiles',supplierId);assert(active(p)&&p.role==='supplier',400);}data[key]=patch[key];}
       }else if(key==='reviewedAt'){
         assert(can(user,editPermission)||can(user,'translate')||can(user,'publish'));data.reviewedAt=now;
       }else if((collection==='requests'||collection==='interests')&&key==='trackingStatus'){
