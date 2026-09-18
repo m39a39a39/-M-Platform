@@ -1,4 +1,5 @@
 import { session } from './session.js';
+import { filesToCompressedSources } from './image-upload.js';
 let state=null,revision=0;
 let requestFilter='active',offerTab='pending',timer=null;
 const searches=new Map(),mediaCache=new Map(),mediaTasks=new Map();
@@ -140,6 +141,76 @@ function categorySelector(x){
   if(!rows.length)return`<section class="admin-category-select-box"><strong>${esc(tr('التصنيف','Category'))}</strong><p>${esc(tr('أضف تصنيفًا من تبويب التصنيفات أولًا.','Add a category from the Categories tab first.'))}</p></section>`;
   return `<section class="admin-category-select-box"><label><span>${esc(tr('التصنيف','Category'))}</span><select data-admin-category-select><option value="">—</option>${rows.map(cat=>`<option value="${esc(cat.id)}" ${current===cat.id?'selected':''}>${esc(tr(cat.nameAr,cat.nameEn))}</option>`).join('')}</select></label></section>`;
 }
+function publicTranslationFields(x){
+  const t=x.translation||{},editable=can('translate'),disabled=editable?'':'disabled';
+  return `<div class="form-stack admin-public-translation"><label><span>${esc(tr('اسم المنتج بالعربية','Arabic product name'))}</span><input ${disabled} data-admin-public-tr="titleAr" value="${esc(t.titleAr||'')}"></label><label><span>${esc(tr('اسم المنتج بالإنجليزية','English product name'))}</span><input ${disabled} data-admin-public-tr="titleEn" value="${esc(t.titleEn||'')}"></label><label><span>${esc(tr('الوصف بالعربية','Arabic description'))}</span><textarea ${disabled} data-admin-public-tr="descriptionAr">${esc(t.descriptionAr||'')}</textarea></label><label><span>${esc(tr('الوصف بالإنجليزية','English description'))}</span><textarea ${disabled} data-admin-public-tr="descriptionEn">${esc(t.descriptionEn||'')}</textarea></label></div>`;
+}
+function publicOfferEditor(x){
+  const cats=activeCategories(),canPublish=can('publish');
+  const currentImages=(x.images||[]).map((src,i)=>`<label class="admin-image-tile"><input checked type="checkbox" data-admin-public-image-index="${i}"><span><img alt="" data-admin-media="${esc(src)}"></span><small>${esc(tr('إبقاء الصورة','Keep image'))}</small></label>`).join('');
+  return `<form id="adminPublicOfferForm" class="form-stack admin-public-offer-editor" data-id="${esc(x.id)}">
+    <h3>${esc(tr('تعديل العرض العام','Edit public offer'))}</h3>
+    <label><span>${esc(tr('اسم المنتج الأصلي','Original product name'))}</span><input name="product" required maxlength="300" value="${esc(x.product||'')}"></label>
+    <label><span>${esc(tr('الوصف الأصلي','Original description'))}</span><textarea name="specs" required maxlength="10000">${esc(x.specs||'')}</textarea></label>
+    <div class="form-two"><label><span>${esc(tr('السعر','Price'))}</span><input name="unitPrice" type="number" step="0.01" min="0.01" required value="${esc(x.unitPrice||'')}"></label><label><span>${esc(tr('العملة','Currency'))}</span><select name="currency">${['USD','SAR','AED','CNY','EUR'].map(v=>`<option ${x.currency===v?'selected':''}>${v}</option>`).join('')}</select></label></div>
+    <div class="form-two"><label><span>${esc(tr('الحد الأدنى','MOQ'))}</span><input name="moq" type="number" min="1" required value="${esc(x.moq||'')}"></label><label><span>${esc(tr('المخزون','Stock'))}</span><input name="stock" maxlength="100" value="${esc(x.stock||'')}"></label></div>
+    <div class="form-two"><label><span>${esc(tr('مدة الإنتاج بالأيام','Production time (days)'))}</span><input name="leadTime" type="number" min="1" required value="${esc(x.leadTime||'')}"></label><label><span>${esc(tr('الدولة','Country'))}</span><input name="country" maxlength="100" value="${esc(x.country||'')}"></label></div>
+    <label><span>${esc(tr('صالح حتى','Valid until'))}</span><input name="validUntil" type="date" value="${esc(x.validUntil||'')}"></label>
+    <label><span>${esc(tr('التصنيف','Category'))}</span><select name="categoryId"><option value="">—</option>${cats.map(cat=>`<option value="${esc(cat.id)}" ${x.categoryId===cat.id?'selected':''}>${esc(tr(cat.nameAr,cat.nameEn))}</option>`).join('')}</select></label>
+    ${canPublish?`<label><span>${esc(tr('حالة النشر','Publication status'))}</span><select name="status"><option value="published" ${x.status==='published'?'selected':''}>${esc(tr('منشور','Published'))}</option><option value="pending" ${x.status==='pending'?'selected':''}>${esc(tr('غير منشور / قيد المراجعة','Unpublished / pending'))}</option></select></label>`:''}
+    <section><h3>${esc(tr('النص الظاهر للعملاء','Customer-facing text'))}</h3>${publicTranslationFields(x)}</section>
+    <section><h3>${esc(tr('الصور الحالية','Current images'))}</h3><div class="admin-image-grid">${currentImages}</div></section>
+    <label><span>${esc(tr('إضافة صور جديدة','Add new images'))}</span><input id="adminPublicFiles" type="file" accept="image/*" multiple><small>${esc(tr('يمكن اختيار صور كبيرة وسيتم ضغطها تلقائيًا. الحد الأقصى 5 صور إجمالًا.','Large images are compressed automatically. Maximum 5 images total.'))}</small></label>
+    <label class="admin-category-toggle-label"><input type="checkbox" data-admin-public-redaction><span>${esc(tr('راجعت النصوص والصور ولا تحتوي على بيانات تواصل مباشرة.','I reviewed the text and images and they contain no direct contact details.'))}</span></label>
+    <p class="form-message" data-admin-public-message></p>
+    <button class="primary-btn" type="submit">${esc(tr('حفظ التعديلات','Save changes'))}</button>
+  </form>`;
+}
+async function adminFilesToSources(input,maxFiles){
+  try{return await filesToCompressedSources(input,{maxFiles});}
+  catch(error){
+    if(error?.message==='too_many')throw new Error(tr('الحد الأقصى 5 صور إجمالًا.','Maximum 5 images total.'));
+    if(error?.message==='too_large')throw new Error(tr('الصورة الأصلية كبيرة جدًا. اختر صورة أقل من 25 MB.','The original image is too large. Choose an image under 25 MB.'));
+    if(error?.message==='unsupported'||error?.message==='decode_failed')throw new Error(tr('تعذر قراءة هذه الصورة. جرّب صورة أخرى.','This image could not be read. Try another image.'));
+    throw new Error(tr('تعذر ضغط الصورة. جرّب صورة أخرى.','The image could not be compressed. Try another image.'));
+  }
+}
+async function uploadAdminSources(sources){
+  const out=[];
+  for(const source of sources){const result=await api('/api/v1/uploads',{method:'POST',body:{source}});out.push(result.src);}
+  return out;
+}
+async function savePublicOffer(form){
+  const x=(state?.publicOffers||[]).find(item=>item.id===form.dataset.id);if(!x)return;
+  const message=form.querySelector('[data-admin-public-message]');
+  try{
+    message.textContent=tr('جارٍ تجهيز الصور...','Preparing images...');
+    const kept=(x.images||[]).filter((src,i)=>form.querySelector(`[data-admin-public-image-index="${i}"]`)?.checked);
+    const remaining=5-kept.length;if(remaining<0)throw new Error(tr('الحد الأقصى 5 صور إجمالًا.','Maximum 5 images total.'));
+    const sources=await adminFilesToSources(form.querySelector('#adminPublicFiles'),remaining);
+    message.textContent=sources.length?tr('جارٍ رفع الصور...','Uploading images...'):tr('جارٍ الحفظ...','Saving...');
+    const uploaded=await uploadAdminSources(sources),images=[...kept,...uploaded];
+    if(!images.length)throw new Error(tr('يجب الإبقاء على صورة واحدة على الأقل.','Keep at least one image.'));
+    const patch={
+      product:form.product.value.trim(),specs:form.specs.value.trim(),
+      unitPrice:form.unitPrice.value,currency:form.currency.value,moq:form.moq.value,
+      stock:form.stock.value.trim(),leadTime:form.leadTime.value,country:form.country.value.trim(),
+      validUntil:form.validUntil.value,categoryId:form.categoryId.value,images
+    };
+    if(can('translate')){
+      const translation={};form.querySelectorAll('[data-admin-public-tr]').forEach(el=>translation[el.dataset.adminPublicTr]=el.value.trim());
+      if(Object.values(translation).some(v=>!v))throw new Error(tr('أكمل الاسم والوصف بالعربية والإنجليزية.','Complete the name and description in Arabic and English.'));
+      patch.translation=translation;
+    }
+    if(can('publish'))patch.status=form.status.value;
+    if(patch.status==='published'&&activeCategories().length&&!patch.categoryId)throw new Error(tr('اختر التصنيف أولًا.','Choose a category first.'));
+    const redaction=form.querySelector('[data-admin-public-redaction]')?.checked;
+    if((patch.status||x.status)==='published'&&!redaction)throw new Error(tr('أكد مراجعة النصوص والصور أولًا.','Confirm that you reviewed the text and images first.'));
+    message.textContent=tr('جارٍ الحفظ...','Saving...');
+    await mutate('publicOffers',x,patch,!!redaction);
+    closeModal();schedule();toast(tr('تم تحديث العرض العام.','Public offer updated.'));
+  }catch(error){message.textContent=error.message||tr('تعذر حفظ التعديلات.','Could not save changes.');}
+}
 function trackingEditor(x){
   const current=requestTracking(x);
   return `<section class="admin-tracking-editor"><h3>${esc(tr('متابعة الطلب','Order tracking'))}</h3><label><span>${esc(tr('الحالة الحالية','Current status'))}</span><select data-admin-tracking-status>${TRACKING.map(([key,ar,en])=>`<option value="${key}" ${current===key?'selected':''}>${esc(tr(ar,en))}</option>`).join('')}</select></label><label><span>${esc(tr('ملاحظة للعميل (اختياري)','Customer note (optional)'))}</span><textarea data-admin-tracking-note maxlength="1000">${esc(x.trackingNote||'')}</textarea></label><small>${x.trackingUpdatedAt?`${esc(tr('آخر تحديث','Last update'))}: ${esc(date(x.trackingUpdatedAt))}`:''}</small><button class="primary-btn" type="button" data-admin-save-tracking="${esc(x.id)}">${esc(tr('حفظ حالة الطلب','Save order status'))}</button></section>`;
@@ -173,10 +244,10 @@ function openRecord(kind,id){
   const pending=kind==='request'?x.status==='review':x.status==='pending',editPerm=kind==='request'?'requests.edit':'offers.edit',editImages=pending&&can(editPerm),editTr=pending&&can('translate'),approve=pending&&can('publish'),linked=kind==='quote'?(state?.requests||[]).find(r=>r.id===x.requestId):null;
   let html=ownerBox(x)+`<section class="admin-source-box"><h3>${esc(tr('المحتوى الأصلي','Original content'))}</h3><strong>${esc(x.product||linked?.product||title(x))}</strong><p>${esc(x.specs||x.notes||'—')}</p>${kind==='request'?`<div class="facts"><span>${esc(tr('الكمية','Quantity'))}: ${esc(x.quantity||'—')}</span><span>${esc(tr('الدولة','Country'))}: ${esc(x.country||'—')}</span><span>${esc(tr('تاريخ الاحتياج','Needed date'))}: ${esc(x.neededDate||'—')}</span></div>`:''}${linked?`<div class="facts"><span>${esc(tr('الطلب المرتبط','Linked request'))}: #${esc(ref(linked))}</span></div>`:''}</section>`;
   if(kind==='request'&&(can('requests.edit')||can('publish')))html+=trackingEditor(x);
-  if(kind==='public'&&can('offers.edit'))html+=categorySelector(x)+(pending?'':`<button class="secondary-btn full" type="button" data-admin-save-category="${esc(x.id)}">${esc(tr('حفظ التصنيف','Save category'))}</button>`);
-  html+=`<section><h3>${esc(tr('الصور','Images'))}</h3>${gallery(x.images||[],editImages)||`<p class="muted">${esc(tr('لا توجد صور.','No images.'))}</p>`}</section><section><h3>${esc(tr('الترجمة','Translation'))}</h3>${translations(x,editTr)}</section>`;
+  if(kind==='public'&&can('offers.edit'))html+=publicOfferEditor(x);
+  if(kind!=='public'||!can('offers.edit'))html+=`<section><h3>${esc(tr('الصور','Images'))}</h3>${gallery(x.images||[],editImages)||`<p class="muted">${esc(tr('لا توجد صور.','No images.'))}</p>`}</section><section><h3>${esc(tr('الترجمة','Translation'))}</h3>${translations(x,editTr)}</section>`;
   if(kind==='request'&&pending&&can('publish'))html+=supplierPicker(x);
-  if(pending){
+  if(pending&&!(kind==='public'&&can('offers.edit'))){
     html+=`<section class="admin-redaction"><h3>${esc(tr('فحص الخصوصية','Privacy check'))}</h3><label><input type="checkbox" data-admin-redact="identity"><span>${esc(tr('تمت مراجعة الصور والنصوص وإزالة الهوية.','Images and text were checked and identity removed.'))}</span></label><label><input type="checkbox" data-admin-redact="contact"><span>${esc(tr('تمت إزالة بيانات التواصل المباشر.','Direct contact details were removed.'))}</span></label></section><div class="admin-review-actions">${editTr?`<button class="secondary-btn" data-admin-save-review data-kind="${kind}" data-id="${esc(x.id)}">${esc(tr('حفظ دون نشر','Save without publishing'))}</button>`:''}${approve?`<button class="primary-btn" data-admin-approve data-kind="${kind}" data-id="${esc(x.id)}">${esc(tr('اعتماد ونشر','Approve & publish'))}</button>`:''}</div>`;
   }else if(kind==='request'&&x.status==='sent'&&can('publish'))html+=`<div class="admin-review-actions"><button class="secondary-btn" data-admin-reopen-request data-id="${esc(x.id)}">${esc(tr('إعادة للمراجعة','Return to review'))}</button><button class="primary-btn" data-admin-complete-request data-id="${esc(x.id)}">${esc(tr('تحديد كمكتمل','Mark completed'))}</button></div>`;
   modal(`#${ref(x)} — ${title(x)}`,kind==='request'?status(requestTracking(x)):status(x.status),html);
@@ -221,4 +292,8 @@ document.addEventListener('change',e=>{
   if(e.target.matches('[data-admin-interest-status]'))interestStatus(e.target.dataset.adminInterestStatus,e.target.value);
   else if(e.target.matches('[data-admin-request-filter]')){requestFilter=e.target.value;schedule();}
 });
-document.addEventListener('submit',e=>{if(!isAdmin()||!e.target.matches('#adminCategoryForm'))return;e.preventDefault();submitCategory(e.target);});
+document.addEventListener('submit',e=>{
+  if(!isAdmin())return;
+  if(e.target.matches('#adminCategoryForm')){e.preventDefault();submitCategory(e.target);}
+  else if(e.target.matches('#adminPublicOfferForm')){e.preventDefault();savePublicOffer(e.target);}
+});
