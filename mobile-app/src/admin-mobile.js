@@ -36,8 +36,12 @@ const desc=x=>{const t=x?.translation||{};return(lang()==='ar'?(t.descriptionAr|
 const TRACKING=[
  ['received','تم استلام الطلب','Request received'],['reviewing','قيد المراجعة','Under review'],['sourcing','البحث عن موردين','Finding suppliers'],['quotes_available','العروض متاحة','Offers available'],['quote_selected','تم اختيار العرض','Offer selected'],['payment_confirmation','تأكيد الطلب والدفع','Order & payment confirmation'],['production','قيد الإنتاج','In production'],['quality_check','الفحص والجودة','Quality inspection'],['ready_to_ship','جاهز للشحن','Ready to ship'],['shipped','تم الشحن','Shipped'],['in_delivery','قيد التوصيل','In delivery'],['delivered','تم التسليم','Delivered'],['completed','مكتمل','Completed'],['customer_action','بانتظار إجراء من العميل','Waiting for customer action'],['on_hold','معلق','On hold'],['cancelled','ملغي','Cancelled']
 ];
+const READY_TRACKING=[
+ ['received','تم استلام الطلب','Request received'],['payment_confirmation','تأكيد الطلب والدفع','Order & payment confirmation'],['production','قيد الإنتاج','In production'],['quality_check','الفحص والجودة','Quality inspection'],['ready_to_ship','جاهز للشحن','Ready to ship'],['shipped','تم الشحن','Shipped'],['in_delivery','قيد التوصيل','In delivery'],['delivered','تم التسليم','Delivered'],['completed','مكتمل','Completed'],['customer_action','بانتظار إجراء من العميل','Waiting for customer action'],['on_hold','معلق','On hold'],['cancelled','ملغي','Cancelled']
+];
 const status=s=>({review:tr('قيد المراجعة','Under review'),sent:tr('تم الإرسال للموردين','Sent to suppliers'),completed:tr('مكتمل','Completed'),pending:tr('قيد المراجعة','Under review'),published:tr('منشور','Published'),coordinating:tr('قيد التنسيق','Coordinating'),accepted:tr('مقبول','Accepted'),cancelled:tr('ملغي','Cancelled'),...Object.fromEntries(TRACKING.map(x=>[x[0],tr(x[1],x[2])]))})[s]||s||'—';
 const requestTracking=x=>x?.trackingStatus||(x?.status==='completed'?'completed':x?.selectedQuoteId?'quote_selected':x?.status==='sent'?'sourcing':'received');
+const interestTracking=x=>x?.trackingStatus||(x?.status==='completed'?'completed':x?.status==='cancelled'?'cancelled':['coordinating','accepted'].includes(x?.status)?'payment_confirmation':'received');
 const categories=()=>{const rows=Array.isArray(state?.settings?.categories)?state.settings.categories:[];return [...rows].sort((a,b)=>(a.order||0)-(b.order||0));};
 const activeCategories=()=>categories().filter(cat=>cat.active!==false);
 
@@ -72,7 +76,7 @@ function badge(s){return`<span class="status-pill status-${esc(s||'')}">${esc(st
 function page(title,sub=''){return`<div class="page-head admin-page-head"><div><h1>${esc(title)}</h1>${sub?`<p>${esc(sub)}</p>`:''}</div></div>`;}
 function empty(){return`<div class="empty-state"><span>◇</span><p>${esc(tr('لا توجد بيانات حاليًا.','No data available.'))}</p></div>`;}
 function search(placeholder){return`<label class="admin-mobile-search"><span>⌕</span><input type="search" inputmode="search" enterkeyhint="search" data-admin-search value="${esc(searchText())}" placeholder="${esc(placeholder)}" aria-label="${esc(placeholder)}"></label>`;}
-function gallery(images=[],select=false){if(!images.length)return'';return`<div class="admin-image-grid">${images.map((src,i)=>`<label class="admin-image-tile"><input ${select?'':'disabled'} checked type="checkbox" data-admin-image-index="${i}"><span><img alt="" data-admin-media="${esc(src)}"></span>${select?`<small>${esc(tr('إبقاء الصورة','Keep image'))}</small>`:''}</label>`).join('')}</div>`;}
+function gallery(images=[],select=false){if(!images.length)return'';return`<div class="admin-image-grid" data-viewer-gallery>${images.map((src,i)=>`<label class="admin-image-tile"><input ${select?'':'disabled'} checked type="checkbox" data-admin-image-index="${i}"><span><img alt="" data-admin-media="${esc(src)}" data-image-viewer></span>${select?`<small>${esc(tr('إبقاء الصورة','Keep image'))}</small>`:''}</label>`).join('')}</div>`;}
 async function imageUrl(src){
   if(mediaCache.has(src))return mediaCache.get(src);
   if(mediaTasks.has(src))return mediaTasks.get(src);
@@ -121,7 +125,7 @@ function offers(){
   if(offerTab==='categories'){setRoot('offers',page(tr('العروض','Offers'),tr('إدارة العروض والتصنيفات.','Manage offers and categories.'))+tabs+categoryPanel());return;}
   let content='';
   if(offerTab==='interests'){
-    const rows=ints.filter(x=>matches(x,'interest'));content=rows.map(i=>{const o=(state?.publicOffers||[]).find(x=>x.id===i.offerId),customer=account(i.customerId);return`<article class="list-card admin-interest-card"><div class="list-card-main"><div class="list-card-title"><small>#${esc(ref(o))}</small><h3>${esc(o?title(o):tr('طلب اهتمام','Interest request'))}</h3></div>${badge(i.status||'pending')}</div><div class="admin-record-meta">${customer?`<span>${esc(customer.company||customer.name||'')}</span>`:''}<span>${esc(date(i.createdAt))}</span></div>${can('publish')?`<label class="admin-status-select"><span>${esc(tr('الحالة','Status'))}</span><select data-admin-interest-status="${esc(i.id)}">${['pending','coordinating','accepted','completed','cancelled'].map(v=>`<option value="${v}" ${(i.status||'pending')===v?'selected':''}>${esc(status(v))}</option>`).join('')}</select></label>`:''}</article>`;}).join('')||empty();
+    const rows=ints.filter(x=>matches(x,'interest'));content=rows.map(i=>{const o=(state?.publicOffers||[]).find(x=>x.id===i.offerId),customer=account(i.customerId);return`<article class="list-card admin-interest-card" data-admin-interest="${esc(i.id)}"><div class="list-card-main"><div class="list-card-title"><small>#${esc(ref(o))}</small><h3>${esc(o?title(o):tr('طلب منتج جاهز','Ready-product request'))}</h3></div>${badge(interestTracking(i))}</div><div class="admin-record-meta">${customer?`<span>${esc(customer.company||customer.name||'')}</span>`:''}<span>${esc(date(i.createdAt))}</span></div>${o?gallery(o.images||[]):''}<div class="chevron">›</div></article>`;}).join('')||empty();
   }else{
     let rows=[...qs,...po].filter(x=>matches(x,x.__kind));rows.sort((a,b)=>(a.status==='pending'?0:1)-(b.status==='pending'?0:1)||String(b.createdAt||'').localeCompare(String(a.createdAt||'')));if(offerTab==='pending')rows=rows.filter(x=>x.status==='pending');content=rows.map(x=>row(x,x.__kind)).join('')||empty();
   }
@@ -147,7 +151,7 @@ function publicTranslationFields(x){
 }
 function publicOfferEditor(x){
   const cats=activeCategories(),canPublish=can('publish');
-  const currentImages=(x.images||[]).map((src,i)=>`<label class="admin-image-tile"><input checked type="checkbox" data-admin-public-image-index="${i}"><span><img alt="" data-admin-media="${esc(src)}"></span><small>${esc(tr('إبقاء الصورة','Keep image'))}</small></label>`).join('');
+  const currentImages=(x.images||[]).map((src,i)=>`<label class="admin-image-tile"><input checked type="checkbox" data-admin-public-image-index="${i}"><span><img alt="" data-admin-media="${esc(src)}" data-image-viewer></span><small>${esc(tr('إبقاء الصورة','Keep image'))}</small></label>`).join('');
   return `<form id="adminPublicOfferForm" class="form-stack admin-public-offer-editor" data-id="${esc(x.id)}">
     <h3>${esc(tr('تعديل العرض العام','Edit public offer'))}</h3>
     <label><span>${esc(tr('اسم المنتج الأصلي','Original product name'))}</span><input name="product" required maxlength="300" value="${esc(x.product||'')}"></label>
@@ -159,7 +163,7 @@ function publicOfferEditor(x){
     <label><span>${esc(tr('التصنيف','Category'))}</span><select name="categoryId"><option value="">—</option>${cats.map(cat=>`<option value="${esc(cat.id)}" ${x.categoryId===cat.id?'selected':''}>${esc(tr(cat.nameAr,cat.nameEn))}</option>`).join('')}</select></label>
     ${canPublish?`<label><span>${esc(tr('حالة النشر','Publication status'))}</span><select name="status"><option value="published" ${x.status==='published'?'selected':''}>${esc(tr('منشور','Published'))}</option><option value="pending" ${x.status==='pending'?'selected':''}>${esc(tr('غير منشور / قيد المراجعة','Unpublished / pending'))}</option></select></label>`:''}
     <section><h3>${esc(tr('النص الظاهر للعملاء','Customer-facing text'))}</h3>${publicTranslationFields(x)}</section>
-    <section><h3>${esc(tr('الصور الحالية','Current images'))}</h3><div class="admin-image-grid">${currentImages}</div></section>
+    <section><h3>${esc(tr('الصور الحالية','Current images'))}</h3><div class="admin-image-grid" data-viewer-gallery>${currentImages}</div></section>
     <label><span>${esc(tr('إضافة صور جديدة','Add new images'))}</span><input id="adminPublicFiles" type="file" accept="image/*" multiple><small>${esc(tr('يمكن اختيار صور كبيرة وسيتم ضغطها تلقائيًا. الحد الأقصى 5 صور إجمالًا.','Large images are compressed automatically. Maximum 5 images total.'))}</small></label>
     <label class="admin-category-toggle-label"><input type="checkbox" data-admin-public-redaction><span>${esc(tr('راجعت النصوص والصور ولا تحتوي على بيانات تواصل مباشرة.','I reviewed the text and images and they contain no direct contact details.'))}</span></label>
     <p class="form-message" data-admin-public-message></p>
@@ -210,6 +214,21 @@ async function savePublicOffer(form){
     await mutate('publicOffers',x,patch,!!redaction);
     closeModal();schedule();toast(tr('تم تحديث العرض العام.','Public offer updated.'));
   }catch(error){message.textContent=error.message||tr('تعذر حفظ التعديلات.','Could not save changes.');}
+}
+function interestTrackingEditor(x){
+  const current=interestTracking(x);
+  return `<section class="admin-tracking-editor"><h3>${esc(tr('متابعة طلب المنتج الجاهز','Ready-product order tracking'))}</h3><label><span>${esc(tr('الحالة الحالية','Current status'))}</span><select data-admin-interest-tracking-status>${READY_TRACKING.map(([key,ar,en])=>`<option value="${key}" ${current===key?'selected':''}>${esc(tr(ar,en))}</option>`).join('')}</select></label><label><span>${esc(tr('ملاحظة للعميل (اختياري)','Customer note (optional)'))}</span><textarea data-admin-interest-tracking-note maxlength="1000">${esc(x.trackingNote||'')}</textarea></label><small>${x.trackingUpdatedAt?`${esc(tr('آخر تحديث','Last update'))}: ${esc(date(x.trackingUpdatedAt))}`:''}</small><button class="primary-btn" type="button" data-admin-save-interest-tracking="${esc(x.id)}">${esc(tr('حفظ حالة الطلب','Save order status'))}</button></section>`;
+}
+function openInterest(id){
+  const x=(state?.interests||[]).find(item=>item.id===id);if(!x)return;
+  const offer=(state?.publicOffers||[]).find(o=>o.id===x.offerId),customer=account(x.customerId);
+  const html=`${customer?`<section class="admin-owner-box"><strong>${esc(tr('العميل','Customer'))}</strong><p>${esc(customer.company||customer.name||'—')}</p>${can('accounts.read')?`<small>${esc(customer.name||'')} ${customer.phone?`· ${esc(customer.phone)}`:''} ${customer.email?`· ${esc(customer.email)}`:''}</small>`:''}</section>`:''}${interestTrackingEditor(x)}${offer?`<section class="admin-source-box"><h3>${esc(tr('المنتج','Product'))}</h3><strong>${esc(title(offer))}</strong><p>${esc(desc(offer)||'—')}</p></section>${gallery(offer.images||[])}`:''}`;
+  modal(offer?title(offer):tr('طلب منتج جاهز','Ready-product request'),`#${ref(offer)}`,html);
+}
+async function saveInterestTracking(id){
+  const x=(state?.interests||[]).find(item=>item.id===id);if(!x)return;
+  const trackingStatus=document.querySelector('[data-admin-interest-tracking-status]')?.value,trackingNote=document.querySelector('[data-admin-interest-tracking-note]')?.value||'';
+  try{await mutate('interests',x,{trackingStatus,trackingNote});closeModal();schedule();toast(tr('تم تحديث حالة الطلب.','Order status updated.'));}catch(e){toast(e.message);}
 }
 function trackingEditor(x){
   const current=requestTracking(x);
@@ -271,6 +290,8 @@ document.addEventListener('click',e=>{
   const ct=e.target.closest('[data-admin-category-toggle]');if(ct){toggleCategory(ct.dataset.adminCategoryToggle);return;}
   const cd=e.target.closest('[data-admin-category-delete]');if(cd){deleteCategory(cd.dataset.adminCategoryDelete);return;}
   const st=e.target.closest('[data-admin-save-tracking]');if(st){saveTracking(st.dataset.adminSaveTracking);return;}
+  const si=e.target.closest('[data-admin-save-interest-tracking]');if(si){saveInterestTracking(si.dataset.adminSaveInterestTracking);return;}
+  const interest=e.target.closest('[data-admin-interest]');if(interest){openInterest(interest.dataset.adminInterest);return;}
   const sc=e.target.closest('[data-admin-save-category]');if(sc){savePublicCategory(sc.dataset.adminSaveCategory);return;}
   const o=e.target.closest('[data-admin-open]');if(o){openRecord(o.dataset.adminOpen,o.dataset.adminId);return;}
   const a=e.target.closest('[data-admin-account]');if(a){openAccount(a.dataset.adminAccount);return;}
@@ -289,8 +310,7 @@ document.addEventListener('compositionend',e=>{
 });
 document.addEventListener('change',e=>{
   if(!isAdmin())return;
-  if(e.target.matches('[data-admin-interest-status]'))interestStatus(e.target.dataset.adminInterestStatus,e.target.value);
-  else if(e.target.matches('[data-admin-request-filter]')){requestFilter=e.target.value;schedule();}
+  if(e.target.matches('[data-admin-request-filter]')){requestFilter=e.target.value;schedule();}
 });
 document.addEventListener('submit',e=>{
   if(!isAdmin())return;
