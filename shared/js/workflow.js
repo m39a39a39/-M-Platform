@@ -48,7 +48,12 @@
   }
   function offerCard(offer,user) {
     const asked=M.state().interests.some(x=>x.customerId===user?.id&&x.offerId===offer.id);
-    return `<article class="market-offer-card">${gallery(offer.images)}<div class="market-offer-body"><span class="offer-code">#${escape(ref(offer))}</span><h3>${escape(copy(offer,'title'))}</h3><p class="preserve-lines">${escape(copy(offer,'description'))}</p><div class="offer-price">${escape(offer.currency)} ${escape(offer.unitPrice)}</div><div class="offer-facts"><div>MOQ: ${escape(offer.moq)}</div><div>${M.tr('المتوفر','Available')}: ${escape(offer.stock || '—')}</div><div>${M.tr('مدة الإنتاج بالأيام','Production days')}: ${escape(offer.leadTime)}</div><div>${M.tr('ينتهي في','Valid until')}: ${escape(offer.validUntil || M.tr('غير محدد','Not specified'))}</div></div><button type="button" class="btn btn-primary request-market" data-id="${escape(offer.id)}" ${asked?'disabled':''}>${asked?M.tr('تم إرسال الطلب للإدارة','Sent to admin'):M.tr('طلب هذا العرض','Request this offer')}</button></div></article>`;
+    const images=(offer.images||[]).filter(src => /^\\/api\\/media\\/[a-f0-9-]{36}$/.test(src) || /^data:image\\/(jpeg|png|webp);base64,/.test(src));
+    const title=copy(offer,'title');
+    const media=images.length
+      ? `<div class="market-card-media"><img class="market-card-image" src="${escape(images[0])}" alt="${escape(title)}">${images.length>1?`<span class="image-count">${images.length}</span>`:''}</div>`
+      : `<div class="market-card-media market-card-placeholder" aria-label="${M.tr('لا توجد صورة','No image')}"><span>M</span></div>`;
+    return `<article class="market-offer-card">${media}<div class="market-offer-body"><h3 title="${escape(title)}">${escape(title)}</h3><p title="${escape(copy(offer,'description'))}">${escape(copy(offer,'description'))}</p><div class="market-summary"><div><span>${M.tr('السعر','Price')}</span><b>${escape(offer.currency)} ${escape(offer.unitPrice)}</b></div><div><span>${M.tr('الحد الأدنى','Minimum order')}</span><b>${escape(offer.moq)}</b></div></div><button type="button" class="btn btn-primary request-market" data-id="${escape(offer.id)}" ${asked?'disabled':''}>${asked?M.tr('تم إرسال الطلب للإدارة','Sent to admin'):M.tr('طلب هذا العرض','Request this offer')}</button></div></article>`;
   }
   document.addEventListener('click',e=>{
     const b=e.target.closest('.gallery-open');if(!b)return;
