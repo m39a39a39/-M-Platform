@@ -19,10 +19,10 @@ const setNativeCors=(req,res,isV1)=>{
   res.setHeader('Access-Control-Max-Age','86400');
 };
 
-export async function readBody(req){
-  const size=Number(req.headers['content-length']||0);assert(size<=1800000,413);
-  if(req.body!==undefined){const data=typeof req.body==='string'?JSON.parse(req.body):req.body;assert(Buffer.byteLength(JSON.stringify(data))<=1800000,413);return data;}
-  let text='';for await(const chunk of req){text+=chunk;assert(Buffer.byteLength(text)<=1800000,413);}
+export async function readBody(req,maxBytes=1800000){
+  const size=Number(req.headers['content-length']||0);assert(size<=maxBytes,413);
+  if(req.body!==undefined){const data=typeof req.body==='string'?JSON.parse(req.body):req.body;assert(Buffer.byteLength(JSON.stringify(data))<=maxBytes,413);return data;}
+  let text='';for await(const chunk of req){text+=chunk;assert(Buffer.byteLength(text)<=maxBytes,413);}
   try{return text?JSON.parse(text):{};}catch{throw new HttpError(400,'Invalid JSON');}
 }
 export default async function handler(req,res){
@@ -50,7 +50,7 @@ export default async function handler(req,res){
       assert(req.headers.origin===c.origin||trustedNative||bearer&&nativeNoOrigin||path.startsWith('/api/auth/')&&nativeNoOrigin,403,'مصدر الطلب غير مسموح / Invalid origin');
       assert((req.headers['content-type']||'').includes('application/json'),415);
     }
-    const body=req.method==='POST'?await readBody(req):{};
+    const body=req.method==='POST'?await readBody(req,path==='/api/uploads'?7500000:1800000):{};
     let result;
     if(path.startsWith('/api/auth/')){
       assert(req.method==='POST',405);result=await authRoute(path.split('/').at(-1),req,res,body);
