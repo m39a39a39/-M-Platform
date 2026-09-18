@@ -40,6 +40,9 @@ export async function media(user,id,res){
   assert(permitted,404);
   const c=config(),r=await fetch(`${c.url}/storage/v1/object/authenticated/m-private/${m.path}`,{headers:{apikey:c.service,Authorization:`Bearer ${c.service}`},signal:AbortSignal.timeout(15000)});
   assert(r.ok,502);res.setHeader('Content-Type',m.mime);
-  res.setHeader('Cache-Control',publicImage?'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800':'private, no-store');
+  if(publicImage){
+    res.setHeader('Cache-Control','public, max-age=86400');
+    res.setHeader('CDN-Cache-Control','public, max-age=86400, stale-while-revalidate=604800');
+  }else res.setHeader('Cache-Control','private, no-store');
   res.end(Buffer.from(await r.arrayBuffer()));
 }
