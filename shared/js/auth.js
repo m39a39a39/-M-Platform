@@ -11,12 +11,12 @@ document.addEventListener('m:ready',()=>{
   function setRole(value){
     role=value;
     document.querySelectorAll('[data-auth-role]').forEach(b=>b.classList.toggle('active',b.dataset.authRole===value));
-    const link=document.getElementById('registerLink');
-    if(link){
+    const customerLink=document.getElementById('registerCustomerLink');
+    if(customerLink){
       const target=new URLSearchParams(),action=params.get('action'),offer=params.get('offer');
-      if(action&&role==='client')target.set('action',action);
-      if(offer&&role==='client')target.set('offer',offer);
-      link.href=`register-${role==='supplier'?'supplier':'customer'}.html${target.toString()?'?'+target.toString():''}`;
+      if(action)target.set('action',action);
+      if(offer)target.set('offer',offer);
+      customerLink.href=`register-customer.html${target.toString()?'?'+target.toString():''}`;
     }
   }
   function signupCooldown(button,error){
