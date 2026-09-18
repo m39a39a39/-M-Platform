@@ -13,6 +13,7 @@ const requests = Array.from({ length: 100 }, (_, i) => ({ id: `r${i}`, displayNo
 const publicOffers = Array.from({ length: 5 }, (_, i) => ({ id: `p${i}`, displayNo: 10101+i, product: titleAr, translation, specs: titleEn, images: images.slice(0,i+1), status: i%2 ? 'pending' : 'published', supplierId:'supplier', currency:'USD', unitPrice:12, moq:500, leadTime:30 }));
 const quotes = requests.slice(0,4).map((r,i)=>({id:`q${i}`,requestId:r.id,supplierId:'supplier',status:i%2?'pending':'published',unitPrice:10,moq:500,leadTime:20,currency:'USD',images,translation,createdAt:'2026-09-17'}));
 const accounts = ['client','supplier','admin'].map(role=>({id:role,role,name: role==='admin'?'مدير المنصة':titleAr,company:titleEn,email:`${role}@example.test`,isOwner:role==='admin'}));
+const interests = [{id:'i1',offerId:'p0',status:'pending',createdAt:'2026-09-17'}];
 const notes = Array.from({length:20},(_,i)=>({id:i+1,titleAr,titleEn,bodyAr:titleAr,bodyEn:titleEn,createdAt:'2026-09-17'}));
 const results = [];
 let failures = 0;
@@ -56,7 +57,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
     }
     let body={};
     if(path.endsWith('/auth/login')) body={user:accounts.find(a=>a.role===role),tokens:{accessToken:'fixture',refreshToken:'fixture'}};
-    else if(path.endsWith('/state')) body={user:accounts.find(a=>a.role===role),requests,quotes,publicOffers,accounts,interests:[]};
+    else if(path.endsWith('/state')) body={user:accounts.find(a=>a.role===role),requests,quotes,publicOffers,accounts,interests};
     else if(path.endsWith('/notifications')) body=notes;
     else if(path.endsWith('/app-config')) body={apiVersion:1};
     else if(path.endsWith('/mutations')) {
@@ -91,9 +92,29 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
     await page.locator('#appView').waitFor({state:'visible'});
     if(role==='admin') await page.locator('[data-admin-root="home"]').waitFor();
     assert.equal(await page.locator('html').getAttribute('dir'),language==='ar'?'rtl':'ltr');
+    if(role==='client'){
+      assert.equal(await page.locator('#bottomNav button:visible').count(),4,'Client navigation must contain four visible sections');
+      assert.equal(await page.locator('#bottomNav [data-screen="offers"]:visible').count(),0,'Client Offers navigation must be removed');
+      assert.equal(await page.locator('#bottomNav').evaluate(el=>getComputedStyle(el).gridTemplateColumns.split(' ').length),4,'Client navigation must use four equal columns');
+      assert.ok(await page.locator('#screen').evaluate(el=>el.firstElementChild?.classList.contains('special-request-card')),'Custom request card must be first under the header');
+      assert.equal(await page.locator('#screen .stats-grid').count(),0,'Request summary must not appear on the client home page');
+      assert.equal(await page.locator('#screen [data-request]').count(),0,'Request list must not appear on the client home page');
+      assert.equal(await page.locator('#screen .public-offer-card').count(),3,'Only published ready products should appear on the client home page');
+      assert.equal(await page.locator('.public-offers-grid').evaluate(el=>getComputedStyle(el).gridTemplateColumns.split(' ').length),2,'Ready products must use two columns');
+      await page.locator('.special-request-card [data-action="new-request"]').click();
+      await page.locator('#modal').waitFor({state:'visible'});
+      await page.locator('.modal-close').click();
+      const firstOffer=page.locator('.public-offer-card').first();
+      await firstOffer.click();
+      await page.locator('#modal').waitFor({state:'visible'});
+      assert.ok((await page.locator('#modalBody').textContent()).includes('30'),'Production time must remain in ready-product details');
+      assert.equal(await page.locator('#modal [data-interest]').count(),1,'Request-this-offer button must remain in ready-product details');
+      await page.locator('.modal-close').click();
+    }
     // Simulate a top notch, landscape side inset and home indicator.
     await page.addStyleTag({content:':root { --safe-top: 47px; --safe-bottom: 34px; --safe-left: 0px; --safe-right: 0px; }'});
-    for(const screen of ['home','requests','offers','notifications','account']) {
+    const screens=role==='client'?['home','requests','notifications','account']:['home','requests','offers','notifications','account'];
+    for(const screen of screens) {
       await page.locator(`#bottomNav [data-screen="${screen}"]`).click();
       if(role==='admin' && screen!=='notifications') await page.locator(`[data-admin-root="${screen}"]`).waitFor();
       const before=await geometry(page);
@@ -102,21 +123,19 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
       assert.deepEqual(after.nav,before.nav,'Navigation moved when content scrolled');
       assert.deepEqual(after.head,before.head,'Header moved when content scrolled');
       await page.locator('#screen').evaluate(el=>el.scrollTop=0);
-      if(screen==='offers'&&role==='client'){
+      if(screen==='home'&&role==='client'){
         const firstOffer=page.locator('.public-offer-card').first();
-        await firstOffer.waitFor();
-        assert.equal(await page.locator('.public-offers-grid').evaluate(el=>getComputedStyle(el).gridTemplateColumns.split(' ').length),2,'Authenticated public offers must use two columns');
-        assert.equal(await firstOffer.locator('.public-offer-facts span').count(),2,'Authenticated offer card must show only price and MOQ');
-        assert.ok(await firstOffer.locator('h3').evaluate(el=>getComputedStyle(el).whiteSpace==='nowrap'),'Authenticated offer title must stay on one line');
-        assert.ok(await firstOffer.locator('p').evaluate(el=>getComputedStyle(el).whiteSpace==='nowrap'),'Authenticated offer description must stay on one line');
-        await firstOffer.click();
-        await page.locator('#modal').waitFor({state:'visible'});
-        assert.ok((await page.locator('#modalBody').textContent()).includes('30'),'Production time must remain in offer details');
-        assert.equal(await page.locator('#modal [data-interest]').count(),1,'Request-this-offer button must remain in offer details');
-        await page.locator('.modal-close').click();
+        assert.equal(await firstOffer.locator('.public-offer-facts span').count(),2,'Ready-product card must show only price and MOQ');
+        assert.ok(await firstOffer.locator('h3').evaluate(el=>getComputedStyle(el).whiteSpace==='nowrap'),'Ready-product title must stay on one line');
+        assert.ok(await firstOffer.locator('p').evaluate(el=>getComputedStyle(el).whiteSpace==='nowrap'),'Ready-product description must stay on one line');
       }
       if(screen==='requests'){
         assert.ok(await page.locator('#screen').evaluate(el=>el.scrollHeight>el.clientHeight),'Long list did not scroll');
+        if(role==='client'){
+          assert.equal(await page.locator('#screen .client-request-stats').count(),1,'Request summary must appear inside Requests');
+          assert.equal(await page.locator('[data-client-request-group="custom"] [data-request]').count(),100,'All custom requests must be inside Requests');
+          assert.equal(await page.locator('[data-client-request-group="ready"] [data-public-offer]').count(),1,'Ready-product requests must be inside Requests');
+        }
         await page.screenshot({path:`${output}/${label}-requests.png`});
         const card=page.locator(role==='admin'?'[data-admin-open="request"]':role==='supplier'?'[data-supplier-request]':'[data-request]').first();
         await card.click();

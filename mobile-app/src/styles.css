@@ -496,6 +496,10 @@ input:focus,textarea:focus,select:focus {
   border-top: 1px solid var(--line);
 }
 
+.bottom-nav.client-nav {
+  grid-template-columns: repeat(4,minmax(0,1fr));
+}
+
 .bottom-nav button {
   position: relative;
   border: 0;
@@ -1340,6 +1344,77 @@ html {
 .guest-offer-image {
   width: 100%;
   border-radius: 0;
+}
+
+.special-request-card {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  margin-bottom: 18px;
+  border: 1px solid #cfe5f0;
+  border-radius: 18px;
+  background: #eef8fc;
+}
+
+.special-request-copy {
+  min-width: 0;
+}
+
+.special-request-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.special-request-heading h2 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+.special-request-icon {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: #fff;
+  color: #0a79ae;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.special-request-card p {
+  margin: 6px 0 0;
+  color: #607784;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.ready-products-section {
+  margin-top: 0;
+}
+
+.ready-products-title {
+  margin-bottom: 10px;
+}
+
+.ready-products-title p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.request-group {
+  margin-top: 18px;
+}
+
+.request-group>.section-title {
+  margin-bottom: 10px;
 }
 
 .public-offers-grid {
