@@ -4,8 +4,10 @@ import {tables,assertOpenRequest,active,open} from './records.mjs';
 const contact=v=>/(?:https?:\/\/|www\.|wa\.me|@[a-z0-9]|[\w.+-]+@[\w.-]+\.[a-z]{2,}|(?:\+|00)\d[\d\s()-]{7,})/i.test(String(v));
 const contentFields={requests:['product','specs','quantity','country','neededDate','images'],quotes:['unitPrice','currency','moq','leadTime','sampleCost','notes','images'],publicOffers:['product','specs','country','unitPrice','currency','moq','stock','leadTime','validUntil','images','categoryId']};
 export const TRACKING_FLOW=['received','reviewing','sourcing','quotes_available','quote_selected','payment_confirmation','production','quality_check','ready_to_ship','shipped','in_delivery','delivered','completed'];
+export const READY_TRACKING_FLOW=['received','payment_confirmation','production','quality_check','ready_to_ship','shipped','in_delivery','delivered','completed'];
 export const TRACKING_EXCEPTIONS=['customer_action','on_hold','cancelled'];
 export const TRACKING_STATUSES=[...TRACKING_FLOW,...TRACKING_EXCEPTIONS];
+export const READY_TRACKING_STATUSES=[...READY_TRACKING_FLOW,...TRACKING_EXCEPTIONS];
 const trackingRank=s=>TRACKING_FLOW.indexOf(s);
 function setTracking(data,status,now,note=''){
   data.trackingStatus=status;data.trackingNote=String(note||'').slice(0,1000);data.trackingUpdatedAt=now;
@@ -16,6 +18,11 @@ function advanceTracking(data,status,now){
   const current=trackingRank(data.trackingStatus||'received'),next=trackingRank(status);
   if(next<0||next<=current)return false;
   setTracking(data,status,now,'');return true;
+}
+export function requiresRedaction(collection,status,changes){
+  if(!['sent','published'].includes(status))return false;
+  const relevant=new Set(['translation','status','supplierIds',...(contentFields[collection]||[])]);
+  return changes.some(key=>relevant.has(key));
 }
 export function normalizeCategories(input){
   assert(Array.isArray(input)&&input.length<=100,400,'تصنيفات غير صالحة / Invalid categories');
@@ -66,8 +73,8 @@ export async function mutate(user,body){
     const allowed=collection==='interests'?['offerId','status']: [...contentFields[collection],...(collection==='quotes'?['requestId']:[]),'status'];
     assert(changes.every(k=>allowed.includes(k)),400);
     data=Object.fromEntries(changes.filter(k=>!['status','requestId','offerId'].includes(k)).map(k=>[k,patch[k]]));
-    data.status=collection==='requests'?'review':'pending';data.createdAt=now;
-    if(collection==='requests')setTracking(data,'received',now,'');
+    data.status=collection==='requests'?'review':collection==='interests'?'active':'pending';data.createdAt=now;
+    if(collection==='requests'||collection==='interests')setTracking(data,'received',now,'');
     if(collection==='quotes'){
       const r=await assertOpenRequest(patch.requestId);
       assert(r.data.status==='sent'&&!r.data.selectedQuoteId&&r.data.supplierIds?.includes(user.id));
@@ -123,15 +130,21 @@ export async function mutate(user,body){
         if(collection==='quotes'&&key==='status'&&patch[key]==='published')data.publishedAt=now;
       }else if(key==='reviewedAt'){
         assert(can(user,editPermission)||can(user,'translate')||can(user,'publish'));data.reviewedAt=now;
-      }else if(collection==='requests'&&key==='trackingStatus'){
-        assert(can(user,'requests.edit')||can(user,'publish'));assert(TRACKING_STATUSES.includes(patch[key]),400,'حالة متابعة غير صالحة / Invalid tracking status');data.trackingStatus=patch[key];
-      }else if(collection==='requests'&&key==='trackingNote'){
-        assert(can(user,'requests.edit')||can(user,'publish'));assert(typeof patch[key]==='string'&&patch[key].length<=1000,400,'ملاحظة المتابعة طويلة / Tracking note too long');data.trackingNote=patch[key];
+      }else if((collection==='requests'||collection==='interests')&&key==='trackingStatus'){
+        const allowed=collection==='requests'?TRACKING_STATUSES:READY_TRACKING_STATUSES;
+        assert(collection==='requests'?(can(user,'requests.edit')||can(user,'publish')):(can(user,'offers.edit')||can(user,'publish')));
+        assert(allowed.includes(patch[key]),400,'حالة متابعة غير صالحة / Invalid tracking status');data.trackingStatus=patch[key];
+      }else if((collection==='requests'||collection==='interests')&&key==='trackingNote'){
+        assert(collection==='requests'?(can(user,'requests.edit')||can(user,'publish')):(can(user,'offers.edit')||can(user,'publish')));
+        assert(typeof patch[key]==='string'&&patch[key].length<=1000,400,'ملاحظة المتابعة طويلة / Tracking note too long');data.trackingNote=patch[key];
       }else if((contentFields[collection]||[]).includes(key)){
         assert(can(user,editPermission));data[key]=patch[key];
       }else assert(false,400,'حقل غير قابل للتعديل / Field not editable');
     }
-    if(collection==='requests'&&(changes.includes('trackingStatus')||changes.includes('trackingNote')))setTracking(data,data.trackingStatus||'received',now,changes.includes('trackingNote')?patch.trackingNote:(data.trackingNote||''));
+    if((collection==='requests'||collection==='interests')&&(changes.includes('trackingStatus')||changes.includes('trackingNote'))){
+      setTracking(data,data.trackingStatus||'received',now,changes.includes('trackingNote')?patch.trackingNote:(data.trackingNote||''));
+      if(collection==='interests')data.status=data.trackingStatus==='completed'?'completed':data.trackingStatus==='cancelled'?'cancelled':'active';
+    }
     if(collection==='requests'&&data.status==='sent'&&original.data.status!=='sent')advanceTracking(data,'sourcing',now);
     if(collection==='requests'&&data.status==='completed'&&original.data.status!=='completed')setTracking(data,'completed',now,'');
     if(collection==='publicOffers'&&changes.includes('categoryId'))await assertCategory(data.categoryId,{required:data.status==='published'});
@@ -139,7 +152,7 @@ export async function mutate(user,body){
       await checkImages(data.images||[],user,original.data.images||[]);
       assert(active(await one('profiles',ownerId)),409);
       if(collection==='quotes')await assertOpenRequest(original.request_id);
-      if(['sent','published'].includes(data.status)&&changes.some(k=>k!=='reviewedAt')){
+      if(requiresRedaction(collection,data.status,changes)){
         assert(body.redactionConfirmed===true,400,'أكد مراجعة النصوص والصور وإزالة الهوية / Confirm redaction');
         assert(data.translation&&['titleAr','titleEn','descriptionAr','descriptionEn'].every(k=>data.translation[k]?.trim()),400);
         if(collection==='requests')assert(data.supplierIds?.length,400);
