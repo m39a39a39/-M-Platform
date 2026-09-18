@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {can} from '../backend/modules/auth.mjs';
 import {anonymous,ownRecord} from '../backend/modules/records.mjs';
-import {validateContent,normalizeCategories,TRACKING_STATUSES} from '../backend/modules/mutations.mjs';
+import {validateContent,normalizeCategories,TRACKING_STATUSES,READY_TRACKING_STATUSES,requiresRedaction} from '../backend/modules/mutations.mjs';
 import {decodeImage} from '../backend/modules/media.mjs';
 
 test('client cannot grant itself admin permission',()=>{
@@ -49,4 +49,18 @@ test('compressed upload fallback accepts images up to 5 MB',()=>{
  assert.equal(decoded.bytes.length,twoMb.length);
  const sixMb=Buffer.alloc(6*1024*1024,1);sixMb[0]=255;sixMb[1]=216;sixMb[2]=255;
  assert.throws(()=>decodeImage('data:image/jpeg;base64,'+sixMb.toString('base64')));
+});
+
+
+test('tracking-only admin updates never require redaction',()=>{
+ assert.equal(requiresRedaction('requests','sent',['trackingStatus','trackingNote']),false);
+ assert.equal(requiresRedaction('requests','sent',['translation']),true);
+ assert.equal(requiresRedaction('requests','sent',['images']),true);
+ assert.equal(requiresRedaction('publicOffers','published',['unitPrice']),true);
+});
+
+test('ready-product requests use fulfillment tracking statuses',()=>{
+ const expected=['received','payment_confirmation','production','quality_check','ready_to_ship','shipped','in_delivery','delivered','completed','customer_action','on_hold','cancelled'];
+ assert.deepEqual(READY_TRACKING_STATUSES,expected);
+ for(const legacy of ['pending','coordinating','accepted'])assert.equal(READY_TRACKING_STATUSES.includes(legacy),false);
 });
