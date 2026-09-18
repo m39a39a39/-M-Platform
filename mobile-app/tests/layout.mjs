@@ -52,6 +52,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
   let stateCalls=0;
   let publicOfferMutation=null;
   let interestMutation=null;
+  let requestTrackingMutation=null;
   const uploadedSources=[];
   page.on('pageerror',e=>errors.push(e.message));
   await page.addInitScript(lang=>localStorage.setItem('CapacitorStorage.language',lang),language);
@@ -76,6 +77,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
       if(mutation.collection==='publicOffers') publicOfferMutation=mutation;
       else if(mutation.collection==='interests') interestMutation=mutation;
       else if(mutation.collection==='requests'&&mutation.patch?.product) body={ok:true};
+      else if(mutation.collection==='requests'&&('trackingStatus' in mutation.patch||'trackingNote' in mutation.patch)) requestTrackingMutation=mutation;
       else if(mutation.collection!=='requests' || Object.keys(mutation.patch).join()!=='lastSeenQuoteAt') errors.push('Unexpected fixture mutation');
       body={ok:true}; // Opening a customer request marks its quotes as seen.
     }
@@ -269,8 +271,10 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
           await page.locator('#modal [data-admin-tracking-status]').selectOption('production');
           await page.locator('#modal [data-admin-save-tracking]').click();
           await page.locator('#modal.hidden').waitFor();
-          const trackingMutation=interestMutation||publicOfferMutation;
-          assert.equal(errors.includes('Unexpected fixture mutation'),false,'Tracking-only request update must be accepted without redaction');
+          assert.equal(requestTrackingMutation?.collection,'requests','Admin request tracking must submit a requests mutation');
+          assert.equal(requestTrackingMutation?.patch?.trackingStatus,'production','Admin must save the selected request tracking status');
+          assert.equal(requestTrackingMutation?.redactionConfirmed,false,'Tracking-only request updates must not require redaction');
+          requestTrackingMutation=null;
         }else await page.locator('.modal-close').click();
       }
       results.push({label,screen,pass:true,nav:after.nav,contentWidth:after.screenClient});
