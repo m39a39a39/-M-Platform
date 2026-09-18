@@ -105,6 +105,8 @@
     .auth-card-body h1 { margin: 0 0 5px; font-size: 1.55rem; }
     .auth-card-body > p { margin: 0 0 22px; color: var(--muted); font-size: .86rem; }
     .auth-links { margin-top: 16px; display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; color: var(--muted); font-size: .8rem; }
+    .auth-register-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 18px; }
+    .auth-register-actions .btn { min-width: 0; padding-inline: 10px; text-align: center; }
     .auth-links a { color: var(--brand-dark); font-weight: 800; }
     .page-spacer { height: 22px; }
 
@@ -362,13 +364,17 @@
     .market-thumb { border-radius: 8px; }
     .market-thumb.placeholder .icon { width: 17px; height: 17px; }
     .image-count { position: absolute; inset-block-end: 14px; inset-inline-start: 14px; padding: 4px 8px; border-radius: 999px; color: white; background: rgba(7,29,43,.78); font-size: .68rem; font-weight: 850; }
-    .market-offer-body { padding: 17px; }
-    .market-offer-body h3 { margin: 4px 0 7px; font-size: 1rem; }
-    .market-offer-body p { margin: 0 0 13px; color: var(--muted); font-size: .76rem; min-height: 2.4em; }
-    .market-price-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 13px; }
-    .market-price { font-size: 1.35rem; font-weight: 950; letter-spacing: -.035em; }
-    .market-price small { color: var(--muted); font-size: .68rem; font-weight: 650; }
-    .market-moq { color: var(--muted); font-size: .72rem; }
+    .market-card-media { position: relative; width: 100%; aspect-ratio: 1 / 1; overflow: hidden; background: #eef6f9; }
+    .market-card-image { width: 100%; height: 100%; display: block; object-fit: cover; }
+    .market-card-placeholder { display: grid; place-items: center; color: var(--brand); background: var(--brand-soft); }
+    .market-card-placeholder span { width: 50px; height: 50px; display: grid; place-items: center; border-radius: 15px; color: white; background: var(--brand); font-size: 1.5rem; font-weight: 900; }
+    .market-offer-body { padding: 14px; }
+    .market-offer-body h3 { margin: 0 0 5px; overflow: hidden; font-size: .96rem; line-height: 1.35; white-space: nowrap; text-overflow: ellipsis; }
+    .market-offer-body p { margin: 0 0 12px; overflow: hidden; color: var(--muted); font-size: .75rem; line-height: 1.4; white-space: nowrap; text-overflow: ellipsis; }
+    .market-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+    .market-summary div { min-width: 0; padding: 9px 8px; border: 1px solid var(--line); border-radius: 10px; background: #f8fbfc; }
+    .market-summary span { display: block; overflow: hidden; color: var(--muted); font-size: .64rem; white-space: nowrap; text-overflow: ellipsis; }
+    .market-summary b { display: block; margin-top: 2px; overflow: hidden; font-size: .79rem; white-space: nowrap; text-overflow: ellipsis; }
     .market-offer-card .btn { width: 100%; }
     .market-empty { grid-column: 1 / -1; }
 
@@ -575,7 +581,7 @@
       .brand-note, .topbar .user-copy, .topbar .icon-btn { display: none; }
       .language-switch button { min-width: 39px; }
       .role-entry-grid, .form-grid, .manual-pair { grid-template-columns: 1fr; }
-      .market-offer-grid { grid-template-columns: 1fr; }
+      .market-offer-grid { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
       .image-preview-grid { grid-template-columns: repeat(3, 1fr); }
       .supplier-own-offer { grid-template-columns: 54px minmax(0,1fr); }
       .supplier-own-offer > .status { grid-column: 1 / -1; justify-self: start; }
@@ -600,7 +606,15 @@
       .dialog { width: 100%; max-height: 94vh; border-radius: 22px 22px 0 0; }
       .dialog-footer { flex-direction: column-reverse; }
       .dialog-footer .btn { width: 100%; }
-      .market-offer-grid { grid-template-columns: 1fr; }
+      .market-offer-grid { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
+      .market-offer-body { padding: 10px; }
+      .market-offer-body h3 { font-size: .82rem; }
+      .market-offer-body p { margin-bottom: 9px; font-size: .68rem; }
+      .market-summary { gap: 6px; margin-bottom: 9px; }
+      .market-summary div { padding: 7px 6px; }
+      .market-summary span { font-size: .58rem; }
+      .market-summary b { font-size: .7rem; }
+      .market-offer-card .btn { min-height: 38px; padding: 0 7px; font-size: .7rem; }
       .multi-uploader { grid-template-columns: 1fr; }
       .image-preview-grid { grid-template-columns: repeat(3, minmax(70px,1fr)); min-height: 0; }
       .supplier-own-offer { grid-template-columns: 54px minmax(0,1fr); }
