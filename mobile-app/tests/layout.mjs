@@ -15,7 +15,7 @@ const categories=[{id:'mobile',nameAr:'إكسسوارات الجوال',nameEn:'
 const publicOffers = Array.from({ length: 45 }, (_, i) => ({ id: `p${i}`, displayNo: 10101+i, product: titleAr, translation, specs: titleEn, images: images.slice(0,(i%5)+1), status:'published', supplierId:'supplier', categoryId:categories[i%3].id, currency:'USD', unitPrice:12, moq:500, leadTime:30 }));
 const quotes = requests.slice(0,4).map((r,i)=>({id:`q${i}`,requestId:r.id,supplierId:'supplier',status:i%2?'pending':'published',unitPrice:10,moq:500,leadTime:20,currency:'USD',images,translation,createdAt:'2026-09-17'}));
 const accounts = ['client','supplier','admin'].map(role=>({id:role,role,name: role==='admin'?'مدير المنصة':titleAr,company:titleEn,email:`${role}@example.test`,isOwner:role==='admin'}));
-const interests = [{id:'i1',offerId:'p0',status:'pending',createdAt:'2026-09-17'}];
+const interests = [{id:'i1',offerId:'p0',status:'active',trackingStatus:'payment_confirmation',trackingUpdatedAt:'2026-09-18',trackingNote:'بانتظار تأكيد الدفع',createdAt:'2026-09-17',customerId:'client',version:1}];
 const notes = Array.from({length:20},(_,i)=>({id:i+1,titleAr,titleEn,bodyAr:titleAr,bodyEn:titleEn,createdAt:'2026-09-17'}));
 const results = [];
 let failures = 0;
@@ -51,6 +51,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
   const errors=[];
   let stateCalls=0;
   let publicOfferMutation=null;
+  let interestMutation=null;
   const uploadedSources=[];
   page.on('pageerror',e=>errors.push(e.message));
   await page.addInitScript(lang=>localStorage.setItem('CapacitorStorage.language',lang),language);
@@ -73,6 +74,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
     else if(path.endsWith('/mutations')) {
       const mutation=route.request().postDataJSON();
       if(mutation.collection==='publicOffers') publicOfferMutation=mutation;
+      else if(mutation.collection==='interests') interestMutation=mutation;
       else if(mutation.collection==='requests'&&mutation.patch?.product) body={ok:true};
       else if(mutation.collection!=='requests' || Object.keys(mutation.patch).join()!=='lastSeenQuoteAt') errors.push('Unexpected fixture mutation');
       body={ok:true}; // Opening a customer request marks its quotes as seen.
@@ -110,8 +112,13 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
     assert.equal(await page.locator('.guest-offer-card').first().locator('.guest-facts span').count(),2,'Guest offer card must show only price and MOQ');
     assert.ok(await page.locator('.guest-offer-card').first().locator('h3').evaluate(el=>getComputedStyle(el).whiteSpace==='nowrap'),'Guest offer title must stay on one line');
     assert.ok(await page.locator('.guest-offer-card').first().locator('p').evaluate(el=>getComputedStyle(el).whiteSpace==='nowrap'),'Guest offer description must stay on one line');
-    await page.locator('.guest-offer-card').first().click();
+    await page.locator('.guest-offer-card').first().locator('.guest-offer-body').click();
     await geometry(page,'#modal');
+    await page.locator('#modal .guest-modal-images img').first().click();
+    await page.locator('#imageViewer:not(.hidden)').waitFor();
+    assert.equal(await page.locator('#imageViewerImage').count(),1,'Guest image must open in the full-screen viewer');
+    await page.locator('[data-image-viewer-close]').click();
+    await page.locator('#imageViewer.hidden').waitFor();
     await page.locator('.modal-close').click();
     await page.locator('#guestLoginBtn').click();
     await geometry(page,'#loginView');
@@ -170,10 +177,12 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
         await page.locator('.special-request-card').waitFor();
       }else await page.locator('.modal-close').click();
       const firstOffer=page.locator('.public-offer-card').first();
-      await firstOffer.click();
+      await firstOffer.locator('.public-offer-content').click();
       await page.locator('#modal').waitFor({state:'visible'});
       assert.ok((await page.locator('#modalBody').textContent()).includes('30'),'Production time must remain in ready-product details');
       assert.equal(await page.locator('#modal [data-interest]').count(),1,'Request-this-offer button must remain in ready-product details');
+      assert.equal(await page.locator('#modal .tracking-timeline').count(),1,'Requested ready product must show the unified order timeline');
+      assert.equal(await page.locator('#modal .tracking-step').count(),9,'Ready-product timeline must skip sourcing and quote stages');
       await page.locator('.modal-close').click();
     }
     // Simulate a top notch, landscape side inset and home indicator.
@@ -213,6 +222,19 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
         assert.equal(publicOfferMutation?.patch?.images?.length,publicOffers[0].images.length,'Admin public offer edit must preserve selected images');
         assert.equal(publicOfferMutation?.redactionConfirmed,true,'Published public offer edits must confirm privacy review');
         publicOfferMutation=null;
+        await page.locator('[data-admin-offer-tab="interests"]').click();
+        await page.locator('[data-admin-interest="i1"]').click();
+        await page.locator('[data-admin-interest-tracking-status]').waitFor();
+        assert.equal(await page.locator('[data-admin-interest-status]').count(),0,'Legacy interest status selector must be removed');
+        assert.equal(await page.locator('[data-admin-interest-tracking-status] option').count(),12,'Ready-product requests must use fulfillment tracking statuses and exceptions');
+        await page.locator('[data-admin-interest-tracking-status]').selectOption('production');
+        await page.locator('[data-admin-interest-tracking-note]').fill('بدأ الإنتاج');
+        await page.locator('[data-admin-save-interest-tracking]').click();
+        await page.locator('#modal.hidden').waitFor();
+        assert.equal(interestMutation?.collection,'interests','Ready-product tracking must update the interest record');
+        assert.equal(interestMutation?.patch?.trackingStatus,'production','Admin must save the selected ready-product tracking stage');
+        assert.equal(interestMutation?.redactionConfirmed,false,'Tracking-only ready-product updates must not require redaction');
+        interestMutation=null;
         await page.locator('[data-admin-offer-tab="categories"]').click();
         await page.locator('[data-admin-category-new]').waitFor();
         assert.equal(await page.locator('[data-admin-category-new]').count(),1,'Admin categories must allow adding a category');
@@ -236,7 +258,20 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
           assert.equal(await page.locator('#modal .tracking-step').count(),13,'Tracking timeline must include all normal stages');
         }
         if(role==='admin')assert.equal(await page.locator('#modal [data-admin-tracking-status]').count(),1,'Admin request details must include tracking status control');
-        await page.locator('.modal-close').click();
+        const viewable=page.locator('#modal img[data-image-viewer]').first();
+        if(await viewable.count()){
+          await viewable.click();
+          await page.locator('#imageViewer:not(.hidden)').waitFor();
+          assert.ok((await page.locator('#imageViewerCounter').textContent()).includes('/'),'Request image must open in full-screen viewer');
+          await page.locator('[data-image-viewer-close]').click();
+        }
+        if(role==='admin'){
+          await page.locator('#modal [data-admin-tracking-status]').selectOption('production');
+          await page.locator('#modal [data-admin-save-tracking]').click();
+          await page.locator('#modal.hidden').waitFor();
+          const trackingMutation=interestMutation||publicOfferMutation;
+          assert.equal(errors.includes('Unexpected fixture mutation'),false,'Tracking-only request update must be accepted without redaction');
+        }else await page.locator('.modal-close').click();
       }
       results.push({label,screen,pass:true,nav:after.nav,contentWidth:after.screenClient});
     }
