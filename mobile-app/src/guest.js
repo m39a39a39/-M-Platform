@@ -6,10 +6,12 @@ const $=id=>document.getElementById(id);
 const mediaCache=new Map();
 let lang='ar';
 let state=null;
+let offersPage=1;
+const PAGE_SIZE=20;
 
 const text={
-  ar:{tagline:'اطلب ما تحتاجه، وقارن العروض بثقة.',eyebrow:'منصة شراء وتوريد موثوقة',title:'اطلب ما تحتاجه، وقارن العروض بثقة.',subtitle:'منصة آمنة تربطك بموردين مؤهلين، بينما نتولى مراجعة العروض، التحقق من البضاعة، الترجمة، الشحن الموثوق، ومتابعة الضمان.',browse:'تصفح العروض',login:'تسجيل الدخول',customer:'إنشاء حساب عميل',supplier:'إنشاء حساب مورد',kicker:'تصفح دون حساب',offers:'العروض العامة',reload:'تحديث',loading:'جارٍ تحميل العروض...',empty:'لا توجد عروض عامة منشورة حاليًا.',price:'السعر',moq:'الحد الأدنى',production:'الإنتاج',days:'يوم',stock:'المخزون',details:'تفاصيل العرض',back:'العودة للرئيسية',error:'تعذر تحميل العروض. تحقق من اتصال الإنترنت.'},
-  en:{tagline:'Request what you need, and compare offers with confidence.',eyebrow:'Trusted sourcing platform',title:'Request what you need, and compare offers with confidence.',subtitle:'A secure platform that connects you with qualified suppliers while we handle offer review, product verification, translation, reliable shipping, and warranty follow-up.',browse:'Browse offers',login:'Sign in',customer:'Create customer account',supplier:'Create supplier account',kicker:'Browse without an account',offers:'Public offers',reload:'Refresh',loading:'Loading offers...',empty:'No public offers are currently published.',price:'Price',moq:'MOQ',production:'Production',days:'days',stock:'Stock',details:'Offer details',back:'Back to home',error:'Could not load offers. Check your internet connection.'}
+  ar:{tagline:'اطلب ما تحتاجه، وقارن العروض بثقة.',eyebrow:'منصة شراء وتوريد موثوقة',title:'اطلب ما تحتاجه، وقارن العروض بثقة.',subtitle:'منصة آمنة تربطك بموردين مؤهلين، بينما نتولى مراجعة العروض، التحقق من البضاعة، الترجمة، الشحن الموثوق، ومتابعة الضمان.',browse:'تصفح العروض',login:'تسجيل الدخول',customer:'إنشاء حساب عميل',supplier:'إنشاء حساب مورد',kicker:'تصفح دون حساب',offers:'العروض العامة',reload:'تحديث',loading:'جارٍ تحميل العروض...',empty:'لا توجد عروض عامة منشورة حاليًا.',price:'السعر',moq:'الحد الأدنى',production:'الإنتاج',days:'يوم',stock:'المخزون',details:'تفاصيل العرض',back:'العودة للرئيسية',error:'تعذر تحميل العروض. تحقق من اتصال الإنترنت.',previous:'السابق',next:'التالي',page:'صفحة',companyDescription:'منصة تساعدك في طلب المنتجات، مقارنة العروض، ومتابعة التوريد بسهولة.',contact:'تواصل معنا',copyright:'© 2026 MIG COMPANY — جميع الحقوق محفوظة'},
+  en:{tagline:'Request what you need, and compare offers with confidence.',eyebrow:'Trusted sourcing platform',title:'Request what you need, and compare offers with confidence.',subtitle:'A secure platform that connects you with qualified suppliers while we handle offer review, product verification, translation, reliable shipping, and warranty follow-up.',browse:'Browse offers',login:'Sign in',customer:'Create customer account',supplier:'Create supplier account',kicker:'Browse without an account',offers:'Public offers',reload:'Refresh',loading:'Loading offers...',empty:'No public offers are currently published.',price:'Price',moq:'MOQ',production:'Production',days:'days',stock:'Stock',details:'Offer details',back:'Back to home',error:'Could not load offers. Check your internet connection.',previous:'Previous',next:'Next',page:'Page',companyDescription:'A platform that helps you request products, compare offers, and follow your sourcing process with ease.',contact:'Contact us',copyright:'© 2026 MIG COMPANY — All rights reserved.'}
 };
 const t=k=>text[lang][k]||k;
 const esc=v=>String(v??'').replace(/[&<>'\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[c]));
@@ -22,6 +24,8 @@ function apply(){
   $('guestTagline').textContent=t('tagline');$('guestEyebrow').textContent=t('eyebrow');$('guestTitle').textContent=t('title');$('guestSubtitle').textContent=t('subtitle');
   $('guestBrowseBtn').textContent=t('browse');$('guestLoginBtn').textContent=t('login');$('guestCustomerRegister').textContent=t('customer');$('guestSupplierRegister').textContent=t('supplier');
   $('guestOffersKicker').textContent=t('kicker');$('guestOffersTitle').textContent=t('offers');$('guestReloadBtn').textContent=t('reload');$('guestLangBtn').textContent=lang==='ar'?'EN':'AR';
+  $('guestPrevPage').textContent=t('previous');$('guestNextPage').textContent=t('next');
+  $('guestCompanyDescription').textContent=t('companyDescription');$('guestContactTitle').textContent=t('contact');$('guestCopyright').textContent=t('copyright');
   $('backToGuestBtn')?.querySelector('span')?.replaceChildren(document.createTextNode(t('back')));
   if(state)renderOffers();
 }
@@ -50,12 +54,20 @@ function offerCard(o){
 }
 function renderOffers(){
   const offers=(state?.publicOffers||[]).filter(o=>o.status==='published');
-  $('guestOffers').innerHTML=offers.length?offers.map(offerCard).join(''):`<div class="guest-empty">${esc(t('empty'))}</div>`;
+  const totalPages=Math.max(1,Math.ceil(offers.length/PAGE_SIZE));
+  offersPage=Math.min(Math.max(offersPage,1),totalPages);
+  const pageOffers=offers.slice((offersPage-1)*PAGE_SIZE,offersPage*PAGE_SIZE);
+  $('guestOffers').innerHTML=pageOffers.length?pageOffers.map(offerCard).join(''):`<div class="guest-empty">${esc(t('empty'))}</div>`;
+  $('guestPageInfo').textContent=`${t('page')} ${offersPage} / ${totalPages}`;
+  $('guestPrevPage').disabled=offersPage<=1;
+  $('guestNextPage').disabled=offersPage>=totalPages;
+  $('guestOffersPagination').classList.toggle('hidden',offers.length<=PAGE_SIZE);
   hydrateImages();
 }
 async function load(){
   $('guestOffers').innerHTML=`<div class="guest-loading">${esc(t('loading'))}</div>`;
-  try{state=await api('/api/v1/state');renderOffers();}catch(error){console.error(error);$('guestOffers').innerHTML=`<div class="guest-empty">${esc(t('error'))}</div>`;}
+  $('guestOffersPagination').classList.add('hidden');
+  try{state=await api('/api/v1/state');offersPage=1;renderOffers();}catch(error){console.error(error);$('guestOffers').innerHTML=`<div class="guest-empty">${esc(t('error'))}</div>`;}
 }
 function showGuest(){showView('guestView');}
 function showLogin(){showView('loginView');}
@@ -71,6 +83,8 @@ $('guestLoginBtn').addEventListener('click',showLogin);
 $('backToGuestBtn').addEventListener('click',showGuest);
 $('guestBrowseBtn').addEventListener('click',()=>$('guestOffersSection').scrollIntoView({behavior:'smooth',block:'start'}));
 $('guestReloadBtn').addEventListener('click',load);
+$('guestPrevPage').addEventListener('click',()=>{if(offersPage>1){offersPage--;renderOffers();$('guestOffersSection').scrollIntoView({behavior:'smooth',block:'start'});}});
+$('guestNextPage').addEventListener('click',()=>{const total=Math.max(1,Math.ceil(((state?.publicOffers||[]).filter(o=>o.status==='published').length)/PAGE_SIZE));if(offersPage<total){offersPage++;renderOffers();$('guestOffersSection').scrollIntoView({behavior:'smooth',block:'start'});}});
 $('guestLangBtn').addEventListener('click',toggleLanguage);
 onLanguageChange(value=>{lang=value;apply();});
 $('guestOffers').addEventListener('click',e=>{const card=e.target.closest('[data-guest-offer]');if(card)openOffer(card.dataset.guestOffer);});

@@ -1519,6 +1519,109 @@ html {
   text-overflow: ellipsis;
 }
 
+
+.product-pagination {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) auto minmax(0,1fr);
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.pagination-btn {
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: #fff;
+  color: var(--navy);
+  font-weight: 900;
+  padding: 10px 14px;
+}
+
+.pagination-btn:disabled {
+  opacity: .42;
+  cursor: default;
+}
+
+.pagination-info {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.company-footer-card {
+  margin-top: 20px;
+  border: 1px solid #d9e5eb;
+  border-radius: 20px;
+  background: #fff;
+  padding: 16px;
+  box-shadow: 0 12px 34px rgba(11,34,54,.06);
+}
+
+.company-footer-brand {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+}
+
+.company-footer-mark {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: var(--navy);
+  color: #fff;
+  font-weight: 900;
+}
+
+.company-footer-card h2 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+.company-footer-card p {
+  margin: 5px 0 0;
+  color: #657a87;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.company-contact {
+  display: grid;
+  gap: 7px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #e7eef2;
+}
+
+.company-contact strong {
+  font-size: 13px;
+}
+
+.company-contact a {
+  width: fit-content;
+  max-width: 100%;
+  color: #0a79ae;
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.company-footer-card>small {
+  display: block;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #edf2f4;
+  color: #84939c;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
 @keyframes spin { to { transform: rotate(360deg); } }
 
 @media (max-width: 420px) {
