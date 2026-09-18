@@ -51,6 +51,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
   const errors=[];
   let stateCalls=0;
   let publicOfferMutation=null;
+  const uploadedSources=[];
   page.on('pageerror',e=>errors.push(e.message));
   await page.addInitScript(lang=>localStorage.setItem('CapacitorStorage.language',lang),language);
   await page.route('https://m-platform-tan.vercel.app/**',async route=>{
@@ -64,9 +65,15 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
     else if(path.endsWith('/state')) { stateCalls++; body={user:accounts.find(a=>a.role===role),requests,quotes,publicOffers,accounts,interests,settings:{categories,_version:1}}; }
     else if(path.endsWith('/notifications')) body=notes;
     else if(path.endsWith('/app-config')) body={apiVersion:1};
+    else if(path.endsWith('/uploads')) {
+      const upload=route.request().postDataJSON();
+      uploadedSources.push(upload.source);
+      body={src:`/api/media/upload-${uploadedSources.length}`};
+    }
     else if(path.endsWith('/mutations')) {
       const mutation=route.request().postDataJSON();
       if(mutation.collection==='publicOffers') publicOfferMutation=mutation;
+      else if(mutation.collection==='requests'&&mutation.patch?.product) body={ok:true};
       else if(mutation.collection!=='requests' || Object.keys(mutation.patch).join()!=='lastSeenQuoteAt') errors.push('Unexpected fixture mutation');
       body={ok:true}; // Opening a customer request marks its quotes as seen.
     }
@@ -147,7 +154,21 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
       assert.equal(await page.locator('#screen .public-offer-card').count(),20,'Client pagination must return to first page');
       await page.locator('.special-request-card [data-action="new-request"]').click();
       await page.locator('#modal').waitFor({state:'visible'});
-      await page.locator('.modal-close').click();
+      if(label==='chromium-390-ar-client'){
+        const largeSvg=`<svg xmlns="http://www.w3.org/2000/svg" width="2600" height="1800"><defs><linearGradient id="g"><stop stop-color="#1699db"/><stop offset="1" stop-color="#111827"/></linearGradient></defs><rect width="2600" height="1800" fill="url(#g)"/><text x="100" y="900" font-size="220" fill="white">MIG</text><!--${'x'.repeat(1400000)}--></svg>`;
+        assert.ok(Buffer.byteLength(largeSvg)>1048576,'Compression fixture must exceed the old 1 MB limit');
+        await page.locator('#newRequestForm input[name="product"]').fill('Compression test');
+        await page.locator('#newRequestForm textarea[name="specs"]').fill('Large image compression');
+        await page.locator('#newRequestForm input[name="quantity"]').fill('100');
+        await page.locator('#requestFiles').setInputFiles({name:'large.svg',mimeType:'image/svg+xml',buffer:Buffer.from(largeSvg)});
+        await page.locator('#newRequestForm button[type="submit"]').click();
+        await page.locator('#modal').waitFor({state:'hidden'});
+        assert.equal(uploadedSources.length,1,'Large selected image must be uploaded after compression');
+        assert.ok(uploadedSources[0].startsWith('data:image/jpeg;base64,'),'Large selected image must be converted to compressed JPEG');
+        assert.ok(uploadedSources[0].length<1300000,'Compressed upload payload should remain below the normal API body limit');
+        await page.locator('#bottomNav [data-screen="home"]').click();
+        await page.locator('.special-request-card').waitFor();
+      }else await page.locator('.modal-close').click();
       const firstOffer=page.locator('.public-offer-card').first();
       await firstOffer.click();
       await page.locator('#modal').waitFor({state:'visible'});
@@ -177,6 +198,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
         await page.locator('[data-admin-offer-tab="all"]').click();
         await page.locator('[data-admin-open="public"]').first().click();
         await page.locator('#adminPublicOfferForm').waitFor();
+        await geometry(page,'#modal');
         assert.equal(await page.locator('#adminPublicOfferForm input[name="product"]').count(),1,'Admin must be able to edit public offer product');
         assert.equal(await page.locator('#adminPublicOfferForm input[name="unitPrice"]').count(),1,'Admin must be able to edit public offer price');
         assert.equal(await page.locator('#adminPublicOfferForm select[name="categoryId"]').count(),1,'Admin must be able to edit public offer category');
