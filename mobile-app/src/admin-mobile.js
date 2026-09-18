@@ -1,14 +1,15 @@
 import { session } from './session.js';
 let state=null,revision=0;
 let requestTab='pending',offerTab='pending',timer=null;
-const searches=new Map(),mediaCache=new Map();
+const searches=new Map(),mediaCache=new Map(),mediaTasks=new Map();
+const MEDIA_CONCURRENCY=6;
 let reloadWorkspace=async()=>{};
 export function configureAdmin({reload}) { reloadWorkspace=reload; }
 export function resetAdmin() {
   clearTimeout(timer); state=null; revision++;
   requestTab='pending'; offerTab='pending'; searches.clear();
   for(const url of mediaCache.values()) URL.revokeObjectURL(url);
-  mediaCache.clear();
+  mediaCache.clear();mediaTasks.clear();
 }
 export function updateAdminState(next) {
   if(next?.user?.role!=='admin') { resetAdmin(); return; }
@@ -65,12 +66,22 @@ function search(placeholder){return`<label class="admin-mobile-search"><span>⌕
 function gallery(images=[],select=false){if(!images.length)return'';return`<div class="admin-image-grid">${images.map((src,i)=>`<label class="admin-image-tile"><input ${select?'':'disabled'} checked type="checkbox" data-admin-image-index="${i}"><span><img alt="" data-admin-media="${esc(src)}"></span>${select?`<small>${esc(tr('إبقاء الصورة','Keep image'))}</small>`:''}</label>`).join('')}</div>`;}
 async function imageUrl(src){
   if(mediaCache.has(src))return mediaCache.get(src);
+  if(mediaTasks.has(src))return mediaTasks.get(src);
   const epoch=session.epoch,p=String(src).replace(/^\/api\/media\//,'/api/v1/media/');
-  const r=await session.raw(p);if(!r.ok)return'';
-  const blob=await r.blob();if(epoch!==session.epoch||!isAdmin())return'';
-  const u=URL.createObjectURL(blob);mediaCache.set(src,u);return u;
+  const task=(async()=>{
+    const r=await session.raw(p);if(!r.ok)return'';
+    const blob=await r.blob();if(epoch!==session.epoch||!isAdmin())return'';
+    const u=URL.createObjectURL(blob);mediaCache.set(src,u);return u;
+  })().catch(()=> '').finally(()=>mediaTasks.delete(src));
+  mediaTasks.set(src,task);
+  return task;
 }
-async function hydrate(root=document){for(const img of root.querySelectorAll('img[data-admin-media]:not([data-loaded])')){img.dataset.loaded='1';try{const u=await imageUrl(img.dataset.adminMedia);if(u)img.src=u;}catch{}}}
+async function hydrate(root=document){
+  const images=[...root.querySelectorAll('img[data-admin-media]:not([data-loaded])')];
+  let cursor=0;
+  const worker=async()=>{while(cursor<images.length){const img=images[cursor++];img.dataset.loaded='1';const u=await imageUrl(img.dataset.adminMedia);if(u&&img.isConnected)img.src=u;}};
+  await Promise.all(Array.from({length:Math.min(MEDIA_CONCURRENCY,images.length)},worker));
+}
 function row(x,kind){const o=ownerOf(x),linked=kind==='quote'?(state?.requests||[]).find(r=>r.id===x.requestId):null;return`<article class="list-card admin-record-card" data-admin-open="${kind}" data-admin-id="${esc(x.id)}"><div class="list-card-main"><div class="list-card-title"><small>#${esc(ref(x))}</small><h3>${esc(title(x))}</h3></div>${badge(x.status)}</div>${desc(x)?`<p>${esc(desc(x))}</p>`:''}<div class="admin-record-meta">${o?`<span>${esc(o.company||o.name||tr('صاحب المحتوى','Owner'))}</span>`:''}${linked?`<span>#${esc(ref(linked))}</span>`:''}<span>${esc(date(x.createdAt))}</span></div>${gallery(x.images||[])}</article>`;}
 function matches(x,kind=''){if(!searchText().trim())return true;const q=searchText().trim().toLowerCase(),o=ownerOf(x),linked=kind==='quote'?(state?.requests||[]).find(r=>r.id===x.requestId):null,client=linked?account(linked.customerId):null;return[ref(x),x.name,x.company,x.email,x.phone,x.product,x.specs,x.notes,x.country,o?.name,o?.company,linked?.displayNo,client?.name,client?.company].filter(Boolean).join(' ').toLowerCase().includes(q);}
 

@@ -6,8 +6,11 @@ const $=id=>document.getElementById(id);
 const mediaCache=new Map();
 let lang='ar';
 let state=null;
+let loadTask=null;
 let offersPage=1;
 const PAGE_SIZE=20;
+const MEDIA_CONCURRENCY=6;
+const mediaTasks=new Map();
 
 const text={
   ar:{tagline:'اطلب ما تحتاجه، وقارن العروض بثقة.',eyebrow:'منصة شراء وتوريد موثوقة',title:'اطلب ما تحتاجه، وقارن العروض بثقة.',subtitle:'منصة آمنة تربطك بموردين مؤهلين، بينما نتولى مراجعة العروض، التحقق من البضاعة، الترجمة، الشحن الموثوق، ومتابعة الضمان.',browse:'تصفح العروض',login:'تسجيل الدخول',customer:'إنشاء حساب عميل',supplier:'إنشاء حساب مورد',kicker:'تصفح دون حساب',offers:'العروض العامة',reload:'تحديث',loading:'جارٍ تحميل العروض...',empty:'لا توجد عروض عامة منشورة حاليًا.',price:'السعر',moq:'الحد الأدنى',production:'الإنتاج',days:'يوم',stock:'المخزون',details:'تفاصيل العرض',back:'العودة للرئيسية',error:'تعذر تحميل العروض. تحقق من اتصال الإنترنت.',previous:'السابق',next:'التالي',page:'صفحة',companyDescription:'منصة تساعدك في طلب المنتجات، مقارنة العروض، ومتابعة التوريد بسهولة.',contact:'تواصل معنا',copyright:'© 2026 MIG COMPANY — جميع الحقوق محفوظة'},
@@ -35,14 +38,26 @@ async function api(path){
 }
 async function imageUrl(src){
   if(mediaCache.has(src))return mediaCache.get(src);
-  const path=src.replace(/^\/api\/media\//,'/api/v1/media/');
-  const r=await fetch(API+path,{credentials:'omit',headers:{'X-M-Client':'native'}});if(!r.ok)return '';
-  const url=URL.createObjectURL(await r.blob());mediaCache.set(src,url);return url;
+  if(mediaTasks.has(src))return mediaTasks.get(src);
+  const task=(async()=>{
+    const path=src.replace(/^\/api\/media\//,'/api/v1/media/');
+    const r=await fetch(API+path,{credentials:'omit',headers:{'X-M-Client':'native'}});if(!r.ok)return '';
+    const url=URL.createObjectURL(await r.blob());mediaCache.set(src,url);return url;
+  })().catch(()=> '').finally(()=>mediaTasks.delete(src));
+  mediaTasks.set(src,task);
+  return task;
 }
 async function hydrateImages(){
-  for(const img of document.querySelectorAll('#guestOffers img[data-media]:not([data-loaded])')){
-    img.dataset.loaded='1';try{const url=await imageUrl(img.dataset.media);if(url)img.src=url;}catch{}
-  }
+  const images=[...document.querySelectorAll('#guestOffers img[data-media]:not([data-loaded])')];
+  let cursor=0;
+  const worker=async()=>{
+    while(cursor<images.length){
+      const img=images[cursor++];img.dataset.loaded='1';
+      const url=await imageUrl(img.dataset.media);
+      if(url&&img.isConnected)img.src=url;
+    }
+  };
+  await Promise.all(Array.from({length:Math.min(MEDIA_CONCURRENCY,images.length)},worker));
 }
 function offerImages(o){
   const src=(o.images||[])[0];
@@ -65,10 +80,18 @@ function renderOffers(){
   hydrateImages();
 }
 async function load(){
+  if(loadTask)return loadTask;
   $('guestOffers').innerHTML=`<div class="guest-loading">${esc(t('loading'))}</div>`;
   $('guestOffersPagination').classList.add('hidden');
-  try{state=await api('/api/v1/state');offersPage=1;renderOffers();}catch(error){console.error(error);$('guestOffers').innerHTML=`<div class="guest-empty">${esc(t('error'))}</div>`;}
+  loadTask=(async()=>{
+    try{state=await api('/api/v1/state');offersPage=1;renderOffers();}
+    catch(error){console.error(error);$('guestOffers').innerHTML=`<div class="guest-empty">${esc(t('error'))}</div>`;}
+    finally{loadTask=null;}
+  })();
+  return loadTask;
 }
+function ensureLoaded(){if(!state&&!loadTask)void load();}
+
 function showGuest(){showView('guestView');}
 function showLogin(){showView('loginView');}
 function openOffer(id){
@@ -82,12 +105,16 @@ function openOffer(id){
 $('guestLoginBtn').addEventListener('click',showLogin);
 $('backToGuestBtn').addEventListener('click',showGuest);
 $('guestBrowseBtn').addEventListener('click',()=>$('guestOffersSection').scrollIntoView({behavior:'smooth',block:'start'}));
-$('guestReloadBtn').addEventListener('click',load);
+$('guestReloadBtn').addEventListener('click',()=>{state=null;void load();});
 $('guestPrevPage').addEventListener('click',()=>{if(offersPage>1){offersPage--;renderOffers();$('guestOffersSection').scrollIntoView({behavior:'smooth',block:'start'});}});
 $('guestNextPage').addEventListener('click',()=>{const total=Math.max(1,Math.ceil(((state?.publicOffers||[]).filter(o=>o.status==='published').length)/PAGE_SIZE));if(offersPage<total){offersPage++;renderOffers();$('guestOffersSection').scrollIntoView({behavior:'smooth',block:'start'});}});
 $('guestLangBtn').addEventListener('click',toggleLanguage);
 onLanguageChange(value=>{lang=value;apply();});
 $('guestOffers').addEventListener('click',e=>{const card=e.target.closest('[data-guest-offer]');if(card)openOffer(card.dataset.guestOffer);});
 $('modal').addEventListener('click',e=>{if(e.target.closest('.guest-modal-login')){$('modal').classList.add('hidden');showLogin();}});
+window.addEventListener('mplatform:view',e=>{if(e.detail?.id==='guestView')ensureLoaded();});
 
-(async()=>{await languageReady;lang=getLanguage();apply();await load();})();
+(async()=>{
+  await languageReady;lang=getLanguage();apply();
+  if(!$('guestView').classList.contains('hidden'))ensureLoaded();
+})();

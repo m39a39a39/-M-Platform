@@ -47,6 +47,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
   const page=await context.newPage();
   page.setDefaultTimeout(10000);
   const errors=[];
+  let stateCalls=0;
   page.on('pageerror',e=>errors.push(e.message));
   await page.addInitScript(lang=>localStorage.setItem('CapacitorStorage.language',lang),language);
   await page.route('https://m-platform-tan.vercel.app/**',async route=>{
@@ -57,7 +58,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
     }
     let body={};
     if(path.endsWith('/auth/login')) body={user:accounts.find(a=>a.role===role),tokens:{accessToken:'fixture',refreshToken:'fixture'}};
-    else if(path.endsWith('/state')) body={user:accounts.find(a=>a.role===role),requests,quotes,publicOffers,accounts,interests};
+    else if(path.endsWith('/state')) { stateCalls++; body={user:accounts.find(a=>a.role===role),requests,quotes,publicOffers,accounts,interests}; }
     else if(path.endsWith('/notifications')) body=notes;
     else if(path.endsWith('/app-config')) body={apiVersion:1};
     else if(path.endsWith('/mutations')) {
@@ -71,6 +72,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
   try {
     await page.goto('http://127.0.0.1:4173');
     await page.locator('.guest-offer-card').first().waitFor();
+    assert.equal(stateCalls,1,'Guest data must load once when the guest view is shown');
     await geometry(page,'#guestView');
     assert.equal(await page.locator('#guestOffers').evaluate(el=>getComputedStyle(el).gridTemplateColumns.split(' ').length),2,'Guest public offers must use two columns');
     assert.equal(await page.locator('.guest-offer-card').count(),20,'Guest page must show at most 20 products');

@@ -12,8 +12,11 @@ let activeScreen='home';
 let activeSub='primary';
 let readyProductsPage=1;
 let busy=false;
+let lastDataLoadedAt=0;
 const PAGE_SIZE=20;
+const MEDIA_CONCURRENCY=6;
 const mediaCache=new Map();
+const mediaTasks=new Map();
 
 const copy={
   ar:{tagline:'اطلب ما تحتاجه، وقارن العروض بثقة.',secure:'دخول آمن',loginTitle:'تسجيل الدخول',loginSubtitle:'استخدم نفس حسابك الموجود على المنصة.',email:'البريد الإلكتروني',password:'كلمة المرور',login:'تسجيل الدخول',loading:'جارٍ تسجيل الدخول...',failed:'تعذر تسجيل الدخول. تحقق من البريد وكلمة المرور.',home:'الرئيسية',requests:'الطلبات',invites:'الدعوات',offers:'العروض',notifications:'الإشعارات',account:'الحساب',client:'عميل',supplier:'مورد',admin:'إدارة',refreshing:'جارٍ التحديث...',empty:'لا توجد بيانات حاليًا.',details:'التفاصيل',status:'الحالة',quantity:'الكمية',country:'الدولة',neededDate:'تاريخ الاحتياج',receivedQuotes:'العروض المستلمة',newRequest:'طلب جديد',publicOffers:'العروض العامة',requestedOffers:'العروض التي طلبتها',submittedOffers:'العروض المقدمة',myPublicOffers:'عروضي العامة',interestRequests:'طلبات الاهتمام',newPublicOffer:'عرض عام جديد',submitQuote:'تقديم عرض سعر',editQuote:'تعديل العرض',selectQuote:'اختيار العرض',selected:'تم اختيار العرض',requestOffer:'طلب هذا العرض',requested:'تم الطلب',price:'السعر',moq:'الحد الأدنى',leadTime:'مدة الإنتاج',sampleCost:'تكلفة العينة',stock:'المخزون',validUntil:'صالح حتى',specifications:'المواصفات',product:'المنتج',notes:'ملاحظات',currency:'العملة',images:'الصور',submit:'إرسال',save:'حفظ',logout:'تسجيل الخروج',profile:'بيانات الحساب',newQuotes:'عروض جديدة',underReview:'قيد المراجعة',activeRequests:'طلبات نشطة',published:'منشور',pending:'قيد المراجعة',completed:'مكتمل',sent:'تم الإرسال للموردين',review:'قيد المراجعة',coordinating:'قيد التنسيق',accepted:'مقبول',cancelled:'ملغي',markAllRead:'تحديد الكل كمقروء',noNotifications:'لا توجد إشعارات.',unread:'جديد',uploading:'جارٍ رفع الصور...',saving:'جارٍ الحفظ...',created:'تم الإرسال بنجاح.',chooseImages:'اختر حتى 5 صور، بحد أقصى 1 MB للصورة.',sessionNote:'يمكنك تسجيل الخروج لإنهاء جلستك على هذا الجهاز.',readyProducts:'منتجات جاهزة للطلب',readyProductsSubtitle:'اختر من المنتجات المتاحة واطلب ما يناسبك مباشرة.',customRequestTitle:'لم تجد ما تحتاجه؟',customRequestDescription:'أرسل طلبًا خاصًا بالمواصفات والكمية، وسنبحث لك عن المورد المناسب.',sendCustomRequest:'إرسال طلب خاص',customRequests:'الطلبات الخاصة',readyProductRequests:'طلبات المنتجات الجاهزة',totalRequests:'إجمالي الطلبات',previous:'السابق',next:'التالي',page:'صفحة',companyDescription:'منصة تساعدك في طلب المنتجات، مقارنة العروض، ومتابعة التوريد بسهولة.',contactUs:'تواصل معنا',copyright:'© 2026 MIG COMPANY — جميع الحقوق محفوظة',adminMobile:'واجهة الإدارة الكاملة ستضاف في مرحلة منفصلة. يمكنك حاليًا مشاهدة ملخص البيانات والإشعارات.'},
@@ -43,10 +46,12 @@ async function mutate(collection,itemId,version,patch){return request('/api/v1/m
 
 async function loadData({render=true}={}){
   const epoch=session.epoch;
-  const next=await session.state();
-  const nextNotifications=await request('/api/v1/notifications').catch(error=>{if(error.code==='session_expired'||error.code==='session_changed')throw error;return [];});
+  const [next,nextNotifications]=await Promise.all([
+    session.state(),
+    request('/api/v1/notifications').catch(error=>{if(error.code==='session_expired'||error.code==='session_changed')throw error;return [];})
+  ]);
   if(epoch!==session.epoch)return;
-  platformState=next;currentUser=next.user;notifications=nextNotifications;
+  platformState=next;currentUser=next.user;notifications=nextNotifications;lastDataLoadedAt=Date.now();
   updateAdminState(next);updateShell();
   if(render)renderScreen();
 }
@@ -55,7 +60,7 @@ session.onReset(reason=>{
   currentUser=null;platformState=null;notifications=[];activeScreen='home';activeSub='primary';readyProductsPage=1;
   resetAdmin();closeModal();
   for(const url of mediaCache.values())URL.revokeObjectURL(url);
-  mediaCache.clear();$('screen').replaceChildren();$('headerRole').textContent='';
+  mediaCache.clear();mediaTasks.clear();lastDataLoadedAt=0;$('screen').replaceChildren();$('headerRole').textContent='';
   $('navUnread').classList.add('hidden');$('toast').classList.add('hidden');
   document.querySelectorAll('#bottomNav button').forEach(b=>b.classList.toggle('active',b.dataset.screen==='home'));
   if(reason==='logout')showView('bootView');
@@ -90,15 +95,30 @@ function openModal(title,kicker,html){$('modalTitle').textContent=title;$('modal
 function closeModal(){$('modal').classList.add('hidden');$('modalBody').innerHTML='';}
 
 function gallery(images=[]){if(!images.length)return '';return `<div class="media-grid">${images.map(src=>`<div class="media-placeholder"><img alt="" data-media="${esc(src)}" /></div>`).join('')}</div>`;}
-async function hydrateImages(root=document){
+async function mediaUrl(src){
+  if(mediaCache.has(src))return mediaCache.get(src);
+  if(mediaTasks.has(src))return mediaTasks.get(src);
   const epoch=session.epoch;
-  for(const img of root.querySelectorAll('img[data-media]:not([data-loaded])')){
-    img.dataset.loaded='1';const src=img.dataset.media;if(mediaCache.has(src)){img.src=mediaCache.get(src);continue;}
-    try{
-      const path=src.replace(/^\/api\/media\//,'/api/v1/media/');const response=await rawFetch(path,{auth:true});if(!response.ok)continue;
-      const blob=await response.blob();if(epoch!==session.epoch)return;const url=URL.createObjectURL(blob);mediaCache.set(src,url);if(img.isConnected)img.src=url;
-    }catch{}
-  }
+  const task=(async()=>{
+    const path=src.replace(/^\/api\/media\//,'/api/v1/media/');
+    const response=await rawFetch(path,{auth:true});if(!response.ok)return '';
+    const blob=await response.blob();if(epoch!==session.epoch)return '';
+    const url=URL.createObjectURL(blob);mediaCache.set(src,url);return url;
+  })().catch(()=> '').finally(()=>mediaTasks.delete(src));
+  mediaTasks.set(src,task);
+  return task;
+}
+async function hydrateImages(root=document){
+  const images=[...root.querySelectorAll('img[data-media]:not([data-loaded])')];
+  let cursor=0;
+  const worker=async()=>{
+    while(cursor<images.length){
+      const img=images[cursor++];img.dataset.loaded='1';
+      const url=await mediaUrl(img.dataset.media);
+      if(url&&img.isConnected)img.src=url;
+    }
+  };
+  await Promise.all(Array.from({length:Math.min(MEDIA_CONCURRENCY,images.length)},worker));
 }
 
 function statCard(value,label,action=''){return `<button class="stat-card" ${action?`data-action="${action}"`:''}><strong>${esc(value)}</strong><span>${esc(label)}</span></button>`;}
@@ -328,5 +348,9 @@ async function resumeSession(){
 }
 $('sessionRetryBtn').addEventListener('click',resumeSession);
 $('sessionLogoutBtn').addEventListener('click',logout);
-App.addListener('appStateChange',({isActive})=>{if(isActive&&session.active&&!busy)loadData().catch(error=>{if(currentUser)showToast(errorText(error));});});
+App.addListener('appStateChange',({isActive})=>{
+  if(isActive&&session.active&&!busy&&Date.now()-lastDataLoadedAt>30000){
+    loadData().catch(error=>{if(currentUser)showToast(errorText(error));});
+  }
+});
 (async function boot(){await languageReady;lang=getLanguage();applyLanguage();setRegisterRole('client');await resumeSession();})();

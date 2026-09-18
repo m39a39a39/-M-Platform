@@ -26,28 +26,47 @@ export async function rows(table,query=''){
 }
 const inIds=ids=>ids.map(x=>`"${x}"`).join(',');
 export async function snapshot(user){
-  let requests=[],quotes=[],publicOffers=[],interests=[],accounts=[];
-  const settings=await one('settings','site');
+  let requests=[],quotes=[],publicOffers=[],interests=[],accounts=[],settings;
   if(user?.role==='admin'){
     const readRequests=can(user,'requests.read')||can(user,'requests.edit')||can(user,'translate')||can(user,'publish')||can(user,'trash')||can(user,'moderate');
     const readOffers=can(user,'offers.read')||can(user,'offers.edit')||can(user,'translate')||can(user,'publish')||can(user,'trash')||can(user,'moderate');
-    [requests,quotes,publicOffers,interests]=await Promise.all([readRequests?rows('requests'):[],readOffers?rows('quotes'):[],readOffers?rows('public_offers'):[],readOffers?rows('interests'):[]]);
-    if(readRequests||readOffers||can(user,'accounts.read')||can(user,'team')||can(user,'moderate')){
-      accounts=(await rows('profiles')).map(p=>can(user,'accounts.read')||p.id===user.id||p.role==='admin'&&can(user,'team')?profile(p):{id:p.id,role:p.role,version:p.version,name:`#${p.id.slice(0,8)}`,blockedAt:p.blocked_at,deletedAt:p.deleted_at});
-    }else accounts=[profile(user)];
+    const readAccounts=readRequests||readOffers||can(user,'accounts.read')||can(user,'team')||can(user,'moderate');
+    [settings,requests,quotes,publicOffers,interests,accounts]=await Promise.all([
+      one('settings','site'),
+      readRequests?rows('requests'):[],
+      readOffers?rows('quotes'):[],
+      readOffers?rows('public_offers'):[],
+      readOffers?rows('interests'):[],
+      readAccounts?rows('profiles'):[]
+    ]);
+    accounts=readAccounts?accounts.map(p=>can(user,'accounts.read')||p.id===user.id||p.role==='admin'&&can(user,'team')?profile(p):{id:p.id,role:p.role,version:p.version,name:`#${p.id.slice(0,8)}`,blockedAt:p.blocked_at,deletedAt:p.deleted_at}):[profile(user)];
     return {user:profile(user),accounts,requests:requests.map(r=>unpack(r,'requests')),quotes:quotes.map(r=>unpack(r,'quotes')),publicOffers:publicOffers.map(r=>unpack(r,'publicOffers')),interests:interests.map(r=>unpack(r,'interests')),settings:{...settings.data,_version:settings.version}};
   }
-  publicOffers=await rows('public_offers','data->>status=eq.published&data->>deletedAt=is.null');
+
   if(user?.role==='client'){
-    [requests,interests]=await Promise.all([rows('requests',`owner_id=eq.${user.id}&data->>deletedAt=is.null`),rows('interests',`owner_id=eq.${user.id}`)]);
+    [settings,publicOffers,requests,interests]=await Promise.all([
+      one('settings','site'),
+      rows('public_offers','data->>status=eq.published&data->>deletedAt=is.null'),
+      rows('requests',`owner_id=eq.${user.id}&data->>deletedAt=is.null`),
+      rows('interests',`owner_id=eq.${user.id}`)
+    ]);
     if(requests.length)quotes=await rows('quotes',`request_id=in.(${inIds(requests.map(r=>r.id))})&data->>status=eq.published&data->>deletedAt=is.null`);
   }else if(user?.role==='supplier'){
-    [requests,quotes,publicOffers]=await Promise.all([
+    [settings,requests,quotes,publicOffers]=await Promise.all([
+      one('settings','site'),
       rows('requests',`data->supplierIds=cs.${encodeURIComponent(JSON.stringify([user.id]))}&data->>status=eq.sent&data->>deletedAt=is.null&data->>suspendedAt=is.null`),
-      rows('quotes',`owner_id=eq.${user.id}&data->>deletedAt=is.null`),rows('public_offers',`owner_id=eq.${user.id}&data->>deletedAt=is.null`)
+      rows('quotes',`owner_id=eq.${user.id}&data->>deletedAt=is.null`),
+      rows('public_offers',`owner_id=eq.${user.id}&data->>deletedAt=is.null`)
     ]);
-    const ids=publicOffers.map(o=>o.id);if(ids.length)interests=await rows('interests',`offer_id=in.(${inIds(ids)})`);
+    const ids=publicOffers.map(o=>o.id);
+    if(ids.length)interests=await rows('interests',`offer_id=in.(${inIds(ids)})`);
+  }else{
+    [settings,publicOffers]=await Promise.all([
+      one('settings','site'),
+      rows('public_offers','data->>status=eq.published&data->>deletedAt=is.null')
+    ]);
   }
+
   const ownerIds=[...new Set([...requests,...quotes,...publicOffers].map(r=>r.owner_id))];
   const owners=ownerIds.length?await rows('profiles',`id=in.(${inIds(ownerIds)})`):[];
   const ownerActive=id=>active(owners.find(p=>p.id===id));
