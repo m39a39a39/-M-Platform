@@ -54,6 +54,9 @@ function trackingLabel(status){
   const row=TRACKING_FLOW.find(x=>x[0]===status),ex=TRACKING_EXCEPTIONS[status];
   return row?(lang==='ar'?row[1]:row[2]):ex?(lang==='ar'?ex[0]:ex[1]):statusLabel(status);
 }
+function requestTrackingStatus(item){
+  return item?.trackingStatus||(item?.status==='completed'?'completed':item?.selectedQuoteId?'quote_selected':item?.status==='sent'?'sourcing':'received');
+}
 function categories(activeOnly=true){
   const rows=Array.isArray(platformState?.settings?.categories)?platformState.settings.categories:[];
   return rows.filter(c=>!activeOnly||c.active!==false).sort((a,b)=>(a.order||0)-(b.order||0));
@@ -68,7 +71,7 @@ function categoryFilters(){
   return `<div class="category-filter-bar" role="tablist"><button type="button" data-category="all" class="${readyCategory==='all'?'active':''}">${esc(t('allCategories'))}</button>${rows.map(cat=>`<button type="button" data-category="${esc(cat.id)}" class="${readyCategory===cat.id?'active':''}">${esc(lang==='ar'?cat.nameAr:cat.nameEn)}</button>`).join('')}</div>`;
 }
 function trackingTimeline(requestItem){
-  const current=requestItem.trackingStatus||'received',exception=TRACKING_EXCEPTIONS[current];
+  const current=requestTrackingStatus(requestItem),exception=TRACKING_EXCEPTIONS[current];
   const history=Array.isArray(requestItem.trackingHistory)?requestItem.trackingHistory:[];
   const lastLinear=exception?[...history].reverse().find(h=>TRACKING_FLOW.some(x=>x[0]===h.status))?.status||'received':current;
   const currentIndex=Math.max(0,TRACKING_FLOW.findIndex(x=>x[0]===lastLinear));
@@ -206,12 +209,12 @@ function renderRequests(){
     const rows=platformState.requests||[];
     const interests=platformState.interests||[];
     const newQuotes=rows.reduce((n,r)=>n+newQuoteCount(r),0);
-    const active=rows.filter(r=>r.status==='sent'&&!r.selectedQuoteId).length+interests.filter(i=>!['accepted','cancelled'].includes(i.status)).length;
+    const active=rows.filter(r=>!['completed','cancelled'].includes(requestTrackingStatus(r))).length+interests.filter(i=>!['accepted','cancelled','completed'].includes(i.status)).length;
     const readyRows=interests.map(i=>({interest:i,offer:(platformState.publicOffers||[]).find(o=>o.id===i.offerId)}));
     $('screen').innerHTML=
       pageHeader(t('requests'),tr('كل طلباتك ومتابعتها في مكان واحد.','All your requests and their progress in one place.'),`<button class="primary-small" data-action="new-request">+ ${esc(t('sendCustomRequest'))}</button>`)+
       `<div class="stats-grid client-request-stats">${statCard(rows.length+interests.length,t('totalRequests'))}${statCard(newQuotes,t('newQuotes'))}${statCard(active,t('activeRequests'))}${statCard(interests.length,t('readyProductRequests'))}</div>`+
-      `<section class="request-group" data-client-request-group="custom"><div class="section-title"><h2>${esc(t('customRequests'))}</h2></div><div class="list-stack">${rows.map(r=>itemCard(r,{subtitle:descriptionOf(r),meta:`${t('quantity')}: ${r.quantity||'—'} · ${r.country||'—'} · ${date(r.createdAt)}`,badge:cardBadge(r.trackingStatus||'received',newQuoteCount(r)?`<span class="new-pill">${newQuoteCount(r)}</span>`:''),action:`data-request="${esc(r.id)}"`,images:true})).join('')||empty()}</div></section>`+
+      `<section class="request-group" data-client-request-group="custom"><div class="section-title"><h2>${esc(t('customRequests'))}</h2></div><div class="list-stack">${rows.map(r=>itemCard(r,{subtitle:descriptionOf(r),meta:`${t('quantity')}: ${r.quantity||'—'} · ${r.country||'—'} · ${date(r.createdAt)}`,badge:cardBadge(requestTrackingStatus(r),newQuoteCount(r)?`<span class="new-pill">${newQuoteCount(r)}</span>`:''),action:`data-request="${esc(r.id)}"`,images:true})).join('')||empty()}</div></section>`+
       `<section class="request-group" data-client-request-group="ready"><div class="section-title"><h2>${esc(t('readyProductRequests'))}</h2></div><div class="list-stack">${readyRows.map(({interest,offer})=>itemCard(offer||interest,{subtitle:offer?descriptionOf(offer):tr('المنتج غير متاح حاليًا','Product currently unavailable'),meta:date(interest.createdAt),badge:cardBadge(interest.status),action:offer?`data-public-offer="${esc(offer.id)}"`:'',images:!!offer})).join('')||empty()}</div></section>`;
   }else if(currentUser.role==='supplier'){
     const answered=new Set((platformState.quotes||[]).map(q=>q.requestId)),rows=(platformState.requests||[]).filter(r=>!answered.has(r.id));
