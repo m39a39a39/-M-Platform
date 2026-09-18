@@ -149,12 +149,12 @@ function categoryDialog(id=''){
   modal(current?tr('تعديل التصنيف','Edit category'):tr('إضافة تصنيف','Add category'),'M Platform',`<form id="adminCategoryForm" class="form-stack" data-id="${esc(current?.id||'')}"><label><span>${esc(tr('الاسم بالعربية','Arabic name'))}</span><input name="nameAr" required maxlength="80" value="${esc(current?.nameAr||'')}"></label><label><span>${esc(tr('الاسم بالإنجليزية','English name'))}</span><input name="nameEn" required maxlength="80" value="${esc(current?.nameEn||'')}"></label><label class="admin-category-toggle-label"><input type="checkbox" name="active" ${current?.active===false?'':'checked'}><span>${esc(tr('إظهار التصنيف للعملاء','Show category to customers'))}</span></label><button class="primary-btn" type="submit">${esc(tr('حفظ','Save'))}</button></form>`);
 }
 async function saveCategories(rows){
-  try{await api('/api/v1/settings',{method:'POST',body:{version:Number(state.settings?._version||0),data:{categories:rows}}});await reload();schedule();toast(tr('تم حفظ التصنيفات.','Categories saved.'));}catch(e){toast(e.message);}
+  try{await api('/api/v1/settings',{method:'POST',body:{version:Number(state.settings?._version||0),data:{categories:rows}}});await reload();schedule();toast(tr('تم حفظ التصنيفات.','Categories saved.'));return true;}catch(e){toast(e.message);return false;}
 }
 async function submitCategory(form){
   const id=form.dataset.id||crypto.randomUUID(),rows=categories(),next={id,nameAr:form.nameAr.value.trim(),nameEn:form.nameEn.value.trim(),active:form.active.checked};
   const index=rows.findIndex(cat=>cat.id===id);if(index>=0)rows[index]={...rows[index],...next};else rows.push(next);
-  await saveCategories(rows);closeModal();
+  if(await saveCategories(rows))closeModal();
 }
 async function moveCategory(id,direction){const rows=categories(),i=rows.findIndex(cat=>cat.id===id),j=i+Number(direction);if(i<0||j<0||j>=rows.length)return;[rows[i],rows[j]]=[rows[j],rows[i]];await saveCategories(rows);}
 async function toggleCategory(id){const rows=categories(),cat=rows.find(x=>x.id===id);if(!cat)return;cat.active=cat.active===false;await saveCategories(rows);}
