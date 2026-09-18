@@ -9,8 +9,10 @@ const titleAr = 'باور بنك وشاحن متنقل بسعة كبيرة مع 
 const titleEn = 'Power bank with multiple cables and a digital display ' + 'LongUnbrokenProductCode'.repeat(4);
 const translation = { titleAr, titleEn, descriptionAr: titleAr.repeat(2), descriptionEn: titleEn };
 const images = Array.from({ length: 5 }, (_, i) => `/api/media/test-${i}`);
-const requests = Array.from({ length: 100 }, (_, i) => ({ id: `r${i}`, displayNo: 10001+i, product: titleAr, translation, specs: titleEn, quantity: 1000, country: 'United Arab Emirates', createdAt: '2026-09-17', neededDate: '2026-10-17', images, customerId: 'client', supplierIds: ['supplier'], status: i%2 ? 'sent' : 'review', version: 1 }));
-const publicOffers = Array.from({ length: 45 }, (_, i) => ({ id: `p${i}`, displayNo: 10101+i, product: titleAr, translation, specs: titleEn, images: images.slice(0,(i%5)+1), status:'published', supplierId:'supplier', currency:'USD', unitPrice:12, moq:500, leadTime:30 }));
+const trackingFlow=['received','reviewing','sourcing','quotes_available','quote_selected','payment_confirmation','production','quality_check','ready_to_ship','shipped','in_delivery','delivered','completed'];
+const requests = Array.from({ length: 100 }, (_, i) => ({ id: `r${i}`, displayNo: 10001+i, product: titleAr, translation, specs: titleEn, quantity: 1000, country: 'United Arab Emirates', createdAt: '2026-09-17', neededDate: '2026-10-17', images, customerId: 'client', supplierIds: ['supplier'], status: i%2 ? 'sent' : 'review', trackingStatus:trackingFlow[i%trackingFlow.length], trackingUpdatedAt:'2026-09-18', trackingNote:i===0?'المصنع يتوقع اكتمال الإنتاج قريبًا':'', version: 1 }));
+const categories=[{id:'mobile',nameAr:'إكسسوارات الجوال',nameEn:'Mobile accessories',active:true,order:0},{id:'electronics',nameAr:'إلكترونيات',nameEn:'Electronics',active:true,order:1},{id:'home',nameAr:'المنزل',nameEn:'Home',active:true,order:2}];
+const publicOffers = Array.from({ length: 45 }, (_, i) => ({ id: `p${i}`, displayNo: 10101+i, product: titleAr, translation, specs: titleEn, images: images.slice(0,(i%5)+1), status:'published', supplierId:'supplier', categoryId:categories[i%3].id, currency:'USD', unitPrice:12, moq:500, leadTime:30 }));
 const quotes = requests.slice(0,4).map((r,i)=>({id:`q${i}`,requestId:r.id,supplierId:'supplier',status:i%2?'pending':'published',unitPrice:10,moq:500,leadTime:20,currency:'USD',images,translation,createdAt:'2026-09-17'}));
 const accounts = ['client','supplier','admin'].map(role=>({id:role,role,name: role==='admin'?'مدير المنصة':titleAr,company:titleEn,email:`${role}@example.test`,isOwner:role==='admin'}));
 const interests = [{id:'i1',offerId:'p0',status:'pending',createdAt:'2026-09-17'}];
@@ -58,7 +60,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
     }
     let body={};
     if(path.endsWith('/auth/login')) body={user:accounts.find(a=>a.role===role),tokens:{accessToken:'fixture',refreshToken:'fixture'}};
-    else if(path.endsWith('/state')) { stateCalls++; body={user:accounts.find(a=>a.role===role),requests,quotes,publicOffers,accounts,interests}; }
+    else if(path.endsWith('/state')) { stateCalls++; body={user:accounts.find(a=>a.role===role),requests,quotes,publicOffers,accounts,interests,settings:{categories,_version:1}}; }
     else if(path.endsWith('/notifications')) body=notes;
     else if(path.endsWith('/app-config')) body={apiVersion:1};
     else if(path.endsWith('/mutations')) {
@@ -75,6 +77,12 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
     assert.equal(stateCalls,1,'Guest data must load once when the guest view is shown');
     await geometry(page,'#guestView');
     assert.equal(await page.locator('#guestOffers').evaluate(el=>getComputedStyle(el).gridTemplateColumns.split(' ').length),2,'Guest public offers must use two columns');
+    assert.equal(await page.locator('#guestCategoryFilters button').count(),4,'Guest must show All plus three category buttons');
+    await page.locator('#guestCategoryFilters [data-guest-category="mobile"]').click();
+    assert.equal(await page.locator('.guest-offer-card').count(),15,'Guest category filter must show only matching products');
+    assert.equal(await page.locator('#guestOffersPagination:visible').count(),0,'Category with 15 products must not paginate');
+    await page.locator('#guestCategoryFilters [data-guest-category="all"]').click();
+    assert.equal(await page.locator('.guest-offer-card').count(),20,'Guest All category must restore first page');
     assert.equal(await page.locator('.guest-offer-card').count(),20,'Guest page must show at most 20 products');
     assert.equal(await page.locator('#guestOffersPagination:visible').count(),1,'Guest pagination must appear when there are more than 20 products');
     assert.equal(await page.locator('#guestPrevPage').isDisabled(),true,'Guest previous must be disabled on first page');
@@ -117,6 +125,12 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
       assert.equal(await page.locator('#screen .stats-grid').count(),0,'Request summary must not appear on the client home page');
       assert.equal(await page.locator('#screen [data-request]').count(),0,'Request list must not appear on the client home page');
       assert.equal(await page.locator('#screen .public-offer-card').count(),20,'Client home must show at most 20 ready products');
+      assert.equal(await page.locator('#screen .category-filter-bar button').count(),4,'Client must show All plus three category buttons');
+      await page.locator('#screen [data-category="mobile"]').click();
+      assert.equal(await page.locator('#screen .public-offer-card').count(),15,'Client category filter must show matching products only');
+      assert.equal(await page.locator('#screen .product-pagination:visible').count(),0,'Filtered 15 products must not paginate');
+      await page.locator('#screen [data-category="all"]').click();
+      assert.equal(await page.locator('#screen .public-offer-card').count(),20,'Client All category must restore first page');
       assert.equal(await page.locator('.public-offers-grid').evaluate(el=>getComputedStyle(el).gridTemplateColumns.split(' ').length),2,'Ready products must use two columns');
       assert.equal(await page.locator('#screen .product-pagination:visible').count(),1,'Client pagination must appear when there are more than 20 ready products');
       assert.equal(await page.locator('#screen .company-footer-card').count(),1,'Client home must include MIG COMPANY footer card');
@@ -157,8 +171,15 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
         assert.ok(await firstOffer.locator('h3').evaluate(el=>getComputedStyle(el).whiteSpace==='nowrap'),'Ready-product title must stay on one line');
         assert.ok(await firstOffer.locator('p').evaluate(el=>getComputedStyle(el).whiteSpace==='nowrap'),'Ready-product description must stay on one line');
       }
+      if(screen==='offers'&&role==='admin'){
+        assert.equal(await page.locator('[data-admin-offer-tab="categories"]').count(),1,'Admin offers must include Categories tab');
+        await page.locator('[data-admin-offer-tab="categories"]').click();
+        assert.equal(await page.locator('[data-admin-category-new]').count(),1,'Admin categories must allow adding a category');
+        assert.equal(await page.locator('.admin-category-row').count(),3,'Admin categories must list configured categories');
+      }
       if(screen==='requests'){
         assert.ok(await page.locator('#screen').evaluate(el=>el.scrollHeight>el.clientHeight),'Long list did not scroll');
+        if(role==='admin')assert.equal(await page.locator('[data-admin-request-filter]').count(),1,'Admin requests must include status filter');
         if(role==='client'){
           assert.equal(await page.locator('#screen .client-request-stats').count(),1,'Request summary must appear inside Requests');
           assert.equal(await page.locator('[data-client-request-group="custom"] [data-request]').count(),100,'All custom requests must be inside Requests');
@@ -169,6 +190,11 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
         await card.click();
         await page.locator('#modal').waitFor({state:'visible'});
         await geometry(page,'#modal');
+        if(role==='client'){
+          assert.equal(await page.locator('#modal .tracking-timeline').count(),1,'Client request details must show a tracking timeline');
+          assert.equal(await page.locator('#modal .tracking-step').count(),13,'Tracking timeline must include all normal stages');
+        }
+        if(role==='admin')assert.equal(await page.locator('#modal [data-admin-tracking-status]').count(),1,'Admin request details must include tracking status control');
         await page.locator('.modal-close').click();
       }
       results.push({label,screen,pass:true,nav:after.nav,contentWidth:after.screenClient});
