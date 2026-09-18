@@ -135,6 +135,15 @@
     </section>
   </div>
   <div id="toast" class="toast hidden"></div>
+  <div id="imageViewer" class="image-viewer hidden" role="dialog" aria-modal="true" aria-label="Image viewer">
+    <button class="image-viewer-close" type="button" data-image-viewer-close aria-label="Close">×</button>
+    <div id="imageViewerStage" class="image-viewer-stage">
+      <button id="imageViewerPrev" class="image-viewer-nav image-viewer-prev" type="button" data-image-viewer-prev aria-label="Previous image">‹</button>
+      <img id="imageViewerImage" alt="" draggable="false" />
+      <button id="imageViewerNext" class="image-viewer-nav image-viewer-next" type="button" data-image-viewer-next aria-label="Next image">›</button>
+    </div>
+    <div id="imageViewerCounter" class="image-viewer-counter">1 / 1</div>
+  </div>
   <script type="module" src="/src/app.js"></script>
   <script type="module" src="/src/guest.js"></script>
 </body>
