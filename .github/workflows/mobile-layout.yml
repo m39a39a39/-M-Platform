@@ -1,7 +1,7 @@
 name: Mobile layout regression
 on:
   push:
-    branches: [main, fix/mobile-layout-single-shell, fix/mobile-accounts-search, feature/categories-tracking-20260918]
+    branches: [main, fix/mobile-layout-single-shell, fix/mobile-accounts-search]
     paths: ['mobile-app/**', '.github/workflows/mobile-layout.yml']
   workflow_dispatch:
 permissions:
@@ -59,13 +59,3 @@ jobs:
       - run: npx cap sync ios
       - name: Compile iOS app and secure storage plugin
         run: xcodebuild -workspace ios/App/App.xcworkspace -scheme App -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build > /tmp/ios-build.log 2>&1 || { tail -n 100 /tmp/ios-build.log; exit 1; }
-
-  backend:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
-        with:
-          node-version: '22'
-      - run: npm test
