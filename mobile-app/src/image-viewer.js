@@ -8,6 +8,8 @@ let startX=0;
 let startY=0;
 let startDistance=0;
 let startScale=1;
+let startTranslateX=0;
+let startTranslateY=0;
 let pointers=new Map();
 
 const $=id=>document.getElementById(id);
@@ -80,7 +82,7 @@ function bind(){
     if(!active)return;
     stage.setPointerCapture?.(e.pointerId);
     pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
-    if(pointers.size===1){startX=e.clientX;startY=e.clientY;}
+    if(pointers.size===1){startX=e.clientX;startY=e.clientY;startTranslateX=translateX;startTranslateY=translateY;}
     if(pointers.size===2){startDistance=distance();startScale=scale;}
   });
   stage.addEventListener('pointermove',e=>{
@@ -89,6 +91,10 @@ function bind(){
     if(pointers.size>=2){
       const d=distance();
       if(startDistance>0){scale=clamp(startScale*(d/startDistance),1,4);applyTransform();}
+    }else if(pointers.size===1&&scale>1){
+      translateX=startTranslateX+(e.clientX-startX);
+      translateY=startTranslateY+(e.clientY-startY);
+      applyTransform();
     }
   });
   const endPointer=e=>{
