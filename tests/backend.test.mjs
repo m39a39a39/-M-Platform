@@ -41,3 +41,12 @@ test('categories normalize safely and tracking stages are complete',()=>{
  assert.throws(()=>normalizeCategories([{id:'x',nameAr:'مكرر',nameEn:'Same'},{id:'y',nameAr:'مكرر',nameEn:'Other'}]));
  for(const status of ['received','reviewing','sourcing','quotes_available','quote_selected','payment_confirmation','production','quality_check','ready_to_ship','shipped','in_delivery','delivered','completed','customer_action','on_hold','cancelled'])assert.ok(TRACKING_STATUSES.includes(status));
 });
+
+
+test('compressed upload fallback accepts images up to 5 MB',()=>{
+ const twoMb=Buffer.alloc(2*1024*1024,1);twoMb[0]=255;twoMb[1]=216;twoMb[2]=255;
+ const decoded=decodeImage('data:image/jpeg;base64,'+twoMb.toString('base64'));
+ assert.equal(decoded.bytes.length,twoMb.length);
+ const sixMb=Buffer.alloc(6*1024*1024,1);sixMb[0]=255;sixMb[1]=216;sixMb[2]=255;
+ assert.throws(()=>decodeImage('data:image/jpeg;base64,'+sixMb.toString('base64')));
+});
