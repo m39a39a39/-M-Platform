@@ -2,7 +2,7 @@ name: Mobile layout regression
 on:
   push:
     branches: [main, fix/mobile-layout-single-shell, fix/mobile-accounts-search, feature/order-status-image-viewer-20260919]
-    paths: ['mobile-app/**', '.github/workflows/mobile-layout.yml']
+    paths: ['mobile-app/**', 'backend/**', 'tests/**', '.github/workflows/mobile-layout.yml']
   workflow_dispatch:
 permissions:
   contents: read
