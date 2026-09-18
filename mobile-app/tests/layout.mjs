@@ -225,7 +225,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
         assert.equal(publicOfferMutation?.redactionConfirmed,true,'Published public offer edits must confirm privacy review');
         publicOfferMutation=null;
         await page.locator('[data-admin-offer-tab="interests"]').click();
-        await page.locator('[data-admin-interest="i1"]').click();
+        await page.locator('[data-admin-interest="i1"] .list-card-title').click();
         await page.locator('[data-admin-interest-tracking-status]').waitFor();
         assert.equal(await page.locator('[data-admin-interest-status]').count(),0,'Legacy interest status selector must be removed');
         assert.equal(await page.locator('[data-admin-interest-tracking-status] option').count(),12,'Ready-product requests must use fulfillment tracking statuses and exceptions');
@@ -252,7 +252,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
         }
         await page.screenshot({path:`${output}/${label}-requests.png`});
         const card=page.locator(role==='admin'?'[data-admin-open="request"]':role==='supplier'?'[data-supplier-request]':'[data-request]').first();
-        await card.click();
+        await card.locator('.list-card-title').click();
         await page.locator('#modal').waitFor({state:'visible'});
         await geometry(page,'#modal');
         if(role==='client'){
