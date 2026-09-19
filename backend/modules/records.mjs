@@ -8,7 +8,7 @@ export function ownRecord(row,kind){const item=unpack(row,kind);delete item.supp
 function publicSettings(data={}){const safe={...data};delete safe.bankAccounts;return safe;}
 function supplierInterest(row){
   const d=row.data||{};
-  return {id:row.id,displayNo:row.display_no,offerId:row.offer_id,version:row.version,createdAt:row.created_at,status:d.status,trackingStatus:d.trackingStatus||'received',quantity:d.quantity||'',unitPrice:d.unitPrice||'',currency:d.currency||'',moq:d.moq||'',total:d.total||'',supplierOrderStatus:d.supplierOrderStatus||'pending_confirmation',supplierOrderNote:d.supplierOrderNote||'',supplierOrderUpdatedAt:d.supplierOrderUpdatedAt||''};
+  return {id:row.id,displayNo:row.display_no,offerId:row.offer_id,version:row.version,createdAt:row.created_at,status:d.status,trackingStatus:d.trackingStatus||'received',quantity:d.quantity||'',unitPrice:d.unitPrice||'',currency:d.currency||'',moq:d.moq||'',total:d.total||'',paymentConfirmed:d.paymentStatus==='confirmed',supplierOrderStatus:d.supplierOrderStatus||'pending_confirmation',supplierOrderNote:d.supplierOrderNote||'',supplierOrderUpdatedAt:d.supplierOrderUpdatedAt||''};
 }
 // Pure projection: never serialize raw source text or counterpart identity.
 export function anonymous(row,kind,user){
@@ -16,7 +16,7 @@ export function anonymous(row,kind,user){
   const result={id:row.id,displayNo:row.display_no,version:row.version,createdAt:row.created_at,status:d.status,translation:d.translation||{},images:d.images||[],country:d.country||''};
   const fields=kind==='requests'?['quantity','neededDate']:['unitPrice','currency','moq','leadTime','sampleCost','stock','validUntil','categoryId'];
   for(const key of fields)if(d[key]!==undefined)result[key]=d[key];
-  if(kind==='requests'){result.supplierIds=[user.id];result.quoteSelected=!!d.selectedQuoteId;}
+  if(kind==='requests'){result.supplierIds=[user.id];result.quoteSelected=!!d.selectedQuoteId;result.paymentConfirmed=d.paymentStatus==='confirmed';}
   if(kind==='quotes')result.publishedAt=d.publishedAt||d.updatedAt||d.reviewedAt||row.created_at;
   if(row.request_id)result.requestId=row.request_id;
   return result;
