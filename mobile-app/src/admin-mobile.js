@@ -74,6 +74,7 @@ function supplierExecutionInfo(x,kind){
   return {status,note,confirmed:['confirmed','production','ready_for_inspection'].includes(status)};
 }
 function supplierConfirmationCard(x,kind){
+  if(kind==='request'&&!requestPricing(x))return '';
   const info=supplierExecutionInfo(x,kind),labels={
     pending_confirmation:[tr('بانتظار تأكيد المورد','Awaiting supplier confirmation'),'pending'],
     confirmed:[tr('المورد أكد التنفيذ','Supplier confirmed fulfillment'),'confirmed'],
