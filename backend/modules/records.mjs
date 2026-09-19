@@ -35,7 +35,7 @@ export async function snapshot(user){
   if(user?.role==='admin'){
     const readRequests=can(user,'requests.read')||can(user,'requests.edit')||can(user,'translate')||can(user,'publish')||can(user,'trash')||can(user,'moderate');
     const readOffers=can(user,'offers.read')||can(user,'offers.edit')||can(user,'translate')||can(user,'publish')||can(user,'trash')||can(user,'moderate');
-    const readAccounts=readRequests||readOffers||can(user,'accounts.read')||can(user,'team')||can(user,'moderate');
+    const readAccounts=readRequests||readOffers||can(user,'accounts.read')||can(user,'accounts.manage')||can(user,'team')||can(user,'moderate');
     [settings,requests,quotes,publicOffers,interests,accounts]=await Promise.all([
       one('settings','site'),
       readRequests?rows('requests'):[],
@@ -44,7 +44,7 @@ export async function snapshot(user){
       readOffers?rows('interests'):[],
       readAccounts?rows('profiles'):[]
     ]);
-    accounts=readAccounts?accounts.map(p=>can(user,'accounts.read')||p.id===user.id||p.role==='admin'&&can(user,'team')?profile(p):{id:p.id,role:p.role,version:p.version,name:`#${p.id.slice(0,8)}`,blockedAt:p.blocked_at,deletedAt:p.deleted_at}):[profile(user)];
+    accounts=readAccounts?accounts.map(p=>can(user,'accounts.read')||can(user,'accounts.manage')&&p.role!=='admin'||p.id===user.id||p.role==='admin'&&can(user,'team')?profile(p):{id:p.id,role:p.role,version:p.version,name:`#${p.id.slice(0,8)}`,blockedAt:p.blocked_at,deletedAt:p.deleted_at}):[profile(user)];
     return {user:profile(user),accounts,requests:requests.map(r=>unpack(r,'requests')),quotes:quotes.map(r=>unpack(r,'quotes')),publicOffers:publicOffers.map(r=>unpack(r,'publicOffers')),interests:interests.map(r=>unpack(r,'interests')),settings:{...settings.data,_version:settings.version}};
   }
 

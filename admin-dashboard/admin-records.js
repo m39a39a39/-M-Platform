@@ -1,7 +1,7 @@
 document.addEventListener('m:ready', async () =>{
   if(M.session()?.role!=='admin')return;
   const E=W.escape;
-  const allowed={allrequests:['requests.read','requests.edit','translate','publish'],alloffers:['offers.read','offers.edit','translate','publish'],interests:['offers.read','offers.edit','publish'],customers:['accounts.read','moderate'],suppliers:['accounts.read','moderate'],trash:['trash'],settings:['settings'],team:['team']};
+  const allowed={allrequests:['requests.read','requests.edit','translate','publish'],alloffers:['offers.read','offers.edit','translate','publish'],interests:['offers.read','offers.edit','publish'],customers:['accounts.read','accounts.manage','moderate'],suppliers:['accounts.read','accounts.manage','moderate'],trash:['trash'],settings:['settings'],team:['team']};
   const views=[['allrequests','الطلبات','Requests'],['alloffers','العروض','Offers'],['interests','طلبات الاهتمام','Customer interests'],['customers','العملاء','Customers'],['suppliers','الموردون','Suppliers'],['trash','المحذوفات','Trash'],['settings','النصوص والشعار','Text & logo'],['team','فريق الإدارة','Admin team']].filter(([key])=>allowed[key].some(M.can));
   if(!views.length){document.querySelector('main').textContent=M.tr('لم تُمنح صلاحيات بعد.','No permissions assigned yet.');return;}
   let view=views[0][0];
@@ -11,7 +11,7 @@ document.addEventListener('m:ready', async () =>{
   function go(key){view=key;render();}
   const account=id=>M.state().accounts.find(a=>a.id===id);
   function contact(a) {
-    if(!M.can('accounts.read'))return '';
+    if(!M.can('accounts.read')&&!M.can('accounts.manage'))return '';
     if(!a)return '<p>'+M.tr('بيانات الاتصال غير متاحة.','Contact data unavailable.')+'</p>';
     return '<dl class="contact-data">'+[['الاسم','Name',a.name],['الشركة','Company',a.company],['رقم التواصل','Phone',a.phone],['البريد','Email',a.email],['الدولة','Country',a.country],['تاريخ التسجيل','Registered',W.date(a.createdAt)]].map(([ar,en,v])=>'<div><dt>'+M.tr(ar,en)+'</dt><dd>'+E(v||M.tr('غير مسجل','Not recorded'))+'</dd></div>').join('')+'</dl>';
   }
@@ -24,7 +24,15 @@ document.addEventListener('m:ready', async () =>{
     return adminSearch.match(x,[x.displayNo||'',request?.displayNo||'',offer?.displayNo||'',client?.name||'',supplier?.name||'',...invited]);
   }
   const activeInterest=i=>!['completed','cancelled'].includes(i.trackingStatus||i.status);
-  function accountRow(a){return '<article class="invite-card"><h3>'+E(a.name)+'</h3><p>'+E(a.company)+'</p>'+W.badge(R.stateLabel(a))+'<button class="btn btn-outline account-detail" data-id="'+E(a.id)+'">'+M.tr('البيانات والسجل','Contact & history')+'</button>'+R.buttons('account',a)+R.log(a)+'</article>';}
+  function accountHistory(a){
+    const edits=(a.accountHistory||[]).map(h=>({...h,label:M.tr('تعديل البيانات','Details edited')})),mods=(a.moderationHistory||[]).map(h=>({...h,label:h.action==='block'?M.tr('إيقاف الحساب','Account disabled'):h.action==='unblock'?M.tr('إعادة تفعيل الحساب','Account reactivated'):M.tr('إجراء إداري','Admin action')}));
+    return '<ul class="history-list">'+[...edits,...mods].sort((x,y)=>String(y.at||'').localeCompare(String(x.at||''))).map(h=>'<li>'+E(W.date(h.at))+' — '+E(h.label)+(h.fields?.length?'<p>'+E(h.fields.join(', '))+'</p>':'')+(h.reason?'<p>'+E(h.reason)+'</p>':'')+'</li>').join('')+'</ul>';
+  }
+  function accountEditForm(a){
+    if(!M.can('accounts.manage'))return '';
+    return '<button class="btn btn-primary edit-account" data-id="'+E(a.id)+'">'+M.tr('تعديل البيانات','Edit details')+'</button>';
+  }
+  function accountRow(a){return '<article class="invite-card"><h3>'+E(a.name)+'</h3><p>'+E(a.company)+'</p>'+W.badge(R.stateLabel(a))+'<button class="btn btn-outline account-detail" data-id="'+E(a.id)+'">'+M.tr('البيانات والسجل','Contact & history')+'</button>'+accountEditForm(a)+R.buttons('account',a)+accountHistory(a)+'</article>';}
   function requestRow(x){
     return '<article class="admin-request-row"><span class="request-id">#'+E(W.ref(x))+'</span><h3>'+E(x.product||M.tr('طلب','Request'))+'</h3>'+W.badge(R.stateLabel(x))+'<time>'+E(W.date(x.createdAt))+'</time><button class="record-detail admin-detail-button" data-id="'+E(x.id)+'" data-kind="request" aria-label="'+E(M.tr('عرض التفاصيل','View details'))+'"><span>'+M.tr('التفاصيل','Details')+'</span><b aria-hidden="true">›</b></button></article>';
   }
@@ -63,12 +71,19 @@ document.addEventListener('m:ready', async () =>{
     if(view==='team')Team.render(records);
     document.getElementById('interestCount').textContent=s.interests.filter(activeInterest).length;
   }
+  function openAccountEdit(a){
+    if(!M.can('accounts.manage'))return;
+    W.modal(M.tr('تعديل بيانات الحساب','Edit account details'),'<form id="accountEditForm"><label>'+M.tr('الاسم','Name')+'<input name="name" required maxlength="200" value="'+E(a.name||'')+'"></label><label>'+M.tr('الشركة','Company')+'<input name="company" maxlength="200" value="'+E(a.company||'')+'"></label><label>'+M.tr('رقم التواصل','Phone')+'<input name="phone" required maxlength="200" value="'+E(a.phone||'')+'"></label><label>'+M.tr('البريد الإلكتروني','Email')+'<input name="email" type="email" required maxlength="254" value="'+E(a.email||'')+'"></label><label>'+M.tr('الدولة','Country')+'<input name="country" required maxlength="200" value="'+E(a.country||'')+'"></label>'+(a.role==='supplier'?'<label>'+M.tr('التصنيف','Category')+'<input name="category" maxlength="200" value="'+E(a.category||'')+'"></label>':'')+'<p class="form-error"></p><button class="btn btn-primary" type="submit">'+M.tr('حفظ التعديلات','Save changes')+'</button></form>');
+    const form=document.getElementById('accountEditForm');
+    form.onsubmit=async ev=>{ev.preventDefault();const button=ev.submitter;button.disabled=true;try{await API.request('accounts/update',{id:a.id,name:form.name.value,company:form.company.value,phone:form.phone.value,email:form.email.value,country:form.country.value,category:form.category?.value||''});await API.refresh();document.getElementById('workflowDialog').remove();render();}catch(err){form.querySelector('.form-error').textContent=err.message;}finally{button.disabled=false;}};
+  }
   records.onclick=e=>{
+    const edit=e.target.closest('.edit-account');if(edit){const a=account(edit.dataset.id);if(a)openAccountEdit(a);return;}
     const person=e.target.closest('.account-detail');
     if(person){
       const s=M.state(),a=account(person.dataset.id);if(!a)return;
       const related=a.role==='client'?s.requests.filter(r=>r.customerId===a.id):[...s.quotes,...s.publicOffers].filter(o=>o.supplierId===a.id);
-      W.modal(a.name,contact(a)+R.buttons('account',a)+R.log(a)+'<h3>'+M.tr('سجل الطلبات والعروض','Request & offer history')+'</h3>'+related.map(x=>'<article class="invite-card">#'+E(W.ref(x))+' '+E(x.product||s.requests.find(r=>r.id===x.requestId)?.product||'')+' '+W.badge(x.status)+'<p>'+E(W.date(x.createdAt))+'</p>'+W.history(x)+'</article>').join(''));return;
+      W.modal(a.name,contact(a)+accountEditForm(a)+R.buttons('account',a)+'<h3>'+M.tr('سجل النشاط','Activity log')+'</h3>'+accountHistory(a)+'<h3>'+M.tr('سجل الطلبات والعروض','Request & offer history')+'</h3>'+related.map(x=>'<article class="invite-card">#'+E(W.ref(x))+' '+E(x.product||s.requests.find(r=>r.id===x.requestId)?.product||'')+' '+W.badge(x.status)+'<p>'+E(W.date(x.createdAt))+'</p>'+W.history(x)+'</article>').join(''));return;
     }
     const b=e.target.closest('.record-detail');if(!b)return;
     const s=M.state(),x=collection(b.dataset.kind,s).find(x=>x.id===b.dataset.id);if(!x)return;

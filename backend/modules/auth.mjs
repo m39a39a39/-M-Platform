@@ -1,5 +1,5 @@
 import {sb,one,config,assert,HttpError} from '../lib/supabase.mjs';
-export const permissions=['requests.read','requests.edit','offers.read','offers.edit','translate','publish','accounts.read','moderate','trash','settings','team'];
+export const permissions=['requests.read','requests.edit','offers.read','offers.edit','translate','publish','accounts.read','accounts.manage','moderate','trash','settings','team'];
 export const can=(user,p)=>user?.role==='admin'&&(user.is_owner||user.permissions?.includes(p));
 export const profile=p=>p?{...p.data,id:p.id,role:p.role,isOwner:p.is_owner,permissions:p.permissions,blockedAt:p.blocked_at,deletedAt:p.deleted_at,version:p.version}:null;
 const NATIVE_ORIGINS=new Set(['capacitor://localhost','http://localhost','https://localhost']);

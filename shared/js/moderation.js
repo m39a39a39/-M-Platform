@@ -1,7 +1,7 @@
 /* Display helpers only. The API independently authorizes every operation. */
 (() => {
   const actions={
-    block:['حظر الحساب','Block account'],unblock:['إلغاء الحظر','Unblock account'],
+    block:['إيقاف الحساب','Disable account'],unblock:['إعادة تفعيل الحساب','Reactivate account'],
     suspend:['تعليق الطلب','Suspend request'],resume:['إعادة التفعيل','Resume request'],
     delete:['نقل إلى المحذوفات','Move to trash'],restore:['استعادة','Restore']
   };
@@ -24,7 +24,7 @@
   function buttons(kind,x){
     if(M.session()?.role!=='admin'||x.role==='admin')return '';
     const list=x.deletedAt?['restore']:kind==='account'?[x.blockedAt?'unblock':'block','delete']:kind==='request'?[x.suspendedAt?'resume':'suspend','delete']:['delete'];
-    return '<div class="invite-actions moderation-actions">'+list.filter(a=>M.can(['delete','restore'].includes(a)?'trash':'moderate')).map(a=>'<button type="button" class="btn '+(a==='delete'?'btn-danger':'btn-outline')+' btn-sm" data-moderate="'+a+'" data-kind="'+kind+'" data-id="'+W.escape(x.id)+'">'+M.tr(...actions[a])+'</button>').join('')+'</div>';
+    return '<div class="invite-actions moderation-actions">'+list.filter(a=>M.can(['delete','restore'].includes(a)?'trash':kind==='account'?'accounts.manage':'moderate')).map(a=>'<button type="button" class="btn '+(a==='delete'?'btn-danger':'btn-outline')+' btn-sm" data-moderate="'+a+'" data-kind="'+kind+'" data-id="'+W.escape(x.id)+'">'+M.tr(...actions[a])+'</button>').join('')+'</div>';
   }
   function log(x){return '<ul class="history-list">'+(x.moderationHistory||[]).map(h=>'<li>'+W.escape(W.date(h.at))+' — '+M.tr(...actions[h.action])+'<p>'+W.escape(h.reason)+'</p></li>').join('')+'</ul>';}
   function guard(){if(userActive())return true;M.toast('الحساب موقوف','Account disabled','لا يمكن تنفيذ هذا الإجراء.','This action is unavailable.');return false;}

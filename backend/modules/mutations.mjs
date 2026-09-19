@@ -1,4 +1,4 @@
-import {one,db,rpc,assert} from '../lib/supabase.mjs';
+import {one,db,rpc,assert,sb} from '../lib/supabase.mjs';
 import {can} from './auth.mjs';
 import {tables,assertOpenRequest,active,open} from './records.mjs';
 const contact=v=>/(?:https?:\/\/|www\.|wa\.me|@[a-z0-9]|[\w.+-]+@[\w.-]+\.[a-z]{2,}|(?:\+|00)\d[\d\s()-]{7,})/i.test(String(v));
@@ -328,9 +328,36 @@ export async function saveSettings(user,body){
   }
   await rpc('commit_changes',{actor:user.id,changes:[{table:'settings',id:'site',version:row.version,data,action:'settings'}]});return {ok:true};
 }
+export async function updateAccount(user,body){
+  assert(can(user,'accounts.manage'),403,'غير مسموح / Not allowed');
+  const id=String(body.id||'');
+  assert(/^[a-f0-9-]{36}$/.test(id),400,'حساب غير صالح / Invalid account');
+  const row=await one('profiles',id);
+  assert(row&&['client','supplier'].includes(row.role)&&!row.deleted_at,404,'الحساب غير متاح / Account unavailable');
+  const current=structuredClone(row.data||{}),next={...current};
+  const fields=['name','company','phone','country','category'];
+  for(const key of fields)next[key]=String(body[key]??current[key]??'').trim().slice(0,200);
+  const email=String(body.email??current.email??'').trim().toLowerCase();
+  assert(email.length<255&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email),400,'تحقق من البريد الإلكتروني / Check email address');
+  assert(next.name&&next.phone&&next.country,400,'الاسم ورقم التواصل والدولة مطلوبة / Name, phone and country are required');
+  const changed=[...fields,'email'].filter(key=>String(key==='email'?email:next[key]??'')!==String(current[key]??''));
+  assert(changed.length,409,'لا توجد تغييرات / No changes');
+  const now=new Date().toISOString(),oldEmail=String(current.email||'').trim().toLowerCase(),emailChanged=email!==oldEmail;
+  next.email=email;
+  next.accountHistory=[...(Array.isArray(current.accountHistory)?current.accountHistory:[]),{action:'edit',fields:changed,at:now,actorId:user.id}].slice(-200);
+  if(emailChanged)await sb('/auth/v1/admin/users/'+encodeURIComponent(id),{method:'PUT',body:{email}});
+  try{
+    await rpc('commit_changes',{actor:user.id,changes:[{table:'profiles',id,version:row.version,data:next,role:row.role,permissions:row.permissions,blockedAt:row.blocked_at,deletedAt:row.deleted_at,action:'account_update',reason:'Admin account details update'}]});
+  }catch(error){
+    if(emailChanged&&oldEmail)try{await sb('/auth/v1/admin/users/'+encodeURIComponent(id),{method:'PUT',body:{email:oldEmail}});}catch{}
+    throw error;
+  }
+  return {ok:true};
+}
 export async function moderate(user,{kind,id,action,reason}){
   assert(typeof reason==='string'&&reason.trim()&&reason.length<=1000,400,'سبب الإجراء مطلوب / Reason required');
-  assert(can(user,['delete','restore'].includes(action)?'trash':'moderate'));
+  const permission=['delete','restore'].includes(action)?'trash':kind==='account'?'accounts.manage':'moderate';
+  assert(can(user,permission));
   const table=kind==='account'?'profiles':{request:'requests',quote:'quotes',public:'public_offers'}[kind];assert(table,400);
   const r=await one(table,id);assert(r,404);assert(table!=='profiles'||r.role!=='admin',403);
   const data=structuredClone(r.data),isDeleted=table==='profiles'?r.deleted_at:data.deletedAt;
