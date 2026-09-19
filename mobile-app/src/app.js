@@ -42,6 +42,7 @@ const TRACKING_FLOW=[
   ['sourcing','البحث عن موردين','Finding suppliers'],
   ['quotes_available','العروض متاحة','Offers available'],
   ['quote_selected','تم اختيار العرض','Offer selected'],
+  ['supplier_confirmation','بانتظار تأكيد المورد','Awaiting supplier confirmation'],
   ['payment_confirmation','تأكيد الطلب والدفع','Order & payment confirmation'],
   ['production','قيد الإنتاج','In production'],
   ['quality_check','الفحص والجودة','Quality inspection'],
@@ -53,6 +54,7 @@ const TRACKING_FLOW=[
 ];
 const READY_TRACKING_FLOW=[
   ['received','تم استلام الطلب','Request received'],
+  ['supplier_confirmation','بانتظار تأكيد المورد','Awaiting supplier confirmation'],
   ['payment_confirmation','تأكيد الطلب والدفع','Order & payment confirmation'],
   ['production','قيد الإنتاج','In production'],
   ['quality_check','الفحص والجودة','Quality inspection'],
@@ -212,7 +214,15 @@ function applyLanguage(){
 function showToast(text){if(!currentUser)return;const el=$('toast');el.textContent=text;el.classList.remove('hidden');clearTimeout(showToast.timer);showToast.timer=setTimeout(()=>el.classList.add('hidden'),2200);}
 async function copyText(value){
   const text=String(value||'');if(!text)return;
-  try{if(navigator.clipboard?.writeText)await navigator.clipboard.writeText(text);else{const el=document.createElement('textarea');el.value=text;el.style.position='fixed';el.style.opacity='0';document.body.appendChild(el);el.select();document.execCommand('copy');el.remove();}showToast(tr('تم النسخ.','Copied.'));}catch{showToast(tr('تعذر النسخ.','Could not copy.'));}
+  let copied=false;
+  try{
+    const el=document.createElement('textarea'),y=window.scrollY;
+    el.value=text;el.setAttribute('readonly','');el.style.position='fixed';el.style.inset='0 auto auto 0';el.style.width='1px';el.style.height='1px';el.style.opacity='0.01';el.style.pointerEvents='none';
+    document.body.appendChild(el);el.focus({preventScroll:true});el.select();el.setSelectionRange(0,text.length);
+    copied=document.execCommand('copy')===true;el.remove();window.scrollTo(0,y);
+  }catch{}
+  if(!copied&&navigator.clipboard?.writeText){try{await navigator.clipboard.writeText(text);copied=true;}catch{}}
+  showToast(copied?tr('تم النسخ.','Copied.'):tr('تعذر النسخ.','Could not copy.'));
 }
 function openModal(title,kicker,html){$('modalTitle').textContent=title;$('modalKicker').textContent=kicker||'';$('modalBody').innerHTML=html;$('modal').classList.remove('hidden');hydrateImages($('modalBody'));}
 function closeModal(){$('modal').classList.add('hidden');$('modalBody').innerHTML='';}
@@ -277,12 +287,12 @@ function supplierOrders(){
   const custom=requests.filter(r=>r.selectedForSupplier).map(r=>{
     const q=quotes.find(x=>x.requestId===r.id);if(!q)return null;
     const quantity=Number(r.quantity),unitPrice=Number(q.unitPrice),total=Number.isFinite(quantity)&&Number.isFinite(unitPrice)?quantity*unitPrice:null;
-    return {type:'quote',id:q.id,version:q.version,request:r,quote:q,item:r,title:titleOf(r),images:r.images||[],source:tr('عرض مقدم','Submitted quote'),status:q.supplierOrderStatus||'pending_confirmation',note:q.supplierOrderNote||'',updatedAt:q.supplierOrderUpdatedAt||q.updatedAt||q.createdAt||r.createdAt,quantity:r.quantity||'',unitPrice:q.unitPrice,currency:q.currency,total,country:r.country||''};
+    return {type:'quote',id:q.id,version:q.version,request:r,quote:q,item:r,title:titleOf(r),images:r.images||[],source:tr('عرض مقدم','Submitted quote'),status:q.supplierOrderStatus||'pending_confirmation',note:q.supplierOrderNote||'',paymentStatus:r.paymentStatus||'',updatedAt:q.supplierOrderUpdatedAt||q.updatedAt||q.createdAt||r.createdAt,quantity:r.quantity||'',unitPrice:q.unitPrice,currency:q.currency,total,country:r.country||''};
   }).filter(Boolean);
   const ready=interests.map(i=>{
     const o=offers.find(x=>x.id===i.offerId);if(!o)return null;
     const quantity=Number(i.quantity),unitPrice=Number(i.unitPrice||o.unitPrice),total=Number(i.total);
-    return {type:'public',id:i.id,version:i.version,interest:i,offer:o,item:o,title:titleOf(o),images:o.images||[],source:tr('عرض عام','Public offer'),status:i.supplierOrderStatus||'pending_confirmation',note:i.supplierOrderNote||'',updatedAt:i.supplierOrderUpdatedAt||i.createdAt,quantity:i.quantity||'',unitPrice:i.unitPrice||o.unitPrice,currency:i.currency||o.currency,total:Number.isFinite(total)&&total>0?total:(Number.isFinite(quantity)&&quantity>0&&Number.isFinite(unitPrice)&&unitPrice>0?quantity*unitPrice:null),country:o.country||'',moq:i.moq||o.moq||''};
+    return {type:'public',id:i.id,version:i.version,interest:i,offer:o,item:o,title:titleOf(o),images:o.images||[],source:tr('عرض عام','Public offer'),status:i.supplierOrderStatus||'pending_confirmation',note:i.supplierOrderNote||'',paymentStatus:i.paymentStatus||'',updatedAt:i.supplierOrderUpdatedAt||i.createdAt,quantity:i.quantity||'',unitPrice:i.unitPrice||o.unitPrice,currency:i.currency||o.currency,total:Number.isFinite(total)&&total>0?total:(Number.isFinite(quantity)&&quantity>0&&Number.isFinite(unitPrice)&&unitPrice>0?quantity*unitPrice:null),country:o.country||'',moq:i.moq||o.moq||''};
   }).filter(Boolean);
   return [...custom,...ready].sort((a,b)=>(Date.parse(b.updatedAt||0)||0)-(Date.parse(a.updatedAt||0)||0));
 }
@@ -553,6 +563,7 @@ function openSupplierRequest(requestId){
 function supplierOrderActions(order){
   const base=`data-supplier-order-type="${esc(order.type)}" data-supplier-order-id="${esc(order.id)}"`;
   if(order.status==='pending_confirmation')return `<div class="supplier-order-actions"><button class="primary-btn" type="button" data-supplier-order-status="confirmed" ${base}>${esc(tr('تأكيد التنفيذ','Confirm fulfillment'))}</button><button class="secondary-btn" type="button" data-supplier-order-cannot ${base}>${esc(tr('تعذر التنفيذ','Unable to fulfill'))}</button></div>`;
+  if(order.status==='confirmed'&&order.paymentStatus!=='confirmed')return `<div class="supplier-order-complete">⏳ ${esc(tr('تم تأكيد التنفيذ — بانتظار تأكيد الدفع من الإدارة.','Fulfillment confirmed — waiting for admin payment confirmation.'))}</div>`;
   if(order.status==='confirmed')return `<div class="supplier-order-actions"><button class="primary-btn" type="button" data-supplier-order-status="production" ${base}>${esc(tr('بدء التجهيز / الإنتاج','Start preparation / production'))}</button><button class="secondary-btn" type="button" data-supplier-order-cannot ${base}>${esc(tr('تعذر التنفيذ','Unable to fulfill'))}</button></div>`;
   if(order.status==='production')return `<div class="supplier-order-actions"><button class="primary-btn" type="button" data-supplier-order-status="ready_for_inspection" ${base}>${esc(tr('جاهز للفحص','Ready for inspection'))}</button><button class="secondary-btn" type="button" data-supplier-order-cannot ${base}>${esc(tr('تعذر التنفيذ','Unable to fulfill'))}</button></div>`;
   if(order.status==='ready_for_inspection')return `<div class="supplier-order-complete">✓ ${esc(tr('تم إشعار الإدارة أن الطلب جاهز للفحص.','Admin has been notified that the order is ready for inspection.'))}</div>`;
