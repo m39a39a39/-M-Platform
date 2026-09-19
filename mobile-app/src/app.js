@@ -257,6 +257,47 @@ function supplierPublicOfferPreview(item){
     <span class="chevron">›</span>
   </article>`;
 }
+const SUPPLIER_ORDER_LABELS={
+  pending_confirmation:['بانتظار تأكيد المورد','Awaiting supplier confirmation'],
+  confirmed:['تم تأكيد الطلب','Order confirmed'],
+  production:['قيد التجهيز/الإنتاج','In preparation / production'],
+  ready_for_inspection:['جاهز للفحص','Ready for inspection'],
+  cannot_fulfill:['تعذر التنفيذ','Unable to fulfill']
+};
+function supplierOrderLabel(status){const row=SUPPLIER_ORDER_LABELS[status]||SUPPLIER_ORDER_LABELS.pending_confirmation;return tr(row[0],row[1]);}
+function supplierOrders(){
+  if(currentUser?.role!=='supplier')return[];
+  const requests=platformState?.requests||[],quotes=platformState?.quotes||[],offers=platformState?.publicOffers||[],interests=platformState?.interests||[];
+  const custom=requests.filter(r=>r.selectedForSupplier).map(r=>{
+    const q=quotes.find(x=>x.requestId===r.id);if(!q)return null;
+    const quantity=Number(r.quantity),unitPrice=Number(q.unitPrice),total=Number.isFinite(quantity)&&Number.isFinite(unitPrice)?quantity*unitPrice:null;
+    return {type:'quote',id:q.id,version:q.version,request:r,quote:q,item:r,title:titleOf(r),images:r.images||[],source:tr('عرض مقدم','Submitted quote'),status:q.supplierOrderStatus||'pending_confirmation',note:q.supplierOrderNote||'',updatedAt:q.supplierOrderUpdatedAt||q.updatedAt||q.createdAt||r.createdAt,quantity:r.quantity||'',unitPrice:q.unitPrice,currency:q.currency,total,country:r.country||''};
+  }).filter(Boolean);
+  const ready=interests.map(i=>{
+    const o=offers.find(x=>x.id===i.offerId);if(!o)return null;
+    return {type:'public',id:i.id,version:i.version,interest:i,offer:o,item:o,title:titleOf(o),images:o.images||[],source:tr('عرض عام','Public offer'),status:i.supplierOrderStatus||'pending_confirmation',note:i.supplierOrderNote||'',updatedAt:i.supplierOrderUpdatedAt||i.createdAt,quantity:'',unitPrice:o.unitPrice,currency:o.currency,total:null,country:o.country||'',moq:o.moq||''};
+  }).filter(Boolean);
+  return [...custom,...ready].sort((a,b)=>(Date.parse(b.updatedAt||0)||0)-(Date.parse(a.updatedAt||0)||0));
+}
+function supplierOrderStatusBadge(status){return `<span class="supplier-order-status supplier-order-status-${esc(status||'pending_confirmation')}">${esc(supplierOrderLabel(status))}</span>`;}
+function supplierOrderCard(order){
+  const image=(order.images||[])[0],refItem=order.type==='quote'?order.request:order.interest;
+  const quantity=order.quantity?tr('الكمية','Quantity')+': '+esc(order.quantity):order.moq?'MOQ '+esc(order.moq):'';
+  const price=money(order.unitPrice,order.currency),total=order.total!==null?tr('الإجمالي','Total')+': '+money(order.total,order.currency):'';
+  return `<article class="supplier-order-card" data-supplier-order-type="${esc(order.type)}" data-supplier-order-id="${esc(order.id)}">
+    <div class="supplier-order-thumb">${image?`<img alt="" data-media="${esc(image)}">`:'<div>M</div>'}</div>
+    <div class="supplier-order-main">
+      <div class="supplier-order-top"><div><small>#${esc(ref(refItem))} · ${esc(order.source)}</small><h3>${esc(order.title)}</h3></div>${supplierOrderStatusBadge(order.status)}</div>
+      <div class="supplier-order-meta"><span>${price}</span>${quantity?`<span>${quantity}</span>`:''}${total?`<span>${total}</span>`:''}</div>
+    </div><span class="chevron">›</span>
+  </article>`;
+}
+function renderSupplierOrders(){
+  if(currentUser?.role!=='supplier'){activeScreen='home';renderHome();return;}
+  const rows=supplierOrders();
+  $('screen').innerHTML=pageHeader(tr('الطلبات','Orders'),tr('الطلبات التي أصبحت جاهزة للتنفيذ بعد اختيار العميل واعتماد الإدارة.','Orders ready for fulfillment after customer selection and admin approval.'))+
+    `<div class="supplier-orders-list">${rows.map(supplierOrderCard).join('')||empty()}</div>`;
+}
 function productPagination(page,totalPages){
   if(totalPages<=1)return '';
   return `<nav class="product-pagination" aria-label="${esc(t('readyProducts'))}"><button class="pagination-btn" type="button" data-action="ready-products-prev" ${page<=1?'disabled':''}>${esc(t('previous'))}</button><span class="pagination-info">${esc(t('page'))} ${page} / ${totalPages}</span><button class="pagination-btn" type="button" data-action="ready-products-next" ${page>=totalPages?'disabled':''}>${esc(t('next'))}</button></nav>`;
