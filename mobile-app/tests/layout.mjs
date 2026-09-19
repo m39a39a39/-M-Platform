@@ -215,6 +215,22 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
         assert.ok(await firstOffer.locator('h3').evaluate(el=>getComputedStyle(el).whiteSpace==='nowrap'),'Ready-product title must stay on one line');
         assert.ok(await firstOffer.locator('p').evaluate(el=>getComputedStyle(el).whiteSpace==='nowrap'),'Ready-product description must stay on one line');
       }
+      if(screen==='notifications'&&role==='client'){
+        assert.equal(await page.locator('[data-payment-notification="9001"]').count(),1,'Payment-required notification must include an upload receipt action');
+        if(label==='chromium-390-ar-client'){
+          await page.locator('[data-payment-notification="9001"]').click();
+          await page.locator('#paymentReceiptForm').waitFor();
+          const pdf=Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF');
+          await page.locator('#paymentReceiptFile').setInputFiles({name:'receipt.pdf',mimeType:'application/pdf',buffer:pdf});
+          await page.locator('#paymentReceiptForm button[type="submit"]').click();
+          await page.locator('#modal').waitFor({state:'hidden'});
+          assert.equal(paymentReceiptSubmission?.entityType,'request','Payment notification must upload receipt for the correct order type');
+          assert.equal(paymentReceiptSubmission?.entityId,'r0','Payment notification must upload receipt for the correct order');
+          assert.ok(paymentReceiptSubmission?.source?.startsWith('data:application/pdf;base64,'),'PDF receipt must be sent as a PDF data URL');
+          paymentReceiptSubmission=null;
+          await page.locator('#bottomNav [data-screen="notifications"]').click();
+        }
+      }
       if(screen==='offers'&&role==='admin'){
         await page.locator('[data-admin-offer-tab="all"]').click();
         await page.locator('[data-admin-open="public"]').first().click();
@@ -239,6 +255,20 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
         await page.locator('[data-admin-interest-tracking-status]').waitFor();
         assert.equal(await page.locator('[data-admin-interest-status]').count(),0,'Legacy interest status selector must be removed');
         assert.equal(await page.locator('[data-admin-interest-tracking-status] option').count(),12,'Ready-product requests must use fulfillment tracking statuses and exceptions');
+        assert.equal(await page.locator('#modal .admin-payment-review').count(),1,'Admin must see submitted payment receipt review controls');
+        assert.equal(await page.locator('#modal [data-admin-payment-confirm]').count(),1,'Admin must be able to confirm payment');
+        assert.equal(await page.locator('#modal [data-admin-payment-reupload]').count(),1,'Admin must be able to request a new receipt');
+        if(label==='chromium-390-ar-admin'){
+          await page.locator('#modal [data-admin-payment-confirm]').click();
+          await page.locator('#modal').waitFor({state:'hidden'});
+          assert.equal(paymentReviewSubmission?.entityType,'interest','Payment review must target the ready-product order');
+          assert.equal(paymentReviewSubmission?.entityId,'i1','Payment review must target the correct ready-product order');
+          assert.equal(paymentReviewSubmission?.action,'confirm','Admin confirm button must submit confirm action');
+          paymentReviewSubmission=null;
+          await page.locator('[data-admin-offer-tab="interests"]').click();
+          await page.locator('[data-admin-interest="i1"] .list-card-title').click();
+          await page.locator('[data-admin-interest-tracking-status]').waitFor();
+        }
         await page.locator('[data-admin-interest-tracking-status]').selectOption('production');
         await page.locator('[data-admin-interest-tracking-note]').fill('بدأ الإنتاج');
         await page.locator('[data-admin-save-interest-tracking]').click();
@@ -272,6 +302,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
           assert.equal(await page.locator('#modal [data-payment-upload]').count(),1,'Awaiting payment must allow the customer to upload a receipt');
         }
         if(role==='admin')assert.equal(await page.locator('#modal [data-admin-tracking-status]').count(),1,'Admin request details must include tracking status control');
+        if(role==='supplier')assert.equal(await page.locator('#modal .payment-card,#modal .admin-payment-review').count(),0,'Supplier must never see payment receipt or payment instructions');
         const viewable=page.locator('#modal img[data-image-viewer]').first();
         if(await viewable.count()){
           await viewable.click();
