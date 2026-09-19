@@ -193,6 +193,8 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
       assert.equal(await page.locator('#modal [data-interest]').count(),1,'Request-this-offer button must remain in ready-product details');
       assert.equal(await page.locator('#modal .tracking-timeline').count(),1,'Requested ready product must show the unified order timeline');
       assert.equal(await page.locator('#modal .tracking-step').count(),9,'Ready-product timeline must skip sourcing and quote stages');
+      assert.equal(await page.locator('#modal .payment-card').count(),1,'Ready-product payment status must appear inside the order');
+      assert.ok((await page.locator('#modal .payment-card').textContent()).includes(language==='ar'?'بانتظار المراجعة':'awaiting review'),'Submitted ready-product receipt must show as awaiting review');
       await page.locator('.modal-close').click();
     }
     // Simulate a top notch, landscape side inset and home indicator.
@@ -266,6 +268,8 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
         if(role==='client'){
           assert.equal(await page.locator('#modal .tracking-timeline').count(),1,'Client request details must show a tracking timeline');
           assert.equal(await page.locator('#modal .tracking-step').count(),13,'Tracking timeline must include all normal stages');
+          assert.equal(await page.locator('#modal .payment-card').count(),1,'Payment stage must show payment instructions to the customer');
+          assert.equal(await page.locator('#modal [data-payment-upload]').count(),1,'Awaiting payment must allow the customer to upload a receipt');
         }
         if(role==='admin')assert.equal(await page.locator('#modal [data-admin-tracking-status]').count(),1,'Admin request details must include tracking status control');
         const viewable=page.locator('#modal img[data-image-viewer]').first();
@@ -276,12 +280,15 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
           await page.locator('[data-image-viewer-close]').click();
         }
         if(role==='admin'){
-          await page.locator('#modal [data-admin-tracking-status]').selectOption('production');
+          await page.locator('#modal [data-admin-tracking-status]').selectOption('payment_confirmation');
+          assert.equal(await page.locator('#modal .admin-payment-message-field:not(.hidden)').count(),1,'Choosing payment stage must reveal the editable customer payment message');
+          await page.locator('#modal [data-admin-payment-message]').fill('يرجى تحويل 30% وإرفاق إيصال الدفع.');
           await page.locator('#modal [data-admin-save-tracking]').click();
           await page.locator('#modal').waitFor({state:'hidden'});
           assert.equal(requestTrackingMutation?.collection,'requests','Admin request tracking must submit a requests mutation');
-          assert.equal(requestTrackingMutation?.patch?.trackingStatus,'production','Admin must save the selected request tracking status');
-          assert.equal(requestTrackingMutation?.redactionConfirmed,false,'Tracking-only request updates must not require redaction');
+          assert.equal(requestTrackingMutation?.patch?.trackingStatus,'payment_confirmation','Admin must save the payment-confirmation stage');
+          assert.equal(requestTrackingMutation?.patch?.paymentMessage,'يرجى تحويل 30% وإرفاق إيصال الدفع.','Admin payment message must be sent with the stage update');
+          assert.equal(requestTrackingMutation?.redactionConfirmed,false,'Payment-stage updates must not require redaction');
           requestTrackingMutation=null;
         }else await page.locator('.modal-close').click();
       }
