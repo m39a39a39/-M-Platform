@@ -4,7 +4,8 @@ import assert from 'node:assert/strict';
 import {can} from '../backend/modules/auth.mjs';
 import {anonymous,ownRecord} from '../backend/modules/records.mjs';
 import {validateContent,normalizeCategories,TRACKING_STATUSES,READY_TRACKING_STATUSES,requiresRedaction} from '../backend/modules/mutations.mjs';
-import {decodeImage} from '../backend/modules/media.mjs';
+import {decodeImage,decodePaymentReceipt} from '../backend/modules/media.mjs';
+import {notificationPayload} from '../backend/modules/notifications.mjs';
 
 test('client cannot grant itself admin permission',()=>{
  assert.equal(can({role:'client',is_owner:true,permissions:['team']},'team'),false);
@@ -12,10 +13,10 @@ test('client cannot grant itself admin permission',()=>{
  assert.equal(can({role:'admin',permissions:['translate']},'translate'),true);
 });
 test('supplier projection hides customer identity, source content and other invites',()=>{
- const r={id:'M-1',owner_id:'private-customer',version:1,data:{product:'private-name',specs:'private-phone',supplierIds:['one','two'],moderationHistory:[{actorId:'admin'}],translation:{titleEn:'Approved'},status:'sent',images:[]}};
+ const r={id:'M-1',owner_id:'private-customer',version:1,data:{product:'private-name',specs:'private-phone',supplierIds:['one','two'],moderationHistory:[{actorId:'admin'}],translation:{titleEn:'Approved'},status:'sent',images:[],paymentMessage:'secret payment instructions',paymentReceipt:{src:'/api/media/secret-receipt'}}};
  const result=anonymous(r,'requests',{id:'one'});
  assert.deepEqual(result.supplierIds,['one']);
- for(const secret of ['private-customer','private-name','private-phone','two','actorId'])assert.ok(!JSON.stringify(result).includes(secret));
+ for(const secret of ['private-customer','private-name','private-phone','two','actorId','secret payment instructions','secret-receipt'])assert.ok(!JSON.stringify(result).includes(secret));
  assert.equal(result.translation.titleEn,'Approved');
 });
 test('customer request does not disclose supplier invitation ids',()=>{
@@ -63,4 +64,37 @@ test('ready-product requests use fulfillment tracking statuses',()=>{
  const expected=['received','payment_confirmation','production','quality_check','ready_to_ship','shipped','in_delivery','delivered','completed','customer_action','on_hold','cancelled'];
  assert.deepEqual(READY_TRACKING_STATUSES,expected);
  for(const legacy of ['pending','coordinating','accepted'])assert.equal(READY_TRACKING_STATUSES.includes(legacy),false);
+});
+
+
+test('payment receipt decoder accepts PDF and rejects invalid receipt content',()=>{
+ const pdf=Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF');
+ const decoded=decodePaymentReceipt('data:application/pdf;base64,'+pdf.toString('base64'));
+ assert.equal(decoded.mime,'application/pdf');
+ assert.equal(decoded.bytes.equals(pdf),true);
+ assert.throws(()=>decodePaymentReceipt('data:application/pdf;base64,'+Buffer.from('not a pdf document').toString('base64')));
+});
+
+test('payment notifications preserve admin message and route to the right workflow',()=>{
+ const required=notificationPayload(
+  {id:1,event:'payment_required_request',entity_id:'r1',read_at:null,created_at:'2026-09-19'},
+  undefined,
+  {display_no:10002,data:{paymentMessage:'حوّل الدفعة الأولى ثم أرفق الإيصال.'}}
+ );
+ assert.equal(required.titleAr,'بانتظار تأكيد الدفع');
+ assert.equal(required.bodyAr,'حوّل الدفعة الأولى ثم أرفق الإيصال.');
+ assert.equal(required.action,'upload_receipt');
+ assert.deepEqual(required.target,{screen:'customerPayment',entityType:'request',entityId:'r1'});
+
+ const admin=notificationPayload(
+  {id:2,event:'payment_receipt_submitted_interest',entity_id:'i1',read_at:null,created_at:'2026-09-19'},
+  undefined,
+  {data:{paymentStatus:'receipt_submitted'}}
+ );
+ assert.equal(admin.titleAr,'إيصال دفع جديد');
+ assert.deepEqual(admin.target,{screen:'adminPayment',entityType:'interest',entityId:'i1'});
+});
+
+test('payment message does not trigger privacy redaction requirement',()=>{
+ assert.equal(requiresRedaction('requests','sent',['trackingStatus','trackingNote','paymentMessage']),false);
 });
