@@ -13,12 +13,13 @@ const trackingFlow=['received','reviewing','sourcing','quotes_available','quote_
 const requests = Array.from({ length: 100 }, (_, i) => ({ id: `r${i}`, displayNo: 10001+i, product: titleAr, translation, specs: titleEn, quantity: 1000, country: 'United Arab Emirates', createdAt: '2026-09-17', neededDate: '2026-10-17', images, customerId: 'client', supplierIds: ['supplier'], status: i%2 ? 'sent' : 'review', trackingStatus:trackingFlow[i%trackingFlow.length], trackingUpdatedAt:'2026-09-18', trackingNote:i===0?'المصنع يتوقع اكتمال الإنتاج قريبًا':'', version: 1 }));
 const bankAccounts=[{id:'bank-usd',label:'MIG USD',beneficiary:'MIG COMPANY',bankName:'Fixture Bank',iban:'AE070331234567890123456',swift:'FIXTAEAD',accountNumber:'1234567890',country:'United Arab Emirates',currency:'USD',active:true,order:0},{id:'bank-aed',label:'حساب الإمارات',beneficiary:'MIG COMPANY',bankName:'Fixture Bank AED',iban:'AE090331234567890123457',swift:'FIXTAEAD',accountNumber:'9876543210',country:'United Arab Emirates',currency:'AED',active:true,order:1}];
 requests[0]={...requests[0],status:'sent',trackingStatus:'payment_confirmation',trackingNote:'',selectedQuoteId:'q0',paymentStatus:'awaiting_receipt',paymentMessage:'يرجى تحويل الدفعة الأولى ثم إرفاق إيصال الدفع.',paymentBankAccountId:'bank-usd',paymentBankAccount:bankAccounts[0],paymentAmount:5250,paymentCurrency:'USD',paymentRequestedAt:'2026-09-18'};
-requests[2]={...requests[2],status:'sent',trackingStatus:'quote_selected',selectedQuoteId:'q2',selectedForSupplier:true};
+requests[2]={...requests[2],status:'sent',trackingStatus:'supplier_confirmation',selectedQuoteId:'q2',selectedForSupplier:true};
 const categories=[{id:'mobile',nameAr:'إكسسوارات الجوال',nameEn:'Mobile accessories',active:true,order:0},{id:'electronics',nameAr:'إلكترونيات',nameEn:'Electronics',active:true,order:1},{id:'home',nameAr:'المنزل',nameEn:'Home',active:true,order:2}];
 const publicOffers = Array.from({ length: 45 }, (_, i) => ({ id: `p${i}`, displayNo: 10101+i, product: titleAr, translation, specs: titleEn, images: images.slice(0,(i%5)+1), status:'published', supplierId:'supplier', categoryId:categories[i%3].id, currency:'USD', unitPrice:12, moq:500, stock:'2000', leadTime:30 }));
 const quotes = requests.slice(0,4).map((r,i)=>({id:`q${i}`,requestId:r.id,supplierId:'supplier',status:i%2?'pending':'published',unitPrice:10,moq:500,leadTime:20,currency:'USD',images,translation,createdAt:'2026-09-17'}));
 const accounts = ['client','supplier','admin'].map(role=>({id:role,role,name: role==='admin'?'مدير المنصة':titleAr,company:titleEn,email:`${role}@example.test`,isOwner:role==='admin'}));
-const interests = [{id:'i1',displayNo:11001,offerId:'p0',status:'active',trackingStatus:'payment_confirmation',trackingUpdatedAt:'2026-09-18',trackingNote:'بانتظار تأكيد الدفع',quantity:600,unitPrice:12,currency:'USD',moq:500,total:7200,supplierOrderStatus:'pending_confirmation',supplierOrderNote:'',paymentStatus:'receipt_submitted',paymentMessage:'يرجى دفع قيمة المنتج وإرسال الإيصال.',paymentReceipt:{src:images[0],mime:'image/jpeg',submittedAt:'2026-09-18'},createdAt:'2026-09-17',customerId:'client',version:1}];
+const interests = [{id:'i1',displayNo:11001,offerId:'p0',status:'active',trackingStatus:'payment_confirmation',trackingUpdatedAt:'2026-09-18',trackingNote:'بانتظار تأكيد الدفع',quantity:600,unitPrice:12,currency:'USD',moq:500,total:7200,supplierOrderStatus:'confirmed',supplierOrderNote:'',paymentStatus:'receipt_submitted',paymentMessage:'يرجى دفع قيمة المنتج وإرسال الإيصال.',paymentReceipt:{src:images[0],mime:'image/jpeg',submittedAt:'2026-09-18'},createdAt:'2026-09-17',customerId:'client',version:1}];
+const adminPendingInterest={id:'i2',displayNo:11002,offerId:'p1',status:'active',trackingStatus:'received',quantity:700,unitPrice:12,currency:'USD',moq:500,total:8400,supplierOrderStatus:'pending_confirmation',supplierOrderNote:'',createdAt:'2026-09-19',customerId:'client',version:1};
 const notes = Array.from({length:20},(_,i)=>({id:i+1,titleAr,titleEn,bodyAr:titleAr,bodyEn:titleEn,createdAt:'2026-09-17'}));
 const clientPaymentNote={id:9001,event:'payment_required_request',entityId:'r0',titleAr:'بانتظار تأكيد الدفع',titleEn:'Awaiting payment confirmation',bodyAr:'يرجى تحويل الدفعة الأولى ثم إرفاق إيصال الدفع.',bodyEn:'Please upload the payment receipt.',action:'upload_receipt',target:{screen:'customerPayment',entityType:'request',entityId:'r0'},createdAt:'2026-09-19'};
 const adminPaymentNote={id:9002,event:'payment_receipt_submitted_interest',entityId:'i1',titleAr:'إيصال دفع جديد',titleEn:'New payment receipt',bodyAr:'تم رفع إيصال دفع جديد لطلب منتج جاهز.',bodyEn:'A new receipt was uploaded.',target:{screen:'adminPayment',entityType:'interest',entityId:'i1'},createdAt:'2026-09-19'};
@@ -72,7 +73,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
     }
     let body={};
     if(path.endsWith('/auth/login')) body={user:accounts.find(a=>a.role===role),tokens:{accessToken:'fixture',refreshToken:'fixture'}};
-    else if(path.endsWith('/state')) { stateCalls++; body={user:accounts.find(a=>a.role===role),requests,quotes,publicOffers,accounts,interests,settings:{categories,...(role==='admin'?{bankAccounts}:{}),_version:1}}; }
+    else if(path.endsWith('/state')) { stateCalls++; const roleQuotes=role==='admin'?quotes.map(q=>q.id==='q2'?{...q,supplierOrderStatus:'confirmed'}:q):quotes;const roleInterests=role==='admin'?[...interests,adminPendingInterest]:interests;body={user:accounts.find(a=>a.role===role),requests,quotes:roleQuotes,publicOffers,accounts,interests:roleInterests,settings:{categories,...(role==='admin'?{bankAccounts}:{}),_version:1}}; }
     else if(path.endsWith('/notifications')) body=role==='client'?[clientPaymentNote,...notes.slice(1)]:role==='admin'?[adminPaymentNote,...notes.slice(1)]:notes;
     else if(path.endsWith('/notifications/read')) body={ok:true};
     else if(path.endsWith('/payment-receipts')) {paymentReceiptSubmission=route.request().postDataJSON();body={ok:true,paymentStatus:'receipt_submitted'};}
@@ -201,7 +202,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
       assert.ok((await page.locator('#modal .client-order-summary').textContent()).includes('600'),'Existing public-offer order must show requested quantity');
       assert.ok((await page.locator('#modal .client-order-summary').textContent()).includes('7200'),'Existing public-offer order must show total');
       assert.equal(await page.locator('#modal .tracking-timeline').count(),1,'Requested ready product must show the unified order timeline');
-      assert.equal(await page.locator('#modal .tracking-step').count(),9,'Ready-product timeline must skip sourcing and quote stages');
+      assert.equal(await page.locator('#modal .tracking-step').count(),10,'Ready-product timeline must include supplier confirmation while skipping sourcing and quote stages');
       assert.equal(await page.locator('#modal .payment-card').count(),1,'Ready-product payment status must appear inside the order');
       assert.ok((await page.locator('#modal .payment-card').textContent()).includes(language==='ar'?'بانتظار المراجعة':'awaiting review'),'Submitted ready-product receipt must show as awaiting review');
       await page.locator('.modal-close').click();
@@ -332,10 +333,20 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
         assert.equal(publicOfferMutation?.redactionConfirmed,true,'Published public offer edits must confirm privacy review');
         publicOfferMutation=null;
         await page.locator('[data-admin-offer-tab="interests"]').click();
+        await page.locator('[data-admin-interest="i2"] .list-card-title').click();
+        await page.locator('[data-admin-interest-tracking-status]').waitFor();
+        assert.equal(await page.locator('#modal .admin-supplier-confirmation.pending').count(),1,'New public-offer order must show supplier confirmation pending');
+        assert.equal(await page.locator('#modal [data-admin-interest-tracking-status] option[value="payment_confirmation"]').isDisabled(),true,'Payment must stay disabled until supplier confirmation');
+        assert.equal(await page.locator('#modal [data-admin-send-interest-supplier]').count(),1,'Admin must have an explicit approve-and-send-to-supplier action');
+        await page.locator('#modal [data-admin-send-interest-supplier]').click();
+        await page.locator('#modal').waitFor({state:'hidden'});
+        assert.equal(interestMutation?.patch?.trackingStatus,'supplier_confirmation','Admin approval must move public offer order to supplier confirmation');
+        interestMutation=null;
+        await page.locator('[data-admin-offer-tab="interests"]').click();
         await page.locator('[data-admin-interest="i1"] .list-card-title').click();
         await page.locator('[data-admin-interest-tracking-status]').waitFor();
         assert.equal(await page.locator('[data-admin-interest-status]').count(),0,'Legacy interest status selector must be removed');
-        assert.equal(await page.locator('[data-admin-interest-tracking-status] option').count(),12,'Ready-product requests must use fulfillment tracking statuses and exceptions');
+        assert.equal(await page.locator('[data-admin-interest-tracking-status] option').count(),13,'Ready-product requests must include supplier confirmation plus fulfillment statuses and exceptions');
         const publicOrderSummary=await page.locator('#modal .admin-selected-quote-card').textContent();
         assert.ok(publicOrderSummary.includes('600'),'Admin public-offer order must show requested quantity');
         assert.equal(await page.locator('#modal [data-admin-payment-amount]').inputValue(),'7200','Public-offer total must auto-fill the amount due');
@@ -389,14 +400,18 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
           assert.equal(await page.locator('#modal .client-current-status').count(),1,'Client request details must show current status before the timeline');
           assert.equal(await page.locator('#modal .client-selected-quote').count(),1,'Selected quote summary must be visible inside the order');
           assert.equal(await page.locator('#modal .tracking-timeline').count(),1,'Client request details must show a tracking timeline');
-          assert.equal(await page.locator('#modal .tracking-step').count(),13,'Tracking timeline must include all normal stages');
+          assert.equal(await page.locator('#modal .tracking-step').count(),14,'Tracking timeline must include supplier confirmation in the normal stages');
           assert.equal(await page.locator('#modal .payment-card').count(),1,'Payment stage must show payment instructions to the customer');
           assert.equal(await page.locator('#modal [data-payment-upload]').count(),1,'Awaiting payment must allow the customer to upload a receipt');
           assert.equal(await page.locator('#modal .payment-bank-card').count(),1,'Payment stage must show the selected bank account to the customer');
           assert.ok((await page.locator('#modal .payment-bank-card').textContent()).includes('5250'),'Payment card must show the requested amount');
+          await page.evaluate(()=>{document.execCommand=cmd=>cmd==='copy';});
+          await page.locator('#modal .payment-bank-card .copy-btn').first().click();
+          await page.locator('#toast:not(.hidden)').waitFor();
+          assert.ok((await page.locator('#toast').textContent()).toLowerCase().includes(language==='ar'?'تم النسخ':'copied'),'Bank detail copy must work through the iOS-safe fallback');
           assert.equal(await page.locator('#modal [data-repeat-request]').count(),1,'Customer request details must include Repeat request');
         }
-        if(role==='admin'){assert.equal(await page.locator('#modal [data-admin-tracking-status]').count(),1,'Admin request details must include tracking status control');assert.equal(await page.locator('#modal .admin-selected-quote-card:not(.missing)').count(),1,'Admin request details must show the selected quote summary');}
+        if(role==='admin'){assert.equal(await page.locator('#modal [data-admin-tracking-status]').count(),1,'Admin request details must include tracking status control');assert.equal(await page.locator('#modal .admin-selected-quote-card:not(.missing)').count(),1,'Admin request details must show the selected quote summary');assert.equal(await page.locator('#modal .admin-supplier-confirmation.confirmed').count(),1,'Admin request details must show supplier fulfillment confirmation before payment');}
         if(role==='supplier')assert.equal(await page.locator('#modal .payment-card,#modal .admin-payment-review').count(),0,'Supplier must never see payment receipt or payment instructions');
         const viewable=page.locator('#modal img[data-image-viewer]').first();
         if(await viewable.count()){
