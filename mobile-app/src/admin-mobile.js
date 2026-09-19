@@ -86,15 +86,21 @@ function supplierConfirmationCard(x,kind){
 }
 const SYSTEM_MANAGED_TRACKING=new Set(['production','quality_check','ready_to_ship','shipped','in_delivery','delivered','completed']);
 const TRACKING_EXCEPTIONS=new Set(['customer_action','on_hold','cancelled']);
-function trackingOptions(rows,current,canPay){
+function trackingChoiceDisabled(key,current,canPay){
   const managedCurrent=SYSTEM_MANAGED_TRACKING.has(current);
-  return rows.map(([key,ar,en])=>{
-    let disabled=false;
-    if(managedCurrent)disabled=key!==current&&!TRACKING_EXCEPTIONS.has(key);
-    else disabled=SYSTEM_MANAGED_TRACKING.has(key)&&key!==current;
-    if(key==='payment_confirmation'&&!canPay&&current!=='payment_confirmation')disabled=true;
-    return '<option value="'+key+'" '+(current===key?'selected':'')+' '+(disabled?'disabled':'')+'>'+esc(tr(ar,en))+'</option>';
+  let disabled=false;
+  if(managedCurrent)disabled=key!==current&&!TRACKING_EXCEPTIONS.has(key);
+  else disabled=SYSTEM_MANAGED_TRACKING.has(key)&&key!==current;
+  if(key==='payment_confirmation'&&!canPay&&current!=='payment_confirmation')disabled=true;
+  return disabled;
+}
+function trackingPicker(rows,current,canPay,kind){
+  const currentRow=rows.find(([key])=>key===current),label=currentRow?tr(currentRow[1],currentRow[2]):status(current),attr=kind==='interest'?'data-admin-interest-tracking-status':'data-admin-tracking-status';
+  const choices=rows.map(([key,ar,en])=>{
+    const disabled=trackingChoiceDisabled(key,current,canPay),selected=key===current;
+    return '<button type="button" class="admin-status-choice'+(selected?' current':'')+(disabled?' locked':'')+'" data-admin-status-value="'+esc(key)+'" '+(disabled?'disabled':'')+' role="option" aria-selected="'+(selected?'true':'false')+'"><span>'+esc(tr(ar,en))+'</span><small>'+(selected?esc(tr('الحالة الحالية','Current status')):disabled?esc(tr('تتغير تلقائيًا','Changes automatically')):'')+'</small><b>'+(selected?'✓':disabled?'⌁':'›')+'</b></button>';
   }).join('');
+  return '<div class="admin-status-picker" data-admin-status-picker><button type="button" class="admin-status-picker-trigger" '+attr+' data-value="'+esc(current)+'" data-admin-status-toggle aria-expanded="false"><span><small>'+esc(tr('الحالة الحالية','Current status'))+'</small><strong data-admin-status-label>'+esc(label)+'</strong></span><b class="admin-status-picker-arrow">⌄</b></button><div class="admin-status-options hidden" data-admin-status-options role="listbox">'+choices+'</div></div>';
 }
 function adminStageActionPanel(x,kind){
   const current=kind==='request'?requestTracking(x):interestTracking(x),supplier=supplierExecutionInfo(x,kind);
@@ -504,7 +510,7 @@ function paymentMessageField(x,kind,current){
 function interestTrackingEditor(x){
   const current=interestTracking(x),supplier=supplierExecutionInfo(x,'interest'),canPay=supplier.confirmed||current==='payment_confirmation';
   const approve=current==='received'?'<button class="primary-btn admin-send-to-supplier" type="button" data-admin-send-interest-supplier="'+esc(x.id)+'">'+esc(tr('اعتماد وإرسال للمورد','Approve & send to supplier'))+'</button>':'';
-  return '<section class="admin-tracking-editor"><h3>'+esc(tr('متابعة طلب المنتج الجاهز','Ready-product order tracking'))+'</h3>'+approve+'<label><span>'+esc(tr('الحالة الحالية','Current status'))+'</span><select data-admin-interest-tracking-status>'+trackingOptions(READY_TRACKING,current,canPay)+'</select></label>'+paymentMessageField(x,'interest',current)+'<label><span>'+esc(tr('ملاحظة للعميل (اختياري)','Customer note (optional)'))+'</span><textarea data-admin-interest-tracking-note maxlength="1000">'+esc(x.trackingNote||'')+'</textarea></label><small>'+(x.trackingUpdatedAt?esc(tr('آخر تحديث','Last update'))+': '+esc(date(x.trackingUpdatedAt)):'')+'</small><button class="primary-btn" type="button" data-admin-save-interest-tracking="'+esc(x.id)+'">'+esc(tr('حفظ حالة الطلب','Save order status'))+'</button></section>'+paymentReviewPanel(x,'interest');
+  return '<section class="admin-tracking-editor"><h3>'+esc(tr('متابعة طلب المنتج الجاهز','Ready-product order tracking'))+'</h3>'+approve+trackingPicker(READY_TRACKING,current,canPay,'interest')+paymentMessageField(x,'interest',current)+'<label><span>'+esc(tr('ملاحظة للعميل (اختياري)','Customer note (optional)'))+'</span><textarea data-admin-interest-tracking-note maxlength="1000">'+esc(x.trackingNote||'')+'</textarea></label><small>'+(x.trackingUpdatedAt?esc(tr('آخر تحديث','Last update'))+': '+esc(date(x.trackingUpdatedAt)):'')+'</small><button class="primary-btn" type="button" data-admin-save-interest-tracking="'+esc(x.id)+'">'+esc(tr('حفظ حالة الطلب','Save order status'))+'</button></section>'+paymentReviewPanel(x,'interest');
 }
 function adminRequestOverview(x){
   return '<section class="admin-order-overview"><div><small>#'+esc(ref(x))+' · '+esc(tr('طلب خاص','Custom request'))+'</small><strong>'+esc(title(x))+'</strong></div><div class="admin-order-overview-facts"><span>'+esc(tr('الحالة','Status'))+': '+esc(status(requestTracking(x)))+'</span><span>'+esc(tr('الكمية','Quantity'))+': '+esc(x.quantity||'—')+'</span><span>'+esc(tr('الدولة','Country'))+': '+esc(x.country||'—')+'</span></div></section>';
@@ -531,7 +537,7 @@ function openInterest(id){
 }
 async function saveInterestTracking(id){
   const x=(state?.interests||[]).find(item=>item.id===id);if(!x)return;
-  const trackingStatus=document.querySelector('[data-admin-interest-tracking-status]')?.value,trackingNote=document.querySelector('[data-admin-interest-tracking-note]')?.value||'';
+  const trackingStatus=document.querySelector('[data-admin-interest-tracking-status]')?.dataset.value,trackingNote=document.querySelector('[data-admin-interest-tracking-note]')?.value||'';
   const patch={trackingStatus,trackingNote};
   if(trackingStatus==='payment_confirmation'){if(!supplierExecutionInfo(x,'interest').confirmed&&interestTracking(x)!=='payment_confirmation'){toast(tr('يجب أن يؤكد المورد التنفيذ قبل الانتقال للدفع.','Supplier must confirm fulfillment before payment.'));return;}const pricing=interestPricing(x),paymentMessage=document.querySelector('[data-admin-payment-message]')?.value.trim()||'',paymentBankAccountId=document.querySelector('[data-admin-payment-bank]')?.value||'',paymentAmount=document.querySelector('[data-admin-payment-amount]')?.value||'',paymentCurrency=pricing?.currency||document.querySelector('[data-admin-payment-currency]')?.value||'';if(!paymentMessage){toast(tr('اكتب رسالة الدفع للعميل.','Add a payment message for the customer.'));return;}if(!paymentBankAccountId||!paymentAmount||!paymentCurrency){toast(tr('اختر الحساب البنكي وأدخل مبلغ الدفع.','Choose the bank account and enter the payment amount.'));return;}Object.assign(patch,{paymentMessage,paymentBankAccountId,paymentAmount,paymentCurrency});}
   try{await mutate('interests',x,patch);closeModal();schedule();toast(tr('تم تحديث حالة الطلب.','Order status updated.'));}catch(e){toast(e.message);}
@@ -542,7 +548,7 @@ async function sendInterestToSupplier(id){
 }
 function trackingEditor(x){
   const current=requestTracking(x),supplier=supplierExecutionInfo(x,'request'),canPay=supplier.confirmed||current==='payment_confirmation';
-  return '<section class="admin-tracking-editor"><h3>'+esc(tr('متابعة الطلب','Order tracking'))+'</h3><label><span>'+esc(tr('الحالة الحالية','Current status'))+'</span><select data-admin-tracking-status>'+trackingOptions(TRACKING,current,canPay)+'</select></label>'+paymentMessageField(x,'request',current)+'<label><span>'+esc(tr('ملاحظة للعميل (اختياري)','Customer note (optional)'))+'</span><textarea data-admin-tracking-note maxlength="1000">'+esc(x.trackingNote||'')+'</textarea></label><small>'+(x.trackingUpdatedAt?esc(tr('آخر تحديث','Last update'))+': '+esc(date(x.trackingUpdatedAt)):'')+'</small><button class="primary-btn" type="button" data-admin-save-tracking="'+esc(x.id)+'">'+esc(tr('حفظ حالة الطلب','Save order status'))+'</button></section>'+paymentReviewPanel(x,'request');
+  return '<section class="admin-tracking-editor"><h3>'+esc(tr('متابعة الطلب','Order tracking'))+'</h3>'+trackingPicker(TRACKING,current,canPay,'request')+paymentMessageField(x,'request',current)+'<label><span>'+esc(tr('ملاحظة للعميل (اختياري)','Customer note (optional)'))+'</span><textarea data-admin-tracking-note maxlength="1000">'+esc(x.trackingNote||'')+'</textarea></label><small>'+(x.trackingUpdatedAt?esc(tr('آخر تحديث','Last update'))+': '+esc(date(x.trackingUpdatedAt)):'')+'</small><button class="primary-btn" type="button" data-admin-save-tracking="'+esc(x.id)+'">'+esc(tr('حفظ حالة الطلب','Save order status'))+'</button></section>'+paymentReviewPanel(x,'request');
 }
 async function reviewPayment(entityType,id,action){
   const rows=entityType==='request'?(state?.requests||[]):(state?.interests||[]),x=rows.find(item=>item.id===id);if(!x)return;
@@ -584,7 +590,7 @@ async function toggleCategory(id){const rows=categories(),cat=rows.find(x=>x.id=
 async function deleteCategory(id){await saveCategories(categories().filter(cat=>cat.id!==id));}
 async function saveTracking(id){
   const x=(state?.requests||[]).find(item=>item.id===id);if(!x)return;
-  const trackingStatus=document.querySelector('[data-admin-tracking-status]')?.value,trackingNote=document.querySelector('[data-admin-tracking-note]')?.value||'';
+  const trackingStatus=document.querySelector('[data-admin-tracking-status]')?.dataset.value,trackingNote=document.querySelector('[data-admin-tracking-note]')?.value||'';
   const patch={trackingStatus,trackingNote};
   if(trackingStatus==='payment_confirmation'){if(!supplierExecutionInfo(x,'request').confirmed&&requestTracking(x)!=='payment_confirmation'){toast(tr('يجب أن يؤكد المورد التنفيذ قبل الانتقال للدفع.','Supplier must confirm fulfillment before payment.'));return;}const paymentMessage=document.querySelector('[data-admin-payment-message]')?.value.trim()||'',paymentBankAccountId=document.querySelector('[data-admin-payment-bank]')?.value||'',paymentAmount=document.querySelector('[data-admin-payment-amount]')?.value||'',paymentCurrency=document.querySelector('[data-admin-payment-currency]')?.value||'';if(!paymentMessage){toast(tr('اكتب رسالة الدفع للعميل.','Add a payment message for the customer.'));return;}if(!paymentBankAccountId||!paymentAmount){toast(tr('اختر الحساب البنكي وأدخل مبلغ الدفع.','Choose the bank account and enter the payment amount.'));return;}Object.assign(patch,{paymentMessage,paymentBankAccountId,paymentAmount,paymentCurrency});}
   try{await mutate('requests',x,patch);closeModal();schedule();toast(tr('تم تحديث حالة الطلب.','Order status updated.'));}catch(e){toast(e.message);}
@@ -664,6 +670,26 @@ function go(view,tab){
 
 document.addEventListener('click',e=>{
   if(!isAdmin()||document.getElementById('appView').classList.contains('hidden'))return;
+  const picker=e.target.closest('[data-admin-status-picker]');
+  if(!picker)document.querySelectorAll('[data-admin-status-options]:not(.hidden)').forEach(x=>x.classList.add('hidden'));
+  const toggle=e.target.closest('[data-admin-status-toggle]');if(toggle){
+    const wrap=toggle.closest('[data-admin-status-picker]'),options=wrap?.querySelector('[data-admin-status-options]'),open=options?.classList.contains('hidden');
+    document.querySelectorAll('[data-admin-status-options]:not(.hidden)').forEach(x=>{if(x!==options)x.classList.add('hidden');});
+    if(options){options.classList.toggle('hidden',!open);toggle.setAttribute('aria-expanded',String(open));}
+    return;
+  }
+  const choice=e.target.closest('[data-admin-status-value]');if(choice&&!choice.disabled){
+    const wrap=choice.closest('[data-admin-status-picker]'),toggle=wrap?.querySelector('[data-admin-status-toggle]'),options=wrap?.querySelector('[data-admin-status-options]');
+    if(toggle){
+      toggle.dataset.value=choice.dataset.adminStatusValue||'';
+      const label=toggle.querySelector('[data-admin-status-label]');if(label)label.textContent=choice.querySelector('span')?.textContent||'';
+      toggle.setAttribute('aria-expanded','false');
+    }
+    options?.classList.add('hidden');
+    wrap?.querySelectorAll('[data-admin-status-value]').forEach(btn=>{const selected=btn===choice;btn.classList.toggle('current',selected);btn.setAttribute('aria-selected',String(selected));const small=btn.querySelector('small');if(small&&!btn.disabled)small.textContent=selected?tr('الحالة الحالية','Current status'):'';});
+    const field=wrap?.closest('.admin-tracking-editor')?.querySelector('.admin-payment-message-field');if(field)field.classList.toggle('hidden',choice.dataset.adminStatusValue!=='payment_confirmation');
+    return;
+  }
   const g=e.target.closest('[data-admin-go]');if(g){go(g.dataset.adminGo,g.dataset.adminTabTarget);return;}
   const active=e.target.closest('[data-admin-request-active]');if(active){requestFilter='active';schedule();return;}
   const completed=e.target.closest('[data-admin-request-completed]');if(completed){requestFilter='completed';schedule();return;}
@@ -711,10 +737,6 @@ document.addEventListener('compositionend',e=>{
 document.addEventListener('change',e=>{
   if(!isAdmin())return;
   if(e.target.matches('[data-admin-request-filter]')){requestFilter=e.target.value;schedule();return;}
-  if(e.target.matches('[data-admin-tracking-status],[data-admin-interest-tracking-status]')){
-    const field=e.target.closest('.admin-tracking-editor')?.querySelector('.admin-payment-message-field');
-    if(field)field.classList.toggle('hidden',e.target.value!=='payment_confirmation');
-  }
 });
 document.addEventListener('submit',e=>{
   if(!isAdmin())return;
