@@ -1970,3 +1970,23 @@ body.image-viewer-open {
 .admin-selected-quote-values strong{display:block;margin-top:4px;font-size:15px;overflow-wrap:anywhere}
 .admin-selected-quote-values .total strong{font-size:17px}
 @media (max-width:520px){.admin-selected-quote-values{grid-template-columns:1fr 1fr}.admin-selected-quote-values .total{grid-column:1/-1}}
+
+
+/* Supplier public offer home */
+.supplier-public-cta{display:grid;gap:14px;padding:16px;border:1px solid var(--line,#d9e2ea);border-radius:18px;background:var(--surface,#fff);margin-bottom:16px}
+.supplier-public-cta-copy{display:flex;align-items:flex-start;gap:12px}
+.supplier-public-cta-icon{display:grid;place-items:center;width:42px;height:42px;flex:0 0 42px;border-radius:13px;background:var(--soft,#eef3f7);font-size:25px;font-weight:700}
+.supplier-public-cta h2{margin:0 0 5px;font-size:20px}.supplier-public-cta p{margin:0;color:var(--muted,#6b7280);line-height:1.55}
+.supplier-public-cta .primary-btn{width:100%}
+.supplier-public-recent{margin-top:16px}
+.supplier-public-recent .section-title{align-items:center}
+.supplier-public-recent .section-title p{margin:4px 0 0;color:var(--muted,#6b7280);font-size:13px}
+.supplier-public-preview-list{display:grid;gap:10px}
+.supplier-public-preview{display:grid;grid-template-columns:62px minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px;border:1px solid var(--line,#e1e7ec);border-radius:14px;background:var(--surface,#fff);cursor:pointer}
+.supplier-public-thumb{width:62px;height:62px;border-radius:12px;overflow:hidden;background:var(--soft,#f3f5f7)}
+.supplier-public-thumb img{width:100%;height:100%;object-fit:cover;display:block}.supplier-public-placeholder{width:100%;height:100%;display:grid;place-items:center;font-weight:800}
+.supplier-public-preview-body{min-width:0}.supplier-public-preview-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.supplier-public-preview-head>div{min-width:0}.supplier-public-preview h3{margin:2px 0 0;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.supplier-public-preview small,.supplier-public-preview p{color:var(--muted,#6b7280)}.supplier-public-preview p{margin:6px 0 0;font-size:13px}
+.supplier-public-preview .status-pill{flex:0 0 auto}.supplier-public-preview .chevron{font-size:24px;color:var(--muted,#94a3b8)}
+@media (max-width:430px){.supplier-public-preview{grid-template-columns:54px minmax(0,1fr) auto}.supplier-public-thumb{width:54px;height:54px}.supplier-public-preview-head{display:grid}.supplier-public-preview .status-pill{justify-self:start}}
