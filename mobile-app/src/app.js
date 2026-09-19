@@ -1,7 +1,7 @@
 import { session } from './session.js';
 import { languageReady, getLanguage, onLanguageChange, toggleLanguage } from './language.js';
 import { showView } from './views.js';
-import { configureAdmin, updateAdminState, resetAdmin, renderAdminScreen } from './admin-mobile.js';
+import { configureAdmin, updateAdminState, resetAdmin, renderAdminScreen, openAdminPayment } from './admin-mobile.js';
 import { App } from '@capacitor/app';
 import { filesToCompressedSources } from './image-upload.js';
 import './image-viewer.js';
@@ -392,7 +392,7 @@ async function handleAction(target){
     if(n.target?.entityType&&n.target?.entityId)return openPaymentReceiptForm(n.target.entityType,n.target.entityId);
     return;
   }
-  if(target.dataset.notification){const n=notifications.find(x=>String(x.id)===String(target.dataset.notification));if(!n)return;if(!n.readAt)await request('/api/v1/notifications/read',{method:'POST',auth:true,body:{id:Number(n.id)}}).catch(()=>{});await loadData({render:false});if(n.target?.screen==='supplierRequest')return openSupplierRequest(n.target.requestId);if(n.target?.screen==='customerRequest')return openClientRequest(n.target.requestId);if(n.target?.screen==='customerPayment'){if(n.target.entityType==='request')return openClientRequest(n.target.entityId);const interest=(platformState.interests||[]).find(i=>i.id===n.target.entityId);if(interest)return openPublicOffer(interest.offerId);}renderScreen();return;}
+  if(target.dataset.notification){const n=notifications.find(x=>String(x.id)===String(target.dataset.notification));if(!n)return;if(!n.readAt)await request('/api/v1/notifications/read',{method:'POST',auth:true,body:{id:Number(n.id)}}).catch(()=>{});await loadData({render:false});if(n.target?.screen==='supplierRequest')return openSupplierRequest(n.target.requestId);if(n.target?.screen==='customerRequest')return openClientRequest(n.target.requestId);if(n.target?.screen==='customerPayment'){if(n.target.entityType==='request')return openClientRequest(n.target.entityId);const interest=(platformState.interests||[]).find(i=>i.id===n.target.entityId);if(interest)return openPublicOffer(interest.offerId);}if(n.target?.screen==='adminPayment')return openAdminPayment(n.target.entityType,n.target.entityId);renderScreen();return;}
 }
 
 function errorText(error,stage='data'){
