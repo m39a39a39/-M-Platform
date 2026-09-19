@@ -637,6 +637,10 @@ document.addEventListener('click',e=>{
   const of=e.target.closest('[data-admin-offer-filter]');if(of){offerFilter=of.dataset.adminOfferFilter;schedule();return;}
   const op=e.target.closest('[data-admin-operation-tab]');if(op){operationTab=op.dataset.adminOperationTab;schedule();return;}
   const mt=e.target.closest('[data-admin-more-tab]');if(mt){moreTab=mt.dataset.adminMoreTab;schedule();return;}
+  const tn=e.target.closest('[data-admin-team-new]');if(tn){teamDialog();return;}
+  const te=e.target.closest('[data-admin-team-edit]');if(te){teamDialog(te.dataset.adminTeamEdit);return;}
+  const tt=e.target.closest('[data-admin-team-toggle]');if(tt){toggleTeam(tt.dataset.adminTeamToggle,tt.dataset.action);return;}
+  const am=e.target.closest('[data-admin-account-moderate]');if(am){moderationDialog(am.dataset.adminAccountModerate,am.dataset.action);return;}
   const bn=e.target.closest('[data-admin-bank-new]');if(bn){bankAccountDialog();return;}
   const be=e.target.closest('[data-admin-bank-edit]');if(be){bankAccountDialog(be.dataset.adminBankEdit);return;}
   const bt=e.target.closest('[data-admin-bank-toggle]');if(bt){toggleBankAccount(bt.dataset.adminBankToggle);return;}
@@ -682,4 +686,6 @@ document.addEventListener('submit',e=>{
   if(e.target.matches('#adminBankAccountForm')){e.preventDefault();submitBankAccount(e.target);}
   else if(e.target.matches('#adminCategoryForm')){e.preventDefault();submitCategory(e.target);}
   else if(e.target.matches('#adminPublicOfferForm')){e.preventDefault();savePublicOffer(e.target);}
+  else if(e.target.matches('#adminTeamForm')){e.preventDefault();submitTeam(e.target);}
+  else if(e.target.matches('#adminModerationForm')){e.preventDefault();submitModeration(e.target);}
 });
