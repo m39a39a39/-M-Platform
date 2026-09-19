@@ -209,7 +209,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
       assert.equal(await page.locator('#publicForm input[name="unitPrice"]').count(),1,'Public-offer form must include price');
       assert.equal(await page.locator('#publicForm select[name="currency"]').count(),1,'Public-offer form must include currency');
       await page.locator('.modal-close').click();
-      await page.locator('#screen [data-action="view-public-offers"]').click();
+      await page.locator('#screen .supplier-public-recent [data-action="view-public-offers"]').click();
       await page.locator('#screen [data-sub="public"].active').waitFor();
       assert.equal(await page.locator('#screen [data-action="new-public"]').count(),1,'My public offers page must retain Add public offer action');
       assert.equal(await page.locator('#screen [data-own-public]').count(),45,'View all must open the complete My public offers list');
