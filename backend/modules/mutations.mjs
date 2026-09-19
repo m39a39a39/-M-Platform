@@ -103,7 +103,7 @@ export async function mutate(user,body){
   const changes=Object.keys(patch),isAdmin=user.role==='admin';
   if(!original){
     assert(collection==='requests'?user.role==='client':collection==='interests'?user.role==='client':user.role==='supplier');
-    const allowed=collection==='interests'?['offerId','status']: [...contentFields[collection],...(collection==='quotes'?['requestId']:[]),...(collection==='requests'?['repeatedFromRequestId']:[]),'status'];
+    const allowed=collection==='interests'?['offerId','quantity','status']: [...contentFields[collection],...(collection==='quotes'?['requestId']:[]),...(collection==='requests'?['repeatedFromRequestId']:[]),'status'];
     assert(changes.every(k=>allowed.includes(k)),400);
     data=Object.fromEntries(changes.filter(k=>!['status','requestId','offerId'].includes(k)).map(k=>[k,patch[k]]));
     data.status=collection==='requests'?'review':collection==='interests'?'active':'pending';data.createdAt=now;
@@ -121,6 +121,18 @@ export async function mutate(user,body){
     }else if(collection==='interests'){
       const offer=await one('public_offers',patch.offerId);
       assert(open(offer)&&offer.data.status==='published'&&active(await one('profiles',offer.owner_id))&&(!offer.data.validUntil||offer.data.validUntil>=now.slice(0,10)),409);
+      const quantity=Number(patch.quantity),moq=Number(offer.data.moq),unitPrice=Number(offer.data.unitPrice),stock=Number(offer.data.stock);
+      assert(Number.isFinite(quantity)&&quantity>0&&quantity<=1e9,400,'أدخل كمية صحيحة / Enter a valid quantity');
+      assert(Number.isFinite(moq)&&quantity>=moq,400,'الكمية أقل من الحد الأدنى للطلب / Quantity is below the minimum order');
+      if(Number.isFinite(stock)&&stock>0)assert(quantity<=stock,400,'الكمية المطلوبة أكبر من المخزون المتاح / Requested quantity exceeds available stock');
+      const existing=await db('interests',`owner_id=eq.${encodeURIComponent(user.id)}&offer_id=eq.${encodeURIComponent(patch.offerId)}&limit=1`);
+      assert(!existing.length,409,'سبق أن طلبت هذا العرض / You already requested this offer');
+      data.quantity=quantity;
+      data.unitPrice=unitPrice;
+      data.currency=String(offer.data.currency||'').toUpperCase();
+      data.moq=moq;
+      data.total=quantity*unitPrice;
+      data.offerSnapshot={unitPrice, currency:data.currency, moq, stock:offer.data.stock||'', product:offer.data.product||'', translation:offer.data.translation||{}};
     }
     if(collection!=='interests'){
       validateContent(collection,data);await checkImages(data.images||[],user);
@@ -227,6 +239,8 @@ export async function mutate(user,body){
         assert(selectedQuote&&selectedQuote.request_id===id&&open(selectedQuote)&&selectedQuote.data.status==='published',409,'العرض المختار غير متاح / Selected quote unavailable');
         const quoteCurrency=String(selectedQuote.data.currency||'').toUpperCase();
         assert(quoteCurrency&&data.paymentCurrency===quoteCurrency,400,'عملة الدفع يجب أن تطابق عملة العرض المختار / Payment currency must match selected quote currency');
+      }else if(collection==='interests'&&data.currency){
+        assert(data.paymentCurrency===String(data.currency).toUpperCase(),400,'عملة الدفع يجب أن تطابق عملة العرض العام / Payment currency must match public-offer currency');
       }
       if(original.data.trackingStatus!=='payment_confirmation'&&data.paymentStatus!=='confirmed'){
         data.paymentStatus='awaiting_receipt';
