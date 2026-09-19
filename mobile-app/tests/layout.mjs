@@ -336,7 +336,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
         await page.locator('[data-admin-interest="i2"] .list-card-title').click();
         await page.locator('[data-admin-interest-tracking-status]').waitFor();
         assert.equal(await page.locator('#modal .admin-supplier-confirmation.pending').count(),1,'New public-offer order must show supplier confirmation pending');
-        assert.equal(await page.locator('#modal [data-admin-interest-tracking-status] option[value="payment_confirmation"]').isDisabled(),true,'Payment must stay disabled until supplier confirmation');
+        assert.notEqual(await page.locator('#modal [data-admin-interest-tracking-status] option[value="payment_confirmation"]').getAttribute('disabled'),null,'Payment must stay disabled until supplier confirmation');
         assert.equal(await page.locator('#modal [data-admin-send-interest-supplier]').count(),1,'Admin must have an explicit approve-and-send-to-supplier action');
         await page.locator('#modal [data-admin-send-interest-supplier]').click();
         await page.locator('#modal').waitFor({state:'hidden'});
