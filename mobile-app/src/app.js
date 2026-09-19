@@ -105,7 +105,7 @@ function paymentEntity(type,id){return type==='request'?(platformState?.requests
 function paymentPanel(item,entityType){
   const status=item?.paymentStatus;
   if(!status&&item?.trackingStatus!=='payment_confirmation')return '';
-  const receipt=item?.paymentReceipt,canUpload=['awaiting_receipt','reupload_requested'].includes(status);
+  const receipt=item?.paymentReceipt,canUpload=item?.trackingStatus==='payment_confirmation'&&['awaiting_receipt','reupload_requested'].includes(status);
   const message=item?.paymentMessage||tr('يرجى إتمام عملية الدفع وإرفاق إيصال الدفع لتأكيد طلبك.','Please complete payment and upload the receipt to confirm your order.');
   const receiptHtml=receipt?.src?(receipt.mime==='application/pdf'
     ?`<button type="button" class="secondary-btn full" data-payment-document="${esc(receipt.src)}">${esc(tr('عرض إيصال PDF','View PDF receipt'))}</button>`
@@ -310,7 +310,7 @@ function openSupplierRequest(requestId){
 async function paymentReceiptSource(input){
   const file=input?.files?.[0];if(!file)throw new Error(tr('اختر صورة أو ملف PDF للإيصال.','Choose an image or PDF receipt.'));
   if(file.type==='application/pdf'||/\.pdf$/i.test(file.name||'')){
-    if(file.size>5*1024*1024)throw new Error(tr('الحد الأقصى لملف PDF هو 5 MB.','PDF receipt must be 5 MB or smaller.'));
+    if(file.size>3*1024*1024)throw new Error(tr('الحد الأقصى لملف PDF هو 3 MB.','PDF receipt must be 3 MB or smaller.'));
     return await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||''));reader.onerror=()=>reject(new Error(tr('تعذر قراءة ملف PDF.','Could not read the PDF.')));reader.readAsDataURL(file);});
   }
   const sources=await filesToCompressedSources(input,{maxFiles:1});
@@ -325,7 +325,7 @@ function openPaymentReceiptForm(entityType,entityId){
   const adminNote=item.paymentReviewNote?'<p><b>'+esc(tr('ملاحظة الإدارة','Admin note'))+':</b> '+esc(item.paymentReviewNote)+'</p>':'';
   const html='<form id="paymentReceiptForm" class="form-stack" data-entity-type="'+esc(entityType)+'" data-entity-id="'+esc(entityId)+'">'+
     '<section class="payment-upload-note"><strong>'+esc(paymentLabel(item.paymentStatus||'awaiting_receipt'))+'</strong><p>'+esc(message)+'</p>'+adminNote+'</section>'+
-    '<label><span>'+esc(tr('إيصال الدفع','Payment receipt'))+'</span><input id="paymentReceiptFile" type="file" accept="image/*,application/pdf,.pdf" required><small>'+esc(tr('صورة أو PDF — الحد الأقصى 5 MB.','Image or PDF — maximum 5 MB.'))+'</small></label>'+
+    '<label><span>'+esc(tr('إيصال الدفع','Payment receipt'))+'</span><input id="paymentReceiptFile" type="file" accept="image/*,application/pdf,.pdf" required><small>'+esc(tr('صورة أو PDF — ملف PDF بحد أقصى 3 MB، والصور تُضغط تلقائيًا.','Image or PDF — PDF maximum 3 MB; images are compressed automatically.'))+'</small></label>'+
     '<p class="form-message" id="paymentReceiptMessage"></p><button class="primary-btn" type="submit">'+esc(tr('إرسال الإيصال','Submit receipt'))+'</button></form>';
   openModal(title,kicker,html);
   $('paymentReceiptForm').addEventListener('submit',submitPaymentReceipt);
