@@ -275,8 +275,84 @@ function bankAccountPanel(){
   const rows=bankAccounts();
   return `<section class="section-block admin-bank-panel"><div class="section-title"><div><h2>${esc(tr('حسابات استلام المدفوعات','Payment receiving accounts'))}</h2><p>${esc(tr('تظهر بيانات الحساب للعميل فقط بعد اختيارها داخل طلب في مرحلة الدفع.','Account details are shown to a customer only after the account is selected for an order at the payment stage.'))}</p></div><button class="primary-small" type="button" data-admin-bank-new>+ ${esc(tr('إضافة حساب','Add account'))}</button></div><div class="admin-bank-list">${rows.map(a=>`<article class="admin-bank-row"><div><strong>${esc(a.label||a.bankName)}</strong><small>${esc(a.bankName)} · ${esc(a.currency||'')}</small><span class="status-pill ${a.active!==false?'status-published':'status-cancelled'}">${esc(a.active!==false?tr('نشط','Active'):tr('متوقف','Inactive'))}</span></div><div class="admin-category-actions"><button type="button" data-admin-bank-edit="${esc(a.id)}">${esc(tr('تعديل','Edit'))}</button><button type="button" data-admin-bank-toggle="${esc(a.id)}">${esc(a.active!==false?tr('إيقاف','Disable'):tr('تفعيل','Enable'))}</button><button class="danger-text" type="button" data-admin-bank-delete="${esc(a.id)}">${esc(tr('حذف','Delete'))}</button></div></article>`).join('')||empty()}</div></section>`;
 }
-function accounts(){const u=me(),rows=(state?.accounts||[]).filter(a=>['client','supplier'].includes(a.role)&&!a.deletedAt&&matches(a,'account'));setRoot('account',page(tr('الإدارة والحسابات','Admin & accounts'),tr('بيانات حسابك ودليل العملاء والموردين.','Your profile and customer/supplier directory.'))+`<section class="profile-card admin-profile"><div class="avatar">${esc((u?.name||u?.email||'M').charAt(0).toUpperCase())}</div><h2>${esc(u?.name||tr('الإدارة','Admin'))}</h2><p>${esc(tr('حساب إدارة','Admin account'))}</p><button class="danger-btn" data-action="logout">${esc(tr('تسجيل الخروج','Sign out'))}</button></section>`+bankAccountPanel()+`<section class="section-block admin-directory"><div class="section-title"><h2>${esc(tr('العملاء والموردون','Customers & suppliers'))}</h2></div>${search(tr('ابحث بالاسم أو الشركة','Search name or company'))}<div class="list-stack" data-admin-results>${rows.slice(0,100).map(a=>`<button class="admin-account-row" data-admin-account="${esc(a.id)}"><div><strong>${esc(a.company||a.name||'#'+String(a.id).slice(0,8))}</strong><small>${esc(a.role==='client'?tr('عميل','Customer'):tr('مورد','Supplier'))}</small></div><span>›</span></button>`).join('')||empty()}</div></section>`);}
-export function renderAdminScreen(v=activeView()){if(!isAdmin()||v==='notifications')return false;if(v==='home')home();else if(v==='requests')requests();else if(v==='offers')offers();else if(v==='account')accounts();return true;}
+const ADMIN_PERMISSION_META=[
+  ['requests.read','الطلبات: عرض','Requests: view'],['requests.edit','الطلبات: تعديل','Requests: edit'],
+  ['offers.read','العروض: عرض','Offers: view'],['offers.edit','العروض: تعديل','Offers: edit'],
+  ['translate','الترجمة','Translation'],['publish','الاعتماد والنشر','Approve & publish'],
+  ['accounts.read','بيانات الحسابات','Account data'],['moderate','الحظر والتعليق','Moderation'],
+  ['trash','الحذف والاستعادة','Delete & restore'],['settings','الإعدادات والحسابات البنكية','Settings & bank accounts'],
+  ['team','إدارة المديرين','Admin team']
+];
+function operationTabs(){
+  return '<div class="segmented admin-segmented admin-segmented-3">'+
+    '<button class="'+(operationTab==='payments'?'active':'')+'" data-admin-operation-tab="payments">'+esc(tr('المدفوعات','Payments'))+'</button>'+
+    '<button class="'+(operationTab==='execution'?'active':'')+'" data-admin-operation-tab="execution">'+esc(tr('التنفيذ والفحص','Execution'))+'</button>'+
+    '<button class="'+(operationTab==='shipping'?'active':'')+'" data-admin-operation-tab="shipping">'+esc(tr('الشحن','Shipping'))+'</button>'+
+  '</div>';
+}
+function operations(){
+  const entries=adminOrderEntries().filter(adminOrderMatches);
+  let rows=[],titleText='',subtitle='';
+  if(operationTab==='payments'){
+    rows=entries.filter(e=>e.entity.paymentStatus||e.status==='payment_confirmation').sort((a,b)=>(needsPaymentReview(b.entity)?1:0)-(needsPaymentReview(a.entity)?1:0)||(Date.parse(b.updatedAt||0)||0)-(Date.parse(a.updatedAt||0)||0));
+    titleText=tr('المدفوعات','Payments');subtitle=tr('راجع الإيصالات وحالات الدفع لجميع الطلبات.','Review receipts and payment states for all orders.');
+  }else if(operationTab==='shipping'){
+    rows=entries.filter(e=>['ready_to_ship','shipped','in_delivery','delivered'].includes(e.status));
+    titleText=tr('الشحن','Shipping');subtitle=tr('الطلبات الجاهزة للشحن والمشحونة وقيد التوصيل.','Orders ready to ship, shipped, or in delivery.');
+  }else{
+    rows=entries.filter(e=>needsSupplierConfirmationEntry(e)||isInspectionReady(e)||isExecutionProblem(e)||['production','quality_check','ready_to_ship'].includes(e.status));
+    titleText=tr('التنفيذ والفحص','Execution & inspection');subtitle=tr('متابعة تأكيد المورد والإنتاج والفحص والمشاكل التشغيلية.','Track supplier confirmation, production, inspection, and execution issues.');
+  }
+  const paymentReview=entries.filter(e=>needsPaymentReview(e.entity)).length,inspection=entries.filter(isInspectionReady).length,problems=entries.filter(isExecutionProblem).length;
+  const stats='<div class="stats-grid admin-operation-stats"><div class="stat-card"><strong>'+paymentReview+'</strong><span>'+esc(tr('إيصالات للمراجعة','Receipts to review'))+'</span></div><div class="stat-card"><strong>'+inspection+'</strong><span>'+esc(tr('جاهز للفحص','Ready for inspection'))+'</span></div><div class="stat-card"><strong>'+problems+'</strong><span>'+esc(tr('مشاكل','Issues'))+'</span></div></div>';
+  setRoot('operations',page(tr('العمليات','Operations'),tr('المدفوعات والتنفيذ والفحص والشحن في مساحة عمل واحدة.','Payments, execution, inspection, and shipping in one workspace.'))+
+    operationTabs()+stats+search(tr('ابحث برقم الطلب أو العميل','Search order or customer'))+
+    '<section class="section-block"><div class="section-title"><div><h2>'+esc(titleText)+'</h2><p>'+esc(subtitle)+'</p></div></div><div class="list-stack" data-admin-results>'+(rows.map(e=>operationalCard(e,operationTab==='payments'?'payment':'execution')).join('')||empty())+'</div></section>');
+}
+function directoryPanel(role){
+  const rows=(state?.accounts||[]).filter(a=>a.role===role&&!a.deletedAt&&matches(a,'account'));
+  return '<section class="section-block admin-directory"><div class="section-title"><div><h2>'+esc(role==='client'?tr('العملاء','Customers'):tr('الموردون','Suppliers'))+'</h2><p>'+esc(role==='client'?tr('بيانات العملاء وسجل طلباتهم وإدارة الحساب.','Customer details, order history, and account controls.'):tr('بيانات الموردين وعروضهم وطلباتهم النشطة.','Supplier details, offers, and active orders.'))+'</p></div></div>'+
+    search(role==='client'?tr('ابحث باسم العميل أو الشركة','Search customer or company'):tr('ابحث باسم المورد أو الشركة','Search supplier or company'))+
+    '<div class="list-stack" data-admin-results>'+((rows.slice(0,150).map(a=>'<button class="admin-account-row" data-admin-account="'+esc(a.id)+'"><div><strong>'+esc(a.company||a.name||'#'+String(a.id).slice(0,8))+'</strong><small>'+esc(a.country||'—')+(a.blockedAt?' · '+esc(tr('محظور','Blocked')):'')+'</small></div><span>›</span></button>').join(''))||empty())+'</div></section>';
+}
+function teamPanel(){
+  const u=me(),admins=(state?.accounts||[]).filter(a=>a.role==='admin'&&!a.deletedAt);
+  const owner=admins.find(a=>a.isOwner)||u;
+  const rows=admins.filter(a=>!a.isOwner);
+  const add=can('team')?'<button class="primary-small" type="button" data-admin-team-new>+ '+esc(tr('إضافة مدير','Add admin'))+'</button>':'';
+  const ownerCard='<article class="admin-super-card"><div class="avatar">'+esc((owner?.name||owner?.email||'S').charAt(0).toUpperCase())+'</div><div><small>'+esc(tr('المدير الرئيسي','Super Admin'))+'</small><strong>'+esc(owner?.name||owner?.email||tr('حساب المالك','Owner account'))+'</strong><p>'+esc(tr('جميع الصلاحيات مفعلة دائمًا، ولا يمكن لمدير آخر تعديل هذا الحساب أو حظره.','All permissions are always enabled. Other admins cannot modify or block this account.'))+'</p></div><span>✓</span></article>';
+  const list=rows.map(a=>'<article class="admin-team-row"><div><strong>'+esc(a.name||a.email||'#'+String(a.id).slice(0,8))+'</strong><small>'+esc(a.email||'')+(a.blockedAt?' · '+esc(tr('محظور','Blocked')):'')+'</small><div class="admin-team-permissions">'+(a.permissions||[]).slice(0,4).map(p=>'<span>'+esc((ADMIN_PERMISSION_META.find(x=>x[0]===p)||[p,p,p])[lang()==='ar'?1:2])+'</span>').join('')+((a.permissions||[]).length>4?'<span>+'+((a.permissions||[]).length-4)+'</span>':'')+'</div></div>'+(can('team')?'<button class="secondary-btn" type="button" data-admin-team-edit="'+esc(a.id)+'">'+esc(tr('إدارة','Manage'))+'</button>':'')+'</article>').join('');
+  return '<section class="section-block admin-team-panel"><div class="section-title"><div><h2>'+esc(tr('المديرون والصلاحيات','Admins & permissions'))+'</h2><p>'+esc(tr('المالك يملك جميع الصلاحيات، ويمكن تفويض المديرين الآخرين حسب مهامهم.','The owner has all permissions; other admins can be delegated by role.'))+'</p></div>'+add+'</div>'+ownerCard+'<div class="admin-team-list">'+(list||empty())+'</div></section>';
+}
+function settingsPanel(){
+  const u=me(),profile='<section class="profile-card admin-profile"><div class="avatar">'+esc((u?.name||u?.email||'M').charAt(0).toUpperCase())+'</div><h2>'+esc(u?.name||tr('الإدارة','Admin'))+'</h2><p>'+esc(u?.isOwner?tr('Super Admin — جميع الصلاحيات','Super Admin — full access'):tr('حساب إدارة','Admin account'))+'</p><button class="danger-btn" data-action="logout">'+esc(tr('تسجيل الخروج','Sign out'))+'</button></section>';
+  return profile+bankAccountPanel()+categoryPanel();
+}
+function moreTabs(){
+  return '<div class="admin-more-tabs">'+
+    '<button class="'+(moreTab==='customers'?'active':'')+'" data-admin-more-tab="customers">👤<span>'+esc(tr('العملاء','Customers'))+'</span></button>'+
+    '<button class="'+(moreTab==='suppliers'?'active':'')+'" data-admin-more-tab="suppliers">▣<span>'+esc(tr('الموردون','Suppliers'))+'</span></button>'+
+    '<button class="'+(moreTab==='team'?'active':'')+'" data-admin-more-tab="team">♟<span>'+esc(tr('المديرون','Admins'))+'</span></button>'+
+    '<button class="'+(moreTab==='settings'?'active':'')+'" data-admin-more-tab="settings">⚙<span>'+esc(tr('الإعدادات','Settings'))+'</span></button>'+
+  '</div>';
+}
+function more(){
+  let content='';
+  if(moreTab==='suppliers')content=directoryPanel('supplier');
+  else if(moreTab==='team')content=teamPanel();
+  else if(moreTab==='settings')content=settingsPanel();
+  else content=directoryPanel('client');
+  setRoot('more',page(tr('المزيد','More'),tr('الحسابات والمديرون والإعدادات.','Accounts, admins, and platform settings.'))+moreTabs()+content);
+}
+export function renderAdminScreen(v=activeView()){
+  if(!isAdmin()||v==='notifications')return false;
+  if(v==='home')home();
+  else if(v==='requests')requests();
+  else if(v==='offers')offers();
+  else if(v==='operations')operations();
+  else if(v==='more'||v==='account')more();
+  return true;
+}
 function render(){if(!document.getElementById('appView')?.classList.contains('hidden'))renderAdminScreen();}
 
 function modal(titleText,kicker,html){const m=document.getElementById('modal');if(!m)return;document.getElementById('modalTitle').textContent=titleText;document.getElementById('modalKicker').textContent=kicker||'';document.getElementById('modalBody').innerHTML=html;m.classList.remove('hidden');hydrate(document.getElementById('modalBody'));}
