@@ -2094,3 +2094,5 @@ body.image-viewer-open {
 .admin-supplier-confirmation.blocked{border-color:#efc3c3;background:#fff9f9}.admin-supplier-confirmation.blocked .admin-supplier-confirmation-head>span{background:#faeaea;color:#983d3d}
 .admin-supplier-confirmation p{margin:0;color:#475569}.admin-supplier-confirmation>small{color:var(--muted,#64748b);line-height:1.55}
 .admin-send-to-supplier{margin-bottom:12px;width:100%}
+
+.supplier-order-payment-hint{margin:0 0 2px;padding:10px 12px;border-radius:12px;background:var(--soft,#f5f7f9);color:var(--muted,#64748b);font-size:12px;line-height:1.55}
