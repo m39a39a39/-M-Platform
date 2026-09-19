@@ -15,6 +15,7 @@ let activeSub='primary';
 let readyProductsPage=1;
 let readyCategory='all';
 let clientRequestFilter='all';
+let supplierOrderFilter='active';
 let busy=false;
 let lastDataLoadedAt=0;
 const PAGE_SIZE=20;
@@ -45,10 +46,9 @@ const TRACKING_FLOW=[
   ['supplier_confirmation','بانتظار تأكيد المورد','Awaiting supplier confirmation'],
   ['payment_confirmation','تأكيد الطلب والدفع','Order & payment confirmation'],
   ['production','قيد الإنتاج','In production'],
-  ['quality_check','الفحص والجودة','Quality inspection'],
+  ['quality_check','بانتظار اعتماد الفحص','Inspection pending approval'],
   ['ready_to_ship','جاهز للشحن','Ready to ship'],
   ['shipped','تم الشحن','Shipped'],
-  ['in_delivery','قيد التوصيل','In delivery'],
   ['delivered','تم التسليم','Delivered'],
   ['completed','مكتمل','Completed']
 ];
@@ -57,10 +57,9 @@ const READY_TRACKING_FLOW=[
   ['supplier_confirmation','بانتظار تأكيد المورد','Awaiting supplier confirmation'],
   ['payment_confirmation','تأكيد الطلب والدفع','Order & payment confirmation'],
   ['production','قيد الإنتاج','In production'],
-  ['quality_check','الفحص والجودة','Quality inspection'],
+  ['quality_check','بانتظار اعتماد الفحص','Inspection pending approval'],
   ['ready_to_ship','جاهز للشحن','Ready to ship'],
   ['shipped','تم الشحن','Shipped'],
-  ['in_delivery','قيد التوصيل','In delivery'],
   ['delivered','تم التسليم','Delivered'],
   ['completed','مكتمل','Completed']
 ];
@@ -153,7 +152,7 @@ async function loadData({render=true}={}){
 }
 configureAdmin({reload:()=>loadData({render:false})});
 session.onReset(reason=>{
-  currentUser=null;platformState=null;notifications=[];activeScreen='home';activeSub='primary';readyProductsPage=1;readyCategory='all';clientRequestFilter='all';
+  currentUser=null;platformState=null;notifications=[];activeScreen='home';activeSub='primary';readyProductsPage=1;readyCategory='all';clientRequestFilter='all';supplierOrderFilter='active';
   resetAdmin();closeModal();
   for(const url of mediaCache.values())URL.revokeObjectURL(url);
   mediaCache.clear();mediaTasks.clear();lastDataLoadedAt=0;$('screen').replaceChildren();$('headerRole').textContent='';
@@ -292,7 +291,8 @@ const SUPPLIER_ORDER_LABELS={
   pending_confirmation:['بانتظار تأكيد المورد','Awaiting supplier confirmation'],
   confirmed:['تم تأكيد الطلب','Order confirmed'],
   production:['قيد التجهيز/الإنتاج','In preparation / production'],
-  ready_for_inspection:['جاهز للفحص','Ready for inspection'],
+  ready_for_inspection:['بانتظار الفحص','Awaiting inspection'],
+  completed:['مكتمل','Completed'],
   cannot_fulfill:['تعذر التنفيذ','Unable to fulfill']
 };
 function supplierOrderLabel(status){const row=SUPPLIER_ORDER_LABELS[status]||SUPPLIER_ORDER_LABELS.pending_confirmation;return tr(row[0],row[1]);}
@@ -302,12 +302,14 @@ function supplierOrders(){
   const custom=requests.filter(r=>r.selectedForSupplier).map(r=>{
     const q=quotes.find(x=>x.requestId===r.id);if(!q)return null;
     const quantity=Number(r.quantity),unitPrice=Number(q.unitPrice),total=Number.isFinite(quantity)&&Number.isFinite(unitPrice)?quantity*unitPrice:null;
-    return {type:'quote',id:q.id,version:q.version,request:r,quote:q,item:r,title:titleOf(r),images:r.images||[],source:tr('عرض مقدم','Submitted quote'),status:q.supplierOrderStatus||'pending_confirmation',note:q.supplierOrderNote||'',paymentConfirmed:!!r.paymentConfirmed,updatedAt:q.supplierOrderUpdatedAt||q.updatedAt||q.createdAt||r.createdAt,quantity:r.quantity||'',unitPrice:q.unitPrice,currency:q.currency,total,country:r.country||''};
+    const trackingStatus=requestTrackingStatus(r),completed=['shipped','in_delivery','delivered','completed'].includes(trackingStatus);
+    return {type:'quote',id:q.id,version:q.version,request:r,quote:q,item:r,title:titleOf(r),images:r.images||[],source:tr('عرض مقدم','Submitted quote'),status:completed?'completed':(q.supplierOrderStatus||'pending_confirmation'),trackingStatus,note:q.supplierOrderNote||'',paymentConfirmed:!!r.paymentConfirmed,updatedAt:r.trackingUpdatedAt||q.supplierOrderUpdatedAt||q.updatedAt||q.createdAt||r.createdAt,quantity:r.quantity||'',unitPrice:q.unitPrice,currency:q.currency,total,country:r.country||''};
   }).filter(Boolean);
   const ready=interests.map(i=>{
     const o=offers.find(x=>x.id===i.offerId);if(!o)return null;
     const quantity=Number(i.quantity),unitPrice=Number(i.unitPrice||o.unitPrice),total=Number(i.total);
-    return {type:'public',id:i.id,version:i.version,interest:i,offer:o,item:o,title:titleOf(o),images:o.images||[],source:tr('عرض عام','Public offer'),status:i.supplierOrderStatus||'pending_confirmation',note:i.supplierOrderNote||'',paymentConfirmed:!!i.paymentConfirmed,updatedAt:i.supplierOrderUpdatedAt||i.createdAt,quantity:i.quantity||'',unitPrice:i.unitPrice||o.unitPrice,currency:i.currency||o.currency,total:Number.isFinite(total)&&total>0?total:(Number.isFinite(quantity)&&quantity>0&&Number.isFinite(unitPrice)&&unitPrice>0?quantity*unitPrice:null),country:o.country||'',moq:i.moq||o.moq||''};
+    const trackingStatus=readyTrackingStatus(i),completed=['shipped','in_delivery','delivered','completed'].includes(trackingStatus);
+    return {type:'public',id:i.id,version:i.version,interest:i,offer:o,item:o,title:titleOf(o),images:o.images||[],source:tr('عرض عام','Public offer'),status:completed?'completed':(i.supplierOrderStatus||'pending_confirmation'),trackingStatus,note:i.supplierOrderNote||'',paymentConfirmed:!!i.paymentConfirmed,updatedAt:i.trackingUpdatedAt||i.supplierOrderUpdatedAt||i.createdAt,quantity:i.quantity||'',unitPrice:i.unitPrice||o.unitPrice,currency:i.currency||o.currency,total:Number.isFinite(total)&&total>0?total:(Number.isFinite(quantity)&&quantity>0&&Number.isFinite(unitPrice)&&unitPrice>0?quantity*unitPrice:null),country:o.country||'',moq:i.moq||o.moq||''};
   }).filter(Boolean);
   return [...custom,...ready].sort((a,b)=>(Date.parse(b.updatedAt||0)||0)-(Date.parse(a.updatedAt||0)||0));
 }
@@ -326,9 +328,11 @@ function supplierOrderCard(order){
 }
 function renderSupplierOrders(){
   if(currentUser?.role!=='supplier'){activeScreen='home';renderHome();return;}
-  const rows=supplierOrders();
-  $('screen').innerHTML=pageHeader(tr('الطلبات','Orders'),tr('الطلبات التي أصبحت جاهزة للتنفيذ بعد اختيار العميل واعتماد الإدارة.','Orders ready for fulfillment after customer selection and admin approval.'))+
-    `<div class="supplier-orders-list">${rows.map(supplierOrderCard).join('')||empty()}</div>`;
+  if(!['active','completed'].includes(supplierOrderFilter))supplierOrderFilter='active';
+  const all=supplierOrders(),active=all.filter(o=>o.status!=='completed'),completed=all.filter(o=>o.status==='completed'),rows=supplierOrderFilter==='completed'?completed:active;
+  const tabs=`<div class="client-order-filters supplier-order-filters"><button class="${supplierOrderFilter==='active'?'active':''}" data-supplier-order-filter="active">${esc(tr('الطلبات النشطة','Active orders'))} <span>${active.length}</span></button><button class="${supplierOrderFilter==='completed'?'active':''}" data-supplier-order-filter="completed">${esc(tr('الطلبات المكتملة','Completed orders'))} <span>${completed.length}</span></button></div>`;
+  $('screen').innerHTML=pageHeader(tr('الطلبات','Orders'),tr('تابع الطلبات النشطة، وتنتقل الطلبات المشحونة تلقائيًا إلى المكتملة.','Track active orders. Shipped orders move automatically to Completed.'))+
+    tabs+`<div class="supplier-orders-list">${rows.map(supplierOrderCard).join('')||empty()}</div>`;
 }
 function clientOrders(){
   if(currentUser?.role!=='client')return[];
@@ -416,7 +420,7 @@ function renderHome(){
       companyFooterCard();
   }else if(role==='supplier'){
     const quotes=platformState.quotes||[],answered=new Set(quotes.map(q=>q.requestId)),invites=(platformState.requests||[]).filter(r=>!answered.has(r.id));
-    const pub=platformState.publicOffers||[],orders=supplierOrders(),pendingOrders=orders.filter(o=>o.status==='pending_confirmation'),activeOrders=orders.filter(o=>!['ready_for_inspection','cannot_fulfill'].includes(o.status)),publishedPublic=pub.filter(o=>o.status==='published').length,recentOrders=orders.slice(0,3);
+    const pub=platformState.publicOffers||[],orders=supplierOrders(),pendingOrders=orders.filter(o=>o.status==='pending_confirmation'),activeOrders=orders.filter(o=>!['completed','cannot_fulfill'].includes(o.status)),publishedPublic=pub.filter(o=>o.status==='published').length,recentOrders=orders.slice(0,3);
     const needed=[...pendingOrders.slice(0,3).map(supplierOrderCard),...invites.slice(0,Math.max(0,3-pendingOrders.length)).map(r=>itemCard(r,{subtitle:descriptionOf(r),meta:`${t('quantity')}: ${r.quantity||'—'} · ${r.country||'—'}`,badge:`<span class="status-pill status-review">${esc(tr('تقديم عرض','Submit quote'))}</span>`,action:`data-supplier-request="${esc(r.id)}"`}))];
     $('screen').innerHTML=pageHeader(`${tr('مرحبًا','Welcome')} ${esc(currentUser.name||currentUser.company||'')}`,tr('ركز على الطلبات التي تحتاج إجراء منك أولًا.','Focus first on the items that need your action.'))+
       `<section class="supplier-public-cta"><div class="supplier-public-cta-copy"><span class="supplier-public-cta-icon">＋</span><div><h2>${esc(tr('إضافة عرض عام جديد','Add a new public offer'))}</h2><p>${esc(tr('أضف منتجًا جاهزًا للبيع ليظهر للعملاء بعد مراجعة الإدارة.','Add a ready-to-sell product for customers to see after admin review.'))}</p></div></div><button class="primary-btn" type="button" data-action="new-public">+ ${esc(t('newPublicOffer'))}</button></section>`+
@@ -580,7 +584,8 @@ function supplierOrderActions(order){
   if(order.status==='pending_confirmation')return `<div class="supplier-order-actions"><button class="primary-btn" type="button" data-supplier-order-status="confirmed" ${base}>${esc(tr('تأكيد التنفيذ','Confirm fulfillment'))}</button><button class="secondary-btn" type="button" data-supplier-order-cannot ${base}>${esc(tr('تعذر التنفيذ','Unable to fulfill'))}</button></div>`;
   if(order.status==='confirmed')return `<div class="supplier-order-actions"><p class="supplier-order-payment-hint">${esc(tr('يمكن بدء التجهيز/الإنتاج بعد تأكيد الدفع من الإدارة. يتحقق النظام من ذلك تلقائيًا.','Preparation / production can start after admin confirms payment. The system checks this automatically.'))}</p><button class="primary-btn" type="button" data-supplier-order-status="production" ${base}>${esc(tr('بدء التجهيز / الإنتاج','Start preparation / production'))}</button><button class="secondary-btn" type="button" data-supplier-order-cannot ${base}>${esc(tr('تعذر التنفيذ','Unable to fulfill'))}</button></div>`;
   if(order.status==='production')return `<div class="supplier-order-actions"><button class="primary-btn" type="button" data-supplier-order-status="ready_for_inspection" ${base}>${esc(tr('جاهز للفحص','Ready for inspection'))}</button><button class="secondary-btn" type="button" data-supplier-order-cannot ${base}>${esc(tr('تعذر التنفيذ','Unable to fulfill'))}</button></div>`;
-  if(order.status==='ready_for_inspection')return `<div class="supplier-order-complete">✓ ${esc(tr('تم إشعار الإدارة أن الطلب جاهز للفحص.','Admin has been notified that the order is ready for inspection.'))}</div>`;
+  if(order.status==='ready_for_inspection')return `<div class="supplier-order-complete">✓ ${esc(tr('تم إرسال طلب الفحص للإدارة. بانتظار اعتماد الفحص والشحن.','Inspection request sent to admin. Awaiting inspection approval and shipment.'))}</div>`;
+  if(order.status==='completed')return `<div class="supplier-order-complete">✓ ${esc(tr('تم شحن الطلب وأصبح ضمن الطلبات المكتملة لديك.','The order has shipped and is now in your completed orders.'))}</div>`;
   return `<div class="supplier-order-cannot-note"><strong>${esc(tr('تعذر التنفيذ','Unable to fulfill'))}</strong><p>${esc(order.note||'—')}</p></div>`;
 }
 function openSupplierOrder(type,id){
@@ -684,6 +689,7 @@ async function handleAction(target){
   if(['home','orders','requests','offers','notifications','account'].includes(target.dataset.action)){activeScreen=target.dataset.action;if(activeScreen==='offers')activeSub='primary';renderScreen();return;}
   if(target.dataset.clientOffersRequest)return openClientOffers(target.dataset.clientOffersRequest);
   if(target.dataset.clientOrderFilter){clientRequestFilter=target.dataset.clientOrderFilter;renderRequests();$('screen').scrollTop=0;return;}
+  if(target.dataset.supplierOrderFilter){supplierOrderFilter=target.dataset.supplierOrderFilter;renderSupplierOrders();$('screen').scrollTop=0;return;}
   if(target.dataset.request)return openClientRequest(target.dataset.request);
   if(target.dataset.supplierRequest)return openSupplierRequest(target.dataset.supplierRequest);
   if(target.dataset.supplierOrderId&&target.dataset.supplierOrderType&&!target.dataset.supplierOrderStatus&&!target.hasAttribute('data-supplier-order-cannot'))return openSupplierOrder(target.dataset.supplierOrderType,target.dataset.supplierOrderId);
@@ -742,7 +748,7 @@ $('headerNotificationsBtn').addEventListener('click',()=>{if(!currentUser)return
 onLanguageChange(value=>{lang=value;applyLanguage();applyRegistrationLanguage();});
 $('refreshBtn').addEventListener('click',async()=>{if(busy)return;busy=true;$('refreshBtn').classList.add('spin');try{await loadData();showToast(t('refreshing'));}catch(e){showToast(errorText(e));}finally{busy=false;$('refreshBtn').classList.remove('spin');}});
 $('bottomNav').addEventListener('click',e=>{const b=e.target.closest('button[data-screen]');if(!b)return;activeScreen=b.dataset.screen;if(activeScreen==='offers')activeSub='primary';renderScreen();$('screen').scrollTop=0;});
-$('screen').addEventListener('click',e=>{const sub=e.target.closest('[data-sub]');if(sub){activeSub=sub.dataset.sub;renderScreen();return;}const target=e.target.closest('[data-action],[data-category],[data-client-order-filter],[data-client-offers-request],[data-request],[data-supplier-request],[data-supplier-order-id],[data-public-offer],[data-edit-quote],[data-quote-request],[data-select-quote],[data-interest],[data-notification],[data-payment-notification],[data-payment-upload],[data-payment-document],[data-copy-value]');if(target)handleAction(target);});
+$('screen').addEventListener('click',e=>{const sub=e.target.closest('[data-sub]');if(sub){activeSub=sub.dataset.sub;renderScreen();return;}const target=e.target.closest('[data-action],[data-category],[data-client-order-filter],[data-supplier-order-filter],[data-client-offers-request],[data-request],[data-supplier-request],[data-supplier-order-id],[data-public-offer],[data-edit-quote],[data-quote-request],[data-select-quote],[data-interest],[data-notification],[data-payment-notification],[data-payment-upload],[data-payment-document],[data-copy-value]');if(target)handleAction(target);});
 $('modal').addEventListener('click',e=>{if(e.target.closest('[data-close-modal]')){closeModal();return;}const target=e.target.closest('[data-client-offers-request],[data-edit-quote],[data-quote-request],[data-select-quote],[data-interest],[data-supplier-order-status],[data-supplier-order-cannot],[data-payment-upload],[data-payment-document],[data-copy-value]');if(target)handleAction(target);});
 
 App.addListener('appUrlOpen',async event=>{const url=event.url||'';if(!currentUser)return;if(url.includes('/notifications')){activeScreen='notifications';renderScreen();return;}const m=url.match(/\/requests\/([^?]+)/);if(m){if(currentUser.role==='supplier')openSupplierRequest(decodeURIComponent(m[1]));else openClientRequest(decodeURIComponent(m[1]));}});
