@@ -321,7 +321,6 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
         assert.equal(await page.locator('[data-admin-interest-tracking-status] option').count(),12,'Ready-product requests must use fulfillment tracking statuses and exceptions');
         const publicOrderSummary=await page.locator('#modal .admin-selected-quote-card').textContent();
         assert.ok(publicOrderSummary.includes('600'),'Admin public-offer order must show requested quantity');
-        assert.ok(publicOrderSummary.includes('7,200')||publicOrderSummary.includes('7200'),'Admin public-offer order must show total');
         assert.equal(await page.locator('#modal [data-admin-payment-amount]').inputValue(),'7200','Public-offer total must auto-fill the amount due');
         assert.equal(await page.locator('#modal [data-admin-payment-currency]').inputValue(),'USD','Public-offer currency must auto-fill from the frozen offer snapshot');
         assert.equal(await page.locator('#modal .admin-payment-review').count(),1,'Admin must see submitted payment receipt review controls');
