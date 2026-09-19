@@ -506,12 +506,15 @@ async function handleAction(target){
   if(target.dataset.action==='view-public-offers'){activeScreen='offers';activeSub='public';renderScreen();$('screen').scrollTop=0;return;}
   if(target.dataset.action==='logout')return logout();
   if(target.dataset.action==='mark-all'){await request('/api/v1/notifications/read',{method:'POST',auth:true,body:{all:true}});await loadData();return;}
-  if(['home','requests','offers','notifications','account'].includes(target.dataset.action)){activeScreen=target.dataset.action;if(activeScreen==='offers')activeSub='primary';renderScreen();return;}
+  if(['home','orders','requests','offers','notifications','account'].includes(target.dataset.action)){activeScreen=target.dataset.action;if(activeScreen==='offers')activeSub='primary';renderScreen();return;}
   if(target.dataset.request)return openClientRequest(target.dataset.request);
   if(target.dataset.supplierRequest)return openSupplierRequest(target.dataset.supplierRequest);
+  if(target.dataset.supplierOrderId&&target.dataset.supplierOrderType)return openSupplierOrder(target.dataset.supplierOrderType,target.dataset.supplierOrderId);
   if(target.dataset.publicOffer)return openPublicOffer(target.dataset.publicOffer);
   if(target.dataset.editQuote){const q=(platformState.quotes||[]).find(x=>x.id===target.dataset.editQuote);if(q)return openQuoteForm(q.requestId,q);}
   if(target.dataset.quoteRequest)return openQuoteForm(target.dataset.quoteRequest);
+  if(target.dataset.supplierOrderStatus)return updateSupplierOrderStatus(target.dataset.supplierOrderType,target.dataset.supplierOrderId,target.dataset.supplierOrderStatus);
+  if(target.hasAttribute('data-supplier-order-cannot'))return openSupplierCannotFulfill(target.dataset.supplierOrderType,target.dataset.supplierOrderId);
   if(target.dataset.selectQuote){const r=(platformState.requests||[]).find(x=>x.id===target.dataset.requestId);if(!r)return;target.disabled=true;try{await mutate('requests',r.id,r.version,{selectedQuoteId:target.dataset.selectQuote});await loadData({render:false});closeModal();renderScreen();showToast(t('selected'));}catch(error){showToast(error.message);}return;}
   if(target.dataset.interest){const existing=(platformState.interests||[]).find(i=>i.offerId===target.dataset.interest);if(existing)return;target.disabled=true;try{await mutate('interests',id(),0,{offerId:target.dataset.interest,status:'pending'});await loadData({render:false});closeModal();renderScreen();showToast(t('requested'));}catch(error){showToast(error.message);}return;}
   if(target.dataset.copyValue!==undefined)return copyText(target.dataset.copyValue);
@@ -559,11 +562,12 @@ $('loginForm').addEventListener('submit',async e=>{
 });
 $('langBtn').addEventListener('click',toggleLanguage);
 $('appLangBtn').addEventListener('click',toggleLanguage);
+$('headerNotificationsBtn').addEventListener('click',()=>{if(!currentUser)return;activeScreen='notifications';renderScreen();$('screen').scrollTop=0;});
 onLanguageChange(value=>{lang=value;applyLanguage();applyRegistrationLanguage();});
 $('refreshBtn').addEventListener('click',async()=>{if(busy)return;busy=true;$('refreshBtn').classList.add('spin');try{await loadData();showToast(t('refreshing'));}catch(e){showToast(errorText(e));}finally{busy=false;$('refreshBtn').classList.remove('spin');}});
 $('bottomNav').addEventListener('click',e=>{const b=e.target.closest('button[data-screen]');if(!b)return;activeScreen=b.dataset.screen;if(activeScreen==='offers')activeSub='primary';renderScreen();$('screen').scrollTop=0;});
-$('screen').addEventListener('click',e=>{const sub=e.target.closest('[data-sub]');if(sub){activeSub=sub.dataset.sub;renderScreen();return;}const target=e.target.closest('[data-action],[data-category],[data-request],[data-supplier-request],[data-public-offer],[data-edit-quote],[data-quote-request],[data-select-quote],[data-interest],[data-notification],[data-payment-notification],[data-payment-upload],[data-payment-document]');if(target)handleAction(target);});
-$('modal').addEventListener('click',e=>{if(e.target.closest('[data-close-modal]')){closeModal();return;}const target=e.target.closest('[data-edit-quote],[data-quote-request],[data-select-quote],[data-interest],[data-payment-upload],[data-payment-document]');if(target)handleAction(target);});
+$('screen').addEventListener('click',e=>{const sub=e.target.closest('[data-sub]');if(sub){activeSub=sub.dataset.sub;renderScreen();return;}const target=e.target.closest('[data-action],[data-category],[data-request],[data-supplier-request],[data-supplier-order-id],[data-public-offer],[data-edit-quote],[data-quote-request],[data-select-quote],[data-interest],[data-notification],[data-payment-notification],[data-payment-upload],[data-payment-document]');if(target)handleAction(target);});
+$('modal').addEventListener('click',e=>{if(e.target.closest('[data-close-modal]')){closeModal();return;}const target=e.target.closest('[data-edit-quote],[data-quote-request],[data-select-quote],[data-interest],[data-supplier-order-status],[data-supplier-order-cannot],[data-payment-upload],[data-payment-document]');if(target)handleAction(target);});
 
 App.addListener('appUrlOpen',async event=>{const url=event.url||'';if(!currentUser)return;if(url.includes('/notifications')){activeScreen='notifications';renderScreen();return;}const m=url.match(/\/requests\/([^?]+)/);if(m){if(currentUser.role==='supplier')openSupplierRequest(decodeURIComponent(m[1]));else openClientRequest(decodeURIComponent(m[1]));}});
 
