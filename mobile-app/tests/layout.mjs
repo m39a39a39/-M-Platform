@@ -149,11 +149,14 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
     assert.equal(await page.locator('html').getAttribute('dir'),language==='ar'?'rtl':'ltr');
     if(role==='client'){
       assert.equal(await page.locator('#bottomNav button:visible').count(),4,'Client navigation must contain four visible sections');
-      assert.equal(await page.locator('#bottomNav [data-screen="offers"]:visible').count(),0,'Client Offers navigation must be removed');
+      assert.equal(await page.locator('#bottomNav [data-screen="offers"]:visible').count(),1,'Client navigation must include Quotes');
+      assert.equal(await page.locator('#bottomNav [data-screen="notifications"]:visible').count(),0,'Client notifications must move to the header');
+      assert.equal(await page.locator('#headerNotificationsBtn:not(.hidden)').count(),1,'Client notification bell must be visible in the header');
       assert.equal(await page.locator('#bottomNav').evaluate(el=>getComputedStyle(el).gridTemplateColumns.split(' ').length),4,'Client navigation must use four equal columns');
-      assert.ok(await page.locator('#screen').evaluate(el=>el.firstElementChild?.classList.contains('special-request-card')),'Custom request card must be first under the header');
-      assert.equal(await page.locator('#screen .stats-grid').count(),0,'Request summary must not appear on the client home page');
-      assert.equal(await page.locator('#screen [data-request]').count(),0,'Request list must not appear on the client home page');
+      assert.ok(await page.locator('#screen').evaluate(el=>el.firstElementChild?.classList.contains('special-request-card')),'New request card must be first on client home');
+      assert.equal(await page.locator('#screen .client-action-needed').count(),1,'Client home must include Needs your action');
+      assert.equal(await page.locator('#screen .client-home-stats .stat-card').count(),3,'Client home must show only three useful stats');
+      assert.equal(await page.locator('#screen .client-action-card').count()>0,true,'Client home must surface actionable items');
       assert.equal(await page.locator('#screen .public-offer-card').count(),20,'Client home must show at most 20 ready products');
       assert.equal(await page.locator('#screen .category-filter-bar button').count(),4,'Client must show All plus three category buttons');
       await page.locator('#screen [data-category="mobile"]').click();
@@ -194,9 +197,9 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
       await firstOffer.locator('.public-offer-content').click();
       await page.locator('#modal').waitFor({state:'visible'});
       assert.ok((await page.locator('#modalBody').textContent()).includes('30'),'Production time must remain in ready-product details');
-      assert.equal(await page.locator('#modal .public-order-summary').count(),1,'Existing public-offer request must show requested quantity and total');
-      assert.ok((await page.locator('#modal .public-order-summary').textContent()).includes('600'),'Existing public-offer request must show the requested quantity');
-      assert.ok((await page.locator('#modal .public-order-summary').textContent()).includes('7,200')||(await page.locator('#modal .public-order-summary').textContent()).includes('7200'),'Existing public-offer request must show total');
+      assert.equal(await page.locator('#modal .client-order-summary').count(),1,'Existing public-offer order must start with a concise order summary');
+      assert.ok((await page.locator('#modal .client-order-summary').textContent()).includes('600'),'Existing public-offer order must show requested quantity');
+      assert.ok((await page.locator('#modal .client-order-summary').textContent()).includes('7200'),'Existing public-offer order must show total');
       assert.equal(await page.locator('#modal .tracking-timeline').count(),1,'Requested ready product must show the unified order timeline');
       assert.equal(await page.locator('#modal .tracking-step').count(),9,'Ready-product timeline must skip sourcing and quote stages');
       assert.equal(await page.locator('#modal .payment-card').count(),1,'Ready-product payment status must appear inside the order');
@@ -263,7 +266,25 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
     }
     // Simulate a top notch, landscape side inset and home indicator.
     await page.addStyleTag({content:':root { --safe-top: 47px; --safe-bottom: 34px; --safe-left: 0px; --safe-right: 0px; }'});
-    const screens=role==='client'?['home','requests','notifications','account']:role==='supplier'?['home','orders','requests','offers','account']:['home','requests','offers','notifications','account'];
+    if(role==='client'){
+      await page.locator('#headerNotificationsBtn').click();
+      await page.locator('#screen .notification-list').waitFor();
+      assert.equal(await page.locator('[data-payment-notification="9001"]').count(),1,'Payment-required notification must include an upload receipt action');
+      if(label==='chromium-390-ar-client'){
+        await page.locator('[data-payment-notification="9001"]').click();
+        await page.locator('#paymentReceiptForm').waitFor();
+        const pdf=Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF');
+        await page.locator('#paymentReceiptFile').setInputFiles({name:'receipt.pdf',mimeType:'application/pdf',buffer:pdf});
+        await page.locator('#paymentReceiptForm button[type="submit"]').click();
+        await page.locator('#modal').waitFor({state:'hidden'});
+        assert.equal(paymentReceiptSubmission?.entityType,'request','Payment notification must upload receipt for the correct order type');
+        assert.equal(paymentReceiptSubmission?.entityId,'r0','Payment notification must upload receipt for the correct order');
+        assert.ok(paymentReceiptSubmission?.source?.startsWith('data:application/pdf;base64,'),'PDF receipt must be sent as a PDF data URL');
+        paymentReceiptSubmission=null;
+      }
+      await page.locator('#bottomNav [data-screen="home"]').click();
+    }
+    const screens=role==='client'?['home','requests','offers','account']:role==='supplier'?['home','orders','requests','offers','account']:['home','requests','offers','notifications','account'];
     for(const screen of screens) {
       await page.locator(`#bottomNav [data-screen="${screen}"]`).click();
       if(role==='admin' && screen!=='notifications') await page.locator(`[data-admin-root="${screen}"]`).waitFor();
@@ -278,22 +299,6 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
         assert.equal(await firstOffer.locator('.public-offer-facts span').count(),2,'Ready-product card must show only price and MOQ');
         assert.ok(await firstOffer.locator('h3').evaluate(el=>getComputedStyle(el).whiteSpace==='nowrap'),'Ready-product title must stay on one line');
         assert.ok(await firstOffer.locator('p').evaluate(el=>getComputedStyle(el).whiteSpace==='nowrap'),'Ready-product description must stay on one line');
-      }
-      if(screen==='notifications'&&role==='client'){
-        assert.equal(await page.locator('[data-payment-notification="9001"]').count(),1,'Payment-required notification must include an upload receipt action');
-        if(label==='chromium-390-ar-client'){
-          await page.locator('[data-payment-notification="9001"]').click();
-          await page.locator('#paymentReceiptForm').waitFor();
-          const pdf=Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF');
-          await page.locator('#paymentReceiptFile').setInputFiles({name:'receipt.pdf',mimeType:'application/pdf',buffer:pdf});
-          await page.locator('#paymentReceiptForm button[type="submit"]').click();
-          await page.locator('#modal').waitFor({state:'hidden'});
-          assert.equal(paymentReceiptSubmission?.entityType,'request','Payment notification must upload receipt for the correct order type');
-          assert.equal(paymentReceiptSubmission?.entityId,'r0','Payment notification must upload receipt for the correct order');
-          assert.ok(paymentReceiptSubmission?.source?.startsWith('data:application/pdf;base64,'),'PDF receipt must be sent as a PDF data URL');
-          paymentReceiptSubmission=null;
-          await page.locator('#bottomNav [data-screen="notifications"]').click();
-        }
       }
       if(screen==='offers'&&role==='admin'){
         await page.locator('[data-admin-offer-tab="all"]').click();
@@ -354,16 +359,23 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
         assert.ok(await page.locator('#screen').evaluate(el=>el.scrollHeight>el.clientHeight),'Long list did not scroll');
         if(role==='admin')assert.equal(await page.locator('[data-admin-request-filter]').count(),1,'Admin requests must include status filter');
         if(role==='client'){
-          assert.equal(await page.locator('#screen .client-request-stats').count(),1,'Request summary must appear inside Requests');
-          assert.equal(await page.locator('[data-client-request-group="custom"] [data-request]').count(),100,'All custom requests must be inside Requests');
-          assert.equal(await page.locator('[data-client-request-group="ready"] [data-public-offer]').count(),1,'Ready-product requests must be inside Requests');
+          assert.equal(await page.locator('#screen .client-order-filters button').count(),3,'My orders must include All, Active, and Completed filters');
+          assert.equal(await page.locator('#screen .client-order-card').count(),101,'My orders must combine custom and ready-product orders');
+          assert.equal(await page.locator('#screen [data-request]').count(),100,'Custom requests must remain accessible inside My orders');
+          assert.equal(await page.locator('#screen [data-public-offer]').count(),1,'Ready-product orders must remain accessible inside My orders');
+          await page.locator('#screen [data-client-order-filter="active"]').click();
+          assert.ok(await page.locator('#screen .client-order-card').count()>0,'Active filter must show active orders');
+          await page.locator('#screen [data-client-order-filter="all"]').click();
         }
         await page.screenshot({path:`${output}/${label}-requests.png`});
-        const card=role==='admin'?page.locator('[data-admin-open="request"][data-admin-id="r2"]'):page.locator(role==='supplier'?'[data-supplier-request]':'[data-request]').first();
-        await card.locator('.list-card-title').click();
+        const card=role==='admin'?page.locator('[data-admin-open="request"][data-admin-id="r2"]'):role==='supplier'?page.locator('[data-supplier-request]').first():page.locator('[data-request]').first();
+        if(role==='client')await card.click();else await card.locator('.list-card-title').click();
         await page.locator('#modal').waitFor({state:'visible'});
         await geometry(page,'#modal');
         if(role==='client'){
+          assert.equal(await page.locator('#modal .client-order-summary').count(),1,'Client request details must start with order summary');
+          assert.equal(await page.locator('#modal .client-current-status').count(),1,'Client request details must show current status before the timeline');
+          assert.equal(await page.locator('#modal .client-selected-quote').count(),1,'Selected quote summary must be visible inside the order');
           assert.equal(await page.locator('#modal .tracking-timeline').count(),1,'Client request details must show a tracking timeline');
           assert.equal(await page.locator('#modal .tracking-step').count(),13,'Tracking timeline must include all normal stages');
           assert.equal(await page.locator('#modal .payment-card').count(),1,'Payment stage must show payment instructions to the customer');
