@@ -248,6 +248,13 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
       assert.equal(supplierOrderMutation?.collection,'quotes','Selected quote fulfillment must update the supplier quote');
       assert.equal(supplierOrderMutation?.patch?.supplierOrderStatus,'confirmed','Supplier must be able to confirm fulfillment');
       supplierOrderMutation=null;
+      const publicOrder=page.locator('#screen [data-supplier-order-type="public"][data-supplier-order-id="i1"]');
+      await publicOrder.click();
+      await page.locator('#modal').waitFor({state:'visible'});
+      const publicSummary=await page.locator('#modal .supplier-order-summary').textContent();
+      assert.ok(publicSummary.includes('600'),'Supplier public-offer order must show the customer requested quantity');
+      assert.ok(publicSummary.includes('7200'),'Supplier public-offer order must show the frozen order total');
+      await page.locator('.modal-close').click();
 
       await page.locator('#headerNotificationsBtn').click();
       await page.locator('#screen .notification-list').waitFor();
@@ -312,6 +319,11 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
         await page.locator('[data-admin-interest-tracking-status]').waitFor();
         assert.equal(await page.locator('[data-admin-interest-status]').count(),0,'Legacy interest status selector must be removed');
         assert.equal(await page.locator('[data-admin-interest-tracking-status] option').count(),12,'Ready-product requests must use fulfillment tracking statuses and exceptions');
+        const publicOrderSummary=await page.locator('#modal .admin-selected-quote-card').textContent();
+        assert.ok(publicOrderSummary.includes('600'),'Admin public-offer order must show requested quantity');
+        assert.ok(publicOrderSummary.includes('7,200')||publicOrderSummary.includes('7200'),'Admin public-offer order must show total');
+        assert.equal(await page.locator('#modal [data-admin-payment-amount]').inputValue(),'7200','Public-offer total must auto-fill the amount due');
+        assert.equal(await page.locator('#modal [data-admin-payment-currency]').inputValue(),'USD','Public-offer currency must auto-fill from the frozen offer snapshot');
         assert.equal(await page.locator('#modal .admin-payment-review').count(),1,'Admin must see submitted payment receipt review controls');
         assert.equal(await page.locator('#modal [data-admin-payment-confirm]').count(),1,'Admin must be able to confirm payment');
         assert.equal(await page.locator('#modal [data-admin-payment-reupload]').count(),1,'Admin must be able to request a new receipt');
