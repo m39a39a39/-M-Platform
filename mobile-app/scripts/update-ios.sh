@@ -15,7 +15,7 @@ if [[ ! -f package.json || ! -d ios ]]; then
 fi
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
-files=(package.json package-lock.json index.html src/styles.css src/app.js src/admin-mobile.js src/guest.js src/session-core.js src/session.js src/language.js src/views.js)
+files=(package.json package-lock.json index.html src/styles.css src/app.js src/admin-mobile.js src/guest.js src/session-core.js src/session.js src/language.js src/views.js src/image-upload.js src/image-viewer.js)
 mkdir -p "$stage/src"
 for file in "${files[@]}"; do
   curl --fail --location --retry 2 --connect-timeout 20 --max-time 120 \
