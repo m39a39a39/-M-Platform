@@ -145,6 +145,10 @@ export async function mutate(user,body){
       }else if((collection==='requests'||collection==='interests')&&key==='trackingNote'){
         assert(collection==='requests'?(can(user,'requests.edit')||can(user,'publish')):(can(user,'offers.edit')||can(user,'publish')));
         assert(typeof patch[key]==='string'&&patch[key].length<=1000,400,'ملاحظة المتابعة طويلة / Tracking note too long');data.trackingNote=patch[key];
+      }else if((collection==='requests'||collection==='interests')&&key==='paymentMessage'){
+        assert(collection==='requests'?(can(user,'requests.edit')||can(user,'publish')):(can(user,'offers.edit')||can(user,'publish')));
+        assert(typeof patch[key]==='string'&&patch[key].trim()&&patch[key].trim().length<=2000,400,'اكتب رسالة الدفع للعميل / Add a payment message');
+        data.paymentMessage=patch[key].trim();
       }else if((contentFields[collection]||[]).includes(key)){
         assert(can(user,editPermission));data[key]=patch[key];
       }else assert(false,400,'حقل غير قابل للتعديل / Field not editable');
@@ -152,6 +156,16 @@ export async function mutate(user,body){
     if((collection==='requests'||collection==='interests')&&(changes.includes('trackingStatus')||changes.includes('trackingNote'))){
       setTracking(data,data.trackingStatus||'received',now,changes.includes('trackingNote')?patch.trackingNote:(data.trackingNote||''));
       if(collection==='interests')data.status=data.trackingStatus==='completed'?'completed':data.trackingStatus==='cancelled'?'cancelled':'active';
+    }
+    if((collection==='requests'||collection==='interests')&&changes.includes('trackingStatus')&&patch.trackingStatus==='payment_confirmation'&&original.data.trackingStatus!=='payment_confirmation'){
+      assert(data.paymentMessage?.trim(),400,'اكتب رسالة الدفع للعميل / Add a payment message');
+      if(data.paymentStatus!=='confirmed'){
+        data.paymentStatus='awaiting_receipt';
+        data.paymentRequestedAt=now;
+        data.paymentUpdatedAt=now;
+        data.paymentReviewNote='';
+        data.paymentHistory=[...(Array.isArray(data.paymentHistory)?data.paymentHistory:[]),{at:now,status:'awaiting_receipt'}].slice(-100);
+      }
     }
     if(collection==='requests'&&data.status==='sent'&&original.data.status!=='sent')advanceTracking(data,'sourcing',now);
     if(collection==='requests'&&data.status==='completed'&&original.data.status!=='completed')setTracking(data,'completed',now,'');
