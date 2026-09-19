@@ -509,7 +509,7 @@ async function handleAction(target){
   if(['home','orders','requests','offers','notifications','account'].includes(target.dataset.action)){activeScreen=target.dataset.action;if(activeScreen==='offers')activeSub='primary';renderScreen();return;}
   if(target.dataset.request)return openClientRequest(target.dataset.request);
   if(target.dataset.supplierRequest)return openSupplierRequest(target.dataset.supplierRequest);
-  if(target.dataset.supplierOrderId&&target.dataset.supplierOrderType)return openSupplierOrder(target.dataset.supplierOrderType,target.dataset.supplierOrderId);
+  if(target.dataset.supplierOrderId&&target.dataset.supplierOrderType&&!target.dataset.supplierOrderStatus&&!target.hasAttribute('data-supplier-order-cannot'))return openSupplierOrder(target.dataset.supplierOrderType,target.dataset.supplierOrderId);
   if(target.dataset.publicOffer)return openPublicOffer(target.dataset.publicOffer);
   if(target.dataset.editQuote){const q=(platformState.quotes||[]).find(x=>x.id===target.dataset.editQuote);if(q)return openQuoteForm(q.requestId,q);}
   if(target.dataset.quoteRequest)return openQuoteForm(target.dataset.quoteRequest);
