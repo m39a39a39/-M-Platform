@@ -16,22 +16,30 @@ fi
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
 files=(package.json package-lock.json index.html src/styles.css src/app.js src/admin-mobile.js src/guest.js src/session-core.js src/session.js src/language.js src/views.js src/image-upload.js src/image-viewer.js)
-mkdir -p "$stage/src"
+
+# Download one repository archive instead of many raw.githubusercontent.com files.
+archive="$stage/repo.tar.gz"
+source_root="$stage/repo"
+mkdir -p "$source_root"
+curl --fail --location --retry 5 --retry-all-errors --retry-delay 3 \
+  --connect-timeout 20 --max-time 300 \
+  "https://codeload.github.com/m39a39a39/-M-Platform/tar.gz/$revision" \
+  --output "$archive"
+tar -xzf "$archive" -C "$source_root" --strip-components=1
+source_app="$source_root/mobile-app"
 for file in "${files[@]}"; do
-  curl --fail --location --retry 2 --connect-timeout 20 --max-time 120 \
-    "https://raw.githubusercontent.com/m39a39a39/-M-Platform/$revision/mobile-app/$file" \
-    --output "$stage/$file"
-  [[ -s "$stage/$file" ]] || exit 1
+  [[ -s "$source_app/$file" ]] || { echo "Missing $file in revision $revision" >&2; exit 1; }
 done
+
 # Build the complete version in staging before changing the installed files.
-( cd "$stage" && npm ci && npm run build )
+( cd "$source_app" && npm ci && npm run build )
 # Preserve the existing native project and signing settings.
 backup="web-backup-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$backup/src"
 for file in "${files[@]}"; do
   if [[ -f "$file" ]]; then cp "$file" "$backup/$file"; fi
 done
-for file in "${files[@]}"; do cp "$stage/$file" "$file"; done
+for file in "${files[@]}"; do cp "$source_app/$file" "$file"; done
 if ! npm ci || ! npm run build; then
   for file in "${files[@]}"; do
     if [[ -f "$backup/$file" ]]; then cp "$backup/$file" "$file"; else rm -f "$file"; fi
