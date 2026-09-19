@@ -194,10 +194,18 @@ export async function mutate(user,body){
       setTracking(data,data.trackingStatus||'received',now,changes.includes('trackingNote')?patch.trackingNote:(data.trackingNote||''));
       if(collection==='interests')data.status=data.trackingStatus==='completed'?'completed':data.trackingStatus==='cancelled'?'cancelled':'active';
     }
-    if((collection==='requests'||collection==='interests')&&changes.includes('trackingStatus')&&patch.trackingStatus==='payment_confirmation'&&original.data.trackingStatus!=='payment_confirmation'){
+    if((collection==='requests'||collection==='interests')&&changes.includes('trackingStatus')&&patch.trackingStatus==='payment_confirmation'){
       assert(data.paymentMessage?.trim(),400,'اكتب رسالة الدفع للعميل / Add a payment message');
       assert(data.paymentBankAccount?.id&&data.paymentAmount&&data.paymentCurrency,400,'أكمل الحساب البنكي والمبلغ والعملة / Complete bank account, amount, and currency');
-      if(data.paymentStatus!=='confirmed'){
+      assert(String(data.paymentBankAccount.currency||'').toUpperCase()===String(data.paymentCurrency||'').toUpperCase(),400,'عملة الحساب البنكي يجب أن تطابق عملة الدفع / Bank account currency must match payment currency');
+      if(collection==='requests'){
+        assert(data.selectedQuoteId,409,'يجب أن يختار العميل عرضًا قبل الدفع / Customer must select a quote before payment');
+        const selectedQuote=await one('quotes',data.selectedQuoteId);
+        assert(selectedQuote&&selectedQuote.request_id===id&&open(selectedQuote)&&selectedQuote.data.status==='published',409,'العرض المختار غير متاح / Selected quote unavailable');
+        const quoteCurrency=String(selectedQuote.data.currency||'').toUpperCase();
+        assert(quoteCurrency&&data.paymentCurrency===quoteCurrency,400,'عملة الدفع يجب أن تطابق عملة العرض المختار / Payment currency must match selected quote currency');
+      }
+      if(original.data.trackingStatus!=='payment_confirmation'&&data.paymentStatus!=='confirmed'){
         data.paymentStatus='awaiting_receipt';
         data.paymentRequestedAt=now;
         data.paymentUpdatedAt=now;
