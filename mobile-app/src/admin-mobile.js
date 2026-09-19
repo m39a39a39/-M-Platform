@@ -99,7 +99,7 @@ function trackingOptions(rows,current,canPay){
 function adminStageActionPanel(x,kind){
   const current=kind==='request'?requestTracking(x):interestTracking(x),supplier=supplierExecutionInfo(x,kind);
   let target='',label='',note='';
-  if(current==='quality_check'&&supplier.status==='ready_for_inspection'){
+  if(supplier.status==='ready_for_inspection'&&!['ready_to_ship','shipped','in_delivery','delivered','completed'].includes(current)){
     target='ready_to_ship';label=tr('اعتماد الفحص — جاهز للشحن','Approve inspection — Ready to ship');note=tr('بعد الاعتماد سينتقل الطلب تلقائيًا إلى قسم الشحن.','After approval, the order moves automatically to Shipping.');
   }else if(current==='ready_to_ship'){
     target='shipped';label=tr('تأكيد الشحن','Confirm shipment');note=tr('بعد التأكيد يظهر الطلب ضمن الطلبات المشحونة، ويصبح مكتملًا لدى المورد.','After confirmation, the order appears as shipped and becomes completed for the supplier.');
@@ -201,7 +201,7 @@ function needsSupplierConfirmationEntry(entry){
   return entry.status==='supplier_confirmation'||(entry.kind==='request'&&entry.entity.selectedQuoteId&&selectedSupplierStatus(entry.entity)==='pending_confirmation')||(entry.kind==='interest'&&entry.entity.supplierOrderStatus==='pending_confirmation'&&entry.status!=='received');
 }
 function isInspectionReady(entry){
-  if(entry.status!=='quality_check')return false;
+  if(['ready_to_ship','shipped','in_delivery','delivered','completed','cancelled'].includes(entry.status))return false;
   return entry.kind==='request'?selectedSupplierStatus(entry.entity)==='ready_for_inspection':entry.entity.supplierOrderStatus==='ready_for_inspection';
 }
 function isExecutionProblem(entry){
