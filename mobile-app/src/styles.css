@@ -1938,3 +1938,22 @@ body.image-viewer-open {
   margin-top: 12px!important;
   padding-top: 12px;
 }
+
+
+/* Payment bank details, repeat request, and PDF preview */
+.payment-bank-card{display:grid;gap:12px;padding:14px;border:1px solid var(--line,#e5e7eb);border-radius:16px;background:var(--surface,#fff);margin:12px 0}
+.payment-bank-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
+.payment-bank-head small,.payment-bank-grid span,.payment-amount small{display:block;color:var(--muted,#6b7280);font-size:12px}
+.payment-amount{text-align:end;white-space:nowrap}.payment-amount b{display:block;font-size:18px;margin-top:3px}
+.payment-bank-grid{display:grid;gap:8px}
+.payment-bank-grid>div{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line,#eef0f2)}
+.payment-bank-grid>div span{grid-column:1/-1}.payment-bank-grid strong{overflow-wrap:anywhere}
+.copy-btn{border:0;background:transparent;color:var(--primary,#1677ff);font:inherit;font-weight:700;padding:4px 0;cursor:pointer}
+.pdf-preview-wrap{display:grid;gap:12px;min-height:64vh}.pdf-preview-frame{width:100%;height:66vh;border:0;border-radius:14px;background:#f3f4f6}
+.repeat-request-btn{margin:14px 0}.repeat-images{display:grid;gap:10px}.repeat-images>p{margin:0;color:var(--muted,#6b7280)}
+.repeat-image-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.repeat-image-grid label{position:relative;aspect-ratio:1;border-radius:12px;overflow:hidden;border:1px solid var(--line,#e5e7eb)}
+.repeat-image-grid img{width:100%;height:100%;object-fit:cover;display:block}.repeat-image-grid input{position:absolute;z-index:2;inset-block-start:7px;inset-inline-start:7px;width:20px;height:20px}
+.admin-bank-panel{margin-top:16px}.admin-bank-list{display:grid;gap:10px}.admin-bank-row{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;padding:14px;border:1px solid var(--line,#e5e7eb);border-radius:14px}
+.admin-bank-row>div:first-child{display:grid;gap:5px}.admin-bank-row small{color:var(--muted,#6b7280)}
+.admin-payment-message-field{display:grid;gap:12px;padding:12px;border:1px solid var(--line,#e5e7eb);border-radius:14px}.admin-payment-message-field h4{margin:0}
+@media (max-width:520px){.payment-bank-head{display:grid}.payment-amount{text-align:start}.repeat-image-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.admin-bank-row{display:grid}}
