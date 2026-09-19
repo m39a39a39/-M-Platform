@@ -7,6 +7,7 @@ import {team} from './modules/team.mjs';
 import {listNotifications,markNotificationsRead} from './modules/notifications.mjs';
 import {registerPushDevice,unregisterPushDevice} from './modules/push.mjs';
 import {publicAppConfig} from './modules/app-config.mjs';
+import {submitPaymentReceipt,reviewPaymentReceipt} from './modules/payments.mjs';
 
 const NATIVE_ORIGINS=new Set(['capacitor://localhost','http://localhost','https://localhost']);
 const nativeOrigin=req=>NATIVE_ORIGINS.has(String(req.headers.origin||''));
@@ -50,7 +51,7 @@ export default async function handler(req,res){
       assert(req.headers.origin===c.origin||trustedNative||bearer&&nativeNoOrigin||path.startsWith('/api/auth/')&&nativeNoOrigin,403,'مصدر الطلب غير مسموح / Invalid origin');
       assert((req.headers['content-type']||'').includes('application/json'),415);
     }
-    const body=req.method==='POST'?await readBody(req,path==='/api/uploads'?7500000:1800000):{};
+    const body=req.method==='POST'?await readBody(req,['/api/uploads','/api/payment-receipts'].includes(path)?7500000:1800000):{};
     let result;
     if(path.startsWith('/api/auth/')){
       assert(req.method==='POST',405);result=await authRoute(path.split('/').at(-1),req,res,body);
@@ -67,6 +68,8 @@ export default async function handler(req,res){
         else if(path==='/api/settings')result=await saveSettings(user,body);
         else if(path==='/api/team')result=await team(user,body);
         else if(path==='/api/uploads')result=await upload(user,body);
+        else if(path==='/api/payment-receipts')result=await submitPaymentReceipt(user,body);
+        else if(path==='/api/payment-review')result=await reviewPaymentReceipt(user,body);
         else if(path==='/api/notifications/read')result=await markNotificationsRead(user,body);
         else if(path==='/api/push/register')result=await registerPushDevice(user,body);
         else if(path==='/api/push/unregister')result=await unregisterPushDevice(user,body);
