@@ -5,6 +5,7 @@ export const active=p=>p&&!p.blocked_at&&!p.deleted_at;
 export const open=r=>r&&!r.data.deletedAt&&!r.data.suspendedAt;
 export function unpack(row,kind){return {...row.data,id:row.id,displayNo:row.display_no,version:row.version,createdAt:row.created_at,...(kind==='requests'||kind==='interests'?{customerId:row.owner_id}:{supplierId:row.owner_id}),...(row.request_id?{requestId:row.request_id}:{}),...(row.offer_id?{offerId:row.offer_id}:{})};}
 export function ownRecord(row,kind){const item=unpack(row,kind);delete item.supplierIds;delete item.moderationHistory;delete item.reviewedAt;return item;}
+function publicSettings(data={}){const safe={...data};delete safe.bankAccounts;return safe;}
 // Pure projection: never serialize raw source text or counterpart identity.
 export function anonymous(row,kind,user){
   const d=row.data;
@@ -73,7 +74,7 @@ export async function snapshot(user){
   if(user?.role==='supplier')requests=requests.filter(r=>ownerActive(r.owner_id));
   quotes=quotes.filter(q=>q.owner_id===user?.id||ownerActive(q.owner_id)&&open(requests.find(r=>r.id===q.request_id)));
   publicOffers=publicOffers.filter(o=>o.owner_id===user?.id||ownerActive(o.owner_id));
-  return {user:profile(user),accounts:user?[profile(user)]:[],settings:{...settings.data,_version:settings.version},
+  return {user:profile(user),accounts:user?[profile(user)]:[],settings:{...publicSettings(settings.data),_version:settings.version},
     requests:requests.map(r=>r.owner_id===user?.id?ownRecord(r,'requests'):anonymous(r,'requests',user)),
     quotes:quotes.map(r=>r.owner_id===user?.id?ownRecord(r,'quotes'):anonymous(r,'quotes',user)),
     publicOffers:publicOffers.map(r=>r.owner_id===user?.id?ownRecord(r,'publicOffers'):anonymous(r,'publicOffers',user)),
