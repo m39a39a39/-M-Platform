@@ -74,7 +74,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
     }
     let body={};
     if(path.endsWith('/auth/login')) body={user:accounts.find(a=>a.role===role),tokens:{accessToken:'fixture',refreshToken:'fixture'}};
-    else if(path.endsWith('/state')) { stateCalls++; const roleRequests=role==='admin'?requests.map(r=>r.id==='r2'?{...r,trackingStatus:'quality_check'}:r):requests;const roleQuotes=role==='admin'?quotes.map(q=>q.id==='q0'?{...q,supplierOrderStatus:'confirmed'}:q.id==='q2'?{...q,supplierOrderStatus:'ready_for_inspection'}:q):quotes;const roleInterests=role==='admin'?[...interests,adminPendingInterest]:role==='supplier'?[...interests,supplierCompletedInterest]:interests;body={user:accounts.find(a=>a.role===role),requests:roleRequests,quotes:roleQuotes,publicOffers,accounts,interests:roleInterests,settings:{categories,...(role==='admin'?{bankAccounts}:{}),_version:1}}; }
+    else if(path.endsWith('/state')) { stateCalls++; const roleRequests=role==='admin'?requests.map(r=>r.id==='r2'?{...r,trackingStatus:'quality_check'}:r.id==='r3'?{...r,status:'sent',trackingStatus:'supplier_confirmation',selectedQuoteId:'q3',trackingHistory:[{at:'2026-09-18T11:00:00Z',status:'supplier_confirmation',note:'بانتظار تأكيد المورد',actorId:'admin'}]}:r):requests;const roleQuotes=role==='admin'?quotes.map(q=>q.id==='q2'?{...q,supplierOrderStatus:'ready_for_inspection'}:q.id==='q3'?{...q,status:'published',supplierOrderStatus:'confirmed'}:q):quotes;const roleInterests=role==='admin'?[...interests,adminPendingInterest]:role==='supplier'?[...interests,supplierCompletedInterest]:interests;body={user:accounts.find(a=>a.role===role),requests:roleRequests,quotes:roleQuotes,publicOffers,accounts,interests:roleInterests,settings:{categories,...(role==='admin'?{bankAccounts}:{}),_version:1}}; }
     else if(path.endsWith('/notifications')) body=role==='client'?[clientPaymentNote,...notes.slice(1)]:role==='admin'?[adminPaymentNote,...notes.slice(1)]:notes;
     else if(path.endsWith('/notifications/read')) body={ok:true};
     else if(path.endsWith('/payment-receipts')) {paymentReceiptSubmission=route.request().postDataJSON();body={ok:true,paymentStatus:'receipt_submitted'};}
@@ -430,7 +430,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
           await page.locator('#screen [data-client-order-filter="all"]').click();
         }
         await page.screenshot({path:`${output}/${label}-requests.png`});
-        const card=role==='admin'?page.locator('[data-admin-open="request"][data-admin-id="r0"]'):role==='supplier'?page.locator('[data-supplier-request]').first():page.locator('[data-request]').first();
+        const card=role==='admin'?page.locator('[data-admin-open="request"][data-admin-id="r3"]'):role==='supplier'?page.locator('[data-supplier-request]').first():page.locator('[data-request]').first();
         if(role==='client')await card.click();else await card.locator('.list-card-title').click();
         await page.locator('#modal').waitFor({state:'visible'});
         await geometry(page,'#modal');
