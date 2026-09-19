@@ -148,6 +148,45 @@ async function hydrate(root=document){
 function row(x,kind){const o=ownerOf(x),linked=kind==='quote'?(state?.requests||[]).find(r=>r.id===x.requestId):null,currentStatus=kind==='request'?requestTracking(x):x.status;return`<article class="list-card admin-record-card" data-admin-open="${kind}" data-admin-id="${esc(x.id)}"><div class="list-card-main"><div class="list-card-title"><small>#${esc(ref(x))}</small><h3>${esc(title(x))}</h3></div>${badge(currentStatus)}</div>${desc(x)?`<p>${esc(desc(x))}</p>`:''}<div class="admin-record-meta">${o?`<span>${esc(o.company||o.name||tr('صاحب المحتوى','Owner'))}</span>`:''}${linked?`<span>#${esc(ref(linked))}</span>`:''}<span>${esc(date(x.createdAt))}</span></div>${gallery(x.images||[])}</article>`;}
 function matches(x,kind=''){if(!searchText().trim())return true;const q=searchText().trim().toLowerCase(),o=ownerOf(x),linked=kind==='quote'?(state?.requests||[]).find(r=>r.id===x.requestId):null,client=linked?account(linked.customerId):null;return[ref(x),x.name,x.company,x.email,x.phone,x.product,x.specs,x.notes,x.country,o?.name,o?.company,linked?.displayNo,client?.name,client?.company].filter(Boolean).join(' ').toLowerCase().includes(q);}
 
+function adminOrderEntries(){
+  const custom=(state?.requests||[]).filter(x=>!x.deletedAt&&!x.suspendedAt).map(x=>({kind:'request',entity:x,title:title(x),status:requestTracking(x),typeLabel:tr('طلب خاص','Custom request'),customer:account(x.customerId),createdAt:x.createdAt,updatedAt:x.trackingUpdatedAt||x.updatedAt||x.createdAt}));
+  const ready=(state?.interests||[]).map(x=>{const offer=(state?.publicOffers||[]).find(o=>o.id===x.offerId);return{kind:'interest',entity:x,offer,title:offer?title(offer):tr('منتج جاهز','Ready product'),status:interestTracking(x),typeLabel:tr('عرض عام','Public offer'),customer:account(x.customerId),createdAt:x.createdAt,updatedAt:x.trackingUpdatedAt||x.updatedAt||x.createdAt};});
+  return [...custom,...ready].sort((a,b)=>(Date.parse(b.updatedAt||0)||0)-(Date.parse(a.updatedAt||0)||0));
+}
+function adminOrderMatches(entry){
+  if(!searchText().trim())return true;
+  const q=searchText().trim().toLowerCase(),x=entry.entity,c=entry.customer,o=entry.offer;
+  return [ref(x),entry.title,x.product,x.specs,x.country,c?.name,c?.company,c?.email,c?.phone,o?.displayNo,o?.product].filter(Boolean).join(' ').toLowerCase().includes(q);
+}
+function adminOrderCard(entry){
+  const x=entry.entity,meta=[entry.typeLabel,entry.customer?.company||entry.customer?.name||'',x.quantity?tr('الكمية','Quantity')+': '+x.quantity:'',date(entry.updatedAt)].filter(Boolean);
+  const action=entry.kind==='request'?'data-admin-open="request" data-admin-id="'+esc(x.id)+'"':'data-admin-interest="'+esc(x.id)+'"';
+  return '<article class="list-card admin-order-card" '+action+'><div class="list-card-main"><div class="list-card-title"><small>#'+esc(ref(x))+' · '+esc(entry.typeLabel)+'</small><h3>'+esc(entry.title)+'</h3></div>'+badge(entry.status)+'</div><div class="admin-record-meta">'+meta.map(v=>'<span>'+esc(v)+'</span>').join('')+'</div><div class="chevron">›</div></article>';
+}
+function selectedSupplierStatus(r){
+  const q=selectedQuoteForRequest(r);return q?.supplierOrderStatus||'pending_confirmation';
+}
+function needsPaymentReview(x){return x?.paymentStatus==='receipt_submitted';}
+function needsSupplierConfirmationEntry(entry){
+  return entry.status==='supplier_confirmation'||(entry.kind==='request'&&entry.entity.selectedQuoteId&&selectedSupplierStatus(entry.entity)==='pending_confirmation')||(entry.kind==='interest'&&entry.entity.supplierOrderStatus==='pending_confirmation'&&entry.status!=='received');
+}
+function isInspectionReady(entry){
+  return entry.kind==='request'?selectedSupplierStatus(entry.entity)==='ready_for_inspection':entry.entity.supplierOrderStatus==='ready_for_inspection';
+}
+function isExecutionProblem(entry){
+  const supplierStatus=entry.kind==='request'?selectedSupplierStatus(entry.entity):entry.entity.supplierOrderStatus;
+  return supplierStatus==='cannot_fulfill'||['customer_action','on_hold'].includes(entry.status);
+}
+function operationalCard(entry,context=''){
+  const x=entry.entity,customer=entry.customer?.company||entry.customer?.name||'',payment=x.paymentStatus?status(x.paymentStatus):'',supplierStatus=entry.kind==='request'?selectedSupplierStatus(x):x.supplierOrderStatus;
+  const details=[entry.typeLabel,customer,context==='payment'&&payment?payment:'',context==='execution'&&supplierStatus?status(supplierStatus):'',date(entry.updatedAt)].filter(Boolean);
+  const action=entry.kind==='request'?'data-admin-open="request" data-admin-id="'+esc(x.id)+'"':'data-admin-interest="'+esc(x.id)+'"';
+  return '<article class="admin-operation-card" '+action+'><div><small>#'+esc(ref(x))+'</small><strong>'+esc(entry.title)+'</strong><div class="admin-operation-meta">'+details.map(v=>'<span>'+esc(v)+'</span>').join('')+'</div></div><span class="chevron">›</span></article>';
+}
+function goCard(value,label,view,tab=''){
+  return '<button class="admin-queue-card" data-admin-go="'+esc(view)+'" '+(tab?'data-admin-tab-target="'+esc(tab)+'"':'')+'><strong>'+esc(value)+'</strong><span>'+esc(label)+'</span><b>›</b></button>';
+}
+
 function home(){const req=state?.requests||[],qs=state?.quotes||[],po=state?.publicOffers||[],ints=state?.interests||[],acc=state?.accounts||[],pr=req.filter(x=>!x.deletedAt&&!x.suspendedAt&&x.status==='review'),offers=[...qs.map(x=>({...x,__kind:'quote'})),...po.map(x=>({...x,__kind:'public'}))].filter(x=>!x.deletedAt&&x.status==='pending'),priority=[...pr.slice(0,3).map(x=>row(x,'request')),...offers.slice(0,3).map(x=>row(x,x.__kind))].join('');setRoot('home',page(tr('لوحة الإدارة','Admin dashboard'),tr('اعتماد الطلبات والعروض ومتابعة المنصة من الجوال.','Approve requests and offers and monitor the platform from mobile.'))+`<div class="stats-grid admin-stats"><button class="stat-card" data-admin-go="requests"><strong>${pr.length}</strong><span>${esc(tr('طلبات بانتظار الاعتماد','Requests pending approval'))}</span></button><button class="stat-card" data-admin-go="offers"><strong>${offers.length}</strong><span>${esc(tr('عروض بانتظار الاعتماد','Offers pending approval'))}</span></button><button class="stat-card" data-admin-go="offers" data-admin-tab-target="interests"><strong>${ints.length}</strong><span>${esc(tr('طلبات الاهتمام','Interest requests'))}</span></button><button class="stat-card" data-admin-go="account"><strong>${acc.filter(a=>['client','supplier'].includes(a.role)&&!a.deletedAt).length}</strong><span>${esc(tr('العملاء والموردون','Customers & suppliers'))}</span></button></div><section class="section-block"><div class="section-title"><h2>${esc(tr('الأولوية الآن','Priority now'))}</h2></div><div class="list-stack">${priority||empty()}</div></section>`);}
 function requestFilterControls(allRows){
   const count=s=>allRows.filter(x=>requestTracking(x)===s).length;
