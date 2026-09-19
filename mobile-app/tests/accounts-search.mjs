@@ -54,8 +54,8 @@ for(const [engine,type] of Object.entries({chromium,webkit}))for(const language 
   await logout();
   for(const role of ['client','supplier']){
     await login(role);
-    const roleScreens=role==='client'?['home','requests','account']:['home','requests','offers','account'];
-    if(role==='client')assert.equal(await page.locator('#bottomNav [data-screen="offers"]:visible').count(),0);
+    const roleScreens=role==='client'?['home','requests','offers','account']:['home','requests','offers','account'];
+    if(role==='client'){assert.equal(await page.locator('#bottomNav [data-screen="offers"]:visible').count(),1);assert.equal(await page.locator('#bottomNav [data-screen="notifications"]:visible').count(),0);assert.equal(await page.locator('#headerNotificationsBtn:not(.hidden)').count(),1);}
     for(const screen of roleScreens){
       await nav(screen);assert.equal(await page.locator('[data-admin-root]').count(),0);
       assert.equal((await page.locator('#screen').innerText()).includes('SecretAdmin'),false);
