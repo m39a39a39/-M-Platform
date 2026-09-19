@@ -301,7 +301,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
         assert.ok(await firstOffer.locator('p').evaluate(el=>getComputedStyle(el).whiteSpace==='nowrap'),'Ready-product description must stay on one line');
       }
       if(screen==='offers'&&role==='client'){
-        assert.equal(await page.locator('#screen .client-quote-groups .client-quote-group-card').count(),4,'Client Quotes must group published quotes by request');
+        assert.equal(await page.locator('#screen .client-quote-groups .client-quote-group-card').count(),2,'Client Quotes must group only published quotes by request');
         assert.equal(await page.locator('#screen .client-offers-stats .stat-card').count(),3,'Client Quotes must show concise quote stats');
         await page.locator('#screen .client-quote-group-card').first().click();
         await page.locator('#modal .client-compare-list').waitFor();
