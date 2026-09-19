@@ -305,6 +305,11 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
       assert.deepEqual(after.nav,before.nav,'Navigation moved when content scrolled');
       assert.deepEqual(after.head,before.head,'Header moved when content scrolled');
       await page.locator('#screen').evaluate(el=>el.scrollTop=0);
+      if(screen==='home'&&role==='admin'){
+        assert.equal(await page.locator('.admin-queue-card').count(),6,'Admin home must prioritize six actionable work queues');
+        assert.equal(await page.locator('.admin-overview-stats .stat-card').count(),4,'Admin home must keep high-level stats separate from action queues');
+        assert.equal(await page.locator('.admin-now').count(),1,'Admin home must lead with items needing action now');
+      }
       if(screen==='home'&&role==='client'){
         const firstOffer=page.locator('.public-offer-card').first();
         assert.equal(await firstOffer.locator('.public-offer-facts span').count(),2,'Ready-product card must show only price and MOQ');
