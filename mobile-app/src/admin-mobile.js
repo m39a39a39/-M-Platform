@@ -475,12 +475,24 @@ function interestTrackingEditor(x){
   const approve=current==='received'?'<button class="primary-btn admin-send-to-supplier" type="button" data-admin-send-interest-supplier="'+esc(x.id)+'">'+esc(tr('اعتماد وإرسال للمورد','Approve & send to supplier'))+'</button>':'';
   return '<section class="admin-tracking-editor"><h3>'+esc(tr('متابعة طلب المنتج الجاهز','Ready-product order tracking'))+'</h3>'+approve+'<label><span>'+esc(tr('الحالة الحالية','Current status'))+'</span><select data-admin-interest-tracking-status>'+trackingOptions(READY_TRACKING,current,canPay)+'</select></label>'+paymentMessageField(x,'interest',current)+'<label><span>'+esc(tr('ملاحظة للعميل (اختياري)','Customer note (optional)'))+'</span><textarea data-admin-interest-tracking-note maxlength="1000">'+esc(x.trackingNote||'')+'</textarea></label><small>'+(x.trackingUpdatedAt?esc(tr('آخر تحديث','Last update'))+': '+esc(date(x.trackingUpdatedAt)):'')+'</small><button class="primary-btn" type="button" data-admin-save-interest-tracking="'+esc(x.id)+'">'+esc(tr('حفظ حالة الطلب','Save order status'))+'</button></section>'+paymentReviewPanel(x,'interest');
 }
+function activityLog(x,kind){
+  const rows=[];
+  const push=(at,label,note='',actorId='')=>{if(at)rows.push({at,label,note,actorId});};
+  (x?.trackingHistory||[]).forEach(h=>push(h.at,tr('حالة الطلب: ','Order status: ')+status(h.status),h.note||''));
+  const executionSource=kind==='request'?selectedQuoteForRequest(x):x;
+  (executionSource?.supplierOrderHistory||[]).forEach(h=>push(h.at,tr('المورد: ','Supplier: ')+status(h.status),h.note||''));
+  (x?.paymentHistory||[]).forEach(h=>push(h.at,tr('الدفع: ','Payment: ')+status(h.status),h.note||''));
+  (x?.moderationHistory||[]).forEach(h=>push(h.at,tr('إجراء إداري: ','Admin action: ')+status(h.action),h.reason||h.note||'',h.actorId||''));
+  rows.sort((a,b)=>(Date.parse(b.at)||0)-(Date.parse(a.at)||0));
+  if(!rows.length)return '';
+  return '<section class="admin-activity-log"><div class="section-title"><div><h3>'+esc(tr('سجل النشاط','Activity log'))+'</h3><p>'+esc(tr('آخر التغييرات على الطلب.','Recent changes to this order.'))+'</p></div></div><div class="admin-activity-list">'+rows.slice(0,30).map(h=>{const actor=h.actorId?account(h.actorId):null;return '<article><span></span><div><strong>'+esc(h.label)+'</strong><small>'+esc(date(h.at))+(actor?' · '+esc(actor.name||actor.email||tr('مدير','Admin')):'')+'</small>'+(h.note?'<p>'+esc(h.note)+'</p>':'')+'</div></article>';}).join('')+'</div></section>';
+}
 function openInterest(id){
   const x=(state?.interests||[]).find(item=>item.id===id);if(!x)return;
   const offer=(state?.publicOffers||[]).find(o=>o.id===x.offerId),customer=account(x.customerId);
   const pricing=interestPricing(x);
   const orderSummary=pricing?'<section class="admin-selected-quote-card"><div class="admin-selected-quote-head"><div><small>'+esc(tr('طلب العرض العام','Public-offer order'))+'</small><strong>#'+esc(ref(x))+'</strong></div><span class="status-pill status-published">'+esc(tr('الكمية محددة','Quantity selected'))+'</span></div><div class="admin-selected-quote-values"><div><span>'+esc(tr('سعر الوحدة','Unit price'))+'</span><strong>'+esc(formatMoney(pricing.unitPrice,pricing.currency))+'</strong></div><div><span>'+esc(tr('الكمية','Quantity'))+'</span><strong>'+esc(Number(pricing.quantity).toLocaleString())+'</strong></div><div class="total"><span>'+esc(tr('الإجمالي','Total'))+'</span><strong>'+esc(formatMoney(pricing.total,pricing.currency))+'</strong></div></div><small>'+esc(tr('تم تثبيت السعر والعملة وقت تقديم العميل للطلب.','Price and currency were captured when the customer placed the request.'))+'</small></section>':'';
-  const html=(customer?'<section class="admin-owner-box"><strong>'+esc(tr('العميل','Customer'))+'</strong><p>'+esc(customer.company||customer.name||'—')+'</p>'+(can('accounts.read')?'<small>'+esc(customer.name||'')+(customer.phone?' · '+esc(customer.phone):'')+(customer.email?' · '+esc(customer.email):'')+'</small>':'')+'</section>':'')+orderSummary+supplierConfirmationCard(x,'interest')+interestTrackingEditor(x)+(offer?'<section class="admin-source-box"><h3>'+esc(tr('المنتج','Product'))+'</h3><strong>'+esc(title(offer))+'</strong><p>'+esc(desc(offer)||'—')+'</p></section>'+gallery(offer.images||[]):'');
+  const html=(customer?'<section class="admin-owner-box"><strong>'+esc(tr('العميل','Customer'))+'</strong><p>'+esc(customer.company||customer.name||'—')+'</p>'+(can('accounts.read')?'<small>'+esc(customer.name||'')+(customer.phone?' · '+esc(customer.phone):'')+(customer.email?' · '+esc(customer.email):'')+'</small>':'')+'</section>':'')+orderSummary+supplierConfirmationCard(x,'interest')+interestTrackingEditor(x)+(offer?'<section class="admin-source-box"><h3>'+esc(tr('المنتج','Product'))+'</h3><strong>'+esc(title(offer))+'</strong><p>'+esc(desc(offer)||'—')+'</p></section>'+gallery(offer.images||[]):'')+activityLog(x,'interest');
   modal(offer?title(offer):tr('طلب منتج جاهز','Ready-product request'),'#'+ref(offer),html);
 }
 async function saveInterestTracking(id){
@@ -558,6 +570,7 @@ function openRecord(kind,id){
   if(pending&&!(kind==='public'&&can('offers.edit'))){
     html+=`<section class="admin-redaction"><h3>${esc(tr('فحص الخصوصية','Privacy check'))}</h3><label><input type="checkbox" data-admin-redact="identity"><span>${esc(tr('تمت مراجعة الصور والنصوص وإزالة الهوية.','Images and text were checked and identity removed.'))}</span></label><label><input type="checkbox" data-admin-redact="contact"><span>${esc(tr('تمت إزالة بيانات التواصل المباشر.','Direct contact details were removed.'))}</span></label></section><div class="admin-review-actions">${editTr?`<button class="secondary-btn" data-admin-save-review data-kind="${kind}" data-id="${esc(x.id)}">${esc(tr('حفظ دون نشر','Save without publishing'))}</button>`:''}${approve?`<button class="primary-btn" data-admin-approve data-kind="${kind}" data-id="${esc(x.id)}">${esc(tr('اعتماد ونشر','Approve & publish'))}</button>`:''}</div>`;
   }else if(kind==='request'&&x.status==='sent'&&can('publish'))html+=`<div class="admin-review-actions"><button class="secondary-btn" data-admin-reopen-request data-id="${esc(x.id)}">${esc(tr('إعادة للمراجعة','Return to review'))}</button><button class="primary-btn" data-admin-complete-request data-id="${esc(x.id)}">${esc(tr('تحديد كمكتمل','Mark completed'))}</button></div>`;
+  html+=activityLog(x,kind);
   modal(`#${ref(x)} — ${title(x)}`,kind==='request'?status(requestTracking(x)):status(x.status),html);
 }
 function openAccount(id){
