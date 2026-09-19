@@ -636,10 +636,10 @@ document.addEventListener('click',e=>{
   const g=e.target.closest('[data-admin-go]');if(g){go(g.dataset.adminGo,g.dataset.adminTabTarget);return;}
   const active=e.target.closest('[data-admin-request-active]');if(active){requestFilter='active';schedule();return;}
   const completed=e.target.closest('[data-admin-request-completed]');if(completed){requestFilter='completed';schedule();return;}
-  const ot=e.target.closest('[data-admin-offer-tab]');if(ot){offerTab=ot.dataset.adminOfferTab;offerFilter='pending';schedule();return;}
-  const of=e.target.closest('[data-admin-offer-filter]');if(of){offerFilter=of.dataset.adminOfferFilter;schedule();return;}
-  const op=e.target.closest('[data-admin-operation-tab]');if(op){operationTab=op.dataset.adminOperationTab;schedule();return;}
-  const mt=e.target.closest('[data-admin-more-tab]');if(mt){moreTab=mt.dataset.adminMoreTab;schedule();return;}
+  const ot=e.target.closest('[data-admin-offer-tab]');if(ot){offerTab=ot.dataset.adminOfferTab;offerFilter='pending';render();return;}
+  const of=e.target.closest('[data-admin-offer-filter]');if(of){offerFilter=of.dataset.adminOfferFilter;render();return;}
+  const op=e.target.closest('[data-admin-operation-tab]');if(op){operationTab=op.dataset.adminOperationTab;render();return;}
+  const mt=e.target.closest('[data-admin-more-tab]');if(mt){moreTab=mt.dataset.adminMoreTab;render();return;}
   const tn=e.target.closest('[data-admin-team-new]');if(tn){teamDialog();return;}
   const te=e.target.closest('[data-admin-team-edit]');if(te){teamDialog(te.dataset.adminTeamEdit);return;}
   const tt=e.target.closest('[data-admin-team-toggle]');if(tt){toggleTeam(tt.dataset.adminTeamToggle,tt.dataset.action);return;}
