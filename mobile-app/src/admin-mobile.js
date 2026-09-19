@@ -481,10 +481,10 @@ function adminRequestOverview(x){
 function activityLog(x,kind){
   const rows=[];
   const push=(at,label,note='',actorId='')=>{if(at)rows.push({at,label,note,actorId});};
-  (x?.trackingHistory||[]).forEach(h=>push(h.at,tr('حالة الطلب: ','Order status: ')+status(h.status),h.note||''));
+  (x?.trackingHistory||[]).forEach(h=>push(h.at,tr('حالة الطلب: ','Order status: ')+status(h.status),h.note||'',h.actorId||''));
   const executionSource=kind==='request'?selectedQuoteForRequest(x):x;
-  (executionSource?.supplierOrderHistory||[]).forEach(h=>push(h.at,tr('المورد: ','Supplier: ')+status(h.status),h.note||''));
-  (x?.paymentHistory||[]).forEach(h=>push(h.at,tr('الدفع: ','Payment: ')+status(h.status),h.note||''));
+  (executionSource?.supplierOrderHistory||[]).forEach(h=>push(h.at,tr('المورد: ','Supplier: ')+status(h.status),h.note||'',h.actorId||''));
+  (x?.paymentHistory||[]).forEach(h=>push(h.at,tr('الدفع: ','Payment: ')+status(h.status),h.note||'',h.actorId||''));
   (x?.moderationHistory||[]).forEach(h=>push(h.at,tr('إجراء إداري: ','Admin action: ')+status(h.action),h.reason||h.note||'',h.actorId||''));
   rows.sort((a,b)=>(Date.parse(b.at)||0)-(Date.parse(a.at)||0));
   if(!rows.length)return '';
