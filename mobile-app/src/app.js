@@ -276,7 +276,7 @@ function supplierOrders(){
   const ready=interests.map(i=>{
     const o=offers.find(x=>x.id===i.offerId);if(!o)return null;
     const quantity=Number(i.quantity),unitPrice=Number(i.unitPrice||o.unitPrice),total=Number(i.total);
-    return {type:'public',id:i.id,version:i.version,interest:i,offer:o,item:o,title:titleOf(o),images:o.images||[],source:tr('عرض عام','Public offer'),status:i.supplierOrderStatus||'pending_confirmation',note:i.supplierOrderNote||'',updatedAt:i.supplierOrderUpdatedAt||i.createdAt,quantity:i.quantity||'',unitPrice:i.unitPrice||o.unitPrice,currency:i.currency||o.currency,total:Number.isFinite(total)&&total>0?total:(Number.isFinite(quantity)&&Number.isFinite(unitPrice)?quantity*unitPrice:null),country:o.country||'',moq:i.moq||o.moq||''};
+    return {type:'public',id:i.id,version:i.version,interest:i,offer:o,item:o,title:titleOf(o),images:o.images||[],source:tr('عرض عام','Public offer'),status:i.supplierOrderStatus||'pending_confirmation',note:i.supplierOrderNote||'',updatedAt:i.supplierOrderUpdatedAt||i.createdAt,quantity:i.quantity||'',unitPrice:i.unitPrice||o.unitPrice,currency:i.currency||o.currency,total:Number.isFinite(total)&&total>0?total:(Number.isFinite(quantity)&&quantity>0&&Number.isFinite(unitPrice)&&unitPrice>0?quantity*unitPrice:null),country:o.country||'',moq:i.moq||o.moq||''};
   }).filter(Boolean);
   return [...custom,...ready].sort((a,b)=>(Date.parse(b.updatedAt||0)||0)-(Date.parse(a.updatedAt||0)||0));
 }
