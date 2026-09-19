@@ -305,6 +305,68 @@ function renderSupplierOrders(){
   $('screen').innerHTML=pageHeader(tr('الطلبات','Orders'),tr('الطلبات التي أصبحت جاهزة للتنفيذ بعد اختيار العميل واعتماد الإدارة.','Orders ready for fulfillment after customer selection and admin approval.'))+
     `<div class="supplier-orders-list">${rows.map(supplierOrderCard).join('')||empty()}</div>`;
 }
+function clientOrders(){
+  if(currentUser?.role!=='client')return[];
+  const requests=platformState?.requests||[],interests=platformState?.interests||[],offers=platformState?.publicOffers||[],quotes=platformState?.quotes||[];
+  const custom=requests.map(r=>{
+    const selected=quotes.find(q=>q.id===r.selectedQuoteId),quantity=Number(r.quantity),unitPrice=Number(selected?.unitPrice),total=selected&&Number.isFinite(quantity)&&quantity>0&&Number.isFinite(unitPrice)?quantity*unitPrice:null;
+    return {type:'custom',id:r.id,refItem:r,item:r,title:titleOf(r),images:r.images||[],status:requestTrackingStatus(r),quantity:r.quantity||'',unitPrice:selected?.unitPrice,currency:selected?.currency,total,updatedAt:r.trackingUpdatedAt||r.updatedAt||r.createdAt,createdAt:r.createdAt,selectedQuote:selected};
+  });
+  const ready=interests.map(i=>{
+    const o=offers.find(x=>x.id===i.offerId),quantity=Number(i.quantity),unitPrice=Number(i.unitPrice||o?.unitPrice),storedTotal=Number(i.total);
+    return {type:'ready',id:i.id,refItem:i,item:i,offer:o,title:o?titleOf(o):tr('منتج جاهز','Ready product'),images:o?.images||[],status:readyTrackingStatus(i),quantity:i.quantity||'',unitPrice:i.unitPrice||o?.unitPrice,currency:i.currency||o?.currency,total:Number.isFinite(storedTotal)&&storedTotal>0?storedTotal:(Number.isFinite(quantity)&&quantity>0&&Number.isFinite(unitPrice)?quantity*unitPrice:null),updatedAt:i.trackingUpdatedAt||i.updatedAt||i.createdAt,createdAt:i.createdAt};
+  });
+  return [...custom,...ready].sort((a,b)=>(Date.parse(b.updatedAt||0)||0)-(Date.parse(a.updatedAt||0)||0));
+}
+function clientOrderNeedsAction(order){
+  if(order.type==='custom'){
+    const r=order.item,quotes=(platformState?.quotes||[]).filter(q=>q.requestId===r.id&&q.status==='published'),newCount=newQuoteCount(r);
+    if(r.paymentStatus==='reupload_requested')return {key:'reupload',label:tr('أعد رفع إيصال الدفع','Upload payment receipt again'),action:`data-request="${esc(r.id)}"`,tone:'payment'};
+    if(requestTrackingStatus(r)==='payment_confirmation'&&['awaiting_receipt','reupload_requested'].includes(r.paymentStatus))return {key:'payment',label:tr('الدفع مطلوب','Payment required'),action:`data-request="${esc(r.id)}"`,tone:'payment'};
+    if(newCount>0)return {key:'new_quotes',label:newCount===1?tr('وصل عرض جديد','New quote received'):tr(`وصلت ${newCount} عروض جديدة`,`${newCount} new quotes received`),action:`data-client-offers-request="${esc(r.id)}"`,tone:'quote'};
+    if(!r.selectedQuoteId&&quotes.length)return {key:'choose_quote',label:tr('اختر عرضًا للمتابعة','Choose a quote to continue'),action:`data-client-offers-request="${esc(r.id)}"`,tone:'quote'};
+    if(requestTrackingStatus(r)==='customer_action')return {key:'customer_action',label:tr('مطلوب إجراء منك','Action required'),action:`data-request="${esc(r.id)}"`,tone:'action'};
+  }else{
+    const i=order.item;
+    if(i.paymentStatus==='reupload_requested')return {key:'reupload',label:tr('أعد رفع إيصال الدفع','Upload payment receipt again'),action:order.offer?`data-public-offer="${esc(order.offer.id)}"`:'',tone:'payment'};
+    if(readyTrackingStatus(i)==='payment_confirmation'&&['awaiting_receipt','reupload_requested'].includes(i.paymentStatus))return {key:'payment',label:tr('الدفع مطلوب','Payment required'),action:order.offer?`data-public-offer="${esc(order.offer.id)}"`:'',tone:'payment'};
+    if(readyTrackingStatus(i)==='customer_action')return {key:'customer_action',label:tr('مطلوب إجراء منك','Action required'),action:order.offer?`data-public-offer="${esc(order.offer.id)}"`:'',tone:'action'};
+  }
+  return null;
+}
+function clientOrderCard(order){
+  const image=(order.images||[])[0],typeLabel=order.type==='custom'?tr('طلب خاص','Custom request'):tr('منتج جاهز','Ready product'),action=order.type==='custom'?`data-request="${esc(order.id)}"`:order.offer?`data-public-offer="${esc(order.offer.id)}"`:'';
+  const total=order.total!==null&&order.total!==undefined?money(order.total,order.currency):'';
+  return `<article class="client-order-card" ${action}>
+    <div class="client-order-thumb">${image?`<img alt="" data-media="${esc(image)}">`:'<div>M</div>'}</div>
+    <div class="client-order-main">
+      <div class="client-order-head"><div><small>#${esc(ref(order.refItem))} · ${esc(typeLabel)}</small><h3>${esc(order.title)}</h3></div>${cardBadge(order.status)}</div>
+      <div class="client-order-meta"><span>${esc(tr('الكمية','Quantity'))}: ${esc(order.quantity||'—')}</span>${total?`<span>${esc(tr('الإجمالي','Total'))}: ${total}</span>`:''}<span>${esc(tr('آخر تحديث','Last update'))}: ${esc(date(order.updatedAt))}</span></div>
+    </div><span class="chevron">›</span>
+  </article>`;
+}
+function clientActionCard(order,action){
+  const image=(order.images||[])[0];
+  return `<article class="client-action-card ${esc(action.tone||'action')}" ${action.action}>
+    <div class="client-action-thumb">${image?`<img alt="" data-media="${esc(image)}">`:'<div>!</div>'}</div>
+    <div><small>#${esc(ref(order.refItem))}</small><strong>${esc(action.label)}</strong><p>${esc(order.title)}</p></div><span class="chevron">›</span>
+  </article>`;
+}
+function clientQuoteGroups(){
+  const requests=platformState?.requests||[],quotes=platformState?.quotes||[];
+  return requests.map(r=>{
+    const rows=quotes.filter(q=>q.requestId===r.id&&q.status==='published').sort((a,b)=>quoteTime(b)-quoteTime(a));
+    if(!rows.length)return null;
+    return {request:r,quotes:rows,newCount:newQuoteCount(r),selected:rows.find(q=>q.id===r.selectedQuoteId),latest:rows[0]};
+  }).filter(Boolean).sort((a,b)=>quoteTime(b.latest)-quoteTime(a.latest));
+}
+function clientQuoteGroupCard(group){
+  const r=group.request,total=group.quotes.length,newText=group.newCount?tr(`${group.newCount} جديد`,`${group.newCount} new`):'',selected=group.selected?tr('تم اختيار عرض','Quote selected'):tr('بانتظار اختيارك','Waiting for your choice');
+  return `<article class="client-quote-group-card" data-client-offers-request="${esc(r.id)}">
+    <div class="client-quote-group-head"><div><small>#${esc(ref(r))}</small><h3>${esc(titleOf(r))}</h3></div><span class="client-quote-count">${esc(total)} ${esc(tr('عروض','quotes'))}</span></div>
+    <div class="client-quote-group-meta"><span>${esc(selected)}</span>${newText?`<b>${esc(newText)}</b>`:''}<span>${esc(tr('آخر عرض','Latest quote'))}: ${esc(date(group.latest?.publishedAt||group.latest?.updatedAt||group.latest?.createdAt))}</span></div><span class="chevron">›</span>
+  </article>`;
+}
 function productPagination(page,totalPages){
   if(totalPages<=1)return '';
   return `<nav class="product-pagination" aria-label="${esc(t('readyProducts'))}"><button class="pagination-btn" type="button" data-action="ready-products-prev" ${page<=1?'disabled':''}>${esc(t('previous'))}</button><span class="pagination-info">${esc(t('page'))} ${page} / ${totalPages}</span><button class="pagination-btn" type="button" data-action="ready-products-next" ${page>=totalPages?'disabled':''}>${esc(t('next'))}</button></nav>`;
