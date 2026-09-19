@@ -18,7 +18,7 @@ document.addEventListener('m:ready', async () => {
     document.getElementById('adminRequestCount').textContent = state.requests.filter(item => !item.deletedAt&&!item.suspendedAt&&item.status === 'review').length;
     document.getElementById('adminQuoteCount').textContent = state.quotes.filter(item => !item.deletedAt&&item.status === 'pending').length;
     document.getElementById('adminPublicCount').textContent = state.publicOffers.filter(item => !item.deletedAt&&item.status === 'pending').length;
-    document.getElementById('interestCount').textContent = state.interests.length;
+    document.getElementById('interestCount').textContent = state.interests.filter(item => !['completed','cancelled'].includes(item.trackingStatus||item.status)).length;
     const list = pendingItems().filter(item=>{
       const owner=state.accounts.find(a=>a.id===(item.customerId||item.supplierId)),request=state.requests.find(r=>r.id===item.requestId);
       const client=request?state.accounts.find(a=>a.id===request.customerId):(item.customerId?owner:null),supplier=item.supplierId?owner:null;

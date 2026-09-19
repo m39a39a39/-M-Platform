@@ -23,6 +23,7 @@ document.addEventListener('m:ready', async () =>{
     const invited=x.supplierIds?.map(id=>account(id)?.name||'')||[];
     return adminSearch.match(x,[x.displayNo||'',request?.displayNo||'',offer?.displayNo||'',client?.name||'',supplier?.name||'',...invited]);
   }
+  const activeInterest=i=>!['completed','cancelled'].includes(i.trackingStatus||i.status);
   function accountRow(a){return '<article class="invite-card"><h3>'+E(a.name)+'</h3><p>'+E(a.company)+'</p>'+W.badge(R.stateLabel(a))+'<button class="btn btn-outline account-detail" data-id="'+E(a.id)+'">'+M.tr('البيانات والسجل','Contact & history')+'</button>'+R.buttons('account',a)+R.log(a)+'</article>';}
   function requestRow(x){
     return '<article class="admin-request-row"><span class="request-id">#'+E(W.ref(x))+'</span><h3>'+E(x.product||M.tr('طلب','Request'))+'</h3>'+W.badge(R.stateLabel(x))+'<time>'+E(W.date(x.createdAt))+'</time><button class="record-detail admin-detail-button" data-id="'+E(x.id)+'" data-kind="request" aria-label="'+E(M.tr('عرض التفاصيل','View details'))+'"><span>'+M.tr('التفاصيل','Details')+'</span><b aria-hidden="true">›</b></button></article>';
@@ -53,14 +54,14 @@ document.addEventListener('m:ready', async () =>{
       content='<div class="directory-grid">'+s.accounts.filter(a=>a.role===role&&!a.deletedAt&&match(a)).map(accountRow).join('')+'</div>';
       if(!s.accounts.some(a=>a.role===role&&!a.deletedAt&&match(a)))content='';
     }
-    if(view==='interests')content=s.interests.map((i,index)=>{if(!match(i))return '';
+    if(view==='interests')content=s.interests.map((i,index)=>{if(!activeInterest(i)||!match(i))return '';
       const offer=s.publicOffers.find(o=>o.id===i.offerId);
       return '<article class="invite-card"><h3>#'+E(W.ref(offer))+' — '+E(offer?.product||'')+'</h3>'+contact(account(i.customerId))+W.badge(i.status||'pending')+
         '<p>'+E(W.date(i.createdAt||i.requestedAt))+'</p><label>'+M.tr('تحديث حالة طلب الاهتمام','Update interest status')+'<select class="interest-state" data-index="'+index+'">'+['pending','coordinating','accepted','completed','cancelled'].map(v=>'<option value="'+v+'" '+((i.status||'pending')===v?'selected':'')+'>'+W.status(v)+'</option>').join('')+'</select></label>'+W.history(i)+'</article>';
     }).join('');
     records.innerHTML='<div class="card-head"><h2>'+M.tr(title[1],title[2])+'</h2></div><div class="card-body '+(view==='allrequests'?'admin-request-list':'')+'">'+(content||W.empty())+'</div>';
     if(view==='team')Team.render(records);
-    document.getElementById('interestCount').textContent=s.interests.length;
+    document.getElementById('interestCount').textContent=s.interests.filter(activeInterest).length;
   }
   records.onclick=e=>{
     const person=e.target.closest('.account-detail');
