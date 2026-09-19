@@ -263,11 +263,11 @@ function paymentReviewPanel(x,entityType){
 }
 function paymentMessageField(x,kind,current){
   const hidden=current==='payment_confirmation'?'':' hidden',allBanks=activeBankAccounts(),pricing=kind==='request'?requestPricing(x):null;
-  const derivedCurrency=pricing?.currency||'',currency=x?.paymentCurrency||derivedCurrency||x?.paymentBankAccount?.currency||'AED';
+  const derivedCurrency=pricing?.currency||'',currency=kind==='request'&&derivedCurrency?derivedCurrency:(x?.paymentCurrency||x?.paymentBankAccount?.currency||'AED');
   const matchingBanks=kind==='request'&&derivedCurrency?allBanks.filter(a=>a.currency===derivedCurrency):allBanks;
-  const priorSelected=x?.paymentBankAccountId||x?.paymentBankAccount?.id||'';
-  const selected=priorSelected||(matchingBanks.length===1?matchingBanks[0].id:'');
-  const banks=priorSelected&&!matchingBanks.some(a=>a.id===priorSelected)?[...matchingBanks,...allBanks.filter(a=>a.id===priorSelected)]:matchingBanks;
+  const priorSelected=x?.paymentBankAccountId||x?.paymentBankAccount?.id||'',validPrior=matchingBanks.some(a=>a.id===priorSelected)?priorSelected:'';
+  const selected=validPrior||(matchingBanks.length===1?matchingBanks[0].id:'');
+  const banks=matchingBanks;
   const bankSelect=banks.length?'<label><span>'+esc(tr('حساب استلام المبلغ','Receiving bank account'))+'</span><select data-admin-payment-bank required><option value="">—</option>'+banks.map(a=>'<option value="'+esc(a.id)+'" '+(selected===a.id?'selected':'')+'>'+esc(a.label||a.bankName)+' · '+esc(a.currency||'')+'</option>').join('')+'</select></label>':'<p class="payment-review-note">'+esc(kind==='request'&&derivedCurrency?tr('لا يوجد حساب بنكي نشط بعملة '+derivedCurrency+'. أضف حسابًا بهذه العملة من صفحة الحسابات.','There is no active bank account in '+derivedCurrency+'. Add one from the Accounts page.'):tr('أضف حسابًا بنكيًا نشطًا من صفحة الحسابات أولًا.','Add an active bank account from the Accounts page first.'))+'</p>';
   const amount=x?.paymentAmount||pricing?.total||'';
   const currencyField=kind==='request'&&pricing?'<label><span>'+esc(tr('العملة','Currency'))+'</span><select data-admin-payment-currency disabled>'+['AED','SAR','USD','CNY','EUR'].map(v=>'<option '+(currency===v?'selected':'')+'>'+v+'</option>').join('')+'</select><small>'+esc(tr('تُحدد تلقائيًا من العرض المختار.','Set automatically from the selected quote.'))+'</small></label>':'<label><span>'+esc(tr('العملة','Currency'))+'</span><select data-admin-payment-currency>'+['AED','SAR','USD','CNY','EUR'].map(v=>'<option '+(currency===v?'selected':'')+'>'+v+'</option>').join('')+'</select></label>';
