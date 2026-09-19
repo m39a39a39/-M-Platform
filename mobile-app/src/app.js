@@ -14,6 +14,7 @@ let activeScreen='home';
 let activeSub='primary';
 let readyProductsPage=1;
 let readyCategory='all';
+let clientRequestFilter='all';
 let busy=false;
 let lastDataLoadedAt=0;
 const PAGE_SIZE=20;
@@ -150,7 +151,7 @@ async function loadData({render=true}={}){
 }
 configureAdmin({reload:()=>loadData({render:false})});
 session.onReset(reason=>{
-  currentUser=null;platformState=null;notifications=[];activeScreen='home';activeSub='primary';readyProductsPage=1;readyCategory='all';
+  currentUser=null;platformState=null;notifications=[];activeScreen='home';activeSub='primary';readyProductsPage=1;readyCategory='all';clientRequestFilter='all';
   resetAdmin();closeModal();
   for(const url of mediaCache.values())URL.revokeObjectURL(url);
   mediaCache.clear();mediaTasks.clear();lastDataLoadedAt=0;$('screen').replaceChildren();$('headerRole').textContent='';
@@ -165,34 +166,39 @@ function updateShell(){
   $('headerRole').textContent=t(role);
   $('appLangBtn').textContent=lang==='ar'?'EN':'AR';
   const homeLabel=document.querySelector('[data-nav="home"]');if(homeLabel)homeLabel.textContent=t('home');
-  if(requestLabel)requestLabel.textContent=role==='supplier'?tr('طلبات عروض الأسعار','Quote requests'):t('requests');
+  if(requestLabel)requestLabel.textContent=role==='supplier'?tr('طلبات عروض الأسعار','Quote requests'):role==='client'?tr('طلباتي','My orders'):t('requests');
   if(offersLabel)offersLabel.textContent=t('offers');
   if(accountLabel)accountLabel.textContent=t('account');
   if(role==='supplier'){
     if(utilityNav){
-      utilityNav.dataset.screen='orders';
+      utilityNav.classList.remove('hidden');utilityNav.dataset.screen='orders';
       const label=utilityNav.querySelector('[data-nav="notifications"]'),icon=utilityNav.querySelector('span');if(label)label.textContent=tr('الطلبات','Orders');if(icon)icon.textContent='▣';
       if(requestButton)bottom.insertBefore(utilityNav,requestButton);
     }
     document.querySelector('#bottomNav [data-screen="offers"]')?.classList.remove('hidden');
     $('bottomNav').classList.remove('client-nav');
     $('headerNotificationsBtn')?.classList.remove('hidden');
+  }else if(role==='client'){
+    if(utilityNav){utilityNav.dataset.screen='notifications';utilityNav.classList.add('hidden');}
+    document.querySelector('#bottomNav [data-screen="offers"]')?.classList.remove('hidden');
+    $('bottomNav').classList.add('client-nav');
+    $('headerNotificationsBtn')?.classList.remove('hidden');
+    if(activeScreen==='orders'||activeScreen==='notifications')activeScreen='home';
   }else{
     if(utilityNav){
-      utilityNav.dataset.screen='notifications';
+      utilityNav.classList.remove('hidden');utilityNav.dataset.screen='notifications';
       const label=utilityNav.querySelector('[data-nav="notifications"]'),icon=utilityNav.querySelector('span');if(label)label.textContent=t('notifications');if(icon)icon.textContent='♢';
       if(accountButton)bottom.insertBefore(utilityNav,accountButton);
     }
-    document.querySelector('#bottomNav [data-screen="offers"]')?.classList.toggle('hidden',role==='client');
-    $('bottomNav').classList.toggle('client-nav',role==='client');
+    document.querySelector('#bottomNav [data-screen="offers"]')?.classList.remove('hidden');
+    $('bottomNav').classList.remove('client-nav');
     $('headerNotificationsBtn')?.classList.add('hidden');
-    if(role==='client'&&activeScreen==='offers')activeScreen='home';
     if(activeScreen==='orders')activeScreen='home';
   }
   const unread=notifications.filter(n=>!n.readAt).length,badge=unread>99?'99+':String(unread);
   $('navUnread').textContent=badge;$('headerUnread').textContent=badge;
-  $('navUnread').classList.toggle('hidden',role==='supplier'||!unread);
-  $('headerUnread').classList.toggle('hidden',role!=='supplier'||!unread);
+  $('navUnread').classList.toggle('hidden',role!=='admin'||!unread);
+  $('headerUnread').classList.toggle('hidden',!['supplier','client'].includes(role)||!unread);
   document.querySelectorAll('#bottomNav button').forEach(b=>b.classList.toggle('active',b.dataset.screen===activeScreen));
 }
 
