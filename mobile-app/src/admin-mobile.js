@@ -46,6 +46,23 @@ const categories=()=>{const rows=Array.isArray(state?.settings?.categories)?stat
 const activeCategories=()=>categories().filter(cat=>cat.active!==false);
 const bankAccounts=()=>{const rows=Array.isArray(state?.settings?.bankAccounts)?state.settings.bankAccounts:[];return [...rows].sort((a,b)=>(a.order||0)-(b.order||0));};
 const activeBankAccounts=()=>bankAccounts().filter(x=>x.active!==false);
+const selectedQuoteForRequest=x=>x?.selectedQuoteId?(state?.quotes||[]).find(q=>q.id===x.selectedQuoteId&&q.requestId===x.id):null;
+function requestPricing(x){
+  const quote=selectedQuoteForRequest(x),unitPrice=Number(quote?.unitPrice),quantity=Number(x?.quantity);
+  if(!quote||!Number.isFinite(unitPrice)||unitPrice<=0||!Number.isFinite(quantity)||quantity<=0)return null;
+  return {quote,unitPrice,quantity,total:unitPrice*quantity,currency:String(quote.currency||'').toUpperCase()};
+}
+function formatMoney(value,currency){
+  const amount=Number(value);if(!Number.isFinite(amount))return '—';
+  try{return new Intl.NumberFormat(lang()==='ar'?'ar':'en',{style:'currency',currency:currency||'USD',minimumFractionDigits:0,maximumFractionDigits:4}).format(amount);}
+  catch{return amount.toLocaleString()+' '+String(currency||'');}
+}
+function selectedQuoteCard(x){
+  const pricing=requestPricing(x);
+  if(!pricing)return '<section class="admin-selected-quote-card missing"><div><small>'+esc(tr('العرض المختار','Selected quote'))+'</small><strong>'+esc(tr('لم يختار العميل عرضًا بعد','The customer has not selected a quote yet'))+'</strong></div><p>'+esc(tr('لا يمكن الانتقال إلى تأكيد الطلب والدفع قبل اختيار عرض.','The order cannot move to payment confirmation before a quote is selected.'))+'</p></section>';
+  const {quote,unitPrice,quantity,total,currency}=pricing;
+  return '<section class="admin-selected-quote-card"><div class="admin-selected-quote-head"><div><small>'+esc(tr('العرض المختار','Selected quote'))+'</small><strong>#'+esc(ref(quote))+'</strong></div><span class="status-pill status-published">'+esc(tr('مختار','Selected'))+'</span></div><div class="admin-selected-quote-values"><div><span>'+esc(tr('سعر الوحدة','Unit price'))+'</span><strong>'+esc(formatMoney(unitPrice,currency))+'</strong></div><div><span>'+esc(tr('الكمية','Quantity'))+'</span><strong>'+esc(Number(quantity).toLocaleString())+'</strong></div><div class="total"><span>'+esc(tr('الإجمالي','Total'))+'</span><strong>'+esc(formatMoney(total,currency))+'</strong></div></div><small>'+esc(tr('الإجمالي = سعر الوحدة × كمية الطلب، ويُستخدم تلقائيًا كمبلغ الدفع المطلوب.','Total = unit price × order quantity and is used automatically as the amount due.'))+'</small></section>';
+}
 
 async function mutate(collection,item,patch,redactionConfirmed=false){await api('/api/v1/mutations',{method:'POST',body:{collection,id:item.id,version:Number(item.version||0),patch,redactionConfirmed}});await reload();}
 
@@ -245,10 +262,17 @@ function paymentReviewPanel(x,entityType){
   return '<section class="admin-payment-review"><div class="payment-card-head"><div><small>'+esc(tr('حالة الدفع','Payment status'))+'</small><strong>'+esc(paymentStatusLabel(x.paymentStatus))+'</strong></div></div>'+receiptHtml+note+review+'</section>';
 }
 function paymentMessageField(x,kind,current){
-  const hidden=current==='payment_confirmation'?'':' hidden',banks=activeBankAccounts(),selected=x?.paymentBankAccountId||x?.paymentBankAccount?.id||'';
-  const bankSelect=banks.length?'<label><span>'+esc(tr('حساب استلام المبلغ','Receiving bank account'))+'</span><select data-admin-payment-bank required><option value="">—</option>'+banks.map(a=>'<option value="'+esc(a.id)+'" '+(selected===a.id?'selected':'')+'>'+esc(a.label||a.bankName)+' · '+esc(a.currency||'')+'</option>').join('')+'</select></label>':'<p class="payment-review-note">'+esc(tr('أضف حسابًا بنكيًا نشطًا من صفحة الحسابات أولًا.','Add an active bank account from the Accounts page first.'))+'</p>';
-  const currency=x?.paymentCurrency||x?.paymentBankAccount?.currency||banks.find(a=>a.id===selected)?.currency||'AED';
-  return '<section class="admin-payment-message-field'+hidden+'"><h4>'+esc(tr('بيانات الدفع','Payment details'))+'</h4>'+bankSelect+'<div class="form-two"><label><span>'+esc(tr('المبلغ المطلوب','Amount due'))+'</span><input type="number" min="0.01" step="0.01" data-admin-payment-amount value="'+esc(x?.paymentAmount||'')+'" required></label><label><span>'+esc(tr('العملة','Currency'))+'</span><select data-admin-payment-currency>'+['AED','SAR','USD','CNY','EUR'].map(v=>'<option '+(currency===v?'selected':'')+'>'+v+'</option>').join('')+'</select></label></div><label><span>'+esc(tr('رسالة الدفع للعميل','Payment message to customer'))+'</span><textarea data-admin-payment-message maxlength="2000">'+esc(defaultPaymentMessage(x,kind))+'</textarea><small>'+esc(tr('سيشاهد العميل بيانات الحساب والمبلغ داخل الطلب ثم يرفع الإيصال.','The customer will see the account details and amount inside the order, then upload the receipt.'))+'</small></label></section>';
+  const hidden=current==='payment_confirmation'?'':' hidden',allBanks=activeBankAccounts(),pricing=kind==='request'?requestPricing(x):null;
+  const derivedCurrency=pricing?.currency||'',currency=x?.paymentCurrency||derivedCurrency||x?.paymentBankAccount?.currency||'AED';
+  const matchingBanks=kind==='request'&&derivedCurrency?allBanks.filter(a=>a.currency===derivedCurrency):allBanks;
+  const priorSelected=x?.paymentBankAccountId||x?.paymentBankAccount?.id||'';
+  const selected=priorSelected||(matchingBanks.length===1?matchingBanks[0].id:'');
+  const banks=priorSelected&&!matchingBanks.some(a=>a.id===priorSelected)?[...matchingBanks,...allBanks.filter(a=>a.id===priorSelected)]:matchingBanks;
+  const bankSelect=banks.length?'<label><span>'+esc(tr('حساب استلام المبلغ','Receiving bank account'))+'</span><select data-admin-payment-bank required><option value="">—</option>'+banks.map(a=>'<option value="'+esc(a.id)+'" '+(selected===a.id?'selected':'')+'>'+esc(a.label||a.bankName)+' · '+esc(a.currency||'')+'</option>').join('')+'</select></label>':'<p class="payment-review-note">'+esc(kind==='request'&&derivedCurrency?tr('لا يوجد حساب بنكي نشط بعملة '+derivedCurrency+'. أضف حسابًا بهذه العملة من صفحة الحسابات.','There is no active bank account in '+derivedCurrency+'. Add one from the Accounts page.'):tr('أضف حسابًا بنكيًا نشطًا من صفحة الحسابات أولًا.','Add an active bank account from the Accounts page first.'))+'</p>';
+  const amount=x?.paymentAmount||pricing?.total||'';
+  const currencyField=kind==='request'&&pricing?'<label><span>'+esc(tr('العملة','Currency'))+'</span><select data-admin-payment-currency disabled>'+['AED','SAR','USD','CNY','EUR'].map(v=>'<option '+(currency===v?'selected':'')+'>'+v+'</option>').join('')+'</select><small>'+esc(tr('تُحدد تلقائيًا من العرض المختار.','Set automatically from the selected quote.'))+'</small></label>':'<label><span>'+esc(tr('العملة','Currency'))+'</span><select data-admin-payment-currency>'+['AED','SAR','USD','CNY','EUR'].map(v=>'<option '+(currency===v?'selected':'')+'>'+v+'</option>').join('')+'</select></label>';
+  const amountHint=kind==='request'&&pricing?'<small>'+esc(tr('تم تعبئة الإجمالي تلقائيًا. يمكنك تخفيض المبلغ إذا كانت هذه دفعة جزئية أو عربونًا.','The total is filled automatically. You can reduce it for a partial payment or deposit.'))+'</small>':'';
+  return '<section class="admin-payment-message-field'+hidden+'"><h4>'+esc(tr('بيانات الدفع','Payment details'))+'</h4>'+bankSelect+'<div class="form-two"><label><span>'+esc(tr('المبلغ المطلوب','Amount due'))+'</span><input type="number" min="0.01" step="0.01" data-admin-payment-amount value="'+esc(amount)+'" required>'+amountHint+'</label>'+currencyField+'</div><label><span>'+esc(tr('رسالة الدفع للعميل','Payment message to customer'))+'</span><textarea data-admin-payment-message maxlength="2000">'+esc(defaultPaymentMessage(x,kind))+'</textarea><small>'+esc(tr('سيشاهد العميل بيانات الحساب والمبلغ داخل الطلب ثم يرفع الإيصال.','The customer will see the account details and amount inside the order, then upload the receipt.'))+'</small></label></section>';
 }
 function interestTrackingEditor(x){
   const current=interestTracking(x);
@@ -264,7 +288,7 @@ async function saveInterestTracking(id){
   const x=(state?.interests||[]).find(item=>item.id===id);if(!x)return;
   const trackingStatus=document.querySelector('[data-admin-interest-tracking-status]')?.value,trackingNote=document.querySelector('[data-admin-interest-tracking-note]')?.value||'';
   const patch={trackingStatus,trackingNote};
-  if(trackingStatus==='payment_confirmation'){const paymentMessage=document.querySelector('[data-admin-payment-message]')?.value.trim()||'',paymentBankAccountId=document.querySelector('[data-admin-payment-bank]')?.value||'',paymentAmount=document.querySelector('[data-admin-payment-amount]')?.value||'',paymentCurrency=document.querySelector('[data-admin-payment-currency]')?.value||'';if(!paymentMessage){toast(tr('اكتب رسالة الدفع للعميل.','Add a payment message for the customer.'));return;}if(!paymentBankAccountId||!paymentAmount){toast(tr('اختر الحساب البنكي وأدخل مبلغ الدفع.','Choose the bank account and enter the payment amount.'));return;}Object.assign(patch,{paymentMessage,paymentBankAccountId,paymentAmount,paymentCurrency});}
+  if(trackingStatus==='payment_confirmation'){const pricing=requestPricing(x);if(!pricing){toast(tr('لا يمكن الانتقال للدفع قبل أن يختار العميل عرضًا.','Payment cannot start until the customer selects a quote.'));return;}const paymentMessage=document.querySelector('[data-admin-payment-message]')?.value.trim()||'',paymentBankAccountId=document.querySelector('[data-admin-payment-bank]')?.value||'',paymentAmount=document.querySelector('[data-admin-payment-amount]')?.value||'',paymentCurrency=pricing.currency;if(!paymentMessage){toast(tr('اكتب رسالة الدفع للعميل.','Add a payment message for the customer.'));return;}if(!paymentBankAccountId||!paymentAmount){toast(tr('اختر الحساب البنكي وأدخل مبلغ الدفع.','Choose the bank account and enter the payment amount.'));return;}Object.assign(patch,{paymentMessage,paymentBankAccountId,paymentAmount,paymentCurrency});}
   try{await mutate('interests',x,patch);closeModal();schedule();toast(tr('تم تحديث حالة الطلب.','Order status updated.'));}catch(e){toast(e.message);}
 }
 function trackingEditor(x){
@@ -324,7 +348,7 @@ function openRecord(kind,id){
   const arr=kind==='request'?state?.requests:kind==='quote'?state?.quotes:state?.publicOffers,x=(arr||[]).find(v=>v.id===id);if(!x)return;
   const pending=kind==='request'?x.status==='review':x.status==='pending',editPerm=kind==='request'?'requests.edit':'offers.edit',editImages=pending&&can(editPerm),editTr=pending&&can('translate'),approve=pending&&can('publish'),linked=kind==='quote'?(state?.requests||[]).find(r=>r.id===x.requestId):null;
   let html=ownerBox(x)+`<section class="admin-source-box"><h3>${esc(tr('المحتوى الأصلي','Original content'))}</h3><strong>${esc(x.product||linked?.product||title(x))}</strong><p>${esc(x.specs||x.notes||'—')}</p>${kind==='request'?`<div class="facts"><span>${esc(tr('الكمية','Quantity'))}: ${esc(x.quantity||'—')}</span><span>${esc(tr('الدولة','Country'))}: ${esc(x.country||'—')}</span><span>${esc(tr('تاريخ الاحتياج','Needed date'))}: ${esc(x.neededDate||'—')}</span></div>${x.repeatedFromRequestId?`<p class="payment-review-note"><b>${esc(tr('طلب مكرر من','Repeated from'))}:</b> #${esc(ref((state?.requests||[]).find(r=>r.id===x.repeatedFromRequestId)||{id:x.repeatedFromRequestId}))}</p>`:''}`:''}${linked?`<div class="facts"><span>${esc(tr('الطلب المرتبط','Linked request'))}: #${esc(ref(linked))}</span></div>`:''}</section>`;
-  if(kind==='request'&&(can('requests.edit')||can('publish')))html+=trackingEditor(x);
+  if(kind==='request'&&(can('requests.edit')||can('publish')))html+=selectedQuoteCard(x)+trackingEditor(x);
   if(kind==='public'&&can('offers.edit'))html+=publicOfferEditor(x);
   if(kind!=='public'||!can('offers.edit'))html+=`<section><h3>${esc(tr('الصور','Images'))}</h3>${gallery(x.images||[],editImages)||`<p class="muted">${esc(tr('لا توجد صور.','No images.'))}</p>`}</section><section><h3>${esc(tr('الترجمة','Translation'))}</h3>${translations(x,editTr)}</section>`;
   if(kind==='request'&&pending&&can('publish'))html+=supplierPicker(x);
