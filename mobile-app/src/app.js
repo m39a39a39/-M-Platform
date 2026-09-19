@@ -226,6 +226,17 @@ function publicOfferCard(item){
   const image=(item.images||[])[0];
   return `<article class="public-offer-card" data-public-offer="${esc(item.id)}"><div class="public-offer-media" data-viewer-gallery>${image?`<img alt="" data-media="${esc(image)}" data-image-viewer />`:'<div class="public-offer-placeholder">M</div>'}</div><div class="public-offer-content"><h3>${esc(titleOf(item))}</h3><p>${esc(descriptionOf(item)||'—')}</p><div class="public-offer-facts"><span><b>${esc(t('price'))}</b><strong>${money(item.unitPrice,item.currency)}</strong></span><span><b>${esc(t('moq'))}</b><strong>${esc(item.moq||'—')}</strong></span></div></div></article>`;
 }
+function supplierPublicOfferPreview(item){
+  const image=(item.images||[])[0];
+  return `<article class="supplier-public-preview" data-public-offer="${esc(item.id)}">
+    <div class="supplier-public-thumb">${image?`<img alt="" data-media="${esc(image)}" />`:'<div class="supplier-public-placeholder">M</div>'}</div>
+    <div class="supplier-public-preview-body">
+      <div class="supplier-public-preview-head"><div><small>#${esc(ref(item))}</small><h3>${esc(titleOf(item))}</h3></div>${cardBadge(item.status)}</div>
+      <p>${money(item.unitPrice,item.currency)} · MOQ ${esc(item.moq||'—')}</p>
+    </div>
+    <span class="chevron">›</span>
+  </article>`;
+}
 function productPagination(page,totalPages){
   if(totalPages<=1)return '';
   return `<nav class="product-pagination" aria-label="${esc(t('readyProducts'))}"><button class="pagination-btn" type="button" data-action="ready-products-prev" ${page<=1?'disabled':''}>${esc(t('previous'))}</button><span class="pagination-info">${esc(t('page'))} ${page} / ${totalPages}</span><button class="pagination-btn" type="button" data-action="ready-products-next" ${page>=totalPages?'disabled':''}>${esc(t('next'))}</button></nav>`;
@@ -249,8 +260,11 @@ function renderHome(){
   }else if(role==='supplier'){
     const quotes=platformState.quotes||[],answered=new Set(quotes.map(q=>q.requestId)),invites=(platformState.requests||[]).filter(r=>!answered.has(r.id));
     const pub=platformState.publicOffers||[],interest=(platformState.interests||[]).length;
+    const recentPub=[...pub].sort((a,b)=>(Date.parse(b.createdAt||0)||0)-(Date.parse(a.createdAt||0)||0)).slice(0,3);
     $('screen').innerHTML=pageHeader(`${tr('مرحبًا','Welcome')} ${esc(currentUser.name||currentUser.company||'')}`,tr('الدعوات والعروض وحالة المراجعة.','Invitations, offers and review status.'))+
-      `<div class="stats-grid">${statCard(invites.length,t('invites'),'requests')}${statCard(quotes.length,t('submittedOffers'),'offers')}${statCard(pub.length,t('myPublicOffers'),'offers')}${statCard(interest,t('interestRequests'),'offers')}</div>`+
+      `<section class="supplier-public-cta"><div class="supplier-public-cta-copy"><span class="supplier-public-cta-icon">＋</span><div><h2>${esc(tr('إضافة عرض عام جديد','Add a new public offer'))}</h2><p>${esc(tr('أضف منتجًا جاهزًا للبيع ليظهر للعملاء بعد مراجعة الإدارة.','Add a ready-to-sell product for customers to see after admin review.'))}</p></div></div><button class="primary-btn" type="button" data-action="new-public">+ ${esc(t('newPublicOffer'))}</button></section>`+
+      `<div class="stats-grid supplier-home-stats">${statCard(invites.length,t('invites'),'requests')}${statCard(quotes.length,t('submittedOffers'),'offers')}${statCard(pub.length,t('myPublicOffers'),'view-public-offers')}${statCard(interest,t('interestRequests'),'offers')}</div>`+
+      `<section class="section-block supplier-public-recent"><div class="section-title"><div><h2>${esc(t('myPublicOffers'))}</h2><p>${esc(tr('آخر عروضك العامة وحالة مراجعتها.','Your latest public offers and their review status.'))}</p></div><button class="text-btn" type="button" data-action="view-public-offers">${esc(tr('عرض الكل','View all'))}</button></div><div class="supplier-public-preview-list">${recentPub.map(supplierPublicOfferPreview).join('')||empty()}</div></section>`+
       `<section class="section-block"><div class="section-title"><h2>${esc(t('invites'))}</h2></div>${invites.slice(0,4).map(r=>itemCard(r,{subtitle:descriptionOf(r),meta:`${t('quantity')}: ${r.quantity||'—'} · ${r.country||'—'}`,badge:cardBadge(r.status),action:`data-supplier-request="${esc(r.id)}"`})).join('')||empty()}</section>`;
   }else{
     $('screen').innerHTML=pageHeader(tr('لوحة الإدارة','Admin'),t('adminMobile'))+`<div class="stats-grid">${statCard(platformState.requests?.length||0,t('requests'))}${statCard(platformState.quotes?.length||0,t('submittedOffers'))}${statCard(platformState.publicOffers?.length||0,t('publicOffers'))}${statCard(notifications.filter(n=>!n.readAt).length,t('notifications'),'notifications')}</div>`;
@@ -398,6 +412,7 @@ async function handleAction(target){
   if(target.dataset.action==='new-request')return openNewRequest();
   if(target.dataset.repeatRequest){const source=(platformState.requests||[]).find(x=>x.id===target.dataset.repeatRequest);if(source)return openNewRequest(source);}
   if(target.dataset.action==='new-public')return openNewPublic();
+  if(target.dataset.action==='view-public-offers'){activeScreen='offers';activeSub='public';renderScreen();$('screen').scrollTop=0;return;}
   if(target.dataset.action==='logout')return logout();
   if(target.dataset.action==='mark-all'){await request('/api/v1/notifications/read',{method:'POST',auth:true,body:{all:true}});await loadData();return;}
   if(['home','requests','offers','notifications','account'].includes(target.dataset.action)){activeScreen=target.dataset.action;if(activeScreen==='offers')activeSub='primary';renderScreen();return;}
