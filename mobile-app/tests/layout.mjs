@@ -231,7 +231,6 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
       supplierOrderMutation=null;
 
       await page.locator('#headerNotificationsBtn').click();
-      assert.equal(activeScreen===undefined?true:true,true);
       await page.locator('#screen .notification-list').waitFor();
       await page.locator('#bottomNav [data-screen="home"]').click();
       await page.locator('#screen .supplier-public-cta').waitFor();
