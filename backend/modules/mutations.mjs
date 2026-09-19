@@ -122,7 +122,7 @@ export async function mutate(user,body){
       const offer=await one('public_offers',patch.offerId);
       assert(open(offer)&&offer.data.status==='published'&&active(await one('profiles',offer.owner_id))&&(!offer.data.validUntil||offer.data.validUntil>=now.slice(0,10)),409);
       const quantity=Number(patch.quantity),moq=Number(offer.data.moq),unitPrice=Number(offer.data.unitPrice),stock=Number(offer.data.stock);
-      assert(Number.isFinite(quantity)&&quantity>0&&quantity<=1e9,400,'أدخل كمية صحيحة / Enter a valid quantity');
+      assert(Number.isFinite(quantity)&&Number.isInteger(quantity)&&quantity>0&&quantity<=1e9,400,'أدخل كمية صحيحة / Enter a valid quantity');
       assert(Number.isFinite(moq)&&quantity>=moq,400,'الكمية أقل من الحد الأدنى للطلب / Quantity is below the minimum order');
       if(Number.isFinite(stock)&&stock>0)assert(quantity<=stock,400,'الكمية المطلوبة أكبر من المخزون المتاح / Requested quantity exceeds available stock');
       const existing=await db('interests',`owner_id=eq.${encodeURIComponent(user.id)}&offer_id=eq.${encodeURIComponent(patch.offerId)}&limit=1`);
