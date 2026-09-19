@@ -6,7 +6,7 @@ const TYPES={
   request:{table:'requests',permission:'requests.edit'},
   interest:{table:'interests',permission:'offers.edit'}
 };
-const statusAllowed=new Set(['awaiting_receipt','reupload_requested','receipt_submitted']);
+const statusAllowed=new Set(['awaiting_receipt','reupload_requested']);
 
 function entity(type){const cfg=TYPES[type];assert(cfg,400,'نوع الطلب غير صالح / Invalid order type');return cfg;}
 const paymentHistory=(data,entry)=>[...(Array.isArray(data.paymentHistory)?data.paymentHistory:[]),entry].slice(-100);
@@ -18,8 +18,7 @@ export async function submitPaymentReceipt(user,body={}){
   const row=await one(cfg.table,id);assert(row&&row.owner_id===user.id,404);
   assert(Number(body.version)===row.version,409,'تغيّرت البيانات؛ حدّث الصفحة / Refresh after conflict');
   const data=structuredClone(row.data||{});
-  assert(data.trackingStatus==='payment_confirmation'||statusAllowed.has(data.paymentStatus),409,'الطلب ليس في مرحلة الدفع / Order is not awaiting payment');
-  assert(!['confirmed'].includes(data.paymentStatus),409,'تم تأكيد الدفع بالفعل / Payment already confirmed');
+  assert(data.trackingStatus==='payment_confirmation'&&(!data.paymentStatus||statusAllowed.has(data.paymentStatus)),409,'الطلب ليس بانتظار إيصال الدفع / Order is not awaiting a receipt');
   const receipt=await uploadPaymentReceipt(user,body.source);
   const now=new Date().toISOString();
   data.paymentStatus='receipt_submitted';
