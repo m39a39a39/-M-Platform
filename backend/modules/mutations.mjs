@@ -15,8 +15,8 @@ function updateSupplierOrder(data,patch,now){
   data.supplierOrderStatus=next;data.supplierOrderNote=note;data.supplierOrderUpdatedAt=now;
   data.supplierOrderHistory=[...(Array.isArray(data.supplierOrderHistory)?data.supplierOrderHistory:[]),{at:now,status:next,note}].slice(-100);
 }
-export const TRACKING_FLOW=['received','reviewing','sourcing','quotes_available','quote_selected','payment_confirmation','production','quality_check','ready_to_ship','shipped','in_delivery','delivered','completed'];
-export const READY_TRACKING_FLOW=['received','payment_confirmation','production','quality_check','ready_to_ship','shipped','in_delivery','delivered','completed'];
+export const TRACKING_FLOW=['received','reviewing','sourcing','quotes_available','quote_selected','supplier_confirmation','payment_confirmation','production','quality_check','ready_to_ship','shipped','in_delivery','delivered','completed'];
+export const READY_TRACKING_FLOW=['received','supplier_confirmation','payment_confirmation','production','quality_check','ready_to_ship','shipped','in_delivery','delivered','completed'];
 export const TRACKING_EXCEPTIONS=['customer_action','on_hold','cancelled'];
 export const TRACKING_STATUSES=[...TRACKING_FLOW,...TRACKING_EXCEPTIONS];
 export const READY_TRACKING_STATUSES=[...READY_TRACKING_FLOW,...TRACKING_EXCEPTIONS];
@@ -145,7 +145,7 @@ export async function mutate(user,body){
       if(changes[0]==='selectedQuoteId'){
         const r=await assertOpenRequest(id),q=await one('quotes',patch.selectedQuoteId);
         assert(!r.data.selectedQuoteId&&r.data.status==='sent'&&open(q)&&q.request_id===id&&q.data.status==='published'&&active(await one('profiles',q.owner_id)),409,'العرض غير متاح أو سبق اختيار عرض / Quote unavailable or already selected');
-        data.selectedQuoteId=q.id;setTracking(data,'quote_selected',now,'');
+        data.selectedQuoteId=q.id;setTracking(data,'supplier_confirmation',now,'');
       }else{
         const published=await db('quotes',`request_id=eq.${encodeURIComponent(id)}&data->>status=eq.published&data->>deletedAt=is.null`);
         const latest=published.map(q=>q.data.publishedAt||q.data.updatedAt||q.data.reviewedAt||q.created_at).filter(Boolean).sort().at(-1);
@@ -157,6 +157,7 @@ export async function mutate(user,body){
       const r=await assertOpenRequest(original.request_id);
       if(isOrderUpdate){
         assert(r.data.selectedQuoteId===original.id,409,'هذا العرض ليس الطلب المختار / This quote is not the selected order');
+        if(patch.supplierOrderStatus==='production')assert(r.data.paymentStatus==='confirmed',409,'لا يمكن بدء الإنتاج قبل تأكيد الدفع / Production cannot start before payment is confirmed');
         updateSupplierOrder(data,patch,now);
       }else{
         assert(changes.length&&changes.every(k=>contentFields.quotes.includes(k)),400,'يمكن تعديل بيانات العرض فقط / Only offer fields can be edited');
@@ -174,6 +175,7 @@ export async function mutate(user,body){
       assert(offer&&offer.owner_id===user.id&&open(offer),403,'غير مصرح بهذا الطلب / Unauthorized order');
       assert((original.data.trackingStatus||'received')!=='received'&&!['completed','cancelled'].includes(original.data.trackingStatus),409,'الطلب غير جاهز للتنفيذ / Order is not ready for supplier action');
       assert(changes.length&&changes.every(k=>['supplierOrderStatus','supplierOrderNote'].includes(k)),400,'يمكن تحديث حالة التنفيذ فقط / Only fulfillment status can be updated');
+      if(patch.supplierOrderStatus==='production')assert(original.data.paymentStatus==='confirmed',409,'لا يمكن بدء الإنتاج قبل تأكيد الدفع / Production cannot start before payment is confirmed');
       updateSupplierOrder(data,patch,now);
     }else assert(false,403,'غير مصرح بهذا التعديل / Unauthorized change');
   }else{
@@ -230,6 +232,7 @@ export async function mutate(user,body){
       if(collection==='interests')data.status=data.trackingStatus==='completed'?'completed':data.trackingStatus==='cancelled'?'cancelled':'active';
     }
     if((collection==='requests'||collection==='interests')&&changes.includes('trackingStatus')&&patch.trackingStatus==='payment_confirmation'){
+      const enteringPayment=original.data.trackingStatus!=='payment_confirmation';
       assert(data.paymentMessage?.trim(),400,'اكتب رسالة الدفع للعميل / Add a payment message');
       assert(data.paymentBankAccount?.id&&data.paymentAmount&&data.paymentCurrency,400,'أكمل الحساب البنكي والمبلغ والعملة / Complete bank account, amount, and currency');
       assert(String(data.paymentBankAccount.currency||'').toUpperCase()===String(data.paymentCurrency||'').toUpperCase(),400,'عملة الحساب البنكي يجب أن تطابق عملة الدفع / Bank account currency must match payment currency');
@@ -237,12 +240,14 @@ export async function mutate(user,body){
         assert(data.selectedQuoteId,409,'يجب أن يختار العميل عرضًا قبل الدفع / Customer must select a quote before payment');
         const selectedQuote=await one('quotes',data.selectedQuoteId);
         assert(selectedQuote&&selectedQuote.request_id===id&&open(selectedQuote)&&selectedQuote.data.status==='published',409,'العرض المختار غير متاح / Selected quote unavailable');
+        if(enteringPayment)assert(['confirmed','production','ready_for_inspection'].includes(selectedQuote.data.supplierOrderStatus),409,'يجب أن يؤكد المورد تنفيذ الطلب قبل الانتقال للدفع / Supplier must confirm fulfillment before payment');
         const quoteCurrency=String(selectedQuote.data.currency||'').toUpperCase();
         assert(quoteCurrency&&data.paymentCurrency===quoteCurrency,400,'عملة الدفع يجب أن تطابق عملة العرض المختار / Payment currency must match selected quote currency');
-      }else if(collection==='interests'&&data.currency){
-        assert(data.paymentCurrency===String(data.currency).toUpperCase(),400,'عملة الدفع يجب أن تطابق عملة العرض العام / Payment currency must match public-offer currency');
+      }else if(collection==='interests'){
+        if(enteringPayment)assert(['confirmed','production','ready_for_inspection'].includes(data.supplierOrderStatus),409,'يجب أن يؤكد المورد تنفيذ الطلب قبل الانتقال للدفع / Supplier must confirm fulfillment before payment');
+        if(data.currency)assert(data.paymentCurrency===String(data.currency).toUpperCase(),400,'عملة الدفع يجب أن تطابق عملة العرض العام / Payment currency must match public-offer currency');
       }
-      if(original.data.trackingStatus!=='payment_confirmation'&&data.paymentStatus!=='confirmed'){
+      if(enteringPayment&&data.paymentStatus!=='confirmed'){
         data.paymentStatus='awaiting_receipt';
         data.paymentRequestedAt=now;
         data.paymentUpdatedAt=now;
