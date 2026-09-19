@@ -2,7 +2,7 @@ name: Generate Capacitor Native Projects
 
 on:
   push:
-    branches: [main]
+    branches: [main, development]
     paths:
       - 'mobile-app/package.json'
       - 'mobile-app/package-lock.json'
