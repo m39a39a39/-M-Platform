@@ -199,6 +199,23 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
       assert.ok((await page.locator('#modal .payment-card').textContent()).includes(language==='ar'?'بانتظار المراجعة':'awaiting review'),'Submitted ready-product receipt must show as awaiting review');
       await page.locator('.modal-close').click();
     }
+    if(role==='supplier'){
+      assert.equal(await page.locator('#screen .supplier-public-cta [data-action="new-public"]').count(),1,'Supplier home must expose Add public offer prominently');
+      assert.equal(await page.locator('#screen .supplier-public-preview').count(),3,'Supplier home must show only the three latest public offers');
+      assert.equal(await page.locator('#screen .supplier-public-preview .status-pill').count(),3,'Recent supplier public offers must show review status');
+      await page.locator('#screen .supplier-public-cta [data-action="new-public"]').click();
+      await page.locator('#publicForm').waitFor();
+      assert.equal(await page.locator('#publicForm input[name="product"]').count(),1,'Supplier home CTA must open the existing public-offer form');
+      assert.equal(await page.locator('#publicForm input[name="unitPrice"]').count(),1,'Public-offer form must include price');
+      assert.equal(await page.locator('#publicForm select[name="currency"]').count(),1,'Public-offer form must include currency');
+      await page.locator('.modal-close').click();
+      await page.locator('#screen [data-action="view-public-offers"]').click();
+      await page.locator('#screen [data-sub="public"].active').waitFor();
+      assert.equal(await page.locator('#screen [data-action="new-public"]').count(),1,'My public offers page must retain Add public offer action');
+      assert.equal(await page.locator('#screen [data-own-public]').count(),45,'View all must open the complete My public offers list');
+      await page.locator('#bottomNav [data-screen="home"]').click();
+      await page.locator('#screen .supplier-public-cta').waitFor();
+    }
     // Simulate a top notch, landscape side inset and home indicator.
     await page.addStyleTag({content:':root { --safe-top: 47px; --safe-bottom: 34px; --safe-left: 0px; --safe-right: 0px; }'});
     const screens=role==='client'?['home','requests','notifications','account']:['home','requests','offers','notifications','account'];
