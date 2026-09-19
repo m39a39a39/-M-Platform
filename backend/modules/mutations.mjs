@@ -4,6 +4,17 @@ import {tables,assertOpenRequest,active,open} from './records.mjs';
 const contact=v=>/(?:https?:\/\/|www\.|wa\.me|@[a-z0-9]|[\w.+-]+@[\w.-]+\.[a-z]{2,}|(?:\+|00)\d[\d\s()-]{7,})/i.test(String(v));
 const contentFields={requests:['product','specs','quantity','country','neededDate','images'],quotes:['unitPrice','currency','moq','leadTime','sampleCost','notes','images'],publicOffers:['product','specs','country','unitPrice','currency','moq','stock','leadTime','validUntil','images','categoryId']};
 const PAYMENT_CURRENCIES=['USD','SAR','AED','CNY','EUR'];
+const SUPPLIER_ORDER_STATUSES=['confirmed','production','ready_for_inspection','cannot_fulfill'];
+function updateSupplierOrder(data,patch,now){
+  const next=String(patch.supplierOrderStatus||''),current=data.supplierOrderStatus||'pending_confirmation';
+  const transitions={pending_confirmation:['confirmed','cannot_fulfill'],confirmed:['production','cannot_fulfill'],production:['ready_for_inspection','cannot_fulfill'],ready_for_inspection:[],cannot_fulfill:[]};
+  assert(SUPPLIER_ORDER_STATUSES.includes(next)&&transitions[current]?.includes(next),409,'تحديث حالة الطلب غير متاح / Order status transition unavailable');
+  const note=String(patch.supplierOrderNote||'').trim();
+  assert(note.length<=1000,400,'ملاحظة المورد طويلة / Supplier note too long');
+  if(next==='cannot_fulfill')assert(note,400,'اكتب سبب تعذر التنفيذ / Add a reason why the order cannot be fulfilled');
+  data.supplierOrderStatus=next;data.supplierOrderNote=note;data.supplierOrderUpdatedAt=now;
+  data.supplierOrderHistory=[...(Array.isArray(data.supplierOrderHistory)?data.supplierOrderHistory:[]),{at:now,status:next,note}].slice(-100);
+}
 export const TRACKING_FLOW=['received','reviewing','sourcing','quotes_available','quote_selected','payment_confirmation','production','quality_check','ready_to_ship','shipped','in_delivery','delivered','completed'];
 export const READY_TRACKING_FLOW=['received','payment_confirmation','production','quality_check','ready_to_ship','shipped','in_delivery','delivered','completed'];
 export const TRACKING_EXCEPTIONS=['customer_action','on_hold','cancelled'];
@@ -130,16 +141,28 @@ export async function mutate(user,body){
         data.lastSeenQuoteAt=latest;
       }
     }else if(collection==='quotes'&&user.role==='supplier'&&original.owner_id===user.id){
-      assert(changes.length&&changes.every(k=>contentFields.quotes.includes(k)),400,'يمكن تعديل بيانات العرض فقط / Only offer fields can be edited');
+      const orderFields=['supplierOrderStatus','supplierOrderNote'],isOrderUpdate=changes.length&&changes.every(k=>orderFields.includes(k));
       const r=await assertOpenRequest(original.request_id);
-      assert(r.data.status==='sent'&&!r.data.selectedQuoteId&&r.data.supplierIds?.includes(user.id),409,'لا يمكن تعديل العرض بعد إغلاق الطلب أو اختيار عرض / Offer cannot be edited after request closure or selection');
-      assert(['pending','published'].includes(data.status),409,'العرض غير قابل للتعديل / Offer is not editable');
-      for(const key of changes)data[key]=patch[key];
-      validateContent('quotes',data);
-      await checkImages(data.images||[],user,original.data.images||[]);
-      data.status='pending';
-      data.translation={};
-      data.reviewedAt=null;
+      if(isOrderUpdate){
+        assert(r.data.selectedQuoteId===original.id,409,'هذا العرض ليس الطلب المختار / This quote is not the selected order');
+        updateSupplierOrder(data,patch,now);
+      }else{
+        assert(changes.length&&changes.every(k=>contentFields.quotes.includes(k)),400,'يمكن تعديل بيانات العرض فقط / Only offer fields can be edited');
+        assert(r.data.status==='sent'&&!r.data.selectedQuoteId&&r.data.supplierIds?.includes(user.id),409,'لا يمكن تعديل العرض بعد إغلاق الطلب أو اختيار عرض / Offer cannot be edited after request closure or selection');
+        assert(['pending','published'].includes(data.status),409,'العرض غير قابل للتعديل / Offer is not editable');
+        for(const key of changes)data[key]=patch[key];
+        validateContent('quotes',data);
+        await checkImages(data.images||[],user,original.data.images||[]);
+        data.status='pending';
+        data.translation={};
+        data.reviewedAt=null;
+      }
+    }else if(collection==='interests'&&user.role==='supplier'){
+      const offer=await one('public_offers',original.offer_id);
+      assert(offer&&offer.owner_id===user.id&&open(offer),403,'غير مصرح بهذا الطلب / Unauthorized order');
+      assert((original.data.trackingStatus||'received')!=='received'&&!['completed','cancelled'].includes(original.data.trackingStatus),409,'الطلب غير جاهز للتنفيذ / Order is not ready for supplier action');
+      assert(changes.length&&changes.every(k=>['supplierOrderStatus','supplierOrderNote'].includes(k)),400,'يمكن تحديث حالة التنفيذ فقط / Only fulfillment status can be updated');
+      updateSupplierOrder(data,patch,now);
     }else assert(false,403,'غير مصرح بهذا التعديل / Unauthorized change');
   }else{
     assert(open(original),409);
