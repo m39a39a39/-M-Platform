@@ -393,7 +393,7 @@ async function openPublicOffer(offerId){
   const interest=(platformState.interests||[]).find(i=>i.offerId===o.id);
   const progress=currentUser.role==='client'&&interest?trackingTimeline(interest,{flow:READY_TRACKING_FLOW,statusResolver:readyTrackingStatus}):'';
   const payment=currentUser.role==='client'&&interest?paymentPanel(interest,'interest'):'';
-  const moq=Math.max(1,Number(o.moq)||1),stock=Number(o.stock),maxAttr=Number.isFinite(stock)&&stock>0?` max="${esc(stock)}"`:'';
+  const moq=Math.max(1,Math.ceil(Number(o.moq)||1)),stock=Number(o.stock),maxAttr=Number.isFinite(stock)&&stock>0?` max="${esc(Math.floor(stock))}"`:'';
   const requestedSummary=interest?`<section class="public-order-summary"><div><span>${esc(tr('الكمية المطلوبة','Requested quantity'))}</span><strong>${esc(interest.quantity||'—')}</strong></div><div><span>${esc(tr('سعر الوحدة','Unit price'))}</span><strong>${money(interest.unitPrice||o.unitPrice,interest.currency||o.currency)}</strong></div><div class="total"><span>${esc(tr('الإجمالي','Total'))}</span><strong>${money(interest.total||Number(interest.quantity||0)*Number(interest.unitPrice||o.unitPrice||0),interest.currency||o.currency)}</strong></div></section>`:'';
   const requestForm=currentUser.role==='client'&&!interest?`<form id="publicInterestForm" class="public-interest-form" data-offer-id="${esc(o.id)}">
     <div class="public-interest-head"><div><strong>${esc(tr('حدد الكمية المطلوبة','Choose requested quantity'))}</strong><small>${esc(tr('الحد الأدنى للطلب','Minimum order'))}: ${esc(o.moq||'—')}</small></div></div>
