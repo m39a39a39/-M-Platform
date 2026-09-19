@@ -21,7 +21,7 @@ export function decodeImage(source){
 export function decodePaymentReceipt(source){
   const m=typeof source==='string'&&source.match(/^data:(image\/(?:jpeg|png|webp)|application\/pdf);base64,([A-Za-z0-9+/=]+)$/);
   assert(m,400,'صيغة الإيصال غير مدعومة / Unsupported receipt format');
-  const bytes=Buffer.from(m[2],'base64');assert(bytes.length>12&&bytes.length<=5242880,413,'الحد الأقصى للإيصال 5 MB / Receipt exceeds 5 MB');
+  const bytes=Buffer.from(m[2],'base64');assert(bytes.length>12&&bytes.length<=3145728,413,'الحد الأقصى للإيصال 3 MB / Receipt exceeds 3 MB');
   let mime=null;
   if(bytes.subarray(0,5).toString('ascii')==='%PDF-')mime='application/pdf';
   else if(bytes[0]===255&&bytes[1]===216&&bytes[2]===255)mime='image/jpeg';
