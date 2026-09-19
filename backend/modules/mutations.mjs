@@ -105,7 +105,7 @@ export async function mutate(user,body){
   const changes=Object.keys(patch),isAdmin=user.role==='admin';
   if(!original){
     assert(collection==='requests'?user.role==='client':collection==='interests'?user.role==='client':user.role==='supplier');
-    const allowed=collection==='interests'?['offerId','quantity','status']: [...contentFields[collection],...(collection==='quotes'?['requestId']:[]),...(collection==='requests'?['repeatedFromRequestId']:[]),'status'];
+    const allowed=collection==='interests'?['offerId','quantity','status','repeatedFromInterestId']: [...contentFields[collection],...(collection==='quotes'?['requestId']:[]),...(collection==='requests'?['repeatedFromRequestId']:[]),'status'];
     assert(changes.every(k=>allowed.includes(k)),400);
     data=Object.fromEntries(changes.filter(k=>!['status','requestId','offerId'].includes(k)).map(k=>[k,patch[k]]));
     data.status=collection==='requests'?'review':collection==='interests'?'active':'pending';data.createdAt=now;
@@ -127,8 +127,16 @@ export async function mutate(user,body){
       assert(Number.isFinite(quantity)&&Number.isInteger(quantity)&&quantity>0&&quantity<=1e9,400,'أدخل كمية صحيحة / Enter a valid quantity');
       assert(Number.isFinite(moq)&&quantity>=moq,400,'الكمية أقل من الحد الأدنى للطلب / Quantity is below the minimum order');
       if(Number.isFinite(stock)&&stock>0)assert(quantity<=stock,400,'الكمية المطلوبة أكبر من المخزون المتاح / Requested quantity exceeds available stock');
-      const existing=await db('interests',`owner_id=eq.${encodeURIComponent(user.id)}&offer_id=eq.${encodeURIComponent(patch.offerId)}&limit=1`);
-      assert(!existing.length,409,'سبق أن طلبت هذا العرض / You already requested this offer');
+      const repeatedFromInterestId=String(patch.repeatedFromInterestId||'').trim();
+      if(repeatedFromInterestId){
+        assert(/^[A-Za-z0-9-]{1,80}$/.test(repeatedFromInterestId),400,'مرجع الطلب السابق غير صالح / Invalid previous order reference');
+        const source=await one('interests',repeatedFromInterestId);
+        assert(source&&source.owner_id===user.id&&source.offer_id===patch.offerId&&open(source),409,'الطلب السابق غير متاح للتكرار / Previous order is unavailable to repeat');
+        data.repeatedFromInterestId=repeatedFromInterestId;
+      }else{
+        const existing=await db('interests',`owner_id=eq.${encodeURIComponent(user.id)}&offer_id=eq.${encodeURIComponent(patch.offerId)}&limit=1`);
+        assert(!existing.length,409,'سبق أن طلبت هذا العرض؛ استخدم تكرار الطلب / You already requested this offer; use Repeat order');
+      }
       data.quantity=quantity;
       data.unitPrice=unitPrice;
       data.currency=String(offer.data.currency||'').toUpperCase();
