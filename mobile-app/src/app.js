@@ -443,8 +443,8 @@ function renderNotifications(){
   $('screen').innerHTML=pageHeader(t('notifications'),'',notifications.some(n=>!n.readAt)?`<button class="text-btn" data-action="mark-all">${esc(t('markAllRead'))}</button>`:'')+`<div class="list-stack notification-list">${notifications.map(n=>`<article class="notification-card ${n.readAt?'':'unread'}"><button type="button" class="notification-card-main" data-notification="${esc(n.id)}"><div><strong>${esc(lang==='ar'?n.titleAr:n.titleEn)}</strong><p>${esc(lang==='ar'?n.bodyAr:n.bodyEn)}</p><small>${date(n.createdAt)}</small></div>${n.readAt?'':`<span>${esc(t('unread'))}</span>`}</button>${n.action==='upload_receipt'?`<button type="button" class="primary-small notification-action" data-payment-notification="${esc(n.id)}">${esc(tr('إرفاق إيصال الدفع','Upload payment receipt'))}</button>`:''}</article>`).join('')||`<div class="empty-state"><p>${esc(t('noNotifications'))}</p></div>`}</div>`;
 }
 function renderAccount(){
-  const u=currentUser;
-  $('screen').innerHTML=pageHeader(t('account'))+`<section class="profile-card"><div class="avatar">${esc((u.name||u.company||u.email||'M').charAt(0).toUpperCase())}</div><h2>${esc(u.name||u.company||'M Platform')}</h2><p>${esc(t(u.role))}</p><dl><div><dt>${esc(t('email'))}</dt><dd>${esc(u.email||'—')}</dd></div>${u.company?`<div><dt>${tr('الشركة','Company')}</dt><dd>${esc(u.company)}</dd></div>`:''}${u.country?`<div><dt>${esc(t('country'))}</dt><dd>${esc(u.country)}</dd></div>`:''}</dl><p class="session-note">${esc(t('sessionNote'))}</p><button class="danger-btn" data-action="logout">${esc(t('logout'))}</button></section>`;
+  const u=currentUser,languageControl=u.role==='client'?`<div class="account-setting-row"><div><small>${esc(tr('اللغة','Language'))}</small><strong>${esc(lang==='ar'?tr('العربية','Arabic'):tr('الإنجليزية','English'))}</strong></div><button type="button" class="secondary-btn" data-action="toggle-language">${esc(lang==='ar'?'English':'العربية')}</button></div>`:'';
+  $('screen').innerHTML=pageHeader(t('account'))+`<section class="profile-card"><div class="avatar">${esc((u.name||u.company||u.email||'M').charAt(0).toUpperCase())}</div><h2>${esc(u.name||u.company||'M Platform')}</h2><p>${esc(t(u.role))}</p><dl><div><dt>${esc(t('email'))}</dt><dd>${esc(u.email||'—')}</dd></div>${u.company?`<div><dt>${tr('الشركة','Company')}</dt><dd>${esc(u.company)}</dd></div>`:''}${u.country?`<div><dt>${esc(t('country'))}</dt><dd>${esc(u.country)}</dd></div>`:''}</dl>${languageControl}<p class="session-note">${esc(t('sessionNote'))}</p><button class="danger-btn" data-action="logout">${esc(t('logout'))}</button></section>`;
 }
 function renderAdminCollection(kind){const rows=kind==='requests'?(platformState.requests||[]):[...(platformState.quotes||[]),...(platformState.publicOffers||[])];$('screen').innerHTML=pageHeader(kind==='requests'?t('requests'):t('offers'),t('adminMobile'))+`<div class="list-stack">${rows.slice(0,50).map(x=>itemCard(x,{subtitle:descriptionOf(x),badge:cardBadge(x.status),meta:`#${ref(x)} · ${date(x.createdAt)}`})).join('')||empty()}</div>`;}
 function renderScreen(){if(!currentUser||!platformState)return;updateShell();if(renderAdminScreen(activeScreen))return;if(activeScreen==='home')renderHome();else if(activeScreen==='orders')renderSupplierOrders();else if(activeScreen==='requests')renderRequests();else if(activeScreen==='offers')renderOffers();else if(activeScreen==='notifications')renderNotifications();else renderAccount();hydrateImages($('screen'));}
@@ -499,14 +499,23 @@ async function openClientRequest(requestId){
   const statusCard=`<section class="client-current-status"><small>${esc(tr('الحالة الحالية','Current status'))}</small><strong>${esc(trackingLabel(status))}</strong>${r.trackingUpdatedAt?`<span>${esc(tr('آخر تحديث','Last update'))}: ${esc(date(r.trackingUpdatedAt))}</span>`:''}</section>`;
   openModal(titleOf(r),`#${ref(r)}`,`${summary}${actionPanel}${statusCard}${selectedPanel}${compareButton}${paymentPanel(r,'request')}${trackingTimeline(r)}<section class="client-detail-content"><h3>${esc(t('specifications'))}</h3><p class="long-copy">${esc(descriptionOf(r)||'—')}</p>${gallery(r.images)}</section><button type="button" class="secondary-btn full repeat-request-btn" data-repeat-request="${esc(r.id)}">${esc(tr('تكرار الطلب','Repeat request'))}</button>`);
 }
+function clientReadyActionPanel(interest,offer){
+  const order=clientOrders().find(o=>o.type==='ready'&&o.id===interest.id),action=order?clientOrderNeedsAction(order):null;
+  if(!action)return '';
+  return `<section class="client-detail-action ${esc(action.tone||'action')}"><div><small>${esc(tr('الإجراء المطلوب','Action required'))}</small><strong>${esc(action.label)}</strong></div></section>`;
+}
 async function openPublicOffer(offerId){
   const o=(platformState.publicOffers||[]).find(x=>x.id===offerId);if(!o)return;
   const interest=(platformState.interests||[]).find(i=>i.offerId===o.id);
-  const progress=currentUser.role==='client'&&interest?trackingTimeline(interest,{flow:READY_TRACKING_FLOW,statusResolver:readyTrackingStatus}):'';
-  const payment=currentUser.role==='client'&&interest?paymentPanel(interest,'interest'):'';
   const moq=Math.max(1,Math.ceil(Number(o.moq)||1)),stock=Number(o.stock),maxAttr=Number.isFinite(stock)&&stock>0?` max="${esc(Math.floor(stock))}"`:'';
-  const requestedSummary=interest?`<section class="public-order-summary"><div><span>${esc(tr('الكمية المطلوبة','Requested quantity'))}</span><strong>${esc(interest.quantity||'—')}</strong></div><div><span>${esc(tr('سعر الوحدة','Unit price'))}</span><strong>${money(interest.unitPrice||o.unitPrice,interest.currency||o.currency)}</strong></div><div class="total"><span>${esc(tr('الإجمالي','Total'))}</span><strong>${money(interest.total||Number(interest.quantity||0)*Number(interest.unitPrice||o.unitPrice||0),interest.currency||o.currency)}</strong></div></section>`:'';
-  const requestForm=currentUser.role==='client'&&!interest?`<form id="publicInterestForm" class="public-interest-form" data-offer-id="${esc(o.id)}">
+  if(currentUser.role==='client'&&interest){
+    const order=clientOrders().find(x=>x.type==='ready'&&x.id===interest.id),status=readyTrackingStatus(interest),total=interest.total||Number(interest.quantity||0)*Number(interest.unitPrice||o.unitPrice||0);
+    const summary=`<section class="client-order-summary"><div class="client-order-summary-title"><small>#${esc(ref(interest))} · ${esc(tr('منتج جاهز','Ready product'))}</small><strong>${esc(titleOf(o))}</strong></div><div class="client-order-summary-facts"><span>${esc(tr('الكمية','Quantity'))}: ${esc(interest.quantity||'—')}</span><span>${esc(tr('سعر الوحدة','Unit price'))}: ${money(interest.unitPrice||o.unitPrice,interest.currency||o.currency)}</span><span>${esc(tr('الإجمالي','Total'))}: ${money(total,interest.currency||o.currency)}</span></div></section>`;
+    const statusCard=`<section class="client-current-status"><small>${esc(tr('الحالة الحالية','Current status'))}</small><strong>${esc(trackingLabel(status))}</strong>${interest.trackingUpdatedAt?`<span>${esc(tr('آخر تحديث','Last update'))}: ${esc(date(interest.trackingUpdatedAt))}</span>`:''}</section>`;
+    openModal(titleOf(o),`#${ref(interest)}`,`${summary}${clientReadyActionPanel(interest,o)}${statusCard}${paymentPanel(interest,'interest')}${trackingTimeline(interest,{flow:READY_TRACKING_FLOW,statusResolver:readyTrackingStatus})}<section class="client-detail-content"><h3>${esc(t('specifications'))}</h3><p class="long-copy">${esc(descriptionOf(o)||'—')}</p><div class="facts"><span>MOQ ${esc(o.moq||'—')}</span><span>${esc(t('stock'))}: ${esc(o.stock||'—')}</span><span>${esc(t('leadTime'))}: ${esc(o.leadTime||'—')}</span></div>${gallery(o.images)}</section>`);
+    return;
+  }
+  const requestForm=currentUser.role==='client'?`<form id="publicInterestForm" class="public-interest-form" data-offer-id="${esc(o.id)}">
     <div class="public-interest-head"><div><strong>${esc(tr('حدد الكمية المطلوبة','Choose requested quantity'))}</strong><small>${esc(tr('الحد الأدنى للطلب','Minimum order'))}: ${esc(o.moq||'—')}</small></div></div>
     <label><span>${esc(tr('الكمية','Quantity'))}</span><input id="publicInterestQuantity" name="quantity" type="number" min="${esc(moq)}" step="1" value="${esc(moq)}"${maxAttr} required></label>
     <div class="public-interest-total"><span>${esc(tr('الإجمالي التقديري','Estimated total'))}</span><strong id="publicInterestTotal">${money(moq*Number(o.unitPrice||0),o.currency)}</strong></div>
@@ -514,8 +523,8 @@ async function openPublicOffer(offerId){
     <p class="form-message" id="publicInterestMessage"></p>
     <button class="primary-btn full" type="submit">${esc(t('requestOffer'))}</button>
   </form>`:'';
-  openModal(titleOf(o),`#${ref(o)}`,`${progress}${payment}${gallery(o.images)}<div class="quote-price">${money(o.unitPrice,o.currency)}</div><div class="facts"><span>MOQ ${esc(o.moq||'—')}</span><span>${esc(t('stock'))}: ${esc(o.stock||'—')}</span><span>${esc(t('leadTime'))}: ${esc(o.leadTime||'—')}</span><span>${esc(t('validUntil'))}: ${esc(o.validUntil||'—')}</span></div><p class="long-copy">${esc(descriptionOf(o)||'—')}</p>${requestedSummary}${requestForm}`);
-  if(currentUser.role==='client'&&!interest){
+  openModal(titleOf(o),`#${ref(o)}`,`${gallery(o.images)}<div class="quote-price">${money(o.unitPrice,o.currency)}</div><div class="facts"><span>MOQ ${esc(o.moq||'—')}</span><span>${esc(t('stock'))}: ${esc(o.stock||'—')}</span><span>${esc(t('leadTime'))}: ${esc(o.leadTime||'—')}</span><span>${esc(t('validUntil'))}: ${esc(o.validUntil||'—')}</span></div><p class="long-copy">${esc(descriptionOf(o)||'—')}</p>${requestForm}`);
+  if(currentUser.role==='client'){
     const form=$('publicInterestForm'),input=$('publicInterestQuantity'),total=$('publicInterestTotal');
     input?.addEventListener('input',()=>{const q=Number(input.value);total.textContent=money((Number.isFinite(q)?q:0)*Number(o.unitPrice||0),o.currency);});
     form?.addEventListener('submit',submitPublicInterest);
@@ -644,6 +653,7 @@ async function handleAction(target){
   if(target.dataset.repeatRequest){const source=(platformState.requests||[]).find(x=>x.id===target.dataset.repeatRequest);if(source)return openNewRequest(source);}
   if(target.dataset.action==='new-public')return openNewPublic();
   if(target.dataset.action==='view-public-offers'){activeScreen='offers';activeSub='public';renderScreen();$('screen').scrollTop=0;return;}
+  if(target.dataset.action==='toggle-language')return toggleLanguage();
   if(target.dataset.action==='logout')return logout();
   if(target.dataset.action==='mark-all'){await request('/api/v1/notifications/read',{method:'POST',auth:true,body:{all:true}});await loadData();return;}
   if(['home','orders','requests','offers','notifications','account'].includes(target.dataset.action)){activeScreen=target.dataset.action;if(activeScreen==='offers')activeSub='primary';renderScreen();return;}
