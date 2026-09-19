@@ -31,7 +31,7 @@ for(const [engine,type] of Object.entries({chromium,webkit}))for(const language 
  });
  const nav=async screen=>{await page.locator(`#bottomNav [data-screen="${screen}"]`).click();};
  const login=async role=>{await page.locator('#guestLoginBtn').click();await page.locator('#email').fill(`${role}@example.test`);await page.locator('#password').fill('fixture-password');await page.locator('#loginBtn').click();await page.locator('#appView').waitFor({state:'visible'});};
- const logout=async()=>{await nav('account');await page.locator('#screen [data-action="logout"]').click();await page.locator('#guestView').waitFor({state:'visible'});assert.equal(await page.locator('#screen').innerText(),'');};
+ const logout=async()=>{if(await page.locator('#bottomNav [data-screen="more"]:visible').count()){await nav('more');await page.locator('[data-admin-more-tab="settings"]').click();}else await nav('account');await page.locator('#screen [data-action="logout"]').click();await page.locator('#guestView').waitFor({state:'visible'});assert.equal(await page.locator('#screen').innerText(),'');};
  try{
   await page.goto('http://127.0.0.1:4173');await login('admin');await nav('offers');
   const input=page.locator('[data-admin-search]');await input.focus();
@@ -45,11 +45,12 @@ for(const [engine,type] of Object.entries({chromium,webkit}))for(const language 
   assert.equal(await input.inputValue(),'Alpha');assert.equal(await page.evaluate(()=>window.searchBlurCount),0);
   assert.equal(await page.locator('[data-admin-results] article').count(),1);
   await input.fill('does-not-exist');await page.waitForTimeout(180);assert.equal(await page.locator('[data-admin-results] article').count(),0);
-  await nav('account');assert.equal(await input.inputValue(),'');assert.equal(await page.locator('[data-admin-account]').count(),2);
+  await nav('more');assert.equal(await input.inputValue(),'');assert.equal(await page.locator('[data-admin-account]').count(),1);
   await input.fill('client');await page.waitForTimeout(180);assert.equal(await page.locator('[data-admin-account]').count(),1);
+  await page.locator('[data-admin-more-tab="suppliers"]').click();assert.equal(await input.inputValue(),'');assert.equal(await page.locator('[data-admin-account]').count(),1);
   await nav('requests');assert.equal(await input.inputValue(),'');
   await nav('offers');assert.equal(await input.inputValue(),'does-not-exist');
-  await page.locator('[data-admin-offer-tab="all"]').click();await page.waitForTimeout(180);assert.equal(await input.inputValue(),'');
+  await page.locator('[data-admin-offer-filter="all"]').click();await page.waitForTimeout(180);assert.equal(await input.inputValue(),'');
   await page.screenshot({path:`layout-results/${engine}-${language}-independent-search.png`});
   await logout();
   for(const role of ['client','supplier']){
