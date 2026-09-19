@@ -560,7 +560,48 @@ function openRecord(kind,id){
   }else if(kind==='request'&&x.status==='sent'&&can('publish'))html+=`<div class="admin-review-actions"><button class="secondary-btn" data-admin-reopen-request data-id="${esc(x.id)}">${esc(tr('إعادة للمراجعة','Return to review'))}</button><button class="primary-btn" data-admin-complete-request data-id="${esc(x.id)}">${esc(tr('تحديد كمكتمل','Mark completed'))}</button></div>`;
   modal(`#${ref(x)} — ${title(x)}`,kind==='request'?status(requestTracking(x)):status(x.status),html);
 }
-function openAccount(id){const a=account(id);if(!a)return;const req=(state?.requests||[]).filter(r=>r.customerId===id),qs=(state?.quotes||[]).filter(q=>q.supplierId===id),po=(state?.publicOffers||[]).filter(o=>o.supplierId===id);modal(a.company||a.name||'#'+String(a.id).slice(0,8),a.role==='client'?tr('عميل','Customer'):tr('مورد','Supplier'),`<dl class="admin-account-details"><div><dt>${esc(tr('الاسم','Name'))}</dt><dd>${esc(a.name||'—')}</dd></div><div><dt>${esc(tr('الشركة','Company'))}</dt><dd>${esc(a.company||'—')}</dd></div><div><dt>${esc(tr('رقم التواصل','Phone'))}</dt><dd>${esc(a.phone||'—')}</dd></div><div><dt>${esc(tr('البريد','Email'))}</dt><dd>${esc(a.email||'—')}</dd></div><div><dt>${esc(tr('الدولة','Country'))}</dt><dd>${esc(a.country||'—')}</dd></div></dl><h3>${esc(tr('السجل','History'))}</h3><div class="facts"><span>${esc(tr('الطلبات','Requests'))}: ${req.length}</span><span>${esc(tr('العروض','Offers'))}: ${qs.length+po.length}</span></div>`);}
+function openAccount(id){
+  const a=account(id);if(!a)return;
+  const req=(state?.requests||[]).filter(r=>r.customerId===id),ints=(state?.interests||[]).filter(x=>x.customerId===id),qs=(state?.quotes||[]).filter(q=>q.supplierId===id),po=(state?.publicOffers||[]).filter(o=>o.supplierId===id);
+  const publicOrderCount=a.role==='supplier'?(state?.interests||[]).filter(i=>po.some(o=>o.id===i.offerId)).length:ints.length;
+  const controls=(can('moderate')||can('trash'))?'<div class="admin-account-controls">'+
+    (can('moderate')?'<button class="secondary-btn" type="button" data-admin-account-moderate="'+esc(a.id)+'" data-action="'+(a.blockedAt?'unblock':'block')+'">'+esc(a.blockedAt?tr('إلغاء الحظر','Unblock'):tr('حظر الحساب','Block account'))+'</button>':'')+
+    (can('trash')?'<button class="danger-btn" type="button" data-admin-account-moderate="'+esc(a.id)+'" data-action="delete">'+esc(tr('حذف الحساب','Delete account'))+'</button>':'')+
+  '</div>':'';
+  const history=a.role==='client'
+    ?'<span>'+esc(tr('الطلبات الخاصة','Custom requests'))+': '+req.length+'</span><span>'+esc(tr('طلبات العروض العامة','Public-offer orders'))+': '+publicOrderCount+'</span>'
+    :'<span>'+esc(tr('العروض المقدمة','Submitted quotes'))+': '+qs.length+'</span><span>'+esc(tr('العروض العامة','Public offers'))+': '+po.length+'</span><span>'+esc(tr('طلبات التنفيذ','Orders'))+': '+publicOrderCount+'</span>';
+  modal(a.company||a.name||'#'+String(a.id).slice(0,8),a.role==='client'?tr('عميل','Customer'):tr('مورد','Supplier'),
+    '<dl class="admin-account-details"><div><dt>'+esc(tr('الاسم','Name'))+'</dt><dd>'+esc(a.name||'—')+'</dd></div><div><dt>'+esc(tr('الشركة','Company'))+'</dt><dd>'+esc(a.company||'—')+'</dd></div><div><dt>'+esc(tr('رقم التواصل','Phone'))+'</dt><dd>'+esc(a.phone||'—')+'</dd></div><div><dt>'+esc(tr('البريد','Email'))+'</dt><dd>'+esc(a.email||'—')+'</dd></div><div><dt>'+esc(tr('الدولة','Country'))+'</dt><dd>'+esc(a.country||'—')+'</dd></div><div><dt>'+esc(tr('الحالة','Status'))+'</dt><dd>'+esc(a.blockedAt?tr('محظور','Blocked'):tr('نشط','Active'))+'</dd></div></dl>'+
+    '<h3>'+esc(tr('السجل','History'))+'</h3><div class="facts">'+history+'</div>'+controls);
+}
+function moderationDialog(id,action){
+  const a=account(id);if(!a)return;
+  const label=action==='delete'?tr('حذف الحساب','Delete account'):action==='block'?tr('حظر الحساب','Block account'):tr('إلغاء حظر الحساب','Unblock account');
+  modal(label,a.company||a.name||a.email||'#'+String(a.id).slice(0,8),
+    '<form id="adminModerationForm" class="form-stack" data-id="'+esc(id)+'" data-action="'+esc(action)+'"><p class="payment-review-note">'+esc(action==='delete'?tr('سيتم حذف الحساب من الاستخدام مع الاحتفاظ بالسجل الإداري.','The account will be removed from use while retaining the administrative record.'):tr('اكتب سبب الإجراء ليظهر في السجل الإداري.','Add a reason for the administrative record.'))+'</p><label><span>'+esc(tr('السبب','Reason'))+'</span><textarea name="reason" required maxlength="1000"></textarea></label><button class="'+(action==='delete'?'danger-btn':'primary-btn')+'" type="submit">'+esc(label)+'</button></form>');
+}
+async function submitModeration(form){
+  const id=form.dataset.id,action=form.dataset.action,reason=form.reason.value.trim();if(!reason)return;
+  try{await api('/api/v1/moderation',{method:'POST',body:{kind:'account',id,action,reason}});await reload();closeModal();schedule();toast(tr('تم تحديث الحساب.','Account updated.'));}catch(e){toast(e.message);}
+}
+function teamDialog(id=''){
+  const current=id?account(id):null;
+  if(current?.isOwner){toast(tr('حساب المدير الرئيسي محمي.','The Super Admin account is protected.'));return;}
+  const checks=ADMIN_PERMISSION_META.map(([key,ar,en])=>'<label class="admin-permission-check"><input type="checkbox" name="permission" value="'+esc(key)+'" '+((current?.permissions||[]).includes(key)?'checked':'')+'><span><strong>'+esc(tr(ar,en))+'</strong><small>'+esc(key)+'</small></span></label>').join('');
+  const identity=current?'<div class="admin-team-identity"><strong>'+esc(current.name||current.email||'#'+String(current.id).slice(0,8))+'</strong><small>'+esc(current.email||'')+'</small></div>':'<label><span>'+esc(tr('بريد حساب المدير','Admin account email'))+'</span><input name="email" type="email" required autocomplete="off"></label>';
+  const block=current?'<button class="secondary-btn" type="button" data-admin-team-toggle="'+esc(current.id)+'" data-action="'+(current.blockedAt?'unblock':'block')+'">'+esc(current.blockedAt?tr('إلغاء الحظر','Unblock'):tr('حظر المدير','Block admin'))+'</button>':'';
+  modal(current?tr('صلاحيات المدير','Admin permissions'):tr('إضافة مدير','Add admin'),tr('إدارة الفريق','Team management'),
+    '<form id="adminTeamForm" class="form-stack" data-id="'+esc(current?.id||'')+'">'+identity+'<div class="admin-permission-grid">'+checks+'</div><div class="admin-team-dialog-actions">'+block+'<button class="primary-btn" type="submit">'+esc(tr('حفظ الصلاحيات','Save permissions'))+'</button></div></form>');
+}
+async function submitTeam(form){
+  const id=form.dataset.id,email=form.email?.value.trim().toLowerCase()||'',permissions=[...form.querySelectorAll('input[name="permission"]:checked')].map(x=>x.value);
+  try{await api('/api/v1/team',{method:'POST',body:{action:'save',...(id?{id}:{email}),permissions,reason:'Admin permissions updated'}});await reload();closeModal();schedule();toast(tr('تم حفظ صلاحيات المدير.','Admin permissions saved.'));}catch(e){toast(e.message);}
+}
+async function toggleTeam(id,action){
+  const a=account(id);if(!a||a.isOwner)return;
+  try{await api('/api/v1/team',{method:'POST',body:{id,action,permissions:a.permissions||[],reason:'Admin access updated'}});await reload();closeModal();schedule();toast(tr('تم تحديث حساب المدير.','Admin account updated.'));}catch(e){toast(e.message);}
+}
 function readForm(x){const translation={};document.querySelectorAll('[data-admin-tr]').forEach(e=>translation[e.dataset.adminTr]=e.value.trim());const images=[];(x.images||[]).forEach((src,i)=>{const b=document.querySelector(`[data-admin-image-index="${i}"]`);if(!b||b.checked)images.push(src);});return{translation,images,suppliers:[...document.querySelectorAll('[data-admin-supplier]:checked')].map(e=>e.value),categoryId:document.querySelector('[data-admin-category-select]')?.value||'',identity:document.querySelector('[data-admin-redact="identity"]')?.checked,contact:document.querySelector('[data-admin-redact="contact"]')?.checked};}
 async function approve(kind,id){const arr=kind==='request'?state.requests:kind==='quote'?state.quotes:state.publicOffers,x=arr.find(v=>v.id===id);if(!x)return;const f=readForm(x);if(Object.values(f.translation).some(v=>!v)){toast(tr('أكمل العنوان والوصف بالعربية والإنجليزية.','Complete Arabic and English title and description.'));return;}if(!f.identity||!f.contact){toast(tr('أكمل فحص إزالة الهوية وبيانات التواصل.','Complete both privacy checks.'));return;}if(kind==='request'&&!f.suppliers.length){toast(tr('اختر موردًا واحدًا على الأقل.','Select at least one supplier.'));return;}const patch={translation:f.translation,reviewedAt:new Date().toISOString(),status:kind==='request'?'sent':'published'},editPerm=kind==='request'?'requests.edit':'offers.edit';if(can(editPerm))patch.images=f.images;if(kind==='request')patch.supplierIds=f.suppliers;if(kind==='public'){if(activeCategories().length&&!f.categoryId){toast(tr('اختر التصنيف أولًا.','Choose a category first.'));return;}patch.categoryId=f.categoryId;}try{await mutate(kind==='request'?'requests':kind==='quote'?'quotes':'publicOffers',x,patch,true);closeModal();schedule();toast(tr('تم الاعتماد بنجاح.','Approved successfully.'));}catch(e){toast(e.message);}}
 async function saveReview(kind,id){const arr=kind==='request'?state.requests:kind==='quote'?state.quotes:state.publicOffers,x=arr.find(v=>v.id===id);if(!x)return;const f=readForm(x);if(Object.values(f.translation).some(v=>!v)){toast(tr('أكمل الترجمة أولًا.','Complete the translation first.'));return;}const patch={translation:f.translation,reviewedAt:new Date().toISOString()},editPerm=kind==='request'?'requests.edit':'offers.edit';if(can(editPerm))patch.images=f.images;if(kind==='public')patch.categoryId=f.categoryId;try{await mutate(kind==='request'?'requests':kind==='quote'?'quotes':'publicOffers',x,patch);closeModal();schedule();toast(tr('تم حفظ المراجعة.','Review saved.'));}catch(e){toast(e.message);}}
