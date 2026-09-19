@@ -215,25 +215,61 @@ async function savePublicOffer(form){
     closeModal();schedule();toast(tr('تم تحديث العرض العام.','Public offer updated.'));
   }catch(error){message.textContent=error.message||tr('تعذر حفظ التعديلات.','Could not save changes.');}
 }
+const PAYMENT_STATUS_LABELS={
+  awaiting_receipt:['بانتظار إيصال الدفع','Waiting for receipt'],
+  receipt_submitted:['إيصال جديد بانتظار المراجعة','New receipt awaiting review'],
+  confirmed:['تم تأكيد الدفع','Payment confirmed'],
+  reupload_requested:['تم طلب إعادة رفع الإيصال','Receipt re-upload requested']
+};
+function paymentStatusLabel(value){const row=PAYMENT_STATUS_LABELS[value];return row?tr(row[0],row[1]):value||'—';}
+function defaultPaymentMessage(x,kind){
+  if(x?.paymentMessage)return x.paymentMessage;
+  const number=kind==='request'&&ref(x)!=='—'?' #'+ref(x):'';
+  return tr('يرجى إتمام عملية الدفع وإرفاق إيصال الدفع لتأكيد طلبك'+number+'. بعد إرسال الإيصال ستقوم الإدارة بمراجعته وإشعارك عند تأكيد الدفع.','Please complete payment and upload the receipt to confirm your order'+number+'. After submission, the admin will review it and notify you when payment is confirmed.');
+}
+function paymentReviewPanel(x,entityType){
+  if(!x?.paymentStatus)return '';
+  const receipt=x.paymentReceipt;
+  const receiptHtml=receipt?.src?(receipt.mime==='application/pdf'
+    ?'<button class="secondary-btn full" type="button" data-admin-payment-document="'+esc(receipt.src)+'">'+esc(tr('عرض إيصال PDF','View PDF receipt'))+'</button>'
+    :'<div class="payment-receipt-preview" data-viewer-gallery><img alt="" data-admin-media="'+esc(receipt.src)+'" data-image-viewer></div>'):'';
+  const review=x.paymentStatus==='receipt_submitted'?'<label><span>'+esc(tr('ملاحظة عند طلب إعادة الرفع','Note if requesting re-upload'))+'</span><textarea data-admin-payment-review-note maxlength="1000"></textarea></label><div class="admin-review-actions"><button class="secondary-btn" type="button" data-admin-payment-reupload="'+esc(x.id)+'" data-entity-type="'+entityType+'">'+esc(tr('طلب إعادة رفع الإيصال','Request re-upload'))+'</button><button class="primary-btn" type="button" data-admin-payment-confirm="'+esc(x.id)+'" data-entity-type="'+entityType+'">'+esc(tr('تأكيد الدفع','Confirm payment'))+'</button></div>':'';
+  const note=x.paymentReviewNote?'<p class="payment-review-note"><b>'+esc(tr('ملاحظة الإدارة','Admin note'))+':</b> '+esc(x.paymentReviewNote)+'</p>':'';
+  return '<section class="admin-payment-review"><div class="payment-card-head"><div><small>'+esc(tr('حالة الدفع','Payment status'))+'</small><strong>'+esc(paymentStatusLabel(x.paymentStatus))+'</strong></div></div>'+receiptHtml+note+review+'</section>';
+}
+function paymentMessageField(x,kind,current){
+  const hidden=current==='payment_confirmation'?'':' hidden';
+  return '<label class="admin-payment-message-field'+hidden+'"><span>'+esc(tr('رسالة الدفع للعميل','Payment message to customer'))+'</span><textarea data-admin-payment-message maxlength="2000">'+esc(defaultPaymentMessage(x,kind))+'</textarea><small>'+esc(tr('ستصل هذه الرسالة للعميل في صفحة الإشعارات مع زر إرفاق إيصال الدفع.','This message will appear in the customer notifications with an upload-receipt button.'))+'</small></label>';
+}
 function interestTrackingEditor(x){
   const current=interestTracking(x);
-  return `<section class="admin-tracking-editor"><h3>${esc(tr('متابعة طلب المنتج الجاهز','Ready-product order tracking'))}</h3><label><span>${esc(tr('الحالة الحالية','Current status'))}</span><select data-admin-interest-tracking-status>${READY_TRACKING.map(([key,ar,en])=>`<option value="${key}" ${current===key?'selected':''}>${esc(tr(ar,en))}</option>`).join('')}</select></label><label><span>${esc(tr('ملاحظة للعميل (اختياري)','Customer note (optional)'))}</span><textarea data-admin-interest-tracking-note maxlength="1000">${esc(x.trackingNote||'')}</textarea></label><small>${x.trackingUpdatedAt?`${esc(tr('آخر تحديث','Last update'))}: ${esc(date(x.trackingUpdatedAt))}`:''}</small><button class="primary-btn" type="button" data-admin-save-interest-tracking="${esc(x.id)}">${esc(tr('حفظ حالة الطلب','Save order status'))}</button></section>`;
+  return '<section class="admin-tracking-editor"><h3>'+esc(tr('متابعة طلب المنتج الجاهز','Ready-product order tracking'))+'</h3><label><span>'+esc(tr('الحالة الحالية','Current status'))+'</span><select data-admin-interest-tracking-status>'+READY_TRACKING.map(([key,ar,en])=>'<option value="'+key+'" '+(current===key?'selected':'')+'>'+esc(tr(ar,en))+'</option>').join('')+'</select></label>'+paymentMessageField(x,'interest',current)+'<label><span>'+esc(tr('ملاحظة للعميل (اختياري)','Customer note (optional)'))+'</span><textarea data-admin-interest-tracking-note maxlength="1000">'+esc(x.trackingNote||'')+'</textarea></label><small>'+(x.trackingUpdatedAt?esc(tr('آخر تحديث','Last update'))+': '+esc(date(x.trackingUpdatedAt)):'')+'</small><button class="primary-btn" type="button" data-admin-save-interest-tracking="'+esc(x.id)+'">'+esc(tr('حفظ حالة الطلب','Save order status'))+'</button></section>'+paymentReviewPanel(x,'interest');
 }
 function openInterest(id){
   const x=(state?.interests||[]).find(item=>item.id===id);if(!x)return;
   const offer=(state?.publicOffers||[]).find(o=>o.id===x.offerId),customer=account(x.customerId);
-  const html=`${customer?`<section class="admin-owner-box"><strong>${esc(tr('العميل','Customer'))}</strong><p>${esc(customer.company||customer.name||'—')}</p>${can('accounts.read')?`<small>${esc(customer.name||'')} ${customer.phone?`· ${esc(customer.phone)}`:''} ${customer.email?`· ${esc(customer.email)}`:''}</small>`:''}</section>`:''}${interestTrackingEditor(x)}${offer?`<section class="admin-source-box"><h3>${esc(tr('المنتج','Product'))}</h3><strong>${esc(title(offer))}</strong><p>${esc(desc(offer)||'—')}</p></section>${gallery(offer.images||[])}`:''}`;
-  modal(offer?title(offer):tr('طلب منتج جاهز','Ready-product request'),`#${ref(offer)}`,html);
+  const html=(customer?'<section class="admin-owner-box"><strong>'+esc(tr('العميل','Customer'))+'</strong><p>'+esc(customer.company||customer.name||'—')+'</p>'+(can('accounts.read')?'<small>'+esc(customer.name||'')+(customer.phone?' · '+esc(customer.phone):'')+(customer.email?' · '+esc(customer.email):'')+'</small>':'')+'</section>':'')+interestTrackingEditor(x)+(offer?'<section class="admin-source-box"><h3>'+esc(tr('المنتج','Product'))+'</h3><strong>'+esc(title(offer))+'</strong><p>'+esc(desc(offer)||'—')+'</p></section>'+gallery(offer.images||[]):'');
+  modal(offer?title(offer):tr('طلب منتج جاهز','Ready-product request'),'#'+ref(offer),html);
 }
 async function saveInterestTracking(id){
   const x=(state?.interests||[]).find(item=>item.id===id);if(!x)return;
   const trackingStatus=document.querySelector('[data-admin-interest-tracking-status]')?.value,trackingNote=document.querySelector('[data-admin-interest-tracking-note]')?.value||'';
-  try{await mutate('interests',x,{trackingStatus,trackingNote});closeModal();schedule();toast(tr('تم تحديث حالة الطلب.','Order status updated.'));}catch(e){toast(e.message);}
+  const patch={trackingStatus,trackingNote};
+  if(trackingStatus==='payment_confirmation'){const paymentMessage=document.querySelector('[data-admin-payment-message]')?.value.trim()||'';if(!paymentMessage){toast(tr('اكتب رسالة الدفع للعميل.','Add a payment message for the customer.'));return;}patch.paymentMessage=paymentMessage;}
+  try{await mutate('interests',x,patch);closeModal();schedule();toast(tr('تم تحديث حالة الطلب.','Order status updated.'));}catch(e){toast(e.message);}
 }
 function trackingEditor(x){
   const current=requestTracking(x);
-  return `<section class="admin-tracking-editor"><h3>${esc(tr('متابعة الطلب','Order tracking'))}</h3><label><span>${esc(tr('الحالة الحالية','Current status'))}</span><select data-admin-tracking-status>${TRACKING.map(([key,ar,en])=>`<option value="${key}" ${current===key?'selected':''}>${esc(tr(ar,en))}</option>`).join('')}</select></label><label><span>${esc(tr('ملاحظة للعميل (اختياري)','Customer note (optional)'))}</span><textarea data-admin-tracking-note maxlength="1000">${esc(x.trackingNote||'')}</textarea></label><small>${x.trackingUpdatedAt?`${esc(tr('آخر تحديث','Last update'))}: ${esc(date(x.trackingUpdatedAt))}`:''}</small><button class="primary-btn" type="button" data-admin-save-tracking="${esc(x.id)}">${esc(tr('حفظ حالة الطلب','Save order status'))}</button></section>`;
+  return '<section class="admin-tracking-editor"><h3>'+esc(tr('متابعة الطلب','Order tracking'))+'</h3><label><span>'+esc(tr('الحالة الحالية','Current status'))+'</span><select data-admin-tracking-status>'+TRACKING.map(([key,ar,en])=>'<option value="'+key+'" '+(current===key?'selected':'')+'>'+esc(tr(ar,en))+'</option>').join('')+'</select></label>'+paymentMessageField(x,'request',current)+'<label><span>'+esc(tr('ملاحظة للعميل (اختياري)','Customer note (optional)'))+'</span><textarea data-admin-tracking-note maxlength="1000">'+esc(x.trackingNote||'')+'</textarea></label><small>'+(x.trackingUpdatedAt?esc(tr('آخر تحديث','Last update'))+': '+esc(date(x.trackingUpdatedAt)):'')+'</small><button class="primary-btn" type="button" data-admin-save-tracking="'+esc(x.id)+'">'+esc(tr('حفظ حالة الطلب','Save order status'))+'</button></section>'+paymentReviewPanel(x,'request');
 }
+async function reviewPayment(entityType,id,action){
+  const rows=entityType==='request'?(state?.requests||[]):(state?.interests||[]),x=rows.find(item=>item.id===id);if(!x)return;
+  const note=document.querySelector('[data-admin-payment-review-note]')?.value.trim()||'';
+  if(action==='reupload'&&!note){toast(tr('اكتب سبب طلب إعادة رفع الإيصال.','Add a reason for requesting a new receipt.'));return;}
+  try{await api('/api/v1/payment-review',{method:'POST',body:{entityType,entityId:id,version:Number(x.version||0),action,note}});await reload();closeModal();schedule();toast(action==='confirm'?tr('تم تأكيد الدفع.','Payment confirmed.'):tr('تم طلب إعادة رفع الإيصال.','Receipt re-upload requested.'));}catch(e){toast(e.message);}
+}
+async function openAdminPaymentDocument(src){const url=await imageUrl(src);if(!url){toast(tr('تعذر فتح الإيصال.','Could not open receipt.'));return;}window.open(url,'_blank','noopener');}
+export function openAdminPayment(entityType,id){if(!isAdmin())return;if(entityType==='request')openRecord('request',id);else if(entityType==='interest')openInterest(id);}
 function categoryDialog(id=''){
   const current=categories().find(cat=>cat.id===id);
   modal(current?tr('تعديل التصنيف','Edit category'):tr('إضافة تصنيف','Add category'),'M Platform',`<form id="adminCategoryForm" class="form-stack" data-id="${esc(current?.id||'')}"><label><span>${esc(tr('الاسم بالعربية','Arabic name'))}</span><input name="nameAr" required maxlength="80" value="${esc(current?.nameAr||'')}"></label><label><span>${esc(tr('الاسم بالإنجليزية','English name'))}</span><input name="nameEn" required maxlength="80" value="${esc(current?.nameEn||'')}"></label><label class="admin-category-toggle-label"><input type="checkbox" name="active" ${current?.active===false?'':'checked'}><span>${esc(tr('إظهار التصنيف للعملاء','Show category to customers'))}</span></label><button class="primary-btn" type="submit">${esc(tr('حفظ','Save'))}</button></form>`);
