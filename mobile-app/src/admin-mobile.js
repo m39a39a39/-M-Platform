@@ -1,14 +1,14 @@
 import { session } from './session.js';
 import { filesToCompressedSources } from './image-upload.js';
 let state=null,revision=0;
-let requestFilter='active',offerTab='pending',timer=null;
+let requestFilter='active',offerTab='quotes',offerFilter='pending',operationTab='payments',moreTab='customers',timer=null;
 const searches=new Map(),mediaCache=new Map(),mediaTasks=new Map();
 const MEDIA_CONCURRENCY=6;
 let reloadWorkspace=async()=>{};
 export function configureAdmin({reload}) { reloadWorkspace=reload; }
 export function resetAdmin() {
   clearTimeout(timer); state=null; revision++;
-  requestFilter='active'; offerTab='pending'; searches.clear();
+  requestFilter='active'; offerTab='quotes'; offerFilter='pending'; operationTab='payments'; moreTab='customers'; searches.clear();
   for(const url of mediaCache.values()) URL.revokeObjectURL(url);
   mediaCache.clear();mediaTasks.clear();
 }
@@ -17,7 +17,7 @@ export function updateAdminState(next) {
   if(state?.user?.id!==next.user.id) resetAdmin();
   state=next; revision++;
 }
-const searchKey=()=>activeView()==='offers'?`offers:${offerTab}`:activeView();
+const searchKey=()=>{const v=activeView();if(v==='offers')return `offers:${offerTab}:${offerFilter}`;if(v==='operations')return `operations:${operationTab}`;if(v==='more')return `more:${moreTab}`;return v;};
 const searchText=()=>searches.get(searchKey())||'';
 const api=(path,options={})=>session.request(path,{...options,auth:true});
 const reload=()=>reloadWorkspace();
@@ -93,7 +93,7 @@ async function mutate(collection,item,patch,redactionConfirmed=false){await api(
 
 function toast(msg){if(!isAdmin())return;const e=document.getElementById('toast');if(!e)return;e.textContent=msg;e.classList.remove('hidden');clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.add('hidden'),2400);}
 function activeView(){return document.querySelector('#bottomNav button.active')?.dataset.screen||'home';}
-function rootKey(view){return [view,lang(),revision,searchText(),requestFilter,offerTab].join('|');}
+function rootKey(view){return [view,lang(),revision,searchText(),requestFilter,offerTab,offerFilter,operationTab,moreTab].join('|');}
 function screen(){return document.getElementById('screen');}
 function setRoot(view,html){
   const s=screen(),key=rootKey(view);if(!s)return;
