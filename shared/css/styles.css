@@ -485,6 +485,8 @@
     input:focus, textarea:focus, select:focus { border-color: var(--brand); box-shadow: 0 0 0 4px rgba(22,153,219,.10); outline: 0; }
     .field small { color: var(--muted); font-size: .7rem; }
     .form-error { color: var(--danger); font-size: .75rem; font-weight: 700; min-height: 1.2em; }
+    .form-success { color: var(--success); font-size: .78rem; font-weight: 750; min-height: 1.2em; }
+    .auth-recovery-row { display: flex; justify-content: flex-end; margin: -4px 0 4px; }
     .dialog-footer { padding: 18px 22px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line); background: #fafcfd; }
     .auth-role-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; padding: 5px; margin-bottom: 18px; border-radius: 13px; background: #edf3f6; }
     .auth-role-switch button { min-height: 43px; border: 0; border-radius: 10px; color: var(--muted); background: transparent; font-weight: 800; }

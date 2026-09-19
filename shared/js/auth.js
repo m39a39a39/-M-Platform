@@ -35,8 +35,19 @@ document.addEventListener('m:ready',()=>{
   }
   document.querySelectorAll('[data-auth-role]').forEach(b=>b.onclick=()=>setRole(b.dataset.authRole));setRole(role);
   document.getElementById('loginForm')?.addEventListener('submit',async e=>{
-    e.preventDefault();const button=e.submitter,error=document.getElementById('authError');button.disabled=true;error.textContent='';
+    e.preventDefault();const button=e.submitter,error=document.getElementById('authError'),notice=document.getElementById('authNotice');button.disabled=true;error.textContent='';if(notice)notice.textContent='';
     try{await API.request('auth/login',{email:document.getElementById('loginEmail').value,password:document.getElementById('loginPassword').value});await API.refresh();go();}catch(err){error.textContent=err.message;}finally{button.disabled=false;}
+  });
+  document.getElementById('forgotPassword')?.addEventListener('click',async e=>{
+    const button=e.currentTarget,email=document.getElementById('loginEmail').value.trim(),error=document.getElementById('authError'),notice=document.getElementById('authNotice');
+    error.textContent='';if(notice)notice.textContent='';
+    if(!email){error.textContent=M.tr('أدخل بريدك الإلكتروني أولًا.','Enter your email address first.');document.getElementById('loginEmail').focus();return;}
+    button.disabled=true;
+    try{
+      await API.request('auth/recover',{email});
+      if(notice)notice.textContent=M.tr('إذا كان البريد مسجلًا لدينا، ستصلك رسالة لإعادة تعيين كلمة المرور.','If this email is registered, you will receive a password reset message.');
+    }catch(err){error.textContent=err.message;}
+    finally{button.disabled=false;}
   });
   document.querySelectorAll('.register-form').forEach(form=>form.addEventListener('submit',async e=>{
     e.preventDefault();const button=e.submitter,error=form.querySelector('.form-error');button.disabled=true;error.textContent='';

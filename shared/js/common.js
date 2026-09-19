@@ -1,6 +1,12 @@
 (() => {
   'use strict';
 
+  const recoveryParams=new URLSearchParams(location.hash.replace(/^#/,''));
+  if(recoveryParams.get('type')==='recovery'&&recoveryParams.get('access_token')&&!/reset-password\.html$/.test(location.pathname)){
+    location.replace('reset-password.html'+location.hash);
+    return;
+  }
+
   const LANG_KEY = 'mRfqLanguage';
   const state=()=>API.state(), save=next=>API.save(next), session=()=>API.session();
   const setSession=()=>{}; // Sessions are owned by the server, never by browser state.

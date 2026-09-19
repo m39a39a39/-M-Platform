@@ -239,6 +239,8 @@ input:focus,textarea:focus,select:focus {
   color: var(--danger);
   font-size: .85rem;
 }
+.message.success { color: #147a5a; }
+.forgot-password-btn { justify-self: end; min-height: 34px; padding: 0 2px; margin-top: -8px; }
 
 .mobile-workspace {
   position: fixed;

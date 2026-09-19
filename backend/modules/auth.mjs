@@ -43,6 +43,22 @@ export async function authRoute(action,req,res,body){
     const result=await sb('/auth/v1/token?grant_type=refresh_token',{method:'POST',body:{refresh_token:refreshToken},publicKey:true});
     return {tokens:nativeTokens(result)};
   }
+  if(action==='recover'){
+    const email=String(body.email||'').trim().toLowerCase();
+    assert(email.length<255&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email),400,'تحقق من البريد الإلكتروني / Check email address');
+    const redirectTo=config().origin;
+    await sb(`/auth/v1/recover?redirect_to=${encodeURIComponent(redirectTo)}`,{method:'POST',publicKey:true,body:{email}});
+    return {ok:true};
+  }
+  if(action==='reset'){
+    const token=bearer||String(body.accessToken||''),password=String(body.password||'');
+    assert(token.length>=20&&token.length<=8192,400,'رابط الاستعادة غير صالح أو منتهي / Recovery link is invalid or expired');
+    assert(password.length>=8&&password.length<=128,400,'كلمة المرور يجب أن تكون 8 أحرف على الأقل / Password must be at least 8 characters');
+    await sb('/auth/v1/user',{token,publicKey:true});
+    await sb('/auth/v1/user',{method:'PUT',token,publicKey:true,body:{password}});
+    try{await sb('/auth/v1/logout',{method:'POST',token,publicKey:true});}catch{}
+    return {ok:true};
+  }
   const email=String(body.email||'').trim().toLowerCase(),password=String(body.password||'');
   assert(email.length<255&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)&&password.length>=8&&password.length<=128,400,'تحقق من البريد وكلمة المرور (8 أحرف على الأقل) / Check email and password');
   if(action==='register'){
