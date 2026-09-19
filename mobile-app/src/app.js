@@ -108,10 +108,10 @@ function paymentPanel(item,entityType){
   const receipt=item?.paymentReceipt,canUpload=['awaiting_receipt','reupload_requested'].includes(status);
   const message=item?.paymentMessage||tr('يرجى إتمام عملية الدفع وإرفاق إيصال الدفع لتأكيد طلبك.','Please complete payment and upload the receipt to confirm your order.');
   const receiptHtml=receipt?.src?(receipt.mime==='application/pdf'
-    ?\`<button type="button" class="secondary-btn full" data-payment-document="\${esc(receipt.src)}">\${esc(tr('عرض إيصال PDF','View PDF receipt'))}</button>\`
-    :\`<div class="payment-receipt-preview" data-viewer-gallery><img alt="" data-media="\${esc(receipt.src)}" data-image-viewer></div>\`):'';
+    ?`<button type="button" class="secondary-btn full" data-payment-document="${esc(receipt.src)}">${esc(tr('عرض إيصال PDF','View PDF receipt'))}</button>`
+    :`<div class="payment-receipt-preview" data-viewer-gallery><img alt="" data-media="${esc(receipt.src)}" data-image-viewer></div>`):'';
   const uploadText=status==='reupload_requested'?tr('إعادة رفع إيصال الدفع','Upload receipt again'):tr('إرفاق إيصال الدفع','Upload payment receipt');
-  return \`<section class="payment-card"><div class="payment-card-head"><div><small>\${esc(tr('الدفع','Payment'))}</small><strong>\${esc(paymentLabel(status||'awaiting_receipt'))}</strong></div></div><p>\${esc(message)}</p>\${item?.paymentReviewNote?\`<p class="payment-review-note"><b>\${esc(tr('ملاحظة الإدارة','Admin note'))}:</b> \${esc(item.paymentReviewNote)}</p>\`:''}\${receiptHtml}\${canUpload?\`<button class="primary-btn full" type="button" data-payment-upload data-entity-type="\${entityType}" data-entity-id="\${esc(item.id)}">\${esc(uploadText)}</button>\`:''}</section>\`;
+  return `<section class="payment-card"><div class="payment-card-head"><div><small>${esc(tr('الدفع','Payment'))}</small><strong>${esc(paymentLabel(status||'awaiting_receipt'))}</strong></div></div><p>${esc(message)}</p>${item?.paymentReviewNote?`<p class="payment-review-note"><b>${esc(tr('ملاحظة الإدارة','Admin note'))}:</b> ${esc(item.paymentReviewNote)}</p>`:''}${receiptHtml}${canUpload?`<button class="primary-btn full" type="button" data-payment-upload data-entity-type="${entityType}" data-entity-id="${esc(item.id)}">${esc(uploadText)}</button>`:''}</section>`;
 }
 function titleOf(item){const x=item?.translation||{};return (lang==='ar'?(x.titleAr||x.titleEn):(x.titleEn||x.titleAr))||item?.product||item?.title||`#${ref(item)}`;}
 function descriptionOf(item){const x=item?.translation||{};return (lang==='ar'?(x.descriptionAr||x.descriptionEn):(x.descriptionEn||x.descriptionAr))||item?.specs||item?.notes||'';}
