@@ -379,13 +379,15 @@ function renderHome(){
   const role=currentUser.role;
   if(role==='client'){
     if(readyCategory!=='all'&&!categories().some(cat=>cat.id===readyCategory))readyCategory='all';
-    const offers=filteredReadyOffers();
+    const offers=filteredReadyOffers(),orders=clientOrders(),actions=orders.map(o=>({order:o,action:clientOrderNeedsAction(o)})).filter(x=>x.action),activeOrders=orders.filter(o=>!['completed','cancelled'].includes(o.status)).length,newQuotes=(platformState.requests||[]).reduce((n,r)=>n+newQuoteCount(r),0);
     const totalPages=Math.max(1,Math.ceil(offers.length/PAGE_SIZE));
     readyProductsPage=Math.min(Math.max(readyProductsPage,1),totalPages);
     const pageOffers=offers.slice((readyProductsPage-1)*PAGE_SIZE,readyProductsPage*PAGE_SIZE);
     $('screen').innerHTML=
-      `<section class="special-request-card"><div class="special-request-copy"><div class="special-request-heading"><span class="special-request-icon">＋</span><h2>${esc(t('customRequestTitle'))}</h2></div><p>${esc(t('customRequestDescription'))}</p></div><button class="primary-small" data-action="new-request">${esc(t('sendCustomRequest'))}</button></section>`+
-      `<section class="ready-products-section"><div class="section-title ready-products-title"><div><h2>${esc(t('readyProducts'))}</h2><p>${esc(t('readyProductsSubtitle'))}</p></div></div>${categoryFilters()}<div class="public-offers-grid">${pageOffers.map(publicOfferCard).join('')||empty()}</div>${productPagination(readyProductsPage,totalPages)}</section>`+
+      `<section class="special-request-card client-new-request"><div class="special-request-copy"><div class="special-request-heading"><span class="special-request-icon">＋</span><h2>${esc(tr('أرسل طلب جديد','Send a new request'))}</h2></div><p>${esc(tr('إذا لم تجد المنتج المناسب، أرسل مواصفاتك وسنطلب عروضًا لك.','If you cannot find the right product, send your specifications and we will source quotes for you.'))}</p></div><button class="primary-btn" data-action="new-request">+ ${esc(tr('أرسل طلب جديد','Send new request'))}</button></section>`+
+      `<section class="section-block client-action-needed"><div class="section-title"><div><h2>${esc(tr('يتطلب إجراء منك','Needs your action'))}</h2><p>${esc(tr('اعرض ما يحتاج قرارك أو دفعتك أولًا.','Items waiting for your decision or payment.'))}</p></div></div><div class="client-action-list">${actions.slice(0,5).map(x=>clientActionCard(x.order,x.action)).join('')||`<div class="client-clear-state">✓ ${esc(tr('لا يوجد شيء مطلوب منك حاليًا','Nothing needs your action right now'))}</div>`}</div></section>`+
+      `<div class="stats-grid client-home-stats client-three-stats">${statCard(activeOrders,tr('طلبات نشطة','Active orders'),'requests')}${statCard(newQuotes,tr('عروض جديدة','New quotes'),'offers')}${statCard(actions.length,tr('يحتاج إجراء','Needs action'),'requests')}</div>`+
+      `<section class="ready-products-section"><div class="section-title ready-products-title"><div><h2>${esc(tr('العروض العامة','Public offers'))}</h2><p>${esc(tr('منتجات جاهزة يمكنك طلبها مباشرة بالكمية التي تحتاجها.','Ready products you can order directly in the quantity you need.'))}</p></div></div>${categoryFilters()}<div class="public-offers-grid">${pageOffers.map(publicOfferCard).join('')||empty()}</div>${productPagination(readyProductsPage,totalPages)}</section>`+
       companyFooterCard();
   }else if(role==='supplier'){
     const quotes=platformState.quotes||[],answered=new Set(quotes.map(q=>q.requestId)),invites=(platformState.requests||[]).filter(r=>!answered.has(r.id));
@@ -403,16 +405,14 @@ function renderHome(){
 
 function renderRequests(){
   if(currentUser.role==='client'){
-    const rows=platformState.requests||[];
-    const interests=platformState.interests||[];
-    const newQuotes=rows.reduce((n,r)=>n+newQuoteCount(r),0);
-    const active=rows.filter(r=>!['completed','cancelled'].includes(requestTrackingStatus(r))).length+interests.filter(i=>!['completed','cancelled'].includes(readyTrackingStatus(i))).length;
-    const readyRows=interests.map(i=>({interest:i,offer:(platformState.publicOffers||[]).find(o=>o.id===i.offerId)}));
+    const all=clientOrders(),active=all.filter(o=>!['completed','cancelled'].includes(o.status)),completed=all.filter(o=>['completed','cancelled'].includes(o.status));
+    if(!['all','active','completed'].includes(clientRequestFilter))clientRequestFilter='all';
+    const rows=clientRequestFilter==='active'?active:clientRequestFilter==='completed'?completed:all;
+    const tabs=`<div class="client-order-filters"><button class="${clientRequestFilter==='all'?'active':''}" data-client-order-filter="all">${esc(tr('الكل','All'))} <span>${all.length}</span></button><button class="${clientRequestFilter==='active'?'active':''}" data-client-order-filter="active">${esc(tr('النشطة','Active'))} <span>${active.length}</span></button><button class="${clientRequestFilter==='completed'?'active':''}" data-client-order-filter="completed">${esc(tr('المكتملة','Completed'))} <span>${completed.length}</span></button></div>`;
     $('screen').innerHTML=
-      pageHeader(t('requests'),tr('كل طلباتك ومتابعتها في مكان واحد.','All your requests and their progress in one place.'),`<button class="primary-small" data-action="new-request">+ ${esc(t('sendCustomRequest'))}</button>`)+
-      `<div class="stats-grid client-request-stats">${statCard(rows.length+interests.length,t('totalRequests'))}${statCard(newQuotes,t('newQuotes'))}${statCard(active,t('activeRequests'))}${statCard(interests.length,t('readyProductRequests'))}</div>`+
-      `<section class="request-group" data-client-request-group="custom"><div class="section-title"><h2>${esc(t('customRequests'))}</h2></div><div class="list-stack">${rows.map(r=>itemCard(r,{subtitle:descriptionOf(r),meta:`${t('quantity')}: ${r.quantity||'—'} · ${r.country||'—'} · ${date(r.createdAt)}`,badge:cardBadge(requestTrackingStatus(r),newQuoteCount(r)?`<span class="new-pill">${newQuoteCount(r)}</span>`:''),action:`data-request="${esc(r.id)}"`,images:true})).join('')||empty()}</div></section>`+
-      `<section class="request-group" data-client-request-group="ready"><div class="section-title"><h2>${esc(t('readyProductRequests'))}</h2></div><div class="list-stack">${readyRows.map(({interest,offer})=>itemCard(offer||interest,{subtitle:offer?descriptionOf(offer):tr('المنتج غير متاح حاليًا','Product currently unavailable'),meta:`${tr('الكمية','Quantity')}: ${interest.quantity||'—'} · ${interest.total?tr('الإجمالي','Total')+': '+money(interest.total,interest.currency||offer?.currency):''} · ${date(interest.createdAt)}`,badge:cardBadge(readyTrackingStatus(interest)),action:offer?`data-public-offer="${esc(offer.id)}"`:'',images:!!offer})).join('')||empty()}</div></section>`;
+      pageHeader(tr('طلباتي','My orders'),tr('كل طلباتك الخاصة وطلبات المنتجات الجاهزة في مكان واحد.','All custom and ready-product orders in one place.'),`<button class="primary-small" data-action="new-request">+ ${esc(tr('طلب جديد','New request'))}</button>`)+
+      tabs+
+      `<div class="client-orders-list">${rows.map(clientOrderCard).join('')||empty()}</div>`;
   }else if(currentUser.role==='supplier'){
     const answered=new Set((platformState.quotes||[]).map(q=>q.requestId)),rows=(platformState.requests||[]).filter(r=>!answered.has(r.id));
     $('screen').innerHTML=pageHeader(tr('طلبات عروض الأسعار','Quote requests'),tr('الطلبات التي أرسلتها الإدارة إليك لتقديم سعر. تختفي بعد تقديم عرضك.','Requests sent by admin for quotation. They disappear after you submit an offer.'))+`<div class="list-stack">${rows.map(r=>itemCard(r,{subtitle:descriptionOf(r),meta:`${t('quantity')}: ${r.quantity||'—'} · ${r.country||'—'} · ${t('neededDate')}: ${r.neededDate||'—'}`,badge:`<span class="status-pill status-review">${esc(tr('بانتظار عرضك','Awaiting your quote'))}</span>`,action:`data-supplier-request="${esc(r.id)}"`,images:true})).join('')||empty()}</div>`;
@@ -422,9 +422,10 @@ function renderRequests(){
 function segment(buttons){return `<div class="segmented">${buttons.map(([key,label])=>`<button data-sub="${key}" class="${activeSub===key?'active':''}">${esc(label)}</button>`).join('')}</div>`;}
 function renderOffers(){
   if(currentUser.role==='client'){
-    activeScreen='home';
-    renderHome();
-    return;
+    const groups=clientQuoteGroups(),newTotal=groups.reduce((n,g)=>n+g.newCount,0);
+    $('screen').innerHTML=pageHeader(tr('العروض','Quotes'),tr('قارن العروض التي وصلت لطلباتك واختر الأنسب لك.','Compare quotes received for your requests and choose one.'))+
+      `<div class="stats-grid client-offers-stats">${statCard(groups.length,tr('طلبات لديها عروض','Requests with quotes'))}${statCard(groups.reduce((n,g)=>n+g.quotes.length,0),tr('إجمالي العروض','Total quotes'))}${statCard(newTotal,tr('عروض جديدة','New quotes'))}</div>`+
+      `<div class="client-quote-groups">${groups.map(clientQuoteGroupCard).join('')||empty()}</div>`;
   }else if(currentUser.role==='supplier'){
     if(!['submitted','public'].includes(activeSub))activeSub='submitted';
     const tabs=segment([['submitted',t('submittedOffers')],['public',t('myPublicOffers')]]);
