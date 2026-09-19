@@ -2077,3 +2077,8 @@ body.image-viewer-open {
   .client-detail-action{grid-template-columns:1fr}.client-detail-action button{width:100%}
   .client-selected-values{grid-template-columns:1fr 1fr}.client-selected-values .total{grid-column:1/-1}
 }
+
+
+.account-setting-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;border:1px solid var(--line,#dfe5ea);border-radius:14px;margin:12px 0;background:var(--soft,#f7f9fa);text-align:start}
+.account-setting-row small{display:block;color:var(--muted,#64748b);font-size:12px}.account-setting-row strong{display:block;margin-top:3px}
+.account-setting-row .secondary-btn{width:auto;min-width:96px}
