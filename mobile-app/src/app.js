@@ -171,7 +171,7 @@ function updateShell(){
   if(role==='supplier'){
     if(utilityNav){
       utilityNav.dataset.screen='orders';
-      const label=utilityNav.querySelector('[data-nav="notifications"]');if(label)label.textContent=tr('الطلبات','Orders');
+      const label=utilityNav.querySelector('[data-nav="notifications"]'),icon=utilityNav.querySelector('span');if(label)label.textContent=tr('الطلبات','Orders');if(icon)icon.textContent='▣';
       if(requestButton)bottom.insertBefore(utilityNav,requestButton);
     }
     document.querySelector('#bottomNav [data-screen="offers"]')?.classList.remove('hidden');
@@ -180,7 +180,7 @@ function updateShell(){
   }else{
     if(utilityNav){
       utilityNav.dataset.screen='notifications';
-      const label=utilityNav.querySelector('[data-nav="notifications"]');if(label)label.textContent=t('notifications');
+      const label=utilityNav.querySelector('[data-nav="notifications"]'),icon=utilityNav.querySelector('span');if(label)label.textContent=t('notifications');if(icon)icon.textContent='♢';
       if(accountButton)bottom.insertBefore(utilityNav,accountButton);
     }
     document.querySelector('#bottomNav [data-screen="offers"]')?.classList.toggle('hidden',role==='client');
