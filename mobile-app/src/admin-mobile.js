@@ -85,10 +85,16 @@ function supplierConfirmationCard(x,kind){
   return '<section class="admin-supplier-confirmation '+esc(row[1])+'"><div class="admin-supplier-confirmation-head"><div><small>'+esc(tr('تأكيد المورد','Supplier confirmation'))+'</small><strong>'+esc(row[0])+'</strong></div><span>'+esc(info.confirmed?'✓':info.status==='cannot_fulfill'?'✕':'…')+'</span></div>'+(info.note?'<p><b>'+esc(tr('ملاحظة المورد','Supplier note'))+':</b> '+esc(info.note)+'</p>':'')+'<small>'+esc(info.confirmed?tr('يمكن الآن الانتقال إلى تأكيد الطلب والدفع.','The order can now move to payment confirmation.'):info.status==='cannot_fulfill'?tr('لا يمكن الانتقال للدفع. راجع سبب تعذر التنفيذ.','Payment cannot start. Review the supplier reason.'):tr('تأكيد الطلب والدفع سيبقى غير متاح حتى يؤكد المورد التنفيذ.','Payment confirmation remains unavailable until the supplier confirms fulfillment.'))+'</small></section>';
 }
 const SYSTEM_MANAGED_TRACKING=new Set(['production','quality_check','ready_to_ship','shipped','in_delivery','delivered','completed']);
+const TRACKING_EXCEPTIONS=new Set(['customer_action','on_hold','cancelled']);
 function trackingOptions(rows,current,canPay){
-  const managed=SYSTEM_MANAGED_TRACKING.has(current);
-  return rows.filter(([key])=>managed?(key===current||['customer_action','on_hold','cancelled'].includes(key)):(!SYSTEM_MANAGED_TRACKING.has(key)||key===current))
-    .map(([key,ar,en])=>'<option value="'+key+'" '+(current===key?'selected':'')+' '+(key==='payment_confirmation'&&!canPay&&current!=='payment_confirmation'?'disabled':'')+'>'+esc(tr(ar,en))+'</option>').join('');
+  const managedCurrent=SYSTEM_MANAGED_TRACKING.has(current);
+  return rows.map(([key,ar,en])=>{
+    let disabled=false;
+    if(managedCurrent)disabled=key!==current&&!TRACKING_EXCEPTIONS.has(key);
+    else disabled=SYSTEM_MANAGED_TRACKING.has(key)&&key!==current;
+    if(key==='payment_confirmation'&&!canPay&&current!=='payment_confirmation')disabled=true;
+    return '<option value="'+key+'" '+(current===key?'selected':'')+' '+(disabled?'disabled':'')+'>'+esc(tr(ar,en))+'</option>';
+  }).join('');
 }
 function adminStageActionPanel(x,kind){
   const current=kind==='request'?requestTracking(x):interestTracking(x),supplier=supplierExecutionInfo(x,kind);
