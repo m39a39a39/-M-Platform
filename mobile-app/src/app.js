@@ -399,6 +399,36 @@ function openSupplierRequest(requestId){
   const existing=(platformState.quotes||[]).find(q=>q.requestId===r.id);
   openModal(titleOf(r),`#${ref(r)}`,`${gallery(r.images)}<div class="facts"><span>${esc(t('quantity'))}: ${esc(r.quantity||'—')}</span><span>${esc(r.country||'—')}</span><span>${esc(t('neededDate'))}: ${esc(r.neededDate||'—')}</span></div><p class="long-copy">${esc(descriptionOf(r)||'—')}</p>${existing?`<button class="secondary-btn full" data-edit-quote="${esc(existing.id)}">${esc(t('editQuote'))}</button>`:`<button class="primary-btn full" data-quote-request="${esc(r.id)}">${esc(t('submitQuote'))}</button>`}`);
 }
+function supplierOrderActions(order){
+  const base=`data-supplier-order-type="${esc(order.type)}" data-supplier-order-id="${esc(order.id)}"`;
+  if(order.status==='pending_confirmation')return `<div class="supplier-order-actions"><button class="primary-btn" type="button" data-supplier-order-status="confirmed" ${base}>${esc(tr('تأكيد التنفيذ','Confirm fulfillment'))}</button><button class="secondary-btn" type="button" data-supplier-order-cannot ${base}>${esc(tr('تعذر التنفيذ','Unable to fulfill'))}</button></div>`;
+  if(order.status==='confirmed')return `<div class="supplier-order-actions"><button class="primary-btn" type="button" data-supplier-order-status="production" ${base}>${esc(tr('بدء التجهيز / الإنتاج','Start preparation / production'))}</button><button class="secondary-btn" type="button" data-supplier-order-cannot ${base}>${esc(tr('تعذر التنفيذ','Unable to fulfill'))}</button></div>`;
+  if(order.status==='production')return `<div class="supplier-order-actions"><button class="primary-btn" type="button" data-supplier-order-status="ready_for_inspection" ${base}>${esc(tr('جاهز للفحص','Ready for inspection'))}</button><button class="secondary-btn" type="button" data-supplier-order-cannot ${base}>${esc(tr('تعذر التنفيذ','Unable to fulfill'))}</button></div>`;
+  if(order.status==='ready_for_inspection')return `<div class="supplier-order-complete">✓ ${esc(tr('تم إشعار الإدارة أن الطلب جاهز للفحص.','Admin has been notified that the order is ready for inspection.'))}</div>`;
+  return `<div class="supplier-order-cannot-note"><strong>${esc(tr('تعذر التنفيذ','Unable to fulfill'))}</strong><p>${esc(order.note||'—')}</p></div>`;
+}
+function openSupplierOrder(type,id){
+  const order=supplierOrders().find(o=>o.type===type&&o.id===id);if(!order)return;
+  const refItem=order.type==='quote'?order.request:order.interest;
+  const summary=order.type==='quote'
+    ?`<div class="supplier-order-summary"><div><span>${esc(tr('سعر الوحدة','Unit price'))}</span><strong>${money(order.unitPrice,order.currency)}</strong></div><div><span>${esc(tr('الكمية','Quantity'))}</span><strong>${esc(order.quantity||'—')}</strong></div><div class="total"><span>${esc(tr('الإجمالي','Total'))}</span><strong>${order.total!==null?money(order.total,order.currency):'—'}</strong></div></div>`
+    :`<div class="supplier-order-summary"><div><span>${esc(tr('سعر الوحدة','Unit price'))}</span><strong>${money(order.unitPrice,order.currency)}</strong></div><div><span>MOQ</span><strong>${esc(order.moq||'—')}</strong></div><div><span>${esc(tr('الدولة','Country'))}</span><strong>${esc(order.country||'—')}</strong></div></div>`;
+  openModal(order.title,`#${ref(refItem)} · ${order.source}`,`${gallery(order.images)}<section class="supplier-order-detail"><div class="supplier-order-detail-head"><div><small>${esc(tr('حالة التنفيذ','Fulfillment status'))}</small>${supplierOrderStatusBadge(order.status)}</div></div>${summary}<h3>${esc(t('specifications'))}</h3><p class="long-copy">${esc(descriptionOf(order.item)||'—')}</p>${order.type==='quote'&&order.country?`<div class="facts"><span>${esc(tr('دولة التسليم','Delivery country'))}: ${esc(order.country)}</span></div>`:''}${supplierOrderActions(order)}</section>`);
+}
+async function updateSupplierOrderStatus(type,id,status,note=''){
+  const order=supplierOrders().find(o=>o.type===type&&o.id===id);if(!order)return;
+  const collection=type==='quote'?'quotes':'interests',item=type==='quote'?order.quote:order.interest;
+  try{
+    await mutate(collection,item.id,item.version,{supplierOrderStatus:status,supplierOrderNote:note});
+    await loadData({render:false});closeModal();activeScreen='orders';renderScreen();
+    showToast(status==='ready_for_inspection'?tr('تم تحديث الطلب إلى جاهز للفحص.','Order marked ready for inspection.'):tr('تم تحديث حالة الطلب.','Order status updated.'));
+  }catch(error){showToast(error.message);}
+}
+function openSupplierCannotFulfill(type,id){
+  const order=supplierOrders().find(o=>o.type===type&&o.id===id);if(!order)return;
+  openModal(tr('تعذر تنفيذ الطلب','Unable to fulfill order'),`#${ref(order.type==='quote'?order.request:order.interest)}`,`<form id="supplierCannotForm" class="form-stack" data-order-type="${esc(type)}" data-order-id="${esc(id)}"><p>${esc(tr('اكتب السبب بوضوح ليظهر للإدارة فقط.','Add a clear reason. It will be visible to admin only.'))}</p><label><span>${esc(tr('سبب تعذر التنفيذ','Reason'))}</span><textarea name="reason" maxlength="1000" required></textarea></label><button class="danger-btn" type="submit">${esc(tr('تأكيد تعذر التنفيذ','Confirm unable to fulfill'))}</button></form>`);
+  $('supplierCannotForm').addEventListener('submit',async e=>{e.preventDefault();const form=e.currentTarget,reason=form.reason.value.trim();if(!reason)return;await updateSupplierOrderStatus(form.dataset.orderType,form.dataset.orderId,'cannot_fulfill',reason);});
+}
 async function paymentReceiptSource(input){
   const file=input?.files?.[0];if(!file)throw new Error(tr('اختر صورة أو ملف PDF للإيصال.','Choose an image or PDF receipt.'));
   if(file.type==='application/pdf'||/\.pdf$/i.test(file.name||'')){
