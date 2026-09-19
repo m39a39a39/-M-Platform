@@ -566,7 +566,13 @@ async function approve(kind,id){const arr=kind==='request'?state.requests:kind==
 async function saveReview(kind,id){const arr=kind==='request'?state.requests:kind==='quote'?state.quotes:state.publicOffers,x=arr.find(v=>v.id===id);if(!x)return;const f=readForm(x);if(Object.values(f.translation).some(v=>!v)){toast(tr('أكمل الترجمة أولًا.','Complete the translation first.'));return;}const patch={translation:f.translation,reviewedAt:new Date().toISOString()},editPerm=kind==='request'?'requests.edit':'offers.edit';if(can(editPerm))patch.images=f.images;if(kind==='public')patch.categoryId=f.categoryId;try{await mutate(kind==='request'?'requests':kind==='quote'?'quotes':'publicOffers',x,patch);closeModal();schedule();toast(tr('تم حفظ المراجعة.','Review saved.'));}catch(e){toast(e.message);}}
 async function requestStatus(id,s){const x=(state?.requests||[]).find(v=>v.id===id);if(!x)return;try{await mutate('requests',x,{status:s});closeModal();schedule();toast(tr('تم تحديث الحالة.','Status updated.'));}catch(e){toast(e.message);}}
 async function interestStatus(id,s){const x=(state?.interests||[]).find(v=>v.id===id);if(!x)return;try{await mutate('interests',x,{status:s});schedule();toast(tr('تم تحديث الحالة.','Status updated.'));}catch(e){toast(e.message);}}
-function go(view,tab){if(view==='offers'&&tab)offerTab=tab;document.querySelector(`#bottomNav button[data-screen="${view}"]`)?.click();setTimeout(schedule,30);}
+function go(view,tab){
+  if(view==='offers'&&tab)offerTab=tab;
+  if(view==='operations'&&tab)operationTab=tab;
+  if(view==='more'&&tab)moreTab=tab;
+  document.querySelector('#bottomNav button[data-screen="'+view+'"]')?.click();
+  setTimeout(schedule,30);
+}
 
 document.addEventListener('click',e=>{
   if(!isAdmin()||document.getElementById('appView').classList.contains('hidden'))return;
