@@ -10,12 +10,31 @@ const paymentEvent=event=>event.replace(/_(?:request|interest)$/,'');
 
 function paymentCopy(row,ctx){
   const kind=paymentKind(row.event),event=paymentEvent(row.event),data=ctx?.data||{},ref=ctx?.display_no?` #${ctx.display_no}`:'';
-  if(event==='payment_required')return {
-    titleAr:'بانتظار تأكيد الدفع',titleEn:'Awaiting payment confirmation',
-    bodyAr:data.paymentMessage||`يرجى إرفاق إيصال الدفع لتأكيد طلبك${ref}.`,
-    bodyEn:data.paymentMessage||`Please upload the payment receipt to confirm your order${ref}.`,
-    action:'upload_receipt',target:{screen:'customerPayment',entityType:kind,entityId:row.entity_id}
-  };
+  if(event==='payment_required'){
+    if(data.paymentStatus==='receipt_submitted')return {
+      titleAr:'تم إرسال إيصال الدفع',titleEn:'Payment receipt submitted',
+      bodyAr:'تم إرسال إيصال الدفع — بانتظار مراجعة الإدارة.',bodyEn:'Your payment receipt was submitted and is awaiting admin review.',
+      target:{screen:'customerPayment',entityType:kind,entityId:row.entity_id}
+    };
+    if(data.paymentStatus==='confirmed')return {
+      titleAr:'تم تأكيد الدفع',titleEn:'Payment confirmed',
+      bodyAr:kind==='request'?`تم تأكيد الدفع لطلبك${ref}.`:'تم تأكيد الدفع لطلب المنتج الجاهز.',
+      bodyEn:kind==='request'?`Payment was confirmed for your order${ref}.`:'Payment was confirmed for your ready-product order.',
+      target:{screen:'customerPayment',entityType:kind,entityId:row.entity_id}
+    };
+    if(data.paymentStatus==='reupload_requested')return {
+      titleAr:'يرجى إعادة رفع إيصال الدفع',titleEn:'Please upload the receipt again',
+      bodyAr:`يرجى إعادة رفع إيصال الدفع.${data.paymentReviewNote?` ${data.paymentReviewNote}`:''}`,
+      bodyEn:`Please upload the payment receipt again.${data.paymentReviewNote?` ${data.paymentReviewNote}`:''}`,
+      action:'upload_receipt',target:{screen:'customerPayment',entityType:kind,entityId:row.entity_id}
+    };
+    return {
+      titleAr:'بانتظار تأكيد الدفع',titleEn:'Awaiting payment confirmation',
+      bodyAr:data.paymentMessage||`يرجى إرفاق إيصال الدفع لتأكيد طلبك${ref}.`,
+      bodyEn:data.paymentMessage||`Please upload the payment receipt to confirm your order${ref}.`,
+      action:'upload_receipt',target:{screen:'customerPayment',entityType:kind,entityId:row.entity_id}
+    };
+  }
   if(event==='payment_receipt_submitted')return {
     titleAr:'إيصال دفع جديد',titleEn:'New payment receipt',
     bodyAr:kind==='request'?`تم رفع إيصال دفع جديد للطلب${ref}.`:'تم رفع إيصال دفع جديد لطلب منتج جاهز.',
