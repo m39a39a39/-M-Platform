@@ -1,0 +1,65 @@
+begin;
+
+create or replace function public.notify_payment_events() returns trigger
+language plpgsql security definer set search_path=public as $$
+declare
+  kind text;
+  old_payment text;
+  new_payment text;
+  old_tracking text;
+  new_tracking text;
+begin
+  kind := case when tg_table_name='requests' then 'request' else 'interest' end;
+  old_payment := coalesce(old.data->>'paymentStatus','');
+  new_payment := coalesce(new.data->>'paymentStatus','');
+  old_tracking := coalesce(old.data->>'trackingStatus','');
+  new_tracking := coalesce(new.data->>'trackingStatus','');
+
+  if new_tracking='payment_confirmation'
+     and new_payment='awaiting_receipt'
+     and (old_tracking<>'payment_confirmation' or old_payment<>'awaiting_receipt') then
+    insert into public.notifications(user_id,entity_id,event)
+    values(new.owner_id,new.id,'payment_required_'||kind);
+  end if;
+
+  if new_payment<>old_payment then
+    if new_payment='receipt_submitted' then
+      insert into public.notifications(user_id,entity_id,event)
+      select id,new.id,'payment_receipt_submitted_'||kind
+      from public.profiles
+      where role='admin' and blocked_at is null and deleted_at is null;
+    elsif new_payment='confirmed' then
+      insert into public.notifications(user_id,entity_id,event)
+      values(new.owner_id,new.id,'payment_confirmed_'||kind);
+    elsif new_payment='reupload_requested' then
+      insert into public.notifications(user_id,entity_id,event)
+      values(new.owner_id,new.id,'payment_reupload_'||kind);
+    end if;
+  end if;
+
+  return new;
+end; $$;
+
+update public.requests
+set data = data || jsonb_build_object(
+  'paymentStatus','awaiting_receipt',
+  'paymentRequestedAt',coalesce(data->>'trackingUpdatedAt',now()::text),
+  'paymentUpdatedAt',now(),
+  'paymentMessage',coalesce(nullif(data->>'paymentMessage',''),
+    'يرجى إتمام عملية الدفع وإرفاق إيصال الدفع لتأكيد طلبك رقم #' || display_no || '. بعد إرسال الإيصال ستقوم الإدارة بمراجعته وإشعارك عند تأكيد الدفع.')
+)
+where data->>'trackingStatus'='payment_confirmation'
+  and coalesce(data->>'paymentStatus','')='';
+
+update public.interests
+set data = data || jsonb_build_object(
+  'paymentStatus','awaiting_receipt',
+  'paymentRequestedAt',coalesce(data->>'trackingUpdatedAt',now()::text),
+  'paymentUpdatedAt',now(),
+  'paymentMessage',coalesce(nullif(data->>'paymentMessage',''),
+    'يرجى إتمام عملية الدفع وإرفاق إيصال الدفع لتأكيد طلب المنتج الجاهز. بعد إرسال الإيصال ستقوم الإدارة بمراجعته وإشعارك عند تأكيد الدفع.')
+)
+where data->>'trackingStatus'='payment_confirmation'
+  and coalesce(data->>'paymentStatus','')='';
+
+commit;
