@@ -195,7 +195,60 @@ function bankAccountPanel(){
   const rows=bankAccounts();
   return `<section class="section-block admin-bank-panel"><div class="section-title"><div><h2>${esc(tr('حسابات استلام المدفوعات','Payment receiving accounts'))}</h2><p>${esc(tr('تظهر بيانات الحساب للعميل فقط بعد اختيارها داخل طلب في مرحلة الدفع.','Account details are shown to a customer only after the account is selected for an order at the payment stage.'))}</p></div><button class="primary-small" type="button" data-admin-bank-new>+ ${esc(tr('إضافة حساب','Add account'))}</button></div><div class="admin-bank-list">${rows.map(a=>`<article class="admin-bank-row"><div><strong>${esc(a.label||a.bankName)}</strong><small>${esc(a.bankName)} · ${esc(a.currency||'')}</small><span class="status-pill ${a.active!==false?'status-published':'status-cancelled'}">${esc(a.active!==false?tr('نشط','Active'):tr('متوقف','Inactive'))}</span></div><div class="admin-category-actions"><button type="button" data-admin-bank-edit="${esc(a.id)}">${esc(tr('تعديل','Edit'))}</button><button type="button" data-admin-bank-toggle="${esc(a.id)}">${esc(a.active!==false?tr('إيقاف','Disable'):tr('تفعيل','Enable'))}</button><button class="danger-text" type="button" data-admin-bank-delete="${esc(a.id)}">${esc(tr('حذف','Delete'))}</button></div></article>`).join('')||empty()}</div></section>`;
 }
-function accounts(){const u=me(),rows=(state?.accounts||[]).filter(a=>['client','supplier'].includes(a.role)&&!a.deletedAt&&matches(a,'account'));setRoot('account',page(tr('الإدارة والحسابات','Admin & accounts'),tr('بيانات حسابك ودليل العملاء والموردين.','Your profile and customer/supplier directory.'))+`<section class="profile-card admin-profile"><div class="avatar">${esc((u?.name||u?.email||'M').charAt(0).toUpperCase())}</div><h2>${esc(u?.name||tr('الإدارة','Admin'))}</h2><p>${esc(tr('حساب إدارة','Admin account'))}</p><button class="danger-btn" data-action="logout">${esc(tr('تسجيل الخروج','Sign out'))}</button></section>`+bankAccountPanel()+`<section class="section-block admin-directory"><div class="section-title"><h2>${esc(tr('العملاء والموردون','Customers & suppliers'))}</h2></div>${search(tr('ابحث بالاسم أو الشركة','Search name or company'))}<div class="list-stack" data-admin-results>${rows.slice(0,100).map(a=>`<button class="admin-account-row" data-admin-account="${esc(a.id)}"><div><strong>${esc(a.company||a.name||'#'+String(a.id).slice(0,8))}</strong><small>${esc(a.role==='client'?tr('عميل','Customer'):tr('مورد','Supplier'))} · ${esc(a.blockedAt?tr('متوقف','Disabled'):tr('نشط','Active'))}</small></div><span>›</span></button>`).join('')||empty()}</div></section>`);}
+const TEAM_PERMISSION_LABELS=[
+  ['requests.read','مشاهدة الطلبات','View requests'],
+  ['requests.edit','تعديل الطلبات والصور','Edit requests & images'],
+  ['offers.read','مشاهدة العروض','View offers'],
+  ['offers.edit','تعديل العروض والصور','Edit offers & images'],
+  ['translate','الترجمة اليدوية','Manual translation'],
+  ['publish','الاعتماد والإرسال','Approve & publish'],
+  ['accounts.read','بيانات الحسابات والتواصل','Account contact details'],
+  ['accounts.manage','إدارة حسابات العملاء والموردين','Manage customer & supplier accounts'],
+  ['moderate','تعليق الطلبات','Suspend requests'],
+  ['trash','الحذف والاستعادة','Trash & restore'],
+  ['settings','النصوص والشعار','Text & logo'],
+  ['team','إدارة الفريق','Manage team']
+];
+function teamPanel(){
+  if(!can('team'))return '';
+  const admins=(state?.accounts||[]).filter(a=>a.role==='admin'&&!a.deletedAt);
+  return `<section class="section-block admin-team-panel">
+    <div class="section-title"><div><h2>${esc(tr('فريق الإدارة','Admin team'))}</h2><p>${esc(tr('إضافة المدراء وتحديد صلاحيات كل مدير.','Add managers and control each manager’s permissions.'))}</p></div><button class="primary-small" type="button" data-admin-team-new>+ ${esc(tr('إضافة مدير','Add manager'))}</button></div>
+    <div class="list-stack">${admins.map(a=>`<article class="list-card admin-record-card"><div class="list-card-main"><div class="list-card-title"><h3>${esc(a.name||a.email||'#'+String(a.id).slice(0,8))}</h3><small>${esc(a.email||'')}</small></div><span class="status-pill ${a.blockedAt?'status-cancelled':'status-published'}">${esc(a.blockedAt?tr('متوقف','Disabled'):tr('نشط','Active'))}</span></div>${a.isOwner?`<p class="muted">${esc(tr('المدير الرئيسي — محمي','Owner — protected'))}</p>`:a.id===me()?.id?'':`<div class="admin-review-actions"><button class="secondary-btn" type="button" data-admin-team-edit="${esc(a.id)}">${esc(tr('تعديل الصلاحيات','Edit permissions'))}</button><button class="${a.blockedAt?'primary-btn':'danger-btn'}" type="button" data-admin-team-toggle="${esc(a.id)}">${esc(a.blockedAt?tr('إعادة تفعيل المدير','Reactivate manager'):tr('إيقاف المدير','Disable manager'))}</button></div>`}</article>`).join('')||empty()}</div>
+  </section>`;
+}
+function teamDialog(id=''){
+  if(!can('team'))return;
+  const current=id?(state?.accounts||[]).find(a=>a.id===id&&a.role==='admin'):null,u=me();
+  const allowed=TEAM_PERMISSION_LABELS.filter(([p])=>u?.isOwner||(p!=='team'&&u?.permissions?.includes(p)));
+  const selected=new Set(current?.permissions||[]);
+  modal(current?tr('تعديل صلاحيات المدير','Edit manager permissions'):tr('إضافة مدير','Add manager'),tr('فريق الإدارة','Admin team'),
+    '<form id="adminTeamForm" class="form-stack" data-id="'+esc(current?.id||'')+'">'+
+    '<label><span>'+esc(tr('البريد الإلكتروني','Email'))+'</span><input name="email" type="email" required maxlength="254" value="'+esc(current?.email||'')+'" '+(current?'readonly':'')+'></label>'+
+    '<div class="admin-check-list">'+allowed.map(([p,ar,en])=>'<label><input type="checkbox" name="permission" value="'+esc(p)+'" '+(selected.has(p)?'checked':'')+'><span>'+esc(tr(ar,en))+'</span></label>').join('')+'</div>'+
+    '<small>'+esc(tr('يجب أن يكون الحساب مسجلًا في المنصة أولًا.','The account must already be registered on the platform.'))+'</small>'+
+    '<button class="primary-btn" type="submit">'+esc(tr('حفظ المدير وصلاحياته','Save manager & permissions'))+'</button></form>');
+}
+async function submitTeam(form){
+  const id=form.dataset.id||undefined,permissions=[...form.querySelectorAll('[name="permission"]:checked')].map(x=>x.value);
+  try{
+    await api('/api/v1/team',{method:'POST',body:{id,email:form.email.value.trim(),permissions,action:'save'}});
+    await reload();closeModal();schedule();toast(tr('تم حفظ المدير وصلاحياته.','Manager and permissions saved.'));
+  }catch(e){toast(e.message);}
+}
+function teamToggleDialog(id){
+  const a=(state?.accounts||[]).find(x=>x.id===id&&x.role==='admin');if(!a||a.isOwner||a.id===me()?.id||!can('team'))return;
+  const action=a.blockedAt?'unblock':'block';
+  modal(a.blockedAt?tr('إعادة تفعيل المدير','Reactivate manager'):tr('إيقاف المدير','Disable manager'),a.name||a.email||'', '<form id="adminTeamStatusForm" class="form-stack" data-id="'+esc(a.id)+'" data-action="'+action+'"><p>'+esc(a.blockedAt?tr('سيتمكن المدير من تسجيل الدخول مجددًا بعد إعادة التفعيل.','The manager can sign in again after reactivation.'):tr('لن يتمكن المدير من تسجيل الدخول أثناء إيقاف الحساب.','The manager cannot sign in while the account is disabled.'))+'</p><button class="'+(a.blockedAt?'primary-btn':'danger-btn')+'" type="submit">'+esc(a.blockedAt?tr('إعادة التفعيل','Reactivate'):tr('إيقاف المدير','Disable manager'))+'</button></form>');
+}
+async function submitTeamStatus(form){
+  const a=(state?.accounts||[]).find(x=>x.id===form.dataset.id&&x.role==='admin');if(!a)return;
+  try{
+    await api('/api/v1/team',{method:'POST',body:{id:a.id,permissions:a.permissions||[],action:form.dataset.action}});
+    await reload();closeModal();schedule();toast(form.dataset.action==='block'?tr('تم إيقاف المدير.','Manager disabled.'):tr('تمت إعادة تفعيل المدير.','Manager reactivated.'));
+  }catch(e){toast(e.message);}
+}
+function accounts(){const u=me(),rows=(state?.accounts||[]).filter(a=>['client','supplier'].includes(a.role)&&!a.deletedAt&&matches(a,'account'));setRoot('account',page(tr('الإدارة والحسابات','Admin & accounts'),tr('بيانات حسابك ودليل العملاء والموردين.','Your profile and customer/supplier directory.'))+`<section class="profile-card admin-profile"><div class="avatar">${esc((u?.name||u?.email||'M').charAt(0).toUpperCase())}</div><h2>${esc(u?.name||tr('الإدارة','Admin'))}</h2><p>${esc(tr('حساب إدارة','Admin account'))}</p><button class="danger-btn" data-action="logout">${esc(tr('تسجيل الخروج','Sign out'))}</button></section>`+teamPanel()+bankAccountPanel()+`<section class="section-block admin-directory"><div class="section-title"><h2>${esc(tr('العملاء والموردون','Customers & suppliers'))}</h2></div>${search(tr('ابحث بالاسم أو الشركة','Search name or company'))}<div class="list-stack" data-admin-results>${rows.slice(0,100).map(a=>`<button class="admin-account-row" data-admin-account="${esc(a.id)}"><div><strong>${esc(a.company||a.name||'#'+String(a.id).slice(0,8))}</strong><small>${esc(a.role==='client'?tr('عميل','Customer'):tr('مورد','Supplier'))} · ${esc(a.blockedAt?tr('متوقف','Disabled'):tr('نشط','Active'))}</small></div><span>›</span></button>`).join('')||empty()}</div></section>`);}
 export function renderAdminScreen(v=activeView()){if(!isAdmin()||v==='notifications')return false;if(v==='home')home();else if(v==='requests')requests();else if(v==='offers')offers();else if(v==='account')accounts();return true;}
 function render(){if(!document.getElementById('appView')?.classList.contains('hidden'))renderAdminScreen();}
 
@@ -443,6 +496,9 @@ document.addEventListener('click',e=>{
   const g=e.target.closest('[data-admin-go]');if(g){go(g.dataset.adminGo,g.dataset.adminTabTarget);return;}
   const active=e.target.closest('[data-admin-request-active]');if(active){requestFilter='active';schedule();return;}
   const ot=e.target.closest('[data-admin-offer-tab]');if(ot){offerTab=ot.dataset.adminOfferTab;schedule();return;}
+  const tn=e.target.closest('[data-admin-team-new]');if(tn){teamDialog();return;}
+  const te=e.target.closest('[data-admin-team-edit]');if(te){teamDialog(te.dataset.adminTeamEdit);return;}
+  const tt=e.target.closest('[data-admin-team-toggle]');if(tt){teamToggleDialog(tt.dataset.adminTeamToggle);return;}
   const bn=e.target.closest('[data-admin-bank-new]');if(bn){bankAccountDialog();return;}
   const be=e.target.closest('[data-admin-bank-edit]');if(be){bankAccountDialog(be.dataset.adminBankEdit);return;}
   const bt=e.target.closest('[data-admin-bank-toggle]');if(bt){toggleBankAccount(bt.dataset.adminBankToggle);return;}
@@ -487,7 +543,9 @@ document.addEventListener('change',e=>{
 });
 document.addEventListener('submit',e=>{
   if(!isAdmin())return;
-  if(e.target.matches('#adminBankAccountForm')){e.preventDefault();submitBankAccount(e.target);}
+  if(e.target.matches('#adminTeamForm')){e.preventDefault();submitTeam(e.target);}
+  else if(e.target.matches('#adminTeamStatusForm')){e.preventDefault();submitTeamStatus(e.target);}
+  else if(e.target.matches('#adminBankAccountForm')){e.preventDefault();submitBankAccount(e.target);}
   else if(e.target.matches('#adminAccountEditForm')){e.preventDefault();submitAccountEdit(e.target);}
   else if(e.target.matches('#adminAccountStatusForm')){e.preventDefault();submitAccountStatus(e.target);}
   else if(e.target.matches('#adminCategoryForm')){e.preventDefault();submitCategory(e.target);}
