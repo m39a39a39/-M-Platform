@@ -275,7 +275,8 @@ function supplierOrders(){
   }).filter(Boolean);
   const ready=interests.map(i=>{
     const o=offers.find(x=>x.id===i.offerId);if(!o)return null;
-    return {type:'public',id:i.id,version:i.version,interest:i,offer:o,item:o,title:titleOf(o),images:o.images||[],source:tr('عرض عام','Public offer'),status:i.supplierOrderStatus||'pending_confirmation',note:i.supplierOrderNote||'',updatedAt:i.supplierOrderUpdatedAt||i.createdAt,quantity:'',unitPrice:o.unitPrice,currency:o.currency,total:null,country:o.country||'',moq:o.moq||''};
+    const quantity=Number(i.quantity),unitPrice=Number(i.unitPrice||o.unitPrice),total=Number(i.total);
+    return {type:'public',id:i.id,version:i.version,interest:i,offer:o,item:o,title:titleOf(o),images:o.images||[],source:tr('عرض عام','Public offer'),status:i.supplierOrderStatus||'pending_confirmation',note:i.supplierOrderNote||'',updatedAt:i.supplierOrderUpdatedAt||i.createdAt,quantity:i.quantity||'',unitPrice:i.unitPrice||o.unitPrice,currency:i.currency||o.currency,total:Number.isFinite(total)&&total>0?total:(Number.isFinite(quantity)&&Number.isFinite(unitPrice)?quantity*unitPrice:null),country:o.country||'',moq:i.moq||o.moq||''};
   }).filter(Boolean);
   return [...custom,...ready].sort((a,b)=>(Date.parse(b.updatedAt||0)||0)-(Date.parse(a.updatedAt||0)||0));
 }
@@ -343,7 +344,7 @@ function renderRequests(){
       pageHeader(t('requests'),tr('كل طلباتك ومتابعتها في مكان واحد.','All your requests and their progress in one place.'),`<button class="primary-small" data-action="new-request">+ ${esc(t('sendCustomRequest'))}</button>`)+
       `<div class="stats-grid client-request-stats">${statCard(rows.length+interests.length,t('totalRequests'))}${statCard(newQuotes,t('newQuotes'))}${statCard(active,t('activeRequests'))}${statCard(interests.length,t('readyProductRequests'))}</div>`+
       `<section class="request-group" data-client-request-group="custom"><div class="section-title"><h2>${esc(t('customRequests'))}</h2></div><div class="list-stack">${rows.map(r=>itemCard(r,{subtitle:descriptionOf(r),meta:`${t('quantity')}: ${r.quantity||'—'} · ${r.country||'—'} · ${date(r.createdAt)}`,badge:cardBadge(requestTrackingStatus(r),newQuoteCount(r)?`<span class="new-pill">${newQuoteCount(r)}</span>`:''),action:`data-request="${esc(r.id)}"`,images:true})).join('')||empty()}</div></section>`+
-      `<section class="request-group" data-client-request-group="ready"><div class="section-title"><h2>${esc(t('readyProductRequests'))}</h2></div><div class="list-stack">${readyRows.map(({interest,offer})=>itemCard(offer||interest,{subtitle:offer?descriptionOf(offer):tr('المنتج غير متاح حاليًا','Product currently unavailable'),meta:date(interest.createdAt),badge:cardBadge(readyTrackingStatus(interest)),action:offer?`data-public-offer="${esc(offer.id)}"`:'',images:!!offer})).join('')||empty()}</div></section>`;
+      `<section class="request-group" data-client-request-group="ready"><div class="section-title"><h2>${esc(t('readyProductRequests'))}</h2></div><div class="list-stack">${readyRows.map(({interest,offer})=>itemCard(offer||interest,{subtitle:offer?descriptionOf(offer):tr('المنتج غير متاح حاليًا','Product currently unavailable'),meta:`${tr('الكمية','Quantity')}: ${interest.quantity||'—'} · ${interest.total?tr('الإجمالي','Total')+': '+money(interest.total,interest.currency||offer?.currency):''} · ${date(interest.createdAt)}`,badge:cardBadge(readyTrackingStatus(interest)),action:offer?`data-public-offer="${esc(offer.id)}"`:'',images:!!offer})).join('')||empty()}</div></section>`;
   }else if(currentUser.role==='supplier'){
     const answered=new Set((platformState.quotes||[]).map(q=>q.requestId)),rows=(platformState.requests||[]).filter(r=>!answered.has(r.id));
     $('screen').innerHTML=pageHeader(tr('طلبات عروض الأسعار','Quote requests'),tr('الطلبات التي أرسلتها الإدارة إليك لتقديم سعر. تختفي بعد تقديم عرضك.','Requests sent by admin for quotation. They disappear after you submit an offer.'))+`<div class="list-stack">${rows.map(r=>itemCard(r,{subtitle:descriptionOf(r),meta:`${t('quantity')}: ${r.quantity||'—'} · ${r.country||'—'} · ${t('neededDate')}: ${r.neededDate||'—'}`,badge:`<span class="status-pill status-review">${esc(tr('بانتظار عرضك','Awaiting your quote'))}</span>`,action:`data-supplier-request="${esc(r.id)}"`,images:true})).join('')||empty()}</div>`;
@@ -392,7 +393,37 @@ async function openPublicOffer(offerId){
   const interest=(platformState.interests||[]).find(i=>i.offerId===o.id);
   const progress=currentUser.role==='client'&&interest?trackingTimeline(interest,{flow:READY_TRACKING_FLOW,statusResolver:readyTrackingStatus}):'';
   const payment=currentUser.role==='client'&&interest?paymentPanel(interest,'interest'):'';
-  openModal(titleOf(o),`#${ref(o)}`,`${progress}${payment}${gallery(o.images)}<div class="quote-price">${money(o.unitPrice,o.currency)}</div><div class="facts"><span>MOQ ${esc(o.moq||'—')}</span><span>${esc(t('stock'))}: ${esc(o.stock||'—')}</span><span>${esc(t('leadTime'))}: ${esc(o.leadTime||'—')}</span><span>${esc(t('validUntil'))}: ${esc(o.validUntil||'—')}</span></div><p class="long-copy">${esc(descriptionOf(o)||'—')}</p>${currentUser.role==='client'?`<button class="primary-btn full" data-interest="${esc(o.id)}" ${interest?'disabled':''}>${esc(interest?t('requested'):t('requestOffer'))}</button>`:''}`);
+  const moq=Math.max(1,Number(o.moq)||1),stock=Number(o.stock),maxAttr=Number.isFinite(stock)&&stock>0?` max="${esc(stock)}"`:'';
+  const requestedSummary=interest?`<section class="public-order-summary"><div><span>${esc(tr('الكمية المطلوبة','Requested quantity'))}</span><strong>${esc(interest.quantity||'—')}</strong></div><div><span>${esc(tr('سعر الوحدة','Unit price'))}</span><strong>${money(interest.unitPrice||o.unitPrice,interest.currency||o.currency)}</strong></div><div class="total"><span>${esc(tr('الإجمالي','Total'))}</span><strong>${money(interest.total||Number(interest.quantity||0)*Number(interest.unitPrice||o.unitPrice||0),interest.currency||o.currency)}</strong></div></section>`:'';
+  const requestForm=currentUser.role==='client'&&!interest?`<form id="publicInterestForm" class="public-interest-form" data-offer-id="${esc(o.id)}">
+    <div class="public-interest-head"><div><strong>${esc(tr('حدد الكمية المطلوبة','Choose requested quantity'))}</strong><small>${esc(tr('الحد الأدنى للطلب','Minimum order'))}: ${esc(o.moq||'—')}</small></div></div>
+    <label><span>${esc(tr('الكمية','Quantity'))}</span><input id="publicInterestQuantity" name="quantity" type="number" min="${esc(moq)}" step="1" value="${esc(moq)}"${maxAttr} required></label>
+    <div class="public-interest-total"><span>${esc(tr('الإجمالي التقديري','Estimated total'))}</span><strong id="publicInterestTotal">${money(moq*Number(o.unitPrice||0),o.currency)}</strong></div>
+    ${Number.isFinite(stock)&&stock>0?`<small>${esc(tr('المخزون المتاح','Available stock'))}: ${esc(stock)}</small>`:''}
+    <p class="form-message" id="publicInterestMessage"></p>
+    <button class="primary-btn full" type="submit">${esc(t('requestOffer'))}</button>
+  </form>`:'';
+  openModal(titleOf(o),`#${ref(o)}`,`${progress}${payment}${gallery(o.images)}<div class="quote-price">${money(o.unitPrice,o.currency)}</div><div class="facts"><span>MOQ ${esc(o.moq||'—')}</span><span>${esc(t('stock'))}: ${esc(o.stock||'—')}</span><span>${esc(t('leadTime'))}: ${esc(o.leadTime||'—')}</span><span>${esc(t('validUntil'))}: ${esc(o.validUntil||'—')}</span></div><p class="long-copy">${esc(descriptionOf(o)||'—')}</p>${requestedSummary}${requestForm}`);
+  if(currentUser.role==='client'&&!interest){
+    const form=$('publicInterestForm'),input=$('publicInterestQuantity'),total=$('publicInterestTotal');
+    input?.addEventListener('input',()=>{const q=Number(input.value);total.textContent=money((Number.isFinite(q)?q:0)*Number(o.unitPrice||0),o.currency);});
+    form?.addEventListener('submit',submitPublicInterest);
+  }
+}
+async function submitPublicInterest(e){
+  e.preventDefault();if(busy)return;busy=true;
+  const form=e.currentTarget,offerId=form.dataset.offerId,o=(platformState.publicOffers||[]).find(x=>x.id===offerId),message=$('publicInterestMessage');
+  if(!o){busy=false;return;}
+  const quantity=Number(form.quantity.value),moq=Number(o.moq)||1,stock=Number(o.stock);
+  try{
+    if(!Number.isFinite(quantity)||quantity<moq)throw new Error(tr('الكمية يجب ألا تقل عن الحد الأدنى للطلب.','Quantity cannot be below the minimum order.'));
+    if(Number.isFinite(stock)&&stock>0&&quantity>stock)throw new Error(tr('الكمية المطلوبة أكبر من المخزون المتاح.','Requested quantity exceeds available stock.'));
+    form.querySelector('button[type="submit"]').disabled=true;
+    if(message)message.textContent=tr('جارٍ إرسال الطلب...','Submitting request...');
+    await mutate('interests',id(),0,{offerId,quantity,status:'pending'});
+    await loadData({render:false});closeModal();activeScreen='requests';renderScreen();showToast(t('requested'));
+  }catch(error){if(message)message.textContent=error.message;else showToast(error.message);}
+  finally{busy=false;}
 }
 function openSupplierRequest(requestId){
   const r=(platformState.requests||[]).find(x=>x.id===requestId);if(!r)return;
@@ -516,7 +547,6 @@ async function handleAction(target){
   if(target.dataset.supplierOrderStatus)return updateSupplierOrderStatus(target.dataset.supplierOrderType,target.dataset.supplierOrderId,target.dataset.supplierOrderStatus);
   if(target.hasAttribute('data-supplier-order-cannot'))return openSupplierCannotFulfill(target.dataset.supplierOrderType,target.dataset.supplierOrderId);
   if(target.dataset.selectQuote){const r=(platformState.requests||[]).find(x=>x.id===target.dataset.requestId);if(!r)return;target.disabled=true;try{await mutate('requests',r.id,r.version,{selectedQuoteId:target.dataset.selectQuote});await loadData({render:false});closeModal();renderScreen();showToast(t('selected'));}catch(error){showToast(error.message);}return;}
-  if(target.dataset.interest){const existing=(platformState.interests||[]).find(i=>i.offerId===target.dataset.interest);if(existing)return;target.disabled=true;try{await mutate('interests',id(),0,{offerId:target.dataset.interest,status:'pending'});await loadData({render:false});closeModal();renderScreen();showToast(t('requested'));}catch(error){showToast(error.message);}return;}
   if(target.dataset.copyValue!==undefined)return copyText(target.dataset.copyValue);
   if(target.dataset.paymentUpload)return openPaymentReceiptForm(target.dataset.entityType,target.dataset.entityId);
   if(target.dataset.paymentDocument)return openPaymentDocument(target.dataset.paymentDocument);
