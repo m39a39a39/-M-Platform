@@ -44,6 +44,8 @@ const requestTracking=x=>x?.trackingStatus||(x?.status==='completed'?'completed'
 const interestTracking=x=>x?.trackingStatus||(x?.status==='completed'?'completed':x?.status==='cancelled'?'cancelled':['coordinating','accepted'].includes(x?.status)?'payment_confirmation':'received');
 const categories=()=>{const rows=Array.isArray(state?.settings?.categories)?state.settings.categories:[];return [...rows].sort((a,b)=>(a.order||0)-(b.order||0));};
 const activeCategories=()=>categories().filter(cat=>cat.active!==false);
+const bankAccounts=()=>{const rows=Array.isArray(state?.settings?.bankAccounts)?state.settings.bankAccounts:[];return [...rows].sort((a,b)=>(a.order||0)-(b.order||0));};
+const activeBankAccounts=()=>bankAccounts().filter(x=>x.active!==false);
 
 async function mutate(collection,item,patch,redactionConfirmed=false){await api('/api/v1/mutations',{method:'POST',body:{collection,id:item.id,version:Number(item.version||0),patch,redactionConfirmed}});await reload();}
 
@@ -131,7 +133,12 @@ function offers(){
   }
   setRoot('offers',page(tr('العروض','Offers'),tr('مراجعة عروض الموردين والعروض العامة وإدارة طلبات الاهتمام.','Review supplier quotes, public offers, and interest requests.'))+search(tr('ابحث برقم العرض أو اسم المورد','Search offer number or supplier'))+tabs+`<div class="list-stack" data-admin-results>${content}</div>`);
 }
-function accounts(){const u=me(),rows=(state?.accounts||[]).filter(a=>['client','supplier'].includes(a.role)&&!a.deletedAt&&matches(a,'account'));setRoot('account',page(tr('الإدارة والحسابات','Admin & accounts'),tr('بيانات حسابك ودليل العملاء والموردين.','Your profile and customer/supplier directory.'))+`<section class="profile-card admin-profile"><div class="avatar">${esc((u?.name||u?.email||'M').charAt(0).toUpperCase())}</div><h2>${esc(u?.name||tr('الإدارة','Admin'))}</h2><p>${esc(tr('حساب إدارة','Admin account'))}</p><button class="danger-btn" data-action="logout">${esc(tr('تسجيل الخروج','Sign out'))}</button></section><section class="section-block admin-directory"><div class="section-title"><h2>${esc(tr('العملاء والموردون','Customers & suppliers'))}</h2></div>${search(tr('ابحث بالاسم أو الشركة','Search name or company'))}<div class="list-stack" data-admin-results>${rows.slice(0,100).map(a=>`<button class="admin-account-row" data-admin-account="${esc(a.id)}"><div><strong>${esc(a.company||a.name||'#'+String(a.id).slice(0,8))}</strong><small>${esc(a.role==='client'?tr('عميل','Customer'):tr('مورد','Supplier'))}</small></div><span>›</span></button>`).join('')||empty()}</div></section>`);}
+function bankAccountPanel(){
+  if(!can('settings'))return '';
+  const rows=bankAccounts();
+  return `<section class="section-block admin-bank-panel"><div class="section-title"><div><h2>${esc(tr('حسابات استلام المدفوعات','Payment receiving accounts'))}</h2><p>${esc(tr('تظهر بيانات الحساب للعميل فقط بعد اختيارها داخل طلب في مرحلة الدفع.','Account details are shown to a customer only after the account is selected for an order at the payment stage.'))}</p></div><button class="primary-small" type="button" data-admin-bank-new>+ ${esc(tr('إضافة حساب','Add account'))}</button></div><div class="admin-bank-list">${rows.map(a=>`<article class="admin-bank-row"><div><strong>${esc(a.label||a.bankName)}</strong><small>${esc(a.bankName)} · ${esc(a.currency||'')}</small><span class="status-pill ${a.active!==false?'status-published':'status-cancelled'}">${esc(a.active!==false?tr('نشط','Active'):tr('متوقف','Inactive'))}</span></div><div class="admin-category-actions"><button type="button" data-admin-bank-edit="${esc(a.id)}">${esc(tr('تعديل','Edit'))}</button><button type="button" data-admin-bank-toggle="${esc(a.id)}">${esc(a.active!==false?tr('إيقاف','Disable'):tr('تفعيل','Enable'))}</button><button class="danger-text" type="button" data-admin-bank-delete="${esc(a.id)}">${esc(tr('حذف','Delete'))}</button></div></article>`).join('')||empty()}</div></section>`;
+}
+function accounts(){const u=me(),rows=(state?.accounts||[]).filter(a=>['client','supplier'].includes(a.role)&&!a.deletedAt&&matches(a,'account'));setRoot('account',page(tr('الإدارة والحسابات','Admin & accounts'),tr('بيانات حسابك ودليل العملاء والموردين.','Your profile and customer/supplier directory.'))+`<section class="profile-card admin-profile"><div class="avatar">${esc((u?.name||u?.email||'M').charAt(0).toUpperCase())}</div><h2>${esc(u?.name||tr('الإدارة','Admin'))}</h2><p>${esc(tr('حساب إدارة','Admin account'))}</p><button class="danger-btn" data-action="logout">${esc(tr('تسجيل الخروج','Sign out'))}</button></section>`+bankAccountPanel()+`<section class="section-block admin-directory"><div class="section-title"><h2>${esc(tr('العملاء والموردون','Customers & suppliers'))}</h2></div>${search(tr('ابحث بالاسم أو الشركة','Search name or company'))}<div class="list-stack" data-admin-results>${rows.slice(0,100).map(a=>`<button class="admin-account-row" data-admin-account="${esc(a.id)}"><div><strong>${esc(a.company||a.name||'#'+String(a.id).slice(0,8))}</strong><small>${esc(a.role==='client'?tr('عميل','Customer'):tr('مورد','Supplier'))}</small></div><span>›</span></button>`).join('')||empty()}</div></section>`);}
 export function renderAdminScreen(v=activeView()){if(!isAdmin()||v==='notifications')return false;if(v==='home')home();else if(v==='requests')requests();else if(v==='offers')offers();else if(v==='account')accounts();return true;}
 function render(){if(!document.getElementById('appView')?.classList.contains('hidden'))renderAdminScreen();}
 
@@ -238,8 +245,10 @@ function paymentReviewPanel(x,entityType){
   return '<section class="admin-payment-review"><div class="payment-card-head"><div><small>'+esc(tr('حالة الدفع','Payment status'))+'</small><strong>'+esc(paymentStatusLabel(x.paymentStatus))+'</strong></div></div>'+receiptHtml+note+review+'</section>';
 }
 function paymentMessageField(x,kind,current){
-  const hidden=current==='payment_confirmation'?'':' hidden';
-  return '<label class="admin-payment-message-field'+hidden+'"><span>'+esc(tr('رسالة الدفع للعميل','Payment message to customer'))+'</span><textarea data-admin-payment-message maxlength="2000">'+esc(defaultPaymentMessage(x,kind))+'</textarea><small>'+esc(tr('ستصل هذه الرسالة للعميل في صفحة الإشعارات مع زر إرفاق إيصال الدفع.','This message will appear in the customer notifications with an upload-receipt button.'))+'</small></label>';
+  const hidden=current==='payment_confirmation'?'':' hidden',banks=activeBankAccounts(),selected=x?.paymentBankAccountId||x?.paymentBankAccount?.id||'';
+  const bankSelect=banks.length?'<label><span>'+esc(tr('حساب استلام المبلغ','Receiving bank account'))+'</span><select data-admin-payment-bank required><option value="">—</option>'+banks.map(a=>'<option value="'+esc(a.id)+'" '+(selected===a.id?'selected':'')+'>'+esc(a.label||a.bankName)+' · '+esc(a.currency||'')+'</option>').join('')+'</select></label>':'<p class="payment-review-note">'+esc(tr('أضف حسابًا بنكيًا نشطًا من صفحة الحسابات أولًا.','Add an active bank account from the Accounts page first.'))+'</p>';
+  const currency=x?.paymentCurrency||x?.paymentBankAccount?.currency||banks.find(a=>a.id===selected)?.currency||'AED';
+  return '<section class="admin-payment-message-field'+hidden+'"><h4>'+esc(tr('بيانات الدفع','Payment details'))+'</h4>'+bankSelect+'<div class="form-two"><label><span>'+esc(tr('المبلغ المطلوب','Amount due'))+'</span><input type="number" min="0.01" step="0.01" data-admin-payment-amount value="'+esc(x?.paymentAmount||'')+'" required></label><label><span>'+esc(tr('العملة','Currency'))+'</span><select data-admin-payment-currency>'+['AED','SAR','USD','CNY','EUR'].map(v=>'<option '+(currency===v?'selected':'')+'>'+v+'</option>').join('')+'</select></label></div><label><span>'+esc(tr('رسالة الدفع للعميل','Payment message to customer'))+'</span><textarea data-admin-payment-message maxlength="2000">'+esc(defaultPaymentMessage(x,kind))+'</textarea><small>'+esc(tr('سيشاهد العميل بيانات الحساب والمبلغ داخل الطلب ثم يرفع الإيصال.','The customer will see the account details and amount inside the order, then upload the receipt.'))+'</small></label></section>';
 }
 function interestTrackingEditor(x){
   const current=interestTracking(x);
@@ -255,7 +264,7 @@ async function saveInterestTracking(id){
   const x=(state?.interests||[]).find(item=>item.id===id);if(!x)return;
   const trackingStatus=document.querySelector('[data-admin-interest-tracking-status]')?.value,trackingNote=document.querySelector('[data-admin-interest-tracking-note]')?.value||'';
   const patch={trackingStatus,trackingNote};
-  if(trackingStatus==='payment_confirmation'){const paymentMessage=document.querySelector('[data-admin-payment-message]')?.value.trim()||'';if(!paymentMessage){toast(tr('اكتب رسالة الدفع للعميل.','Add a payment message for the customer.'));return;}patch.paymentMessage=paymentMessage;}
+  if(trackingStatus==='payment_confirmation'){const paymentMessage=document.querySelector('[data-admin-payment-message]')?.value.trim()||'',paymentBankAccountId=document.querySelector('[data-admin-payment-bank]')?.value||'',paymentAmount=document.querySelector('[data-admin-payment-amount]')?.value||'',paymentCurrency=document.querySelector('[data-admin-payment-currency]')?.value||'';if(!paymentMessage){toast(tr('اكتب رسالة الدفع للعميل.','Add a payment message for the customer.'));return;}if(!paymentBankAccountId||!paymentAmount){toast(tr('اختر الحساب البنكي وأدخل مبلغ الدفع.','Choose the bank account and enter the payment amount.'));return;}Object.assign(patch,{paymentMessage,paymentBankAccountId,paymentAmount,paymentCurrency});}
   try{await mutate('interests',x,patch);closeModal();schedule();toast(tr('تم تحديث حالة الطلب.','Order status updated.'));}catch(e){toast(e.message);}
 }
 function trackingEditor(x){
@@ -268,8 +277,23 @@ async function reviewPayment(entityType,id,action){
   if(action==='reupload'&&!note){toast(tr('اكتب سبب طلب إعادة رفع الإيصال.','Add a reason for requesting a new receipt.'));return;}
   try{await api('/api/v1/payment-review',{method:'POST',body:{entityType,entityId:id,version:Number(x.version||0),action,note}});await reload();closeModal();schedule();toast(action==='confirm'?tr('تم تأكيد الدفع.','Payment confirmed.'):tr('تم طلب إعادة رفع الإيصال.','Receipt re-upload requested.'));}catch(e){toast(e.message);}
 }
-async function openAdminPaymentDocument(src){const url=await imageUrl(src);if(!url){toast(tr('تعذر فتح الإيصال.','Could not open receipt.'));return;}window.open(url,'_blank','noopener');}
+async function openAdminPaymentDocument(src){const url=await imageUrl(src);if(!url){toast(tr('تعذر فتح الإيصال.','Could not open receipt.'));return;}modal(tr('إيصال الدفع','Payment receipt'),'PDF','<div class="pdf-preview-wrap"><iframe class="pdf-preview-frame" title="'+esc(tr('إيصال الدفع','Payment receipt'))+'" src="'+esc(url)+'"></iframe><a class="secondary-btn full pdf-fallback-link" href="'+esc(url)+'" target="_self">'+esc(tr('فتح الملف مباشرة','Open file directly'))+'</a></div>');}
 export function openAdminPayment(entityType,id){if(!isAdmin())return;if(entityType==='request')openRecord('request',id);else if(entityType==='interest')openInterest(id);}
+function bankAccountDialog(id=''){
+  const current=bankAccounts().find(x=>x.id===id);
+  modal(current?tr('تعديل الحساب البنكي','Edit bank account'):tr('إضافة حساب بنكي','Add bank account'),'M Platform','<form id="adminBankAccountForm" class="form-stack" data-id="'+esc(current?.id||'')+'"><label><span>'+esc(tr('اسم مختصر للحساب','Account label'))+'</span><input name="label" required maxlength="100" value="'+esc(current?.label||'')+'"></label><label><span>'+esc(tr('اسم المستفيد','Beneficiary'))+'</span><input name="beneficiary" required maxlength="160" value="'+esc(current?.beneficiary||'')+'"></label><label><span>'+esc(tr('اسم البنك','Bank name'))+'</span><input name="bankName" required maxlength="160" value="'+esc(current?.bankName||'')+'"></label><label><span>IBAN</span><input name="iban" maxlength="120" value="'+esc(current?.iban||'')+'"></label><label><span>SWIFT / BIC</span><input name="swift" maxlength="40" value="'+esc(current?.swift||'')+'"></label><label><span>'+esc(tr('رقم الحساب','Account number'))+'</span><input name="accountNumber" maxlength="120" value="'+esc(current?.accountNumber||'')+'"></label><div class="form-two"><label><span>'+esc(tr('الدولة','Country'))+'</span><input name="country" maxlength="100" value="'+esc(current?.country||'')+'"></label><label><span>'+esc(tr('العملة','Currency'))+'</span><select name="currency">'+['AED','SAR','USD','CNY','EUR'].map(v=>'<option '+((current?.currency||'AED')===v?'selected':'')+'>'+v+'</option>').join('')+'</select></label></div><label class="admin-category-toggle-label"><input type="checkbox" name="active" '+(current?.active===false?'':'checked')+'><span>'+esc(tr('الحساب نشط','Account active'))+'</span></label><small>'+esc(tr('يجب إدخال IBAN أو رقم الحساب على الأقل.','Enter at least an IBAN or account number.'))+'</small><button class="primary-btn" type="submit">'+esc(tr('حفظ','Save'))+'</button></form>');
+}
+async function saveBankAccounts(rows){
+  try{await api('/api/v1/settings',{method:'POST',body:{version:Number(state.settings?._version||0),data:{bankAccounts:rows}}});await reload();schedule();toast(tr('تم حفظ الحسابات البنكية.','Bank accounts saved.'));return true;}catch(e){toast(e.message);return false;}
+}
+async function submitBankAccount(form){
+  const id=form.dataset.id||crypto.randomUUID(),rows=bankAccounts(),next={id,label:form.label.value.trim(),beneficiary:form.beneficiary.value.trim(),bankName:form.bankName.value.trim(),iban:form.iban.value.trim(),swift:form.swift.value.trim(),accountNumber:form.accountNumber.value.trim(),country:form.country.value.trim(),currency:form.currency.value,active:form.active.checked};
+  if(!next.iban&&!next.accountNumber){toast(tr('أدخل IBAN أو رقم الحساب.','Enter an IBAN or account number.'));return;}
+  const index=rows.findIndex(x=>x.id===id);if(index>=0)rows[index]={...rows[index],...next};else rows.push(next);
+  if(await saveBankAccounts(rows))closeModal();
+}
+async function toggleBankAccount(id){const rows=bankAccounts(),x=rows.find(a=>a.id===id);if(!x)return;x.active=x.active===false;await saveBankAccounts(rows);}
+async function deleteBankAccount(id){await saveBankAccounts(bankAccounts().filter(x=>x.id!==id));}
 function categoryDialog(id=''){
   const current=categories().find(cat=>cat.id===id);
   modal(current?tr('تعديل التصنيف','Edit category'):tr('إضافة تصنيف','Add category'),'M Platform',`<form id="adminCategoryForm" class="form-stack" data-id="${esc(current?.id||'')}"><label><span>${esc(tr('الاسم بالعربية','Arabic name'))}</span><input name="nameAr" required maxlength="80" value="${esc(current?.nameAr||'')}"></label><label><span>${esc(tr('الاسم بالإنجليزية','English name'))}</span><input name="nameEn" required maxlength="80" value="${esc(current?.nameEn||'')}"></label><label class="admin-category-toggle-label"><input type="checkbox" name="active" ${current?.active===false?'':'checked'}><span>${esc(tr('إظهار التصنيف للعملاء','Show category to customers'))}</span></label><button class="primary-btn" type="submit">${esc(tr('حفظ','Save'))}</button></form>`);
@@ -289,7 +313,7 @@ async function saveTracking(id){
   const x=(state?.requests||[]).find(item=>item.id===id);if(!x)return;
   const trackingStatus=document.querySelector('[data-admin-tracking-status]')?.value,trackingNote=document.querySelector('[data-admin-tracking-note]')?.value||'';
   const patch={trackingStatus,trackingNote};
-  if(trackingStatus==='payment_confirmation'){const paymentMessage=document.querySelector('[data-admin-payment-message]')?.value.trim()||'';if(!paymentMessage){toast(tr('اكتب رسالة الدفع للعميل.','Add a payment message for the customer.'));return;}patch.paymentMessage=paymentMessage;}
+  if(trackingStatus==='payment_confirmation'){const paymentMessage=document.querySelector('[data-admin-payment-message]')?.value.trim()||'',paymentBankAccountId=document.querySelector('[data-admin-payment-bank]')?.value||'',paymentAmount=document.querySelector('[data-admin-payment-amount]')?.value||'',paymentCurrency=document.querySelector('[data-admin-payment-currency]')?.value||'';if(!paymentMessage){toast(tr('اكتب رسالة الدفع للعميل.','Add a payment message for the customer.'));return;}if(!paymentBankAccountId||!paymentAmount){toast(tr('اختر الحساب البنكي وأدخل مبلغ الدفع.','Choose the bank account and enter the payment amount.'));return;}Object.assign(patch,{paymentMessage,paymentBankAccountId,paymentAmount,paymentCurrency});}
   try{await mutate('requests',x,patch);closeModal();schedule();toast(tr('تم تحديث حالة الطلب.','Order status updated.'));}catch(e){toast(e.message);}
 }
 async function savePublicCategory(id){
@@ -299,7 +323,7 @@ async function savePublicCategory(id){
 function openRecord(kind,id){
   const arr=kind==='request'?state?.requests:kind==='quote'?state?.quotes:state?.publicOffers,x=(arr||[]).find(v=>v.id===id);if(!x)return;
   const pending=kind==='request'?x.status==='review':x.status==='pending',editPerm=kind==='request'?'requests.edit':'offers.edit',editImages=pending&&can(editPerm),editTr=pending&&can('translate'),approve=pending&&can('publish'),linked=kind==='quote'?(state?.requests||[]).find(r=>r.id===x.requestId):null;
-  let html=ownerBox(x)+`<section class="admin-source-box"><h3>${esc(tr('المحتوى الأصلي','Original content'))}</h3><strong>${esc(x.product||linked?.product||title(x))}</strong><p>${esc(x.specs||x.notes||'—')}</p>${kind==='request'?`<div class="facts"><span>${esc(tr('الكمية','Quantity'))}: ${esc(x.quantity||'—')}</span><span>${esc(tr('الدولة','Country'))}: ${esc(x.country||'—')}</span><span>${esc(tr('تاريخ الاحتياج','Needed date'))}: ${esc(x.neededDate||'—')}</span></div>`:''}${linked?`<div class="facts"><span>${esc(tr('الطلب المرتبط','Linked request'))}: #${esc(ref(linked))}</span></div>`:''}</section>`;
+  let html=ownerBox(x)+`<section class="admin-source-box"><h3>${esc(tr('المحتوى الأصلي','Original content'))}</h3><strong>${esc(x.product||linked?.product||title(x))}</strong><p>${esc(x.specs||x.notes||'—')}</p>${kind==='request'?`<div class="facts"><span>${esc(tr('الكمية','Quantity'))}: ${esc(x.quantity||'—')}</span><span>${esc(tr('الدولة','Country'))}: ${esc(x.country||'—')}</span><span>${esc(tr('تاريخ الاحتياج','Needed date'))}: ${esc(x.neededDate||'—')}</span></div>${x.repeatedFromRequestId?`<p class="payment-review-note"><b>${esc(tr('طلب مكرر من','Repeated from'))}:</b> #${esc(ref((state?.requests||[]).find(r=>r.id===x.repeatedFromRequestId)||{id:x.repeatedFromRequestId}))}</p>`:''}`:''}${linked?`<div class="facts"><span>${esc(tr('الطلب المرتبط','Linked request'))}: #${esc(ref(linked))}</span></div>`:''}</section>`;
   if(kind==='request'&&(can('requests.edit')||can('publish')))html+=trackingEditor(x);
   if(kind==='public'&&can('offers.edit'))html+=publicOfferEditor(x);
   if(kind!=='public'||!can('offers.edit'))html+=`<section><h3>${esc(tr('الصور','Images'))}</h3>${gallery(x.images||[],editImages)||`<p class="muted">${esc(tr('لا توجد صور.','No images.'))}</p>`}</section><section><h3>${esc(tr('الترجمة','Translation'))}</h3>${translations(x,editTr)}</section>`;
@@ -322,6 +346,10 @@ document.addEventListener('click',e=>{
   const g=e.target.closest('[data-admin-go]');if(g){go(g.dataset.adminGo,g.dataset.adminTabTarget);return;}
   const active=e.target.closest('[data-admin-request-active]');if(active){requestFilter='active';schedule();return;}
   const ot=e.target.closest('[data-admin-offer-tab]');if(ot){offerTab=ot.dataset.adminOfferTab;schedule();return;}
+  const bn=e.target.closest('[data-admin-bank-new]');if(bn){bankAccountDialog();return;}
+  const be=e.target.closest('[data-admin-bank-edit]');if(be){bankAccountDialog(be.dataset.adminBankEdit);return;}
+  const bt=e.target.closest('[data-admin-bank-toggle]');if(bt){toggleBankAccount(bt.dataset.adminBankToggle);return;}
+  const bd=e.target.closest('[data-admin-bank-delete]');if(bd){deleteBankAccount(bd.dataset.adminBankDelete);return;}
   const cn=e.target.closest('[data-admin-category-new]');if(cn){categoryDialog();return;}
   const ce=e.target.closest('[data-admin-category-edit]');if(ce){categoryDialog(ce.dataset.adminCategoryEdit);return;}
   const cm=e.target.closest('[data-admin-category-move]');if(cm){moveCategory(cm.dataset.adminCategoryMove,cm.dataset.direction);return;}
@@ -359,6 +387,7 @@ document.addEventListener('change',e=>{
 });
 document.addEventListener('submit',e=>{
   if(!isAdmin())return;
-  if(e.target.matches('#adminCategoryForm')){e.preventDefault();submitCategory(e.target);}
+  if(e.target.matches('#adminBankAccountForm')){e.preventDefault();submitBankAccount(e.target);}
+  else if(e.target.matches('#adminCategoryForm')){e.preventDefault();submitCategory(e.target);}
   else if(e.target.matches('#adminPublicOfferForm')){e.preventDefault();savePublicOffer(e.target);}
 });
