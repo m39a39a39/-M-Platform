@@ -2144,3 +2144,7 @@ body.image-viewer-open {
   .admin-super-card{grid-template-columns:44px minmax(0,1fr) auto}
   .admin-super-card .avatar{width:44px;height:44px}
 }
+
+.admin-order-overview{display:grid;gap:10px;padding:14px;border:1px solid var(--line,#dfe5ea);border-radius:16px;background:#fff;margin-bottom:12px}
+.admin-order-overview small{display:block;color:var(--muted,#64748b);font-size:11px}.admin-order-overview strong{display:block;margin-top:4px;font-size:16px}
+.admin-order-overview-facts{display:flex;gap:6px;flex-wrap:wrap}.admin-order-overview-facts span{font-size:11px;padding:5px 8px;border-radius:999px;background:var(--soft,#f5f7f9);color:#475569}
