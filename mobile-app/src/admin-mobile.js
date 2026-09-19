@@ -217,17 +217,27 @@ function home(){
     '<section class="section-block"><div class="section-title"><div><h2>'+esc(tr('الأولوية الآن','Priority now'))+'</h2><p>'+esc(tr('أعلى الطلبات التي تحتاج مراجعة أو قرارًا.','Highest-priority orders requiring review or a decision.'))+'</p></div></div><div class="list-stack">'+(priority.map(e=>operationalCard(e,isInspectionReady(e)||needsSupplierConfirmationEntry(e)?'execution':'payment')).join('')||empty())+'</div></section>');
 }
 function requestFilterControls(allRows){
-  const count=s=>allRows.filter(x=>requestTracking(x)===s).length;
-  const active=allRows.filter(x=>!['completed','cancelled'].includes(requestTracking(x))).length;
-  const options=[`<option value="all" ${requestFilter==='all'?'selected':''}>${esc(tr('كل الحالات','All statuses'))} (${allRows.length})</option>`,...TRACKING.map(([key,ar,en])=>`<option value="${key}" ${requestFilter===key?'selected':''}>${esc(tr(ar,en))} (${count(key)})</option>`)].join('');
-  return `<div class="admin-request-filters"><button type="button" data-admin-request-active class="${requestFilter==='active'?'active':''}">${esc(tr('الطلبات النشطة','Active requests'))} (${active})</button><label class="admin-filter-select"><span>${esc(tr('تصفية حسب الحالة','Filter by status'))}</span><select data-admin-request-filter>${options}</select></label></div>`;
+  const count=s=>allRows.filter(x=>x.status===s).length;
+  const active=allRows.filter(x=>!['completed','cancelled'].includes(x.status)).length;
+  const completed=allRows.filter(x=>x.status==='completed').length;
+  const options=['<option value="all" '+(requestFilter==='all'?'selected':'')+'>'+esc(tr('كل الحالات','All statuses'))+' ('+allRows.length+')</option>',
+    ...TRACKING.map(([key,ar,en])=>'<option value="'+key+'" '+(requestFilter===key?'selected':'')+'>'+esc(tr(ar,en))+' ('+count(key)+')</option>')].join('');
+  return '<div class="admin-request-filters"><div class="admin-filter-pills">'+
+    '<button type="button" data-admin-request-active class="'+(requestFilter==='active'?'active':'')+'">'+esc(tr('النشطة','Active'))+' ('+active+')</button>'+
+    '<button type="button" data-admin-request-completed class="'+(requestFilter==='completed'?'active':'')+'">'+esc(tr('المكتملة','Completed'))+' ('+completed+')</button>'+
+    '</div><label class="admin-filter-select"><span>'+esc(tr('تصفية حسب الحالة','Filter by status'))+'</span><select data-admin-request-filter>'+options+'</select></label></div>';
 }
 function requests(){
-  const allRows=(state?.requests||[]).filter(x=>!x.deletedAt&&!x.suspendedAt&&matches(x,'request'));
-  let rows=[...allRows];rows.sort((a,b)=>(a.status==='review'?0:1)-(b.status==='review'?0:1)||String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
-  if(requestFilter==='active')rows=rows.filter(x=>!['completed','cancelled'].includes(requestTracking(x)));
-  else if(requestFilter!=='all')rows=rows.filter(x=>requestTracking(x)===requestFilter);
-  setRoot('requests',page(tr('الطلبات','Requests'),tr('ابحث عن الطلبات وتابعها حسب حالتها.','Search requests and follow them by status.'))+search(tr('ابحث برقم الطلب أو اسم العميل','Search request number or customer'))+requestFilterControls(allRows)+`<div class="list-stack" data-admin-results>${rows.map(x=>row(x,'request')).join('')||empty()}</div>`);
+  const allRows=adminOrderEntries().filter(adminOrderMatches);
+  let rows=[...allRows];
+  if(requestFilter==='active')rows=rows.filter(x=>!['completed','cancelled'].includes(x.status));
+  else if(requestFilter==='completed')rows=rows.filter(x=>x.status==='completed');
+  else if(requestFilter!=='all')rows=rows.filter(x=>x.status===requestFilter);
+  const custom=allRows.filter(x=>x.kind==='request').length,ready=allRows.filter(x=>x.kind==='interest').length;
+  const summary='<div class="admin-order-type-summary"><span>'+esc(tr('طلبات خاصة','Custom requests'))+' <b>'+custom+'</b></span><span>'+esc(tr('طلبات عروض عامة','Public-offer orders'))+' <b>'+ready+'</b></span></div>';
+  setRoot('requests',page(tr('الطلبات','Orders'),tr('كل الطلبات الخاصة وطلبات العروض العامة في مكان واحد.','All custom requests and public-offer orders in one place.'))+
+    search(tr('ابحث برقم الطلب أو اسم العميل','Search order number or customer'))+summary+requestFilterControls(allRows)+
+    '<div class="list-stack" data-admin-results>'+(rows.map(adminOrderCard).join('')||empty())+'</div>');
 }
 function categoryPanel(){
   const rows=categories();
