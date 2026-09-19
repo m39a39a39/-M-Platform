@@ -2082,3 +2082,15 @@ body.image-viewer-open {
 .account-setting-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;border:1px solid var(--line,#dfe5ea);border-radius:14px;margin:12px 0;background:var(--soft,#f7f9fa);text-align:start}
 .account-setting-row small{display:block;color:var(--muted,#64748b);font-size:12px}.account-setting-row strong{display:block;margin-top:3px}
 .account-setting-row .secondary-btn{width:auto;min-width:96px}
+
+
+/* Admin supplier confirmation */
+.admin-supplier-confirmation{display:grid;gap:8px;padding:14px;border:1px solid var(--line,#d9e2ea);border-radius:15px;background:var(--surface,#fff);margin:12px 0}
+.admin-supplier-confirmation-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.admin-supplier-confirmation-head small{display:block;color:var(--muted,#64748b);font-size:12px}
+.admin-supplier-confirmation-head strong{display:block;margin-top:3px}
+.admin-supplier-confirmation-head>span{display:grid;place-items:center;width:32px;height:32px;border-radius:999px;background:#eef2f6;font-weight:900}
+.admin-supplier-confirmation.confirmed{border-color:#b9dfc8;background:#f7fcf9}.admin-supplier-confirmation.confirmed .admin-supplier-confirmation-head>span{background:#e8f5ee;color:#2f7350}
+.admin-supplier-confirmation.blocked{border-color:#efc3c3;background:#fff9f9}.admin-supplier-confirmation.blocked .admin-supplier-confirmation-head>span{background:#faeaea;color:#983d3d}
+.admin-supplier-confirmation p{margin:0;color:#475569}.admin-supplier-confirmation>small{color:var(--muted,#64748b);line-height:1.55}
+.admin-send-to-supplier{margin-bottom:12px;width:100%}
