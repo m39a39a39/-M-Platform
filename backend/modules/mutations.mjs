@@ -100,7 +100,7 @@ export async function mutate(user,body){
   assert(Number(version)===(original?.version||0),409,'تغيّرت البيانات؛ حدّث الصفحة / Refresh after conflict');
   const now=new Date().toISOString();
   let data=structuredClone(original?.data||{}),ownerId=original?.owner_id||user.id;
-  let linkedProductionRequest=null;
+  let linkedProductionRequest=null,linkedInspectionRequest=null;
   const changes=Object.keys(patch),isAdmin=user.role==='admin';
   if(!original){
     assert(collection==='requests'?user.role==='client':collection==='interests'?user.role==='client':user.role==='supplier');
@@ -169,6 +169,7 @@ export async function mutate(user,body){
         if(patch.supplierOrderStatus==='production')assert(r.data.paymentStatus==='confirmed',409,'لا يمكن بدء الإنتاج قبل تأكيد الدفع / Production cannot start before payment is confirmed');
         updateSupplierOrder(data,patch,now);
         if(patch.supplierOrderStatus==='production')linkedProductionRequest=r;
+        if(patch.supplierOrderStatus==='ready_for_inspection')linkedInspectionRequest=r;
       }else{
         assert(changes.length&&changes.every(k=>contentFields.quotes.includes(k)),400,'يمكن تعديل بيانات العرض فقط / Only offer fields can be edited');
         assert(r.data.status==='sent'&&!r.data.selectedQuoteId&&r.data.supplierIds?.includes(user.id),409,'لا يمكن تعديل العرض بعد إغلاق الطلب أو اختيار عرض / Offer cannot be edited after request closure or selection');
@@ -188,6 +189,7 @@ export async function mutate(user,body){
       if(patch.supplierOrderStatus==='production')assert(original.data.paymentStatus==='confirmed',409,'لا يمكن بدء الإنتاج قبل تأكيد الدفع / Production cannot start before payment is confirmed');
       updateSupplierOrder(data,patch,now);
       if(patch.supplierOrderStatus==='production')advanceTracking(data,'production',now);
+      if(patch.supplierOrderStatus==='ready_for_inspection')advanceTracking(data,'quality_check',now);
     }else assert(false,403,'غير مصرح بهذا التعديل / Unauthorized change');
   }else{
     assert(open(original),409);
@@ -241,6 +243,10 @@ export async function mutate(user,body){
     if((collection==='requests'||collection==='interests')&&(changes.includes('trackingStatus')||changes.includes('trackingNote'))){
       setTracking(data,data.trackingStatus||'received',now,changes.includes('trackingNote')?patch.trackingNote:(data.trackingNote||''));
       if(collection==='interests')data.status=data.trackingStatus==='completed'?'completed':data.trackingStatus==='cancelled'?'cancelled':'active';
+      if(changes.includes('trackingStatus')&&patch.trackingStatus==='delivered'){
+        setTracking(data,'completed',now,'');
+        data.status='completed';
+      }
     }
     if((collection==='requests'||collection==='interests')&&changes.includes('trackingStatus')&&patch.trackingStatus==='payment_confirmation'){
       const enteringPayment=original.data.trackingStatus!=='payment_confirmation';
@@ -288,6 +294,13 @@ export async function mutate(user,body){
     if(advanceTracking(requestData,'production',now)){
       requestData.updatedAt=now;
       commitBatch.push({table:'requests',id:linkedProductionRequest.id,version:linkedProductionRequest.version,ownerId:linkedProductionRequest.owner_id,data:requestData,action:'tracking'});
+    }
+  }
+  if(collection==='quotes'&&!isAdmin&&linkedInspectionRequest){
+    const requestData=structuredClone(linkedInspectionRequest.data);
+    if(advanceTracking(requestData,'quality_check',now)){
+      requestData.updatedAt=now;
+      commitBatch.push({table:'requests',id:linkedInspectionRequest.id,version:linkedInspectionRequest.version,ownerId:linkedInspectionRequest.owner_id,data:requestData,action:'tracking'});
     }
   }
   if(collection==='quotes'&&isAdmin&&data.status==='published'&&original?.data.status!=='published'&&original?.request_id){
