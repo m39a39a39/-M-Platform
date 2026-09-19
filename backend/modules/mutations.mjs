@@ -300,7 +300,16 @@ export async function mutate(user,body){
   const commitBatch=[{table,id,version:Number(version),ownerId,requestId:original?.request_id||patch.requestId,offerId:original?.offer_id||patch.offerId,data,action:original?'update':'create'}];
   if(collection==='quotes'&&!isAdmin&&linkedRequestForSupplier&&['production','ready_for_inspection'].includes(supplierOrderTransition)){
     const requestData=structuredClone(linkedRequestForSupplier.data),target=supplierOrderTransition==='production'?'production':'quality_check';
-    if(advanceTracking(requestData,target,now,user.id)){
+    // Supplier production is the source of truth for the production step. Keep later
+    // tracking stages intact, but always move payment-confirmed orders into production
+    // as soon as the supplier starts production.
+    const currentRank=trackingRank(requestData.trackingStatus||'received'),targetRank=trackingRank(target);
+    const changed=supplierOrderTransition==='production'
+      ? (!TRACKING_EXCEPTIONS.includes(requestData.trackingStatus)&&currentRank>=0&&currentRank<targetRank
+          ? (setTracking(requestData,'production',now,'',user.id),true)
+          : false)
+      : advanceTracking(requestData,target,now,user.id);
+    if(changed){
       requestData.updatedAt=now;
       commitBatch.push({table:'requests',id:linkedRequestForSupplier.id,version:linkedRequestForSupplier.version,ownerId:linkedRequestForSupplier.owner_id,data:requestData,action:'tracking'});
     }
