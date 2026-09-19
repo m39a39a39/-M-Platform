@@ -161,18 +161,18 @@ session.onReset(reason=>{
 });
 
 function updateShell(){
-  const role=currentUser?.role||'client',bottom=$('bottomNav'),requestNav=document.querySelector('#bottomNav [data-nav="requests"]'),offersNav=document.querySelector('#bottomNav [data-nav="offers"]'),accountNav=document.querySelector('#bottomNav [data-nav="account"]'),utilityNav=$('navUnread')?.closest('button');
+  const role=currentUser?.role||'client',bottom=$('bottomNav'),requestLabel=document.querySelector('#bottomNav [data-nav="requests"]'),offersLabel=document.querySelector('#bottomNav [data-nav="offers"]'),accountLabel=document.querySelector('#bottomNav [data-nav="account"]'),requestButton=requestLabel?.closest('button'),accountButton=accountLabel?.closest('button'),utilityNav=$('navUnread')?.closest('button');
   $('headerRole').textContent=t(role);
   $('appLangBtn').textContent=lang==='ar'?'EN':'AR';
   const homeLabel=document.querySelector('[data-nav="home"]');if(homeLabel)homeLabel.textContent=t('home');
-  if(requestNav)requestNav.textContent=role==='supplier'?tr('طلبات عروض الأسعار','Quote requests'):t('requests');
-  if(offersNav)offersNav.textContent=t('offers');
-  const accountLabel=document.querySelector('[data-nav="account"]');if(accountLabel)accountLabel.textContent=t('account');
+  if(requestLabel)requestLabel.textContent=role==='supplier'?tr('طلبات عروض الأسعار','Quote requests'):t('requests');
+  if(offersLabel)offersLabel.textContent=t('offers');
+  if(accountLabel)accountLabel.textContent=t('account');
   if(role==='supplier'){
     if(utilityNav){
       utilityNav.dataset.screen='orders';
       const label=utilityNav.querySelector('[data-nav="notifications"]');if(label)label.textContent=tr('الطلبات','Orders');
-      bottom.insertBefore(utilityNav,requestNav);
+      if(requestButton)bottom.insertBefore(utilityNav,requestButton);
     }
     document.querySelector('#bottomNav [data-screen="offers"]')?.classList.remove('hidden');
     $('bottomNav').classList.remove('client-nav');
@@ -181,7 +181,7 @@ function updateShell(){
     if(utilityNav){
       utilityNav.dataset.screen='notifications';
       const label=utilityNav.querySelector('[data-nav="notifications"]');if(label)label.textContent=t('notifications');
-      bottom.insertBefore(utilityNav,accountNav);
+      if(accountButton)bottom.insertBefore(utilityNav,accountButton);
     }
     document.querySelector('#bottomNav [data-screen="offers"]')?.classList.toggle('hidden',role==='client');
     $('bottomNav').classList.toggle('client-nav',role==='client');
