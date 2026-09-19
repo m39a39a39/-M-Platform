@@ -288,7 +288,9 @@ async function deleteCategory(id){await saveCategories(categories().filter(cat=>
 async function saveTracking(id){
   const x=(state?.requests||[]).find(item=>item.id===id);if(!x)return;
   const trackingStatus=document.querySelector('[data-admin-tracking-status]')?.value,trackingNote=document.querySelector('[data-admin-tracking-note]')?.value||'';
-  try{await mutate('requests',x,{trackingStatus,trackingNote});closeModal();schedule();toast(tr('تم تحديث حالة الطلب.','Order status updated.'));}catch(e){toast(e.message);}
+  const patch={trackingStatus,trackingNote};
+  if(trackingStatus==='payment_confirmation'){const paymentMessage=document.querySelector('[data-admin-payment-message]')?.value.trim()||'';if(!paymentMessage){toast(tr('اكتب رسالة الدفع للعميل.','Add a payment message for the customer.'));return;}patch.paymentMessage=paymentMessage;}
+  try{await mutate('requests',x,patch);closeModal();schedule();toast(tr('تم تحديث حالة الطلب.','Order status updated.'));}catch(e){toast(e.message);}
 }
 async function savePublicCategory(id){
   const x=(state?.publicOffers||[]).find(item=>item.id===id),categoryId=document.querySelector('[data-admin-category-select]')?.value||'';if(!x)return;
