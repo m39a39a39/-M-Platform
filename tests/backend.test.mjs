@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {can} from '../backend/modules/auth.mjs';
 import {anonymous,ownRecord} from '../backend/modules/records.mjs';
-import {validateContent,normalizeCategories,TRACKING_STATUSES,READY_TRACKING_STATUSES,requiresRedaction} from '../backend/modules/mutations.mjs';
+import {validateContent,normalizeCategories,TRACKING_FLOW,READY_TRACKING_FLOW,TRACKING_STATUSES,READY_TRACKING_STATUSES,requiresRedaction} from '../backend/modules/mutations.mjs';
 import {decodeImage,decodePaymentReceipt} from '../backend/modules/media.mjs';
 import {notificationPayload} from '../backend/modules/notifications.mjs';
 
@@ -40,7 +40,9 @@ test('categories normalize safely and tracking stages are complete',()=>{
  assert.equal(rows[0].order,0);
  assert.equal(rows[1].active,false);
  assert.throws(()=>normalizeCategories([{id:'x',nameAr:'مكرر',nameEn:'Same'},{id:'y',nameAr:'مكرر',nameEn:'Other'}]));
- for(const status of ['received','reviewing','sourcing','quotes_available','quote_selected','payment_confirmation','production','quality_check','ready_to_ship','shipped','in_delivery','delivered','completed','customer_action','on_hold','cancelled'])assert.ok(TRACKING_STATUSES.includes(status));
+ for(const status of ['received','reviewing','sourcing','quotes_available','quote_selected','supplier_confirmation','payment_confirmation','production','quality_check','ready_to_ship','shipped','delivered','completed','customer_action','on_hold','cancelled'])assert.ok(TRACKING_STATUSES.includes(status));
+ assert.equal(TRACKING_FLOW.includes('in_delivery'),false);
+ assert.equal(TRACKING_STATUSES.includes('in_delivery'),true,'Legacy in_delivery remains readable for old orders');
 });
 
 
@@ -60,9 +62,10 @@ test('tracking-only admin updates never require redaction',()=>{
  assert.equal(requiresRedaction('publicOffers','published',['unitPrice']),true);
 });
 
-test('ready-product requests use fulfillment tracking statuses',()=>{
- const expected=['received','payment_confirmation','production','quality_check','ready_to_ship','shipped','in_delivery','delivered','completed','customer_action','on_hold','cancelled'];
- assert.deepEqual(READY_TRACKING_STATUSES,expected);
+test('ready-product requests use the simplified fulfillment tracking flow',()=>{
+ assert.deepEqual(READY_TRACKING_FLOW,['received','supplier_confirmation','payment_confirmation','production','quality_check','ready_to_ship','shipped','delivered','completed']);
+ assert.equal(READY_TRACKING_FLOW.includes('in_delivery'),false,'New orders skip the ambiguous in-delivery stage');
+ assert.equal(READY_TRACKING_STATUSES.includes('in_delivery'),true,'Legacy in-delivery records remain accepted');
  for(const legacy of ['pending','coordinating','accepted'])assert.equal(READY_TRACKING_STATUSES.includes(legacy),false);
 });
 
