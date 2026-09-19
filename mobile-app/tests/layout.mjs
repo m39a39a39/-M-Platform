@@ -351,6 +351,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
         assert.equal(publicOfferMutation?.redactionConfirmed,true,'Published public offer edits must confirm privacy review');
         publicOfferMutation=null;
         await page.locator('[data-admin-offer-tab="quotes"]').click();
+        await page.locator('[data-admin-open="quote"]').first().waitFor();
         assert.equal(await page.locator('[data-admin-open="quote"]').count()>0,true,'Submitted quotes tab must list supplier quotes');
       }
       if(screen==='operations'&&role==='admin'){
