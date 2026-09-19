@@ -337,6 +337,9 @@ document.addEventListener('click',e=>{
   const sv=e.target.closest('[data-admin-save-review]');if(sv){saveReview(sv.dataset.kind,sv.dataset.id);return;}
   const rr=e.target.closest('[data-admin-reopen-request]');if(rr){requestStatus(rr.dataset.id,'review');return;}
   const cr=e.target.closest('[data-admin-complete-request]');if(cr){requestStatus(cr.dataset.id,'completed');return;}
+  const pc=e.target.closest('[data-admin-payment-confirm]');if(pc){reviewPayment(pc.dataset.entityType,pc.dataset.adminPaymentConfirm,'confirm');return;}
+  const pr=e.target.closest('[data-admin-payment-reupload]');if(pr){reviewPayment(pr.dataset.entityType,pr.dataset.adminPaymentReupload,'reupload');return;}
+  const pd=e.target.closest('[data-admin-payment-document]');if(pd){openAdminPaymentDocument(pd.dataset.adminPaymentDocument);return;}
 });
 document.addEventListener('input',e=>{
   if(!isAdmin()||!e.target.matches('[data-admin-search]'))return;
@@ -348,7 +351,11 @@ document.addEventListener('compositionend',e=>{
 });
 document.addEventListener('change',e=>{
   if(!isAdmin())return;
-  if(e.target.matches('[data-admin-request-filter]')){requestFilter=e.target.value;schedule();}
+  if(e.target.matches('[data-admin-request-filter]')){requestFilter=e.target.value;schedule();return;}
+  if(e.target.matches('[data-admin-tracking-status],[data-admin-interest-tracking-status]')){
+    const field=e.target.closest('.admin-tracking-editor')?.querySelector('.admin-payment-message-field');
+    if(field)field.classList.toggle('hidden',e.target.value!=='payment_confirmation');
+  }
 });
 document.addEventListener('submit',e=>{
   if(!isAdmin())return;
