@@ -367,6 +367,13 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
         assert.equal(await page.locator('[data-admin-interest="i1"]').count(),1,'Payments queue must include a ready-product receipt awaiting review');
         await page.locator('[data-admin-interest="i1"]').click();
         await page.locator('[data-admin-interest-tracking-status]').waitFor();
+        assert.equal(await page.locator('#modal [data-admin-interest-tracking-status] option[value="production"]').count(),1,'Production stage must remain visible in the admin status list');
+        assert.equal(await page.locator('#modal [data-admin-interest-tracking-status] option[value="quality_check"]').count(),1,'Inspection stage must remain visible in the admin status list');
+        assert.equal(await page.locator('#modal [data-admin-interest-tracking-status] option[value="ready_to_ship"]').count(),1,'Ready-to-ship stage must remain visible in the admin status list');
+        assert.equal(await page.locator('#modal [data-admin-interest-tracking-status] option[value="shipped"]').count(),1,'Shipped stage must remain visible in the admin status list');
+        assert.equal(await page.locator('#modal [data-admin-interest-tracking-status] option[value="delivered"]').count(),1,'Delivered stage must remain visible in the admin status list');
+        assert.equal(await page.locator('#modal [data-admin-interest-tracking-status] option[value="completed"]').count(),1,'Completed stage must remain visible in the admin status list');
+        assert.notEqual(await page.locator('#modal [data-admin-interest-tracking-status] option[value="production"]').getAttribute('disabled'),null,'System-managed stages must stay visible but unavailable for manual jumps');
         assert.equal(await page.locator('#modal .admin-selected-quote-card').count(),1,'Public-offer order must show quantity and total');
         assert.equal(await page.locator('#modal .admin-payment-review').count(),1,'Payments queue must open receipt review controls');
         assert.equal(await page.locator('#modal [data-admin-payment-confirm]').count(),1,'Admin must be able to confirm payment');
