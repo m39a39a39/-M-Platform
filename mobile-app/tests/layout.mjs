@@ -324,7 +324,10 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
         assert.equal(await page.locator('#screen .account-setting-row [data-action="toggle-language"]').count(),1,'Customer account must include language setting');
       }
       if(screen==='offers'&&role==='admin'){
-        await page.locator('[data-admin-offer-tab="all"]').click();
+        assert.equal(await page.locator('[data-admin-offer-tab]').count(),2,'Admin Offers must separate submitted quotes and public offers');
+        assert.equal(await page.locator('[data-admin-offer-filter]').count(),2,'Admin Offers must include Pending and All filters');
+        await page.locator('[data-admin-offer-tab="public"]').click();
+        await page.locator('[data-admin-offer-filter="all"]').click();
         await page.locator('[data-admin-open="public"]').first().click();
         await page.locator('#adminPublicOfferForm').waitFor();
         await geometry(page,'#modal');
@@ -332,7 +335,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
         assert.equal(await page.locator('#adminPublicOfferForm input[name="unitPrice"]').count(),1,'Admin must be able to edit public offer price');
         assert.equal(await page.locator('#adminPublicOfferForm select[name="categoryId"]').count(),1,'Admin must be able to edit public offer category');
         assert.equal(await page.locator('#adminPublicOfferForm select[name="status"]').count(),1,'Admin owner must be able to edit publication status');
-        assert.equal(await page.locator('#adminPublicOfferForm #adminPublicFiles[accept="image/*"]').count(),1,'Admin public offer editor must accept large image selections for compression');
+        assert.equal(await page.locator('#adminPublicOfferForm #adminPublicFiles[accept="image/*"]').count(),1,'Admin public offer editor must accept image selections for compression');
         await page.locator('#adminPublicOfferForm input[name="unitPrice"]').fill('19.75');
         await page.locator('#adminPublicOfferForm [data-admin-public-redaction]').check();
         await page.locator('#adminPublicOfferForm button[type="submit"]').click();
@@ -342,28 +345,18 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
         assert.equal(publicOfferMutation?.patch?.images?.length,publicOffers[0].images.length,'Admin public offer edit must preserve selected images');
         assert.equal(publicOfferMutation?.redactionConfirmed,true,'Published public offer edits must confirm privacy review');
         publicOfferMutation=null;
-        await page.locator('[data-admin-offer-tab="interests"]').click();
-        await page.locator('[data-admin-interest="i2"] .list-card-title').click();
+        await page.locator('[data-admin-offer-tab="quotes"]').click();
+        assert.equal(await page.locator('[data-admin-open="quote"]').count()>0,true,'Submitted quotes tab must list supplier quotes');
+      }
+      if(screen==='operations'&&role==='admin'){
+        assert.equal(await page.locator('[data-admin-operation-tab]').count(),3,'Operations must contain Payments, Execution, and Shipping');
+        assert.equal(await page.locator('.admin-operation-stats .stat-card').count(),3,'Operations must show concise work counters');
+        assert.equal(await page.locator('[data-admin-interest="i1"]').count(),1,'Payments queue must include a ready-product receipt awaiting review');
+        await page.locator('[data-admin-interest="i1"]').click();
         await page.locator('[data-admin-interest-tracking-status]').waitFor();
-        assert.equal(await page.locator('#modal .admin-supplier-confirmation.pending').count(),1,'New public-offer order must show supplier confirmation pending');
-        assert.notEqual(await page.locator('#modal [data-admin-interest-tracking-status] option[value="payment_confirmation"]').getAttribute('disabled'),null,'Payment must stay disabled until supplier confirmation');
-        assert.equal(await page.locator('#modal [data-admin-send-interest-supplier]').count(),1,'Admin must have an explicit approve-and-send-to-supplier action');
-        await page.locator('#modal [data-admin-send-interest-supplier]').click();
-        await page.locator('#modal').waitFor({state:'hidden'});
-        assert.equal(interestMutation?.patch?.trackingStatus,'supplier_confirmation','Admin approval must move public offer order to supplier confirmation');
-        interestMutation=null;
-        await page.locator('[data-admin-offer-tab="interests"]').click();
-        await page.locator('[data-admin-interest="i1"] .list-card-title').click();
-        await page.locator('[data-admin-interest-tracking-status]').waitFor();
-        assert.equal(await page.locator('[data-admin-interest-status]').count(),0,'Legacy interest status selector must be removed');
-        assert.equal(await page.locator('[data-admin-interest-tracking-status] option').count(),13,'Ready-product requests must include supplier confirmation plus fulfillment statuses and exceptions');
-        const publicOrderSummary=await page.locator('#modal .admin-selected-quote-card').textContent();
-        assert.ok(publicOrderSummary.includes('600'),'Admin public-offer order must show requested quantity');
-        assert.equal(await page.locator('#modal [data-admin-payment-amount]').inputValue(),'7200','Public-offer total must auto-fill the amount due');
-        assert.equal(await page.locator('#modal [data-admin-payment-currency]').inputValue(),'USD','Public-offer currency must auto-fill from the frozen offer snapshot');
-        assert.equal(await page.locator('#modal .admin-payment-review').count(),1,'Admin must see submitted payment receipt review controls');
+        assert.equal(await page.locator('#modal .admin-selected-quote-card').count(),1,'Public-offer order must show quantity and total');
+        assert.equal(await page.locator('#modal .admin-payment-review').count(),1,'Payments queue must open receipt review controls');
         assert.equal(await page.locator('#modal [data-admin-payment-confirm]').count(),1,'Admin must be able to confirm payment');
-        assert.equal(await page.locator('#modal [data-admin-payment-reupload]').count(),1,'Admin must be able to request a new receipt');
         if(label==='chromium-390-ar-admin'){
           await page.locator('#modal [data-admin-payment-confirm]').click();
           await page.locator('#modal').waitFor({state:'hidden'});
@@ -371,22 +364,24 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
           assert.equal(paymentReviewSubmission?.entityId,'i1','Payment review must target the correct ready-product order');
           assert.equal(paymentReviewSubmission?.action,'confirm','Admin confirm button must submit confirm action');
           paymentReviewSubmission=null;
-          await page.locator('[data-admin-offer-tab="interests"]').click();
-          await page.locator('[data-admin-interest="i1"] .list-card-title').click();
-          await page.locator('[data-admin-interest-tracking-status]').waitFor();
-        }
-        await page.locator('[data-admin-interest-tracking-status]').selectOption('production');
-        await page.locator('[data-admin-interest-tracking-note]').fill('بدأ الإنتاج');
-        await page.locator('[data-admin-save-interest-tracking]').click();
-        await page.locator('#modal').waitFor({state:'hidden'});
-        assert.equal(interestMutation?.collection,'interests','Ready-product tracking must update the interest record');
-        assert.equal(interestMutation?.patch?.trackingStatus,'production','Admin must save the selected ready-product tracking stage');
-        assert.equal(interestMutation?.redactionConfirmed,false,'Tracking-only ready-product updates must not require redaction');
-        interestMutation=null;
-        await page.locator('[data-admin-offer-tab="categories"]').click();
-        await page.locator('[data-admin-category-new]').waitFor();
-        assert.equal(await page.locator('[data-admin-category-new]').count(),1,'Admin categories must allow adding a category');
-        assert.equal(await page.locator('.admin-category-row').count(),3,'Admin categories must list configured categories');
+        }else await page.locator('.modal-close').click();
+        await page.locator('[data-admin-operation-tab="execution"]').click();
+        assert.equal(await page.locator('.admin-operation-card').count()>0,true,'Execution queue must surface supplier/production work');
+        await page.locator('[data-admin-operation-tab="shipping"]').click();
+        assert.equal(await page.locator('.admin-operation-card').count()>0,true,'Shipping queue must surface shipping-stage orders');
+      }
+      if(screen==='more'&&role==='admin'){
+        assert.equal(await page.locator('[data-admin-more-tab]').count(),4,'More must include Customers, Suppliers, Admins, and Settings');
+        assert.equal(await page.locator('.admin-directory [data-admin-account]').count()>0,true,'Customers directory must be available in More');
+        await page.locator('[data-admin-more-tab="suppliers"]').click();
+        assert.equal(await page.locator('.admin-directory [data-admin-account]').count()>0,true,'Suppliers directory must be available in More');
+        await page.locator('[data-admin-more-tab="team"]').click();
+        assert.equal(await page.locator('.admin-super-card').count(),1,'Owner must be shown as protected Super Admin');
+        assert.equal(await page.locator('[data-admin-team-new]').count(),1,'Super Admin must be able to add delegated admins');
+        await page.locator('[data-admin-more-tab="settings"]').click();
+        assert.equal(await page.locator('[data-admin-bank-new]').count(),1,'Settings must include payment bank accounts');
+        assert.equal(await page.locator('[data-admin-category-new]').count(),1,'Settings must include product categories');
+        assert.equal(await page.locator('.admin-category-row').count(),3,'Settings must list configured categories');
       }
       if(screen==='requests'){
         assert.ok(await page.locator('#screen').evaluate(el=>el.scrollHeight>el.clientHeight),'Long list did not scroll');
