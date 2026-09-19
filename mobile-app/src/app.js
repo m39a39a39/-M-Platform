@@ -441,9 +441,7 @@ function supplierOrderActions(order){
 function openSupplierOrder(type,id){
   const order=supplierOrders().find(o=>o.type===type&&o.id===id);if(!order)return;
   const refItem=order.type==='quote'?order.request:order.interest;
-  const summary=order.type==='quote'
-    ?`<div class="supplier-order-summary"><div><span>${esc(tr('سعر الوحدة','Unit price'))}</span><strong>${money(order.unitPrice,order.currency)}</strong></div><div><span>${esc(tr('الكمية','Quantity'))}</span><strong>${esc(order.quantity||'—')}</strong></div><div class="total"><span>${esc(tr('الإجمالي','Total'))}</span><strong>${order.total!==null?money(order.total,order.currency):'—'}</strong></div></div>`
-    :`<div class="supplier-order-summary"><div><span>${esc(tr('سعر الوحدة','Unit price'))}</span><strong>${money(order.unitPrice,order.currency)}</strong></div><div><span>MOQ</span><strong>${esc(order.moq||'—')}</strong></div><div><span>${esc(tr('الدولة','Country'))}</span><strong>${esc(order.country||'—')}</strong></div></div>`;
+  const summary=`<div class="supplier-order-summary"><div><span>${esc(tr('سعر الوحدة','Unit price'))}</span><strong>${money(order.unitPrice,order.currency)}</strong></div><div><span>${esc(tr('الكمية','Quantity'))}</span><strong>${esc(order.quantity||'—')}</strong></div><div class="total"><span>${esc(tr('الإجمالي','Total'))}</span><strong>${order.total!==null?money(order.total,order.currency):'—'}</strong></div></div>`;
   openModal(order.title,`#${ref(refItem)} · ${order.source}`,`${gallery(order.images)}<section class="supplier-order-detail"><div class="supplier-order-detail-head"><div><small>${esc(tr('حالة التنفيذ','Fulfillment status'))}</small>${supplierOrderStatusBadge(order.status)}</div></div>${summary}<h3>${esc(t('specifications'))}</h3><p class="long-copy">${esc(descriptionOf(order.item)||'—')}</p>${order.type==='quote'&&order.country?`<div class="facts"><span>${esc(tr('دولة التسليم','Delivery country'))}: ${esc(order.country)}</span></div>`:''}${supplierOrderActions(order)}</section>`);
 }
 async function updateSupplierOrderStatus(type,id,status,note=''){
