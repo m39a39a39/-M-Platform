@@ -13,7 +13,7 @@ const trackingFlow=['received','reviewing','sourcing','quotes_available','quote_
 const requests = Array.from({ length: 100 }, (_, i) => ({ id: `r${i}`, displayNo: 10001+i, product: titleAr, translation, specs: titleEn, quantity: 1000, country: 'United Arab Emirates', createdAt: '2026-09-17', neededDate: '2026-10-17', images, customerId: 'client', supplierIds: ['supplier'], status: i%2 ? 'sent' : 'review', trackingStatus:trackingFlow[i%trackingFlow.length], trackingUpdatedAt:'2026-09-18', trackingNote:i===0?'المصنع يتوقع اكتمال الإنتاج قريبًا':'', version: 1 }));
 const bankAccounts=[{id:'bank-usd',label:'MIG USD',beneficiary:'MIG COMPANY',bankName:'Fixture Bank',iban:'AE070331234567890123456',swift:'FIXTAEAD',accountNumber:'1234567890',country:'United Arab Emirates',currency:'USD',active:true,order:0},{id:'bank-aed',label:'حساب الإمارات',beneficiary:'MIG COMPANY',bankName:'Fixture Bank AED',iban:'AE090331234567890123457',swift:'FIXTAEAD',accountNumber:'9876543210',country:'United Arab Emirates',currency:'AED',active:true,order:1}];
 requests[0]={...requests[0],status:'sent',trackingStatus:'payment_confirmation',trackingNote:'',selectedQuoteId:'q0',paymentStatus:'awaiting_receipt',paymentMessage:'يرجى تحويل الدفعة الأولى ثم إرفاق إيصال الدفع.',paymentBankAccountId:'bank-usd',paymentBankAccount:bankAccounts[0],paymentAmount:5250,paymentCurrency:'USD',paymentRequestedAt:'2026-09-18'};
-requests[2]={...requests[2],status:'sent',trackingStatus:'supplier_confirmation',selectedQuoteId:'q2',selectedForSupplier:true};
+requests[2]={...requests[2],status:'sent',trackingStatus:'supplier_confirmation',selectedQuoteId:'q2',selectedForSupplier:true,trackingHistory:[{at:'2026-09-18T10:00:00Z',status:'supplier_confirmation',note:'بانتظار تأكيد المورد'}]};
 const categories=[{id:'mobile',nameAr:'إكسسوارات الجوال',nameEn:'Mobile accessories',active:true,order:0},{id:'electronics',nameAr:'إلكترونيات',nameEn:'Electronics',active:true,order:1},{id:'home',nameAr:'المنزل',nameEn:'Home',active:true,order:2}];
 const publicOffers = Array.from({ length: 45 }, (_, i) => ({ id: `p${i}`, displayNo: 10101+i, product: titleAr, translation, specs: titleEn, images: images.slice(0,(i%5)+1), status:'published', supplierId:'supplier', categoryId:categories[i%3].id, currency:'USD', unitPrice:12, moq:500, stock:'2000', leadTime:30 }));
 const quotes = requests.slice(0,4).map((r,i)=>({id:`q${i}`,requestId:r.id,supplierId:'supplier',status:i%2?'pending':'published',unitPrice:10,moq:500,leadTime:20,currency:'USD',images,translation,createdAt:'2026-09-17'}));
@@ -385,7 +385,20 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
       }
       if(screen==='requests'){
         assert.ok(await page.locator('#screen').evaluate(el=>el.scrollHeight>el.clientHeight),'Long list did not scroll');
-        if(role==='admin')assert.equal(await page.locator('[data-admin-request-filter]').count(),1,'Admin requests must include status filter');
+        if(role==='admin'){
+          assert.equal(await page.locator('[data-admin-request-filter]').count(),1,'Admin requests must include status filter');
+          assert.equal(await page.locator('.admin-order-type-summary span').count(),2,'Admin Orders must summarize custom and public-offer orders');
+          assert.equal(await page.locator('[data-admin-interest="i2"]').count(),1,'Admin Orders must include new public-offer orders');
+          await page.locator('[data-admin-interest="i2"]').click();
+          await page.locator('[data-admin-interest-tracking-status]').waitFor();
+          assert.equal(await page.locator('#modal .admin-supplier-confirmation.pending').count(),1,'New public-offer order must show supplier confirmation pending');
+          assert.notEqual(await page.locator('#modal [data-admin-interest-tracking-status] option[value="payment_confirmation"]').getAttribute('disabled'),null,'Payment must remain unavailable until supplier confirmation');
+          assert.equal(await page.locator('#modal [data-admin-send-interest-supplier]').count(),1,'Admin must be able to approve and send a public-offer order to the supplier');
+          await page.locator('#modal [data-admin-send-interest-supplier]').click();
+          await page.locator('#modal').waitFor({state:'hidden'});
+          assert.equal(interestMutation?.patch?.trackingStatus,'supplier_confirmation','Approving a public-offer order must send it to supplier confirmation');
+          interestMutation=null;
+        }
         if(role==='client'){
           assert.equal(await page.locator('#screen .client-order-filters button').count(),3,'My orders must include All, Active, and Completed filters');
           assert.equal(await page.locator('#screen .client-order-card').count(),101,'My orders must combine custom and ready-product orders');
@@ -416,7 +429,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
           assert.ok((await page.locator('#toast').textContent()).toLowerCase().includes(language==='ar'?'تم النسخ':'copied'),'Bank detail copy must work through the iOS-safe fallback');
           assert.equal(await page.locator('#modal [data-repeat-request]').count(),1,'Customer request details must include Repeat request');
         }
-        if(role==='admin'){assert.equal(await page.locator('#modal [data-admin-tracking-status]').count(),1,'Admin request details must include tracking status control');assert.equal(await page.locator('#modal .admin-selected-quote-card:not(.missing)').count(),1,'Admin request details must show the selected quote summary');assert.equal(await page.locator('#modal .admin-supplier-confirmation.confirmed').count(),1,'Admin request details must show supplier fulfillment confirmation before payment');}
+        if(role==='admin'){assert.equal(await page.locator('#modal [data-admin-tracking-status]').count(),1,'Admin request details must include tracking status control');assert.equal(await page.locator('#modal .admin-selected-quote-card:not(.missing)').count(),1,'Admin request details must show the selected quote summary');assert.equal(await page.locator('#modal .admin-supplier-confirmation.confirmed').count(),1,'Admin request details must show supplier fulfillment confirmation before payment');assert.equal(await page.locator('#modal .admin-activity-log').count(),1,'Admin request details must include an activity log');}
         if(role==='supplier')assert.equal(await page.locator('#modal .payment-card,#modal .admin-payment-review').count(),0,'Supplier must never see payment receipt or payment instructions');
         const viewable=page.locator('#modal img[data-image-viewer]').first();
         if(await viewable.count()){
