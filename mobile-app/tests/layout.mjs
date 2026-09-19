@@ -285,10 +285,20 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
       }
       await page.locator('#bottomNav [data-screen="home"]').click();
     }
-    const screens=role==='client'?['home','requests','offers','account']:role==='supplier'?['home','orders','requests','offers','account']:['home','requests','offers','notifications','account'];
+    if(role==='admin'){
+      assert.equal(await page.locator('#bottomNav [data-screen="operations"]:visible').count(),1,'Admin navigation must include Operations');
+      assert.equal(await page.locator('#bottomNav [data-screen="more"]:visible').count(),1,'Admin navigation must include More');
+      assert.equal(await page.locator('#bottomNav [data-screen="notifications"]:visible').count(),0,'Admin notifications must move to the header');
+      assert.equal(await page.locator('#headerNotificationsBtn:not(.hidden)').count(),1,'Admin notification bell must be visible in the header');
+      await page.locator('#headerNotificationsBtn').click();
+      await page.locator('#screen .notification-list').waitFor();
+      await page.locator('#bottomNav [data-screen="home"]').click();
+      await page.locator('[data-admin-root="home"]').waitFor();
+    }
+    const screens=role==='client'?['home','requests','offers','account']:role==='supplier'?['home','orders','requests','offers','account']:['home','requests','offers','operations','more'];
     for(const screen of screens) {
       await page.locator(`#bottomNav [data-screen="${screen}"]`).click();
-      if(role==='admin' && screen!=='notifications') await page.locator(`[data-admin-root="${screen}"]`).waitFor();
+      if(role==='admin') await page.locator(`[data-admin-root="${screen}"]`).waitFor();
       const before=await geometry(page);
       await page.locator('#screen').evaluate(el=>el.scrollTop=el.scrollHeight);
       const after=await geometry(page);
