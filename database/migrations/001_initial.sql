@@ -85,7 +85,7 @@ do $$ declare t text; begin
 end $$;
 grant usage,select on all sequences in schema public to service_role;
 insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
-values('m-private','m-private',false,5242880,array['image/jpeg','image/png','image/webp']);
+values('m-private','m-private',false,5242880,array['image/jpeg','image/png','image/webp','application/pdf']);
 
 -- All writes and audit records in one transaction; optimistic versions prevent
 -- two tabs/users silently overwriting each other or choosing two different quotes.
