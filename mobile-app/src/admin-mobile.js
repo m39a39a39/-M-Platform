@@ -244,19 +244,31 @@ function categoryPanel(){
   return `<section class="admin-category-panel"><div class="section-title"><div><h2>${esc(tr('التصنيفات','Categories'))}</h2><p>${esc(tr('تظهر للعميل كأزرار نصية فوق المنتجات الجاهزة.','Shown to customers as text buttons above ready products.'))}</p></div><button class="primary-small" type="button" data-admin-category-new>+ ${esc(tr('إضافة تصنيف','Add category'))}</button></div><div class="admin-category-list" data-admin-results>${rows.map((cat,i)=>`<article class="admin-category-row"><div><strong>${esc(tr(cat.nameAr,cat.nameEn))}</strong><small>${esc(cat.nameAr)} · ${esc(cat.nameEn)}</small><span class="status-pill ${cat.active!==false?'status-published':'status-cancelled'}">${esc(cat.active!==false?tr('ظاهر','Visible'):tr('مخفي','Hidden'))}</span></div><div class="admin-category-actions"><button type="button" data-admin-category-move="${esc(cat.id)}" data-direction="-1" ${i===0?'disabled':''}>↑</button><button type="button" data-admin-category-move="${esc(cat.id)}" data-direction="1" ${i===rows.length-1?'disabled':''}>↓</button><button type="button" data-admin-category-edit="${esc(cat.id)}">${esc(tr('تعديل','Edit'))}</button><button type="button" data-admin-category-toggle="${esc(cat.id)}">${esc(cat.active!==false?tr('إخفاء','Hide'):tr('إظهار','Show'))}</button><button class="danger-text" type="button" data-admin-category-delete="${esc(cat.id)}">${esc(tr('حذف','Delete'))}</button></div></article>`).join('')||empty()}</div></section>`;
 }
 function offerTabs(){
-  return `<div class="segmented admin-segmented admin-segmented-4"><button class="${offerTab==='pending'?'active':''}" data-admin-offer-tab="pending">${esc(tr('بانتظار الاعتماد','Pending'))}</button><button class="${offerTab==='all'?'active':''}" data-admin-offer-tab="all">${esc(tr('كل العروض','All offers'))}</button><button class="${offerTab==='interests'?'active':''}" data-admin-offer-tab="interests">${esc(tr('الاهتمام','Interest'))}</button><button class="${offerTab==='categories'?'active':''}" data-admin-offer-tab="categories">${esc(tr('التصنيفات','Categories'))}</button></div>`;
+  return '<div class="segmented admin-segmented admin-segmented-2">'+
+    '<button class="'+(offerTab==='quotes'?'active':'')+'" data-admin-offer-tab="quotes">'+esc(tr('العروض المقدمة','Submitted quotes'))+'</button>'+
+    '<button class="'+(offerTab==='public'?'active':'')+'" data-admin-offer-tab="public">'+esc(tr('العروض العامة','Public offers'))+'</button>'+
+  '</div>';
+}
+function offerFilterControls(rows){
+  const pending=rows.filter(x=>x.status==='pending').length;
+  return '<div class="admin-filter-pills admin-offer-filter">'+
+    '<button type="button" class="'+(offerFilter==='pending'?'active':'')+'" data-admin-offer-filter="pending">'+esc(tr('بانتظار الاعتماد','Pending'))+' ('+pending+')</button>'+
+    '<button type="button" class="'+(offerFilter==='all'?'active':'')+'" data-admin-offer-filter="all">'+esc(tr('الكل','All'))+' ('+rows.length+')</button>'+
+  '</div>';
 }
 function offers(){
-  const qs=(state?.quotes||[]).filter(x=>!x.deletedAt).map(x=>({...x,__kind:'quote'})),po=(state?.publicOffers||[]).filter(x=>!x.deletedAt).map(x=>({...x,__kind:'public'})),ints=state?.interests||[];
-  const tabs=offerTabs();
-  if(offerTab==='categories'){setRoot('offers',page(tr('العروض','Offers'),tr('إدارة العروض والتصنيفات.','Manage offers and categories.'))+tabs+categoryPanel());return;}
-  let content='';
-  if(offerTab==='interests'){
-    const rows=ints.filter(x=>matches(x,'interest'));content=rows.map(i=>{const o=(state?.publicOffers||[]).find(x=>x.id===i.offerId),customer=account(i.customerId);return`<article class="list-card admin-interest-card" data-admin-interest="${esc(i.id)}"><div class="list-card-main"><div class="list-card-title"><small>#${esc(ref(o))}</small><h3>${esc(o?title(o):tr('طلب منتج جاهز','Ready-product request'))}</h3></div>${badge(interestTracking(i))}</div><div class="admin-record-meta">${customer?`<span>${esc(customer.company||customer.name||'')}</span>`:''}<span>${esc(tr('الكمية','Quantity'))}: ${esc(i.quantity||'—')}</span>${i.total?`<span>${esc(tr('الإجمالي','Total'))}: ${esc(formatMoney(i.total,i.currency||o?.currency))}</span>`:''}<span>${esc(date(i.createdAt))}</span></div>${o?gallery(o.images||[]):''}<div class="chevron">›</div></article>`;}).join('')||empty();
-  }else{
-    let rows=[...qs,...po].filter(x=>matches(x,x.__kind));rows.sort((a,b)=>(a.status==='pending'?0:1)-(b.status==='pending'?0:1)||String(b.createdAt||'').localeCompare(String(a.createdAt||'')));if(offerTab==='pending')rows=rows.filter(x=>x.status==='pending');content=rows.map(x=>row(x,x.__kind)).join('')||empty();
-  }
-  setRoot('offers',page(tr('العروض','Offers'),tr('مراجعة عروض الموردين والعروض العامة وإدارة طلبات الاهتمام.','Review supplier quotes, public offers, and interest requests.'))+search(tr('ابحث برقم العرض أو اسم المورد','Search offer number or supplier'))+tabs+`<div class="list-stack" data-admin-results>${content}</div>`);
+  const source=offerTab==='public'
+    ?(state?.publicOffers||[]).filter(x=>!x.deletedAt).map(x=>({...x,__kind:'public'}))
+    :(state?.quotes||[]).filter(x=>!x.deletedAt).map(x=>({...x,__kind:'quote'}));
+  let rows=source.filter(x=>matches(x,x.__kind));
+  rows.sort((a,b)=>(a.status==='pending'?0:1)-(b.status==='pending'?0:1)||String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
+  if(offerFilter==='pending')rows=rows.filter(x=>x.status==='pending');
+  const heading=offerTab==='public'?tr('العروض العامة','Public offers'):tr('العروض المقدمة','Submitted quotes');
+  const subtitle=offerTab==='public'?tr('راجع العروض العامة التي يضيفها الموردون قبل نشرها.','Review supplier public offers before publishing.'):tr('راجع العروض التي قدمها الموردون على طلبات العملاء.','Review supplier quotes submitted for customer requests.');
+  setRoot('offers',page(tr('العروض','Offers'),tr('مراجعة واعتماد عروض الموردين من مكان واحد.','Review and approve supplier offers in one place.'))+
+    offerTabs()+search(tr('ابحث برقم العرض أو اسم المورد','Search offer number or supplier'))+
+    '<section class="section-block admin-offer-section"><div class="section-title"><div><h2>'+esc(heading)+'</h2><p>'+esc(subtitle)+'</p></div></div>'+offerFilterControls(source)+
+    '<div class="list-stack" data-admin-results>'+(rows.map(x=>row(x,x.__kind)).join('')||empty())+'</div></section>');
 }
 function bankAccountPanel(){
   if(!can('settings'))return '';
