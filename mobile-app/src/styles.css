@@ -1957,3 +1957,16 @@ body.image-viewer-open {
 .admin-bank-row>div:first-child{display:grid;gap:5px}.admin-bank-row small{color:var(--muted,#6b7280)}
 .admin-payment-message-field{display:grid;gap:12px;padding:12px;border:1px solid var(--line,#e5e7eb);border-radius:14px}.admin-payment-message-field h4{margin:0}
 @media (max-width:520px){.payment-bank-head{display:grid}.payment-amount{text-align:start}.repeat-image-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.admin-bank-row{display:grid}}
+
+
+/* Selected quote payment summary */
+.admin-selected-quote-card{display:grid;gap:12px;padding:14px;border:1px solid var(--line,#d9e2ea);border-radius:16px;background:var(--surface,#fff);margin:12px 0}
+.admin-selected-quote-card.missing{border-style:dashed}
+.admin-selected-quote-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.admin-selected-quote-head small,.admin-selected-quote-values span,.admin-selected-quote-card>small{display:block;color:var(--muted,#6b7280);font-size:12px}
+.admin-selected-quote-head strong{font-size:18px}
+.admin-selected-quote-values{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.admin-selected-quote-values>div{padding:10px;border-radius:12px;background:var(--soft,#f6f8fa);min-width:0}
+.admin-selected-quote-values strong{display:block;margin-top:4px;font-size:15px;overflow-wrap:anywhere}
+.admin-selected-quote-values .total strong{font-size:17px}
+@media (max-width:520px){.admin-selected-quote-values{grid-template-columns:1fr 1fr}.admin-selected-quote-values .total{grid-column:1/-1}}
