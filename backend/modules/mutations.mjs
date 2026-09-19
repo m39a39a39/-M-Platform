@@ -15,11 +15,12 @@ function updateSupplierOrder(data,patch,now,actorId=''){
   data.supplierOrderStatus=next;data.supplierOrderNote=note;data.supplierOrderUpdatedAt=now;
   data.supplierOrderHistory=[...(Array.isArray(data.supplierOrderHistory)?data.supplierOrderHistory:[]),{at:now,status:next,note,actorId}].slice(-100);
 }
-export const TRACKING_FLOW=['received','reviewing','sourcing','quotes_available','quote_selected','supplier_confirmation','payment_confirmation','production','quality_check','ready_to_ship','shipped','in_delivery','delivered','completed'];
-export const READY_TRACKING_FLOW=['received','supplier_confirmation','payment_confirmation','production','quality_check','ready_to_ship','shipped','in_delivery','delivered','completed'];
+export const TRACKING_FLOW=['received','reviewing','sourcing','quotes_available','quote_selected','supplier_confirmation','payment_confirmation','production','quality_check','ready_to_ship','shipped','delivered','completed'];
+export const READY_TRACKING_FLOW=['received','supplier_confirmation','payment_confirmation','production','quality_check','ready_to_ship','shipped','delivered','completed'];
 export const TRACKING_EXCEPTIONS=['customer_action','on_hold','cancelled'];
-export const TRACKING_STATUSES=[...TRACKING_FLOW,...TRACKING_EXCEPTIONS];
-export const READY_TRACKING_STATUSES=[...READY_TRACKING_FLOW,...TRACKING_EXCEPTIONS];
+const LEGACY_TRACKING_STATUSES=['in_delivery'];
+export const TRACKING_STATUSES=[...TRACKING_FLOW,...LEGACY_TRACKING_STATUSES,...TRACKING_EXCEPTIONS];
+export const READY_TRACKING_STATUSES=[...READY_TRACKING_FLOW,...LEGACY_TRACKING_STATUSES,...TRACKING_EXCEPTIONS];
 const trackingRank=s=>TRACKING_FLOW.indexOf(s);
 function setTracking(data,status,now,note='',actorId=''){
   data.trackingStatus=status;data.trackingNote=String(note||'').slice(0,1000);data.trackingUpdatedAt=now;
@@ -100,6 +101,7 @@ export async function mutate(user,body){
   assert(Number(version)===(original?.version||0),409,'تغيّرت البيانات؛ حدّث الصفحة / Refresh after conflict');
   const now=new Date().toISOString();
   let data=structuredClone(original?.data||{}),ownerId=original?.owner_id||user.id;
+  let linkedRequestForSupplier=null,supplierOrderTransition='';
   const changes=Object.keys(patch),isAdmin=user.role==='admin';
   if(!original){
     assert(collection==='requests'?user.role==='client':collection==='interests'?user.role==='client':user.role==='supplier');
@@ -158,6 +160,7 @@ export async function mutate(user,body){
       if(isOrderUpdate){
         assert(r.data.selectedQuoteId===original.id,409,'هذا العرض ليس الطلب المختار / This quote is not the selected order');
         if(patch.supplierOrderStatus==='production')assert(r.data.paymentStatus==='confirmed',409,'لا يمكن بدء الإنتاج قبل تأكيد الدفع / Production cannot start before payment is confirmed');
+        supplierOrderTransition=String(patch.supplierOrderStatus||'');linkedRequestForSupplier=r;
         updateSupplierOrder(data,patch,now,user.id);
       }else{
         assert(changes.length&&changes.every(k=>contentFields.quotes.includes(k)),400,'يمكن تعديل بيانات العرض فقط / Only offer fields can be edited');
@@ -176,7 +179,10 @@ export async function mutate(user,body){
       assert((original.data.trackingStatus||'received')!=='received'&&!['completed','cancelled'].includes(original.data.trackingStatus),409,'الطلب غير جاهز للتنفيذ / Order is not ready for supplier action');
       assert(changes.length&&changes.every(k=>['supplierOrderStatus','supplierOrderNote'].includes(k)),400,'يمكن تحديث حالة التنفيذ فقط / Only fulfillment status can be updated');
       if(patch.supplierOrderStatus==='production')assert(original.data.paymentStatus==='confirmed',409,'لا يمكن بدء الإنتاج قبل تأكيد الدفع / Production cannot start before payment is confirmed');
-      updateSupplierOrder(data,patch,now);
+      supplierOrderTransition=String(patch.supplierOrderStatus||'');
+      updateSupplierOrder(data,patch,now,user.id);
+      if(supplierOrderTransition==='production')advanceTracking(data,'production',now,user.id);
+      if(supplierOrderTransition==='ready_for_inspection')advanceTracking(data,'quality_check',now,user.id);
     }else assert(false,403,'غير مصرح بهذا التعديل / Unauthorized change');
   }else{
     assert(open(original),409);
@@ -227,9 +233,29 @@ export async function mutate(user,body){
         assert(can(user,editPermission));data[key]=patch[key];
       }else assert(false,400,'حقل غير قابل للتعديل / Field not editable');
     }
+    if((collection==='requests'||collection==='interests')&&changes.includes('trackingStatus')){
+      const next=String(patch.trackingStatus||''),current=original.data.trackingStatus||'received';
+      assert(next!=='in_delivery',400,'تم إلغاء حالة قيد التوصيل؛ استخدم تم الشحن ثم تأكيد التسليم / In delivery has been retired; use Shipped then confirm delivery');
+      if(['production','quality_check'].includes(next)&&next!==current)assert(false,409,'هذه المرحلة تتحدث تلقائيًا من إجراء المورد / This stage updates automatically from the supplier action');
+      if(next==='ready_to_ship'&&next!==current){
+        assert(current==='quality_check',409,'اعتمد الفحص أولًا / Complete inspection approval first');
+        if(collection==='requests'){
+          assert(data.selectedQuoteId,409,'لا يوجد عرض مختار / No selected quote');
+          const selectedQuote=await one('quotes',data.selectedQuoteId);
+          assert(selectedQuote?.data?.supplierOrderStatus==='ready_for_inspection',409,'المورد لم يطلب الفحص بعد / Supplier has not requested inspection yet');
+        }else assert(data.supplierOrderStatus==='ready_for_inspection',409,'المورد لم يطلب الفحص بعد / Supplier has not requested inspection yet');
+      }
+      if(next==='shipped'&&next!==current)assert(current==='ready_to_ship',409,'يجب اعتماد الفحص وجعل الطلب جاهزًا للشحن أولًا / Order must be ready to ship first');
+      if(next==='delivered'&&next!==current)assert(['shipped','in_delivery'].includes(current),409,'يجب تأكيد الشحن أولًا / Confirm shipment first');
+      if(next==='completed'&&next!==current)assert(current==='delivered',409,'يجب تأكيد التسليم أولًا / Confirm delivery first');
+    }
     if((collection==='requests'||collection==='interests')&&(changes.includes('trackingStatus')||changes.includes('trackingNote'))){
       setTracking(data,data.trackingStatus||'received',now,changes.includes('trackingNote')?patch.trackingNote:(data.trackingNote||''),user.id);
       if(collection==='interests')data.status=data.trackingStatus==='completed'?'completed':data.trackingStatus==='cancelled'?'cancelled':'active';
+      if(changes.includes('trackingStatus')&&patch.trackingStatus==='delivered'){
+        setTracking(data,'completed',now,'',user.id);
+        data.status='completed';
+      }
     }
     if((collection==='requests'||collection==='interests')&&changes.includes('trackingStatus')&&patch.trackingStatus==='payment_confirmation'){
       const enteringPayment=original.data.trackingStatus!=='payment_confirmation';
@@ -272,6 +298,13 @@ export async function mutate(user,body){
   data.updatedAt=now;
   data.history=[...(original?.data.history||[]),{at:now,status:data.selectedQuoteId&&!original?.data.selectedQuoteId?'selected':data.status}].slice(-200);
   const commitBatch=[{table,id,version:Number(version),ownerId,requestId:original?.request_id||patch.requestId,offerId:original?.offer_id||patch.offerId,data,action:original?'update':'create'}];
+  if(collection==='quotes'&&!isAdmin&&linkedRequestForSupplier&&['production','ready_for_inspection'].includes(supplierOrderTransition)){
+    const requestData=structuredClone(linkedRequestForSupplier.data),target=supplierOrderTransition==='production'?'production':'quality_check';
+    if(advanceTracking(requestData,target,now,user.id)){
+      requestData.updatedAt=now;
+      commitBatch.push({table:'requests',id:linkedRequestForSupplier.id,version:linkedRequestForSupplier.version,ownerId:linkedRequestForSupplier.owner_id,data:requestData,action:'tracking'});
+    }
+  }
   if(collection==='quotes'&&isAdmin&&data.status==='published'&&original?.data.status!=='published'&&original?.request_id){
     const requestRow=await one('requests',original.request_id);
     if(requestRow&&open(requestRow)){
