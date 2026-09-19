@@ -2096,3 +2096,51 @@ body.image-viewer-open {
 .admin-send-to-supplier{margin-bottom:12px;width:100%}
 
 .supplier-order-payment-hint{margin:0 0 2px;padding:10px 12px;border-radius:12px;background:var(--soft,#f5f7f9);color:var(--muted,#64748b);font-size:12px;line-height:1.55}
+
+
+/* Admin control center */
+.admin-now{margin-bottom:14px}
+.admin-now .section-title p,.admin-offer-section .section-title p,.admin-team-panel .section-title p,.admin-directory .section-title p,.admin-activity-log .section-title p{margin:4px 0 0;color:var(--muted,#64748b);font-size:12px}
+.admin-queue-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.admin-queue-card{position:relative;min-height:92px;padding:13px 30px 13px 13px;border:1px solid var(--line,#dfe5ea);border-radius:15px;background:var(--surface,#fff);text-align:start;display:grid;align-content:center;gap:4px}
+[dir="rtl"] .admin-queue-card{padding:13px 13px 13px 30px}
+.admin-queue-card strong{font-size:24px;line-height:1}.admin-queue-card span{font-size:12px;color:var(--muted,#64748b);font-weight:700}
+.admin-queue-card b{position:absolute;inset-inline-end:12px;top:50%;transform:translateY(-50%);font-size:20px;color:#94a3b8}
+.admin-overview-stats{grid-template-columns:repeat(4,minmax(0,1fr));margin:14px 0}
+.admin-order-type-summary{display:flex;gap:7px;flex-wrap:wrap;margin:0 0 12px}
+.admin-order-type-summary span{background:var(--soft,#f5f7f9);border-radius:999px;padding:7px 10px;font-size:12px;color:#475569}
+.admin-order-type-summary b{margin-inline-start:3px}
+.admin-filter-pills{display:flex;gap:7px;flex-wrap:wrap}
+.admin-filter-pills button{border:1px solid var(--line,#d9e2ea);background:#fff;border-radius:999px;padding:8px 11px;font:inherit;font-size:12px;font-weight:800;color:#64748b}
+.admin-filter-pills button.active{background:#eef5f8;color:var(--navy,#17394c);border-color:#c9dce5}
+.admin-request-filters{display:grid;gap:10px;margin-bottom:13px}.admin-offer-filter{margin:0 0 12px}
+.admin-segmented-2{grid-template-columns:repeat(2,minmax(0,1fr))}.admin-segmented-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.admin-operation-stats{grid-template-columns:repeat(3,minmax(0,1fr));margin:12px 0}
+.admin-operation-card{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:13px;border:1px solid var(--line,#dfe5ea);border-radius:15px;background:var(--surface,#fff);cursor:pointer}
+.admin-operation-card small{display:block;color:var(--muted,#64748b);font-size:11px}.admin-operation-card strong{display:block;margin-top:3px}
+.admin-operation-meta{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}.admin-operation-meta span{font-size:11px;padding:4px 7px;border-radius:999px;background:var(--soft,#f5f7f9);color:#64748b}
+.admin-more-tabs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:0 0 14px}
+.admin-more-tabs button{border:1px solid var(--line,#dfe5ea);border-radius:13px;background:#fff;min-height:68px;display:grid;place-items:center;align-content:center;gap:4px;font:inherit;font-weight:800;color:#64748b}
+.admin-more-tabs button.active{background:#eef5f8;color:var(--navy,#17394c);border-color:#c8dde6}.admin-more-tabs span{font-size:11px}
+.admin-super-card{display:grid;grid-template-columns:48px minmax(0,1fr) auto;gap:11px;align-items:center;padding:13px;border:1px solid #b9dfc8;border-radius:16px;background:#f7fcf9;margin-bottom:12px}
+.admin-super-card .avatar{width:48px;height:48px;margin:0}.admin-super-card small{display:block;color:#2f7350;font-weight:800}.admin-super-card strong{display:block;margin-top:2px}.admin-super-card p{margin:5px 0 0;color:#64748b;font-size:12px;line-height:1.5}
+.admin-super-card>span{display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:#e7f5ed;color:#2f7350;font-weight:900}
+.admin-team-list{display:grid;gap:9px}.admin-team-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:12px;border:1px solid var(--line,#dfe5ea);border-radius:14px;background:#fff}
+.admin-team-row small{display:block;color:#64748b;margin-top:3px}.admin-team-row .secondary-btn{width:auto}
+.admin-team-permissions{display:flex;gap:4px;flex-wrap:wrap;margin-top:7px}.admin-team-permissions span{font-size:10px;padding:3px 6px;border-radius:999px;background:var(--soft,#f5f7f9);color:#64748b}
+.admin-permission-grid{display:grid;gap:7px}.admin-permission-check{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:center;padding:10px;border:1px solid var(--line,#dfe5ea);border-radius:12px}
+.admin-permission-check input{width:20px;height:20px}.admin-permission-check strong{display:block}.admin-permission-check small{display:block;color:#64748b;margin-top:2px;font-size:10px}
+.admin-team-identity{padding:12px;border-radius:12px;background:var(--soft,#f5f7f9)}.admin-team-identity strong,.admin-team-identity small{display:block}.admin-team-identity small{color:#64748b;margin-top:3px}
+.admin-team-dialog-actions,.admin-account-controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.admin-team-dialog-actions>*{flex:1}.admin-account-controls>*{flex:1}
+.admin-activity-log{margin-top:14px;padding:14px;border:1px solid var(--line,#dfe5ea);border-radius:16px;background:#fff}
+.admin-activity-list{display:grid;gap:0}.admin-activity-list article{position:relative;display:grid;grid-template-columns:18px minmax(0,1fr);gap:8px;padding:6px 0 12px}
+.admin-activity-list article>span{width:9px;height:9px;border-radius:999px;background:#94a3b8;margin-top:5px;position:relative}
+.admin-activity-list article:not(:last-child)>span:after{content:"";position:absolute;top:11px;bottom:-18px;left:4px;width:1px;background:#d7dee4}
+.admin-activity-list strong{display:block;font-size:13px}.admin-activity-list small{display:block;color:#64748b;margin-top:2px;font-size:11px}.admin-activity-list p{margin:4px 0 0;color:#475569;font-size:12px}
+@media(max-width:520px){
+  .admin-overview-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .admin-operation-stats{grid-template-columns:1fr 1fr}.admin-operation-stats .stat-card:last-child{grid-column:1/-1}
+  .admin-more-tabs{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .admin-super-card{grid-template-columns:44px minmax(0,1fr) auto}
+  .admin-super-card .avatar{width:44px;height:44px}
+}
