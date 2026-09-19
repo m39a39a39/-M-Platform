@@ -27,7 +27,7 @@ export async function submitPaymentReceipt(user,body={}){
   data.paymentReviewNote='';
   data.paymentUpdatedAt=now;
   data.updatedAt=now;
-  data.paymentHistory=paymentHistory(data,{at:now,status:'receipt_submitted'});
+  data.paymentHistory=paymentHistory(data,{at:now,status:'receipt_submitted',actorId:user.id});
   await rpc('commit_changes',{actor:user.id,changes:[{
     table:cfg.table,id:row.id,version:row.version,ownerId:row.owner_id,
     ...(type==='interest'?{offerId:row.offer_id}:{}),
@@ -59,7 +59,7 @@ export async function reviewPaymentReceipt(user,body={}){
   }
   data.paymentUpdatedAt=now;
   data.updatedAt=now;
-  data.paymentHistory=paymentHistory(data,{at:now,status:data.paymentStatus,note:action==='reupload'?note:''});
+  data.paymentHistory=paymentHistory(data,{at:now,status:data.paymentStatus,note:action==='reupload'?note:'',actorId:user.id});
   await rpc('commit_changes',{actor:user.id,changes:[{
     table:cfg.table,id:row.id,version:row.version,ownerId:row.owner_id,
     ...(type==='interest'?{offerId:row.offer_id}:{}),
