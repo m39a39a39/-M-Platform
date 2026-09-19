@@ -100,6 +100,7 @@ export async function mutate(user,body){
   assert(Number(version)===(original?.version||0),409,'تغيّرت البيانات؛ حدّث الصفحة / Refresh after conflict');
   const now=new Date().toISOString();
   let data=structuredClone(original?.data||{}),ownerId=original?.owner_id||user.id;
+  let linkedProductionRequest=null;
   const changes=Object.keys(patch),isAdmin=user.role==='admin';
   if(!original){
     assert(collection==='requests'?user.role==='client':collection==='interests'?user.role==='client':user.role==='supplier');
@@ -167,6 +168,7 @@ export async function mutate(user,body){
         assert(r.data.selectedQuoteId===original.id,409,'هذا العرض ليس الطلب المختار / This quote is not the selected order');
         if(patch.supplierOrderStatus==='production')assert(r.data.paymentStatus==='confirmed',409,'لا يمكن بدء الإنتاج قبل تأكيد الدفع / Production cannot start before payment is confirmed');
         updateSupplierOrder(data,patch,now);
+        if(patch.supplierOrderStatus==='production')linkedProductionRequest=r;
       }else{
         assert(changes.length&&changes.every(k=>contentFields.quotes.includes(k)),400,'يمكن تعديل بيانات العرض فقط / Only offer fields can be edited');
         assert(r.data.status==='sent'&&!r.data.selectedQuoteId&&r.data.supplierIds?.includes(user.id),409,'لا يمكن تعديل العرض بعد إغلاق الطلب أو اختيار عرض / Offer cannot be edited after request closure or selection');
@@ -185,6 +187,7 @@ export async function mutate(user,body){
       assert(changes.length&&changes.every(k=>['supplierOrderStatus','supplierOrderNote'].includes(k)),400,'يمكن تحديث حالة التنفيذ فقط / Only fulfillment status can be updated');
       if(patch.supplierOrderStatus==='production')assert(original.data.paymentStatus==='confirmed',409,'لا يمكن بدء الإنتاج قبل تأكيد الدفع / Production cannot start before payment is confirmed');
       updateSupplierOrder(data,patch,now);
+      if(patch.supplierOrderStatus==='production')advanceTracking(data,'production',now);
     }else assert(false,403,'غير مصرح بهذا التعديل / Unauthorized change');
   }else{
     assert(open(original),409);
@@ -280,6 +283,13 @@ export async function mutate(user,body){
   data.updatedAt=now;
   data.history=[...(original?.data.history||[]),{at:now,status:data.selectedQuoteId&&!original?.data.selectedQuoteId?'selected':data.status}].slice(-200);
   const commitBatch=[{table,id,version:Number(version),ownerId,requestId:original?.request_id||patch.requestId,offerId:original?.offer_id||patch.offerId,data,action:original?'update':'create'}];
+  if(collection==='quotes'&&!isAdmin&&linkedProductionRequest){
+    const requestData=structuredClone(linkedProductionRequest.data);
+    if(advanceTracking(requestData,'production',now)){
+      requestData.updatedAt=now;
+      commitBatch.push({table:'requests',id:linkedProductionRequest.id,version:linkedProductionRequest.version,ownerId:linkedProductionRequest.owner_id,data:requestData,action:'tracking'});
+    }
+  }
   if(collection==='quotes'&&isAdmin&&data.status==='published'&&original?.data.status!=='published'&&original?.request_id){
     const requestRow=await one('requests',original.request_id);
     if(requestRow&&open(requestRow)){
