@@ -34,10 +34,10 @@ const ownerOf=x=>account(x?.customerId||x?.supplierId);
 const title=x=>{const t=x?.translation||{};return(lang()==='ar'?(t.titleAr||t.titleEn):(t.titleEn||t.titleAr))||x?.product||x?.title||`#${ref(x)}`;};
 const desc=x=>{const t=x?.translation||{};return(lang()==='ar'?(t.descriptionAr||t.descriptionEn):(t.descriptionEn||t.descriptionAr))||x?.specs||x?.notes||'';};
 const TRACKING=[
- ['received','تم استلام الطلب','Request received'],['reviewing','قيد المراجعة','Under review'],['sourcing','البحث عن موردين','Finding suppliers'],['quotes_available','العروض متاحة','Offers available'],['quote_selected','تم اختيار العرض','Offer selected'],['supplier_confirmation','بانتظار تأكيد المورد','Awaiting supplier confirmation'],['payment_confirmation','تأكيد الطلب والدفع','Order & payment confirmation'],['production','قيد الإنتاج','In production'],['quality_check','الفحص والجودة','Quality inspection'],['ready_to_ship','جاهز للشحن','Ready to ship'],['shipped','تم الشحن','Shipped'],['in_delivery','قيد التوصيل','In delivery'],['delivered','تم التسليم','Delivered'],['completed','مكتمل','Completed'],['customer_action','بانتظار إجراء من العميل','Waiting for customer action'],['on_hold','معلق','On hold'],['cancelled','ملغي','Cancelled']
+ ['received','تم استلام الطلب','Request received'],['reviewing','قيد المراجعة','Under review'],['sourcing','البحث عن موردين','Finding suppliers'],['quotes_available','العروض متاحة','Offers available'],['quote_selected','تم اختيار العرض','Offer selected'],['supplier_confirmation','بانتظار تأكيد المورد','Awaiting supplier confirmation'],['payment_confirmation','تأكيد الطلب والدفع','Order & payment confirmation'],['production','قيد الإنتاج','In production'],['quality_check','بانتظار اعتماد الفحص','Inspection pending approval'],['ready_to_ship','جاهز للشحن','Ready to ship'],['shipped','تم الشحن','Shipped'],['delivered','تم التسليم','Delivered'],['completed','مكتمل','Completed'],['customer_action','بانتظار إجراء من العميل','Waiting for customer action'],['on_hold','معلق','On hold'],['cancelled','ملغي','Cancelled']
 ];
 const READY_TRACKING=[
- ['received','تم استلام الطلب','Request received'],['supplier_confirmation','بانتظار تأكيد المورد','Awaiting supplier confirmation'],['payment_confirmation','تأكيد الطلب والدفع','Order & payment confirmation'],['production','قيد الإنتاج','In production'],['quality_check','الفحص والجودة','Quality inspection'],['ready_to_ship','جاهز للشحن','Ready to ship'],['shipped','تم الشحن','Shipped'],['in_delivery','قيد التوصيل','In delivery'],['delivered','تم التسليم','Delivered'],['completed','مكتمل','Completed'],['customer_action','بانتظار إجراء من العميل','Waiting for customer action'],['on_hold','معلق','On hold'],['cancelled','ملغي','Cancelled']
+ ['received','تم استلام الطلب','Request received'],['supplier_confirmation','بانتظار تأكيد المورد','Awaiting supplier confirmation'],['payment_confirmation','تأكيد الطلب والدفع','Order & payment confirmation'],['production','قيد الإنتاج','In production'],['quality_check','بانتظار اعتماد الفحص','Inspection pending approval'],['ready_to_ship','جاهز للشحن','Ready to ship'],['shipped','تم الشحن','Shipped'],['delivered','تم التسليم','Delivered'],['completed','مكتمل','Completed'],['customer_action','بانتظار إجراء من العميل','Waiting for customer action'],['on_hold','معلق','On hold'],['cancelled','ملغي','Cancelled']
 ];
 const status=s=>({review:tr('قيد المراجعة','Under review'),sent:tr('تم الإرسال للموردين','Sent to suppliers'),completed:tr('مكتمل','Completed'),pending:tr('قيد المراجعة','Under review'),published:tr('منشور','Published'),coordinating:tr('قيد التنسيق','Coordinating'),accepted:tr('مقبول','Accepted'),cancelled:tr('ملغي','Cancelled'),pending_confirmation:tr('بانتظار تأكيد المورد','Awaiting supplier confirmation'),confirmed:tr('أكد المورد التنفيذ','Supplier confirmed'),ready_for_inspection:tr('جاهز للفحص','Ready for inspection'),cannot_fulfill:tr('تعذر التنفيذ','Unable to fulfill'),awaiting_receipt:tr('بانتظار الإيصال','Awaiting receipt'),receipt_submitted:tr('إيصال بانتظار المراجعة','Receipt awaiting review'),reupload_requested:tr('إعادة رفع الإيصال مطلوبة','Receipt re-upload requested'),...Object.fromEntries(TRACKING.map(x=>[x[0],tr(x[1],x[2])]))})[s]||s||'—';
 const requestTracking=x=>x?.trackingStatus||(x?.status==='completed'?'completed':x?.selectedQuoteId?'quote_selected':x?.status==='sent'?'sourcing':'received');
@@ -84,8 +84,32 @@ function supplierConfirmationCard(x,kind){
   },row=labels[info.status]||labels.pending_confirmation;
   return '<section class="admin-supplier-confirmation '+esc(row[1])+'"><div class="admin-supplier-confirmation-head"><div><small>'+esc(tr('تأكيد المورد','Supplier confirmation'))+'</small><strong>'+esc(row[0])+'</strong></div><span>'+esc(info.confirmed?'✓':info.status==='cannot_fulfill'?'✕':'…')+'</span></div>'+(info.note?'<p><b>'+esc(tr('ملاحظة المورد','Supplier note'))+':</b> '+esc(info.note)+'</p>':'')+'<small>'+esc(info.confirmed?tr('يمكن الآن الانتقال إلى تأكيد الطلب والدفع.','The order can now move to payment confirmation.'):info.status==='cannot_fulfill'?tr('لا يمكن الانتقال للدفع. راجع سبب تعذر التنفيذ.','Payment cannot start. Review the supplier reason.'):tr('تأكيد الطلب والدفع سيبقى غير متاح حتى يؤكد المورد التنفيذ.','Payment confirmation remains unavailable until the supplier confirms fulfillment.'))+'</small></section>';
 }
+const SYSTEM_MANAGED_TRACKING=new Set(['production','quality_check','ready_to_ship','shipped','in_delivery','delivered','completed']);
 function trackingOptions(rows,current,canPay){
-  return rows.map(([key,ar,en])=>'<option value="'+key+'" '+(current===key?'selected':'')+' '+(key==='payment_confirmation'&&!canPay&&current!=='payment_confirmation'?'disabled':'')+'>'+esc(tr(ar,en))+'</option>').join('');
+  const managed=SYSTEM_MANAGED_TRACKING.has(current);
+  return rows.filter(([key])=>managed?(key===current||['customer_action','on_hold','cancelled'].includes(key)):(!SYSTEM_MANAGED_TRACKING.has(key)||key===current))
+    .map(([key,ar,en])=>'<option value="'+key+'" '+(current===key?'selected':'')+' '+(key==='payment_confirmation'&&!canPay&&current!=='payment_confirmation'?'disabled':'')+'>'+esc(tr(ar,en))+'</option>').join('');
+}
+function adminStageActionPanel(x,kind){
+  const current=kind==='request'?requestTracking(x):interestTracking(x),supplier=supplierExecutionInfo(x,kind);
+  let target='',label='',note='';
+  if(current==='quality_check'&&supplier.status==='ready_for_inspection'){
+    target='ready_to_ship';label=tr('اعتماد الفحص — جاهز للشحن','Approve inspection — Ready to ship');note=tr('بعد الاعتماد سينتقل الطلب تلقائيًا إلى قسم الشحن.','After approval, the order moves automatically to Shipping.');
+  }else if(current==='ready_to_ship'){
+    target='shipped';label=tr('تأكيد الشحن','Confirm shipment');note=tr('بعد التأكيد يظهر الطلب ضمن الطلبات المشحونة، ويصبح مكتملًا لدى المورد.','After confirmation, the order appears as shipped and becomes completed for the supplier.');
+  }else if(current==='shipped'||current==='in_delivery'){
+    target='delivered';label=tr('تأكيد التسليم وإكمال الطلب','Confirm delivery & complete order');note=tr('سيتم إكمال الطلب تلقائيًا بعد تأكيد التسليم.','The order will complete automatically after delivery confirmation.');
+  }
+  if(!target)return '';
+  return '<section class="admin-stage-action"><div><small>'+esc(tr('الإجراء التالي','Next action'))+'</small><strong>'+esc(label)+'</strong><p>'+esc(note)+'</p></div><button class="primary-btn" type="button" data-admin-stage-action data-kind="'+esc(kind)+'" data-id="'+esc(x.id)+'" data-target="'+esc(target)+'">'+esc(label)+'</button></section>';
+}
+async function advanceAdminStage(kind,id,target){
+  const rows=kind==='request'?(state?.requests||[]):(state?.interests||[]),x=rows.find(v=>v.id===id);if(!x)return;
+  try{
+    await mutate(kind==='request'?'requests':'interests',x,{trackingStatus:target,trackingNote:''});
+    closeModal();schedule();
+    toast(target==='ready_to_ship'?tr('تم اعتماد الفحص ونقل الطلب إلى جاهز للشحن.','Inspection approved; order moved to Ready to ship.'):target==='shipped'?tr('تم تأكيد الشحن ونقل الطلب إلى الطلبات المشحونة.','Shipment confirmed; order moved to Shipped.'):tr('تم تأكيد التسليم وإكمال الطلب.','Delivery confirmed and order completed.'));
+  }catch(e){toast(e.message);}
 }
 
 
@@ -171,6 +195,7 @@ function needsSupplierConfirmationEntry(entry){
   return entry.status==='supplier_confirmation'||(entry.kind==='request'&&entry.entity.selectedQuoteId&&selectedSupplierStatus(entry.entity)==='pending_confirmation')||(entry.kind==='interest'&&entry.entity.supplierOrderStatus==='pending_confirmation'&&entry.status!=='received');
 }
 function isInspectionReady(entry){
+  if(entry.status!=='quality_check')return false;
   return entry.kind==='request'?selectedSupplierStatus(entry.entity)==='ready_for_inspection':entry.entity.supplierOrderStatus==='ready_for_inspection';
 }
 function isExecutionProblem(entry){
@@ -179,7 +204,7 @@ function isExecutionProblem(entry){
 }
 function operationalCard(entry,context=''){
   const x=entry.entity,customer=entry.customer?.company||entry.customer?.name||'',payment=x.paymentStatus?status(x.paymentStatus):'',supplierStatus=entry.kind==='request'?selectedSupplierStatus(x):x.supplierOrderStatus;
-  const details=[entry.typeLabel,customer,context==='payment'&&payment?payment:'',context==='execution'&&supplierStatus?status(supplierStatus):'',date(entry.updatedAt)].filter(Boolean);
+  const details=[entry.typeLabel,customer,context==='payment'&&payment?payment:'',context==='execution'&&supplierStatus?status(supplierStatus):'',context==='shipping'?status(entry.status):'',date(entry.updatedAt)].filter(Boolean);
   const action=entry.kind==='request'?'data-admin-open="request" data-admin-id="'+esc(x.id)+'"':'data-admin-interest="'+esc(x.id)+'"';
   return '<article class="admin-operation-card" '+action+'><div><small>#'+esc(ref(x))+'</small><strong>'+esc(entry.title)+'</strong><div class="admin-operation-meta">'+details.map(v=>'<span>'+esc(v)+'</span>').join('')+'</div></div><span class="chevron">›</span></article>';
 }
@@ -297,17 +322,17 @@ function operations(){
     rows=entries.filter(e=>e.entity.paymentStatus||e.status==='payment_confirmation').sort((a,b)=>(needsPaymentReview(b.entity)?1:0)-(needsPaymentReview(a.entity)?1:0)||(Date.parse(b.updatedAt||0)||0)-(Date.parse(a.updatedAt||0)||0));
     titleText=tr('المدفوعات','Payments');subtitle=tr('راجع الإيصالات وحالات الدفع لجميع الطلبات.','Review receipts and payment states for all orders.');
   }else if(operationTab==='shipping'){
-    rows=entries.filter(e=>['ready_to_ship','shipped','in_delivery','delivered'].includes(e.status));
-    titleText=tr('الشحن','Shipping');subtitle=tr('الطلبات الجاهزة للشحن والمشحونة وقيد التوصيل.','Orders ready to ship, shipped, or in delivery.');
+    rows=entries.filter(e=>['ready_to_ship','shipped','in_delivery'].includes(e.status));
+    titleText=tr('الشحن','Shipping');subtitle=tr('جاهز للشحن ثم تم الشحن. بعد تأكيد التسليم يُغلق الطلب تلقائيًا.','Ready to ship, then Shipped. Delivery confirmation completes the order automatically.');
   }else{
-    rows=entries.filter(e=>needsSupplierConfirmationEntry(e)||isInspectionReady(e)||isExecutionProblem(e)||['production','quality_check','ready_to_ship'].includes(e.status));
+    rows=entries.filter(e=>needsSupplierConfirmationEntry(e)||isInspectionReady(e)||isExecutionProblem(e)||['production','quality_check'].includes(e.status));
     titleText=tr('التنفيذ والفحص','Execution & inspection');subtitle=tr('متابعة تأكيد المورد والإنتاج والفحص والمشاكل التشغيلية.','Track supplier confirmation, production, inspection, and execution issues.');
   }
   const paymentReview=entries.filter(e=>needsPaymentReview(e.entity)).length,inspection=entries.filter(isInspectionReady).length,problems=entries.filter(isExecutionProblem).length;
   const stats='<div class="stats-grid admin-operation-stats"><div class="stat-card"><strong>'+paymentReview+'</strong><span>'+esc(tr('إيصالات للمراجعة','Receipts to review'))+'</span></div><div class="stat-card"><strong>'+inspection+'</strong><span>'+esc(tr('جاهز للفحص','Ready for inspection'))+'</span></div><div class="stat-card"><strong>'+problems+'</strong><span>'+esc(tr('مشاكل','Issues'))+'</span></div></div>';
   setRoot('operations',page(tr('العمليات','Operations'),tr('المدفوعات والتنفيذ والفحص والشحن في مساحة عمل واحدة.','Payments, execution, inspection, and shipping in one workspace.'))+
     operationTabs()+stats+search(tr('ابحث برقم الطلب أو العميل','Search order or customer'))+
-    '<section class="section-block"><div class="section-title"><div><h2>'+esc(titleText)+'</h2><p>'+esc(subtitle)+'</p></div></div><div class="list-stack" data-admin-results>'+(rows.map(e=>operationalCard(e,operationTab==='payments'?'payment':'execution')).join('')||empty())+'</div></section>');
+    '<section class="section-block"><div class="section-title"><div><h2>'+esc(titleText)+'</h2><p>'+esc(subtitle)+'</p></div></div><div class="list-stack" data-admin-results>'+(rows.map(e=>operationalCard(e,operationTab==='payments'?'payment':operationTab==='shipping'?'shipping':'execution')).join('')||empty())+'</div></section>');
 }
 function directoryPanel(role){
   const rows=(state?.accounts||[]).filter(a=>a.role===role&&!a.deletedAt&&matches(a,'account'));
@@ -495,7 +520,7 @@ function openInterest(id){
   const offer=(state?.publicOffers||[]).find(o=>o.id===x.offerId),customer=account(x.customerId);
   const pricing=interestPricing(x);
   const orderSummary=pricing?'<section class="admin-selected-quote-card"><div class="admin-selected-quote-head"><div><small>'+esc(tr('طلب العرض العام','Public-offer order'))+'</small><strong>#'+esc(ref(x))+'</strong></div><span class="status-pill status-published">'+esc(tr('الكمية محددة','Quantity selected'))+'</span></div><div class="admin-selected-quote-values"><div><span>'+esc(tr('سعر الوحدة','Unit price'))+'</span><strong>'+esc(formatMoney(pricing.unitPrice,pricing.currency))+'</strong></div><div><span>'+esc(tr('الكمية','Quantity'))+'</span><strong>'+esc(Number(pricing.quantity).toLocaleString())+'</strong></div><div class="total"><span>'+esc(tr('الإجمالي','Total'))+'</span><strong>'+esc(formatMoney(pricing.total,pricing.currency))+'</strong></div></div><small>'+esc(tr('تم تثبيت السعر والعملة وقت تقديم العميل للطلب.','Price and currency were captured when the customer placed the request.'))+'</small></section>':'';
-  const html=(customer?'<section class="admin-owner-box"><strong>'+esc(tr('العميل','Customer'))+'</strong><p>'+esc(customer.company||customer.name||'—')+'</p>'+(can('accounts.read')?'<small>'+esc(customer.name||'')+(customer.phone?' · '+esc(customer.phone):'')+(customer.email?' · '+esc(customer.email):'')+'</small>':'')+'</section>':'')+orderSummary+supplierConfirmationCard(x,'interest')+interestTrackingEditor(x)+(offer?'<section class="admin-source-box"><h3>'+esc(tr('المنتج','Product'))+'</h3><strong>'+esc(title(offer))+'</strong><p>'+esc(desc(offer)||'—')+'</p></section>'+gallery(offer.images||[]):'')+activityLog(x,'interest');
+  const html=(customer?'<section class="admin-owner-box"><strong>'+esc(tr('العميل','Customer'))+'</strong><p>'+esc(customer.company||customer.name||'—')+'</p>'+(can('accounts.read')?'<small>'+esc(customer.name||'')+(customer.phone?' · '+esc(customer.phone):'')+(customer.email?' · '+esc(customer.email):'')+'</small>':'')+'</section>':'')+orderSummary+supplierConfirmationCard(x,'interest')+adminStageActionPanel(x,'interest')+interestTrackingEditor(x)+(offer?'<section class="admin-source-box"><h3>'+esc(tr('المنتج','Product'))+'</h3><strong>'+esc(title(offer))+'</strong><p>'+esc(desc(offer)||'—')+'</p></section>'+gallery(offer.images||[]):'')+activityLog(x,'interest');
   modal(offer?title(offer):tr('طلب منتج جاهز','Ready-product request'),'#'+ref(offer),html);
 }
 async function saveInterestTracking(id){
@@ -566,7 +591,7 @@ function openRecord(kind,id){
   const arr=kind==='request'?state?.requests:kind==='quote'?state?.quotes:state?.publicOffers,x=(arr||[]).find(v=>v.id===id);if(!x)return;
   const pending=kind==='request'?x.status==='review':x.status==='pending',editPerm=kind==='request'?'requests.edit':'offers.edit',editImages=pending&&can(editPerm),editTr=pending&&can('translate'),approve=pending&&can('publish'),linked=kind==='quote'?(state?.requests||[]).find(r=>r.id===x.requestId):null;
   let html=(kind==='request'?adminRequestOverview(x):'')+ownerBox(x)+`<section class="admin-source-box"><h3>${esc(tr('المحتوى الأصلي','Original content'))}</h3><strong>${esc(x.product||linked?.product||title(x))}</strong><p>${esc(x.specs||x.notes||'—')}</p>${kind==='request'?`<div class="facts"><span>${esc(tr('الكمية','Quantity'))}: ${esc(x.quantity||'—')}</span><span>${esc(tr('الدولة','Country'))}: ${esc(x.country||'—')}</span><span>${esc(tr('تاريخ الاحتياج','Needed date'))}: ${esc(x.neededDate||'—')}</span></div>${x.repeatedFromRequestId?`<p class="payment-review-note"><b>${esc(tr('طلب مكرر من','Repeated from'))}:</b> #${esc(ref((state?.requests||[]).find(r=>r.id===x.repeatedFromRequestId)||{id:x.repeatedFromRequestId}))}</p>`:''}`:''}${linked?`<div class="facts"><span>${esc(tr('الطلب المرتبط','Linked request'))}: #${esc(ref(linked))}</span></div>`:''}</section>`;
-  if(kind==='request'&&(can('requests.edit')||can('publish')))html+=selectedQuoteCard(x)+supplierConfirmationCard(x,'request')+trackingEditor(x);
+  if(kind==='request'&&(can('requests.edit')||can('publish')))html+=selectedQuoteCard(x)+supplierConfirmationCard(x,'request')+adminStageActionPanel(x,'request')+trackingEditor(x);
   if(kind==='public'&&can('offers.edit'))html+=publicOfferEditor(x);
   if(kind!=='public'||!can('offers.edit'))html+=`<section><h3>${esc(tr('الصور','Images'))}</h3>${gallery(x.images||[],editImages)||`<p class="muted">${esc(tr('لا توجد صور.','No images.'))}</p>`}</section><section><h3>${esc(tr('الترجمة','Translation'))}</h3>${translations(x,editTr)}</section>`;
   if(kind==='request'&&pending&&can('publish'))html+=supplierPicker(x);
@@ -640,6 +665,7 @@ document.addEventListener('click',e=>{
   const of=e.target.closest('[data-admin-offer-filter]');if(of){offerFilter=of.dataset.adminOfferFilter;render();return;}
   const op=e.target.closest('[data-admin-operation-tab]');if(op){operationTab=op.dataset.adminOperationTab;render();return;}
   const mt=e.target.closest('[data-admin-more-tab]');if(mt){moreTab=mt.dataset.adminMoreTab;render();return;}
+  const stage=e.target.closest('[data-admin-stage-action]');if(stage){advanceAdminStage(stage.dataset.kind,stage.dataset.id,stage.dataset.target);return;}
   const tn=e.target.closest('[data-admin-team-new]');if(tn){teamDialog();return;}
   const te=e.target.closest('[data-admin-team-edit]');if(te){teamDialog(te.dataset.adminTeamEdit);return;}
   const tt=e.target.closest('[data-admin-team-toggle]');if(tt){toggleTeam(tt.dataset.adminTeamToggle,tt.dataset.action);return;}
