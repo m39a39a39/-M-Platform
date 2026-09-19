@@ -206,7 +206,19 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
       assert.equal(await page.locator('#modal .tracking-step').count(),9,'Ready-product timeline must use the simplified fulfillment stages');
       assert.equal(await page.locator('#modal .payment-card').count(),1,'Ready-product payment status must appear inside the order');
       assert.ok((await page.locator('#modal .payment-card').textContent()).includes(language==='ar'?'بانتظار المراجعة':'awaiting review'),'Submitted ready-product receipt must show as awaiting review');
-      await page.locator('.modal-close').click();
+      assert.equal(await page.locator('#modal [data-repeat-public-order="i1"]').count(),1,'Ready-product order details must include Repeat order');
+      if(label==='chromium-390-ar-client'){
+        await page.locator('#modal [data-repeat-public-order="i1"]').click();
+        await page.locator('#publicInterestForm[data-repeat-from="i1"]').waitFor();
+        assert.equal(await page.locator('#publicInterestQuantity').inputValue(),'600','Repeated public-offer order must prefill the previous quantity');
+        await page.locator('#publicInterestQuantity').fill('650');
+        await page.locator('#publicInterestForm button[type="submit"]').click();
+        await page.locator('#modal').waitFor({state:'hidden'});
+        assert.equal(interestMutation?.patch?.repeatedFromInterestId,'i1','Repeated public-offer order must reference the previous order');
+        assert.equal(Number(interestMutation?.patch?.quantity),650,'Repeated public-offer order must allow a new quantity');
+        interestMutation=null;
+        await page.locator('#bottomNav [data-screen="home"]').click();
+      }else await page.locator('.modal-close').click();
 
       const secondOffer=page.locator('.public-offer-card').nth(1);
       await secondOffer.locator('.public-offer-content').click();
@@ -435,7 +447,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
           assert.equal(await page.locator('#screen .client-order-filters button').count(),3,'My orders must include All, Active, and Completed filters');
           assert.equal(await page.locator('#screen .client-order-card').count(),101,'My orders must combine custom and ready-product orders');
           assert.equal(await page.locator('#screen [data-request]').count(),100,'Custom requests must remain accessible inside My orders');
-          assert.equal(await page.locator('#screen [data-public-offer]').count(),1,'Ready-product orders must remain accessible inside My orders');
+          assert.equal(await page.locator('#screen [data-ready-order]').count(),1,'Ready-product orders must remain accessible inside My orders');
           await page.locator('#screen [data-client-order-filter="active"]').click();
           assert.ok(await page.locator('#screen .client-order-card').count()>0,'Active filter must show active orders');
           await page.locator('#screen [data-client-order-filter="all"]').click();
