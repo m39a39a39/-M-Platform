@@ -578,7 +578,11 @@ document.addEventListener('click',e=>{
   if(!isAdmin()||document.getElementById('appView').classList.contains('hidden'))return;
   const g=e.target.closest('[data-admin-go]');if(g){go(g.dataset.adminGo,g.dataset.adminTabTarget);return;}
   const active=e.target.closest('[data-admin-request-active]');if(active){requestFilter='active';schedule();return;}
-  const ot=e.target.closest('[data-admin-offer-tab]');if(ot){offerTab=ot.dataset.adminOfferTab;schedule();return;}
+  const completed=e.target.closest('[data-admin-request-completed]');if(completed){requestFilter='completed';schedule();return;}
+  const ot=e.target.closest('[data-admin-offer-tab]');if(ot){offerTab=ot.dataset.adminOfferTab;offerFilter='pending';schedule();return;}
+  const of=e.target.closest('[data-admin-offer-filter]');if(of){offerFilter=of.dataset.adminOfferFilter;schedule();return;}
+  const op=e.target.closest('[data-admin-operation-tab]');if(op){operationTab=op.dataset.adminOperationTab;schedule();return;}
+  const mt=e.target.closest('[data-admin-more-tab]');if(mt){moreTab=mt.dataset.adminMoreTab;schedule();return;}
   const bn=e.target.closest('[data-admin-bank-new]');if(bn){bankAccountDialog();return;}
   const be=e.target.closest('[data-admin-bank-edit]');if(be){bankAccountDialog(be.dataset.adminBankEdit);return;}
   const bt=e.target.closest('[data-admin-bank-toggle]');if(bt){toggleBankAccount(bt.dataset.adminBankToggle);return;}
