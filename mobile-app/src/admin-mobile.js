@@ -146,22 +146,30 @@ async function hydrate(root=document){
   const worker=async()=>{while(cursor<images.length){const img=images[cursor++];img.dataset.loaded='1';const u=await imageUrl(img.dataset.adminMedia);if(u&&img.isConnected)img.src=u;}};
   await Promise.all(Array.from({length:Math.min(MEDIA_CONCURRENCY,images.length)},worker));
 }
-function row(x,kind){const o=ownerOf(x),linked=kind==='quote'?(state?.requests||[]).find(r=>r.id===x.requestId):null,currentStatus=kind==='request'?requestTracking(x):x.status;return`<article class="list-card admin-record-card" data-admin-open="${kind}" data-admin-id="${esc(x.id)}"><div class="list-card-main"><div class="list-card-title"><small>#${esc(ref(x))}</small><h3>${esc(title(x))}</h3></div>${badge(currentStatus)}</div>${desc(x)?`<p>${esc(desc(x))}</p>`:''}<div class="admin-record-meta">${o?`<span>${esc(o.company||o.name||tr('صاحب المحتوى','Owner'))}</span>`:''}${linked?`<span>#${esc(ref(linked))}</span>`:''}<span>${esc(date(x.createdAt))}</span></div>${gallery(x.images||[])}</article>`;}
-function matches(x,kind=''){if(!searchText().trim())return true;const q=searchText().trim().toLowerCase(),o=ownerOf(x),linked=kind==='quote'?(state?.requests||[]).find(r=>r.id===x.requestId):null,client=linked?account(linked.customerId):null;return[ref(x),x.name,x.company,x.email,x.phone,x.product,x.specs,x.notes,x.country,o?.name,o?.company,linked?.displayNo,client?.name,client?.company].filter(Boolean).join(' ').toLowerCase().includes(q);}
+function row(x,kind){
+  const o=ownerOf(x),linked=kind==='quote'?(state?.requests||[]).find(r=>r.id===x.requestId):null,offer=kind==='interest'?(state?.publicOffers||[]).find(v=>v.id===x.offerId):null;
+  const currentStatus=kind==='request'?requestTracking(x):kind==='interest'?interestTracking(x):x.status;
+  const item=offer||x,openAttrs=kind==='interest'?`data-admin-interest="${esc(x.id)}"`:`data-admin-open="${kind}" data-admin-id="${esc(x.id)}"`;
+  return`<article class="list-card admin-record-card" ${openAttrs}><div class="list-card-main"><div class="list-card-title"><small>#${esc(ref(offer||x))}</small><h3>${esc(title(item))}</h3></div>${badge(currentStatus)}</div>${desc(item)?`<p>${esc(desc(item))}</p>`:''}<div class="admin-record-meta">${o?`<span>${esc(o.company||o.name||tr('صاحب المحتوى','Owner'))}</span>`:''}${linked?`<span>#${esc(ref(linked))}</span>`:''}<span>${esc(date(x.createdAt))}</span></div>${gallery(item.images||[])}</article>`;
+}
+function matches(x,kind=''){if(!searchText().trim())return true;const q=searchText().trim().toLowerCase(),o=ownerOf(x),linked=kind==='quote'?(state?.requests||[]).find(r=>r.id===x.requestId):null,offer=kind==='interest'?(state?.publicOffers||[]).find(v=>v.id===x.offerId):null,client=linked?account(linked.customerId):null;return[ref(x),ref(offer),x.name,x.company,x.email,x.phone,x.product,x.specs,x.notes,x.country,offer?title(offer):'',offer?desc(offer):'',o?.name,o?.company,linked?.displayNo,client?.name,client?.company].filter(Boolean).join(' ').toLowerCase().includes(q);}
 
 function home(){const req=state?.requests||[],qs=state?.quotes||[],po=state?.publicOffers||[],ints=(state?.interests||[]).filter(activeInterest),acc=state?.accounts||[],pr=req.filter(x=>!x.deletedAt&&!x.suspendedAt&&x.status==='review'),offers=[...qs.map(x=>({...x,__kind:'quote'})),...po.map(x=>({...x,__kind:'public'}))].filter(x=>!x.deletedAt&&x.status==='pending'),priority=[...pr.slice(0,3).map(x=>row(x,'request')),...offers.slice(0,3).map(x=>row(x,x.__kind))].join('');setRoot('home',page(tr('لوحة الإدارة','Admin dashboard'),tr('اعتماد الطلبات والعروض ومتابعة المنصة من الجوال.','Approve requests and offers and monitor the platform from mobile.'))+`<div class="stats-grid admin-stats"><button class="stat-card" data-admin-go="requests"><strong>${pr.length}</strong><span>${esc(tr('طلبات بانتظار الاعتماد','Requests pending approval'))}</span></button><button class="stat-card" data-admin-go="offers"><strong>${offers.length}</strong><span>${esc(tr('عروض بانتظار الاعتماد','Offers pending approval'))}</span></button><button class="stat-card" data-admin-go="offers" data-admin-tab-target="interests"><strong>${ints.length}</strong><span>${esc(tr('طلبات الاهتمام','Interest requests'))}</span></button><button class="stat-card" data-admin-go="account"><strong>${acc.filter(a=>['client','supplier'].includes(a.role)&&!a.deletedAt).length}</strong><span>${esc(tr('العملاء والموردون','Customers & suppliers'))}</span></button></div><section class="section-block"><div class="section-title"><h2>${esc(tr('الأولوية الآن','Priority now'))}</h2></div><div class="list-stack">${priority||empty()}</div></section>`);}
+const unifiedRequestTracking=x=>x.__kind==='interest'?interestTracking(x):requestTracking(x);
 function requestFilterControls(allRows){
-  const count=s=>allRows.filter(x=>requestTracking(x)===s).length;
-  const active=allRows.filter(x=>!['completed','cancelled'].includes(requestTracking(x))).length;
+  const count=s=>allRows.filter(x=>unifiedRequestTracking(x)===s).length;
+  const active=allRows.filter(x=>!['completed','cancelled'].includes(unifiedRequestTracking(x))).length;
   const options=[`<option value="all" ${requestFilter==='all'?'selected':''}>${esc(tr('كل الحالات','All statuses'))} (${allRows.length})</option>`,...TRACKING.map(([key,ar,en])=>`<option value="${key}" ${requestFilter===key?'selected':''}>${esc(tr(ar,en))} (${count(key)})</option>`)].join('');
   return `<div class="admin-request-filters"><button type="button" data-admin-request-active class="${requestFilter==='active'?'active':''}">${esc(tr('الطلبات النشطة','Active requests'))} (${active})</button><label class="admin-filter-select"><span>${esc(tr('تصفية حسب الحالة','Filter by status'))}</span><select data-admin-request-filter>${options}</select></label></div>`;
 }
 function requests(){
-  const allRows=(state?.requests||[]).filter(x=>!x.deletedAt&&!x.suspendedAt&&matches(x,'request'));
-  let rows=[...allRows];rows.sort((a,b)=>(a.status==='review'?0:1)-(b.status==='review'?0:1)||String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
-  if(requestFilter==='active')rows=rows.filter(x=>!['completed','cancelled'].includes(requestTracking(x)));
-  else if(requestFilter!=='all')rows=rows.filter(x=>requestTracking(x)===requestFilter);
-  setRoot('requests',page(tr('الطلبات','Requests'),tr('ابحث عن الطلبات وتابعها حسب حالتها.','Search requests and follow them by status.'))+search(tr('ابحث برقم الطلب أو اسم العميل','Search request number or customer'))+requestFilterControls(allRows)+`<div class="list-stack" data-admin-results>${rows.map(x=>row(x,'request')).join('')||empty()}</div>`);
+  const custom=(state?.requests||[]).filter(x=>!x.deletedAt&&!x.suspendedAt&&matches(x,'request')).map(x=>({...x,__kind:'request'}));
+  const interests=(state?.interests||[]).filter(x=>matches(x,'interest')).map(x=>({...x,__kind:'interest'}));
+  const allRows=[...custom,...interests];
+  let rows=[...allRows];rows.sort((a,b)=>(a.__kind==='request'&&a.status==='review'?0:1)-(b.__kind==='request'&&b.status==='review'?0:1)||String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
+  if(requestFilter==='active')rows=rows.filter(x=>!['completed','cancelled'].includes(unifiedRequestTracking(x)));
+  else if(requestFilter!=='all')rows=rows.filter(x=>unifiedRequestTracking(x)===requestFilter);
+  setRoot('requests',page(tr('الطلبات','Requests'),tr('ابحث عن الطلبات وتابعها حسب حالتها.','Search requests and follow them by status.'))+search(tr('ابحث برقم الطلب أو اسم العميل','Search request number or customer'))+requestFilterControls(allRows)+`<div class="list-stack" data-admin-results>${rows.map(x=>row(x,x.__kind)).join('')||empty()}</div>`);
 }
 function categoryPanel(){
   const rows=categories();
