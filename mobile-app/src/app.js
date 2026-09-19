@@ -307,6 +307,46 @@ function openSupplierRequest(requestId){
   const existing=(platformState.quotes||[]).find(q=>q.requestId===r.id);
   openModal(titleOf(r),`#${ref(r)}`,`${gallery(r.images)}<div class="facts"><span>${esc(t('quantity'))}: ${esc(r.quantity||'—')}</span><span>${esc(r.country||'—')}</span><span>${esc(t('neededDate'))}: ${esc(r.neededDate||'—')}</span></div><p class="long-copy">${esc(descriptionOf(r)||'—')}</p>${existing?`<button class="secondary-btn full" data-edit-quote="${esc(existing.id)}">${esc(t('editQuote'))}</button>`:`<button class="primary-btn full" data-quote-request="${esc(r.id)}">${esc(t('submitQuote'))}</button>`}`);
 }
+async function paymentReceiptSource(input){
+  const file=input?.files?.[0];if(!file)throw new Error(tr('اختر صورة أو ملف PDF للإيصال.','Choose an image or PDF receipt.'));
+  if(file.type==='application/pdf'||/\.pdf$/i.test(file.name||'')){
+    if(file.size>5*1024*1024)throw new Error(tr('الحد الأقصى لملف PDF هو 5 MB.','PDF receipt must be 5 MB or smaller.'));
+    return await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||''));reader.onerror=()=>reject(new Error(tr('تعذر قراءة ملف PDF.','Could not read the PDF.')));reader.readAsDataURL(file);});
+  }
+  const sources=await filesToCompressedSources(input,{maxFiles:1});
+  if(!sources.length)throw new Error(tr('اختر صورة للإيصال.','Choose a receipt image.'));
+  return sources[0];
+}
+function openPaymentReceiptForm(entityType,entityId){
+  const item=paymentEntity(entityType,entityId);if(!item)return;
+  const title=tr('إرفاق إيصال الدفع','Upload payment receipt');
+  const kicker=entityType==='request'?'#'+ref(item):tr('طلب منتج جاهز','Ready-product request');
+  const message=item.paymentMessage||tr('يرجى إتمام عملية الدفع وإرفاق إيصال الدفع لتأكيد طلبك.','Please complete payment and upload the receipt to confirm your order.');
+  const adminNote=item.paymentReviewNote?'<p><b>'+esc(tr('ملاحظة الإدارة','Admin note'))+':</b> '+esc(item.paymentReviewNote)+'</p>':'';
+  const html='<form id="paymentReceiptForm" class="form-stack" data-entity-type="'+esc(entityType)+'" data-entity-id="'+esc(entityId)+'">'+
+    '<section class="payment-upload-note"><strong>'+esc(paymentLabel(item.paymentStatus||'awaiting_receipt'))+'</strong><p>'+esc(message)+'</p>'+adminNote+'</section>'+
+    '<label><span>'+esc(tr('إيصال الدفع','Payment receipt'))+'</span><input id="paymentReceiptFile" type="file" accept="image/*,application/pdf,.pdf" required><small>'+esc(tr('صورة أو PDF — الحد الأقصى 5 MB.','Image or PDF — maximum 5 MB.'))+'</small></label>'+
+    '<p class="form-message" id="paymentReceiptMessage"></p><button class="primary-btn" type="submit">'+esc(tr('إرسال الإيصال','Submit receipt'))+'</button></form>';
+  openModal(title,kicker,html);
+  $('paymentReceiptForm').addEventListener('submit',submitPaymentReceipt);
+}
+async function submitPaymentReceipt(e){
+  e.preventDefault();if(busy)return;busy=true;
+  const form=e.currentTarget,message=$('paymentReceiptMessage'),entityType=form.dataset.entityType,entityId=form.dataset.entityId,item=paymentEntity(entityType,entityId);
+  try{
+    message.textContent=tr('جارٍ تجهيز الإيصال...','Preparing receipt...');
+    const source=await paymentReceiptSource($('paymentReceiptFile'));
+    message.textContent=tr('جارٍ إرسال الإيصال...','Submitting receipt...');
+    await request('/api/v1/payment-receipts',{method:'POST',auth:true,body:{entityType,entityId,version:Number(item?.version||0),source}});
+    await loadData({render:false});closeModal();activeScreen='requests';renderScreen();showToast(tr('تم إرسال إيصال الدفع للمراجعة.','Payment receipt submitted for review.'));
+  }catch(error){message.textContent=error.message||tr('تعذر إرسال الإيصال.','Could not submit receipt.');}
+  finally{busy=false;}
+}
+async function openPaymentDocument(src){
+  const url=await mediaUrl(src);
+  if(!url){showToast(tr('تعذر فتح الإيصال.','Could not open receipt.'));return;}
+  window.open(url,'_blank','noopener');
+}
 function fileField(idValue){return `<label><span>${esc(t('images'))}</span><input id="${idValue}" type="file" accept="image/*" multiple /><small>${esc(t('chooseImages'))}</small></label>`;}
 function openNewRequest(){openModal(t('newRequest'),'M Platform',`<form id="newRequestForm" class="form-stack"><label><span>${esc(t('product'))}</span><input name="product" required maxlength="300" /></label><label><span>${esc(t('specifications'))}</span><textarea name="specs" required maxlength="10000"></textarea></label><div class="form-two"><label><span>${esc(t('quantity'))}</span><input name="quantity" type="number" min="1" required /></label><label><span>${esc(t('country'))}</span><input name="country" maxlength="100" /></label></div><label><span>${esc(t('neededDate'))}</span><input name="neededDate" type="date" /></label>${fileField('requestFiles')}<p class="form-message" id="requestFormMessage"></p><button class="primary-btn" type="submit">${esc(t('submit'))}</button></form>`);$('newRequestForm').addEventListener('submit',submitNewRequest);}
 function quoteFormHtml(q=null,requestId=''){return `<form id="quoteForm" class="form-stack" data-id="${esc(q?.id||'')}" data-request="${esc(requestId||q?.requestId||'')}"><div class="form-two"><label><span>${esc(t('price'))}</span><input name="unitPrice" type="number" step="0.01" min="0.01" value="${esc(q?.unitPrice||'')}" required /></label><label><span>${esc(t('currency'))}</span><select name="currency">${['USD','SAR','AED','CNY','EUR'].map(c=>`<option ${q?.currency===c?'selected':''}>${c}</option>`).join('')}</select></label></div><div class="form-two"><label><span>${esc(t('moq'))}</span><input name="moq" type="number" min="1" value="${esc(q?.moq||'')}" required /></label><label><span>${esc(t('leadTime'))}</span><input name="leadTime" type="number" min="1" value="${esc(q?.leadTime||'')}" required /></label></div><label><span>${esc(t('sampleCost'))}</span><input name="sampleCost" value="${esc(q?.sampleCost||'')}" maxlength="10000" /></label><label><span>${esc(t('notes'))}</span><textarea name="notes" maxlength="10000">${esc(q?.notes||'')}</textarea></label>${fileField('quoteFiles')}<p class="form-message" id="quoteFormMessage"></p><button class="primary-btn" type="submit">${esc(q?t('save'):t('submit'))}</button></form>`;}
