@@ -1846,3 +1846,95 @@ img[data-image-viewer] {
 body.image-viewer-open {
   overflow: hidden;
 }
+
+
+/* Payment workflow */
+.notification-card {
+  padding: 0;
+  display: grid;
+  gap: 0;
+  overflow: hidden;
+}
+.notification-card-main {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: start;
+  padding: 12px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.notification-card-main>div {
+  flex: 1 1 180px;
+}
+.notification-card-main>span {
+  flex: 0 0 auto;
+  font-size: .66rem;
+  background: #dff2fa;
+  color: #087aaf;
+  padding: 5px 7px;
+  border-radius: 99px;
+  font-weight: 900;
+}
+.notification-action {
+  margin: 0 12px 12px;
+  width: calc(100% - 24px);
+}
+.payment-card,.admin-payment-review,.payment-upload-note {
+  border: 1px solid #cfe3ec;
+  background: #f8fcfe;
+  border-radius: 18px;
+  padding: 14px;
+  margin-bottom: 16px;
+}
+.payment-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.payment-card-head small,.payment-card-head strong {
+  display: block;
+}
+.payment-card-head small {
+  color: #718793;
+  font-size: 11px;
+  margin-bottom: 3px;
+}
+.payment-card p,.payment-upload-note p {
+  color: #566f7d;
+  line-height: 1.65;
+  margin: 8px 0;
+}
+.payment-review-note {
+  background: #fff7e7;
+  border-radius: 12px;
+  padding: 10px;
+}
+.payment-receipt-preview {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  margin: 12px 0;
+  background: #eef4f7;
+}
+.payment-receipt-preview img {
+  width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  display: block;
+}
+.admin-payment-review label {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+}
+.admin-payment-message-field {
+  border-top: 1px dashed var(--line);
+  margin-top: 12px!important;
+  padding-top: 12px;
+}
