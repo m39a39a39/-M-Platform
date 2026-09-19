@@ -6,6 +6,10 @@ export const open=r=>r&&!r.data.deletedAt&&!r.data.suspendedAt;
 export function unpack(row,kind){return {...row.data,id:row.id,displayNo:row.display_no,version:row.version,createdAt:row.created_at,...(kind==='requests'||kind==='interests'?{customerId:row.owner_id}:{supplierId:row.owner_id}),...(row.request_id?{requestId:row.request_id}:{}),...(row.offer_id?{offerId:row.offer_id}:{})};}
 export function ownRecord(row,kind){const item=unpack(row,kind);delete item.supplierIds;delete item.moderationHistory;delete item.reviewedAt;return item;}
 function publicSettings(data={}){const safe={...data};delete safe.bankAccounts;return safe;}
+function supplierInterest(row){
+  const d=row.data||{};
+  return {id:row.id,offerId:row.offer_id,version:row.version,createdAt:row.created_at,status:d.status,trackingStatus:d.trackingStatus||'received',supplierOrderStatus:d.supplierOrderStatus||'pending_confirmation',supplierOrderNote:d.supplierOrderNote||'',supplierOrderUpdatedAt:d.supplierOrderUpdatedAt||''};
+}
 // Pure projection: never serialize raw source text or counterpart identity.
 export function anonymous(row,kind,user){
   const d=row.data;
@@ -61,6 +65,10 @@ export async function snapshot(user){
     ]);
     const ids=publicOffers.map(o=>o.id);
     if(ids.length)interests=await rows('interests',`offer_id=in.(${inIds(ids)})`);
+    interests=interests.filter(i=>{
+      const tracking=i.data?.trackingStatus||'received';
+      return tracking!=='received'||['coordinating','accepted','completed'].includes(i.data?.status);
+    });
   }else{
     [settings,publicOffers]=await Promise.all([
       one('settings','site'),
@@ -74,10 +82,18 @@ export async function snapshot(user){
   if(user?.role==='supplier')requests=requests.filter(r=>ownerActive(r.owner_id));
   quotes=quotes.filter(q=>q.owner_id===user?.id||ownerActive(q.owner_id)&&open(requests.find(r=>r.id===q.request_id)));
   publicOffers=publicOffers.filter(o=>o.owner_id===user?.id||ownerActive(o.owner_id));
+  const projectedRequests=requests.map(r=>{
+    if(r.owner_id===user?.id)return ownRecord(r,'requests');
+    const item=anonymous(r,'requests',user);
+    if(user?.role==='supplier'){
+      item.selectedForSupplier=!!(r.data?.selectedQuoteId&&quotes.some(q=>q.id===r.data.selectedQuoteId&&q.owner_id===user.id));
+    }
+    return item;
+  });
   return {user:profile(user),accounts:user?[profile(user)]:[],settings:{...publicSettings(settings.data),_version:settings.version},
-    requests:requests.map(r=>r.owner_id===user?.id?ownRecord(r,'requests'):anonymous(r,'requests',user)),
+    requests:projectedRequests,
     quotes:quotes.map(r=>r.owner_id===user?.id?ownRecord(r,'quotes'):anonymous(r,'quotes',user)),
     publicOffers:publicOffers.map(r=>r.owner_id===user?.id?ownRecord(r,'publicOffers'):anonymous(r,'publicOffers',user)),
-    interests:interests.map(r=>r.owner_id===user?.id?unpack(r,'interests'):{id:r.id,offerId:r.offer_id,status:r.data.status,createdAt:r.created_at})};
+    interests:user?.role==='supplier'?interests.map(supplierInterest):interests.map(r=>r.owner_id===user?.id?unpack(r,'interests'):{id:r.id,offerId:r.offer_id,status:r.data.status,createdAt:r.created_at})};
 }
 export async function assertOpenRequest(id){const r=await one('requests',id);assert(open(r)&&active(await one('profiles',r?.owner_id)),409,'الطلب غير متاح / Request unavailable');return r;}
