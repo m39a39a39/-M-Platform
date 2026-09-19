@@ -200,7 +200,7 @@ function updateShell(){
     offersButton?.classList.remove('hidden');
     $('bottomNav').classList.remove('client-nav');
     $('headerNotificationsBtn')?.classList.remove('hidden');
-    if(['orders','notifications','account'].includes(activeScreen))activeScreen='home';
+    if(['orders','account'].includes(activeScreen))activeScreen='home';
   }else{
     if(utilityNav){
       utilityNav.classList.remove('hidden');utilityNav.dataset.screen='notifications';
