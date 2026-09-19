@@ -8,7 +8,7 @@ export function ownRecord(row,kind){const item=unpack(row,kind);delete item.supp
 function publicSettings(data={}){const safe={...data};delete safe.bankAccounts;return safe;}
 function supplierInterest(row){
   const d=row.data||{};
-  return {id:row.id,displayNo:row.display_no,offerId:row.offer_id,version:row.version,createdAt:row.created_at,status:d.status,trackingStatus:d.trackingStatus||'received',supplierOrderStatus:d.supplierOrderStatus||'pending_confirmation',supplierOrderNote:d.supplierOrderNote||'',supplierOrderUpdatedAt:d.supplierOrderUpdatedAt||''};
+  return {id:row.id,displayNo:row.display_no,offerId:row.offer_id,version:row.version,createdAt:row.created_at,status:d.status,trackingStatus:d.trackingStatus||'received',quantity:d.quantity||'',unitPrice:d.unitPrice||'',currency:d.currency||'',moq:d.moq||'',total:d.total||'',supplierOrderStatus:d.supplierOrderStatus||'pending_confirmation',supplierOrderNote:d.supplierOrderNote||'',supplierOrderUpdatedAt:d.supplierOrderUpdatedAt||''};
 }
 // Pure projection: never serialize raw source text or counterpart identity.
 export function anonymous(row,kind,user){
