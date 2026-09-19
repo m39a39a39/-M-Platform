@@ -449,13 +449,55 @@ function renderAccount(){
 function renderAdminCollection(kind){const rows=kind==='requests'?(platformState.requests||[]):[...(platformState.quotes||[]),...(platformState.publicOffers||[])];$('screen').innerHTML=pageHeader(kind==='requests'?t('requests'):t('offers'),t('adminMobile'))+`<div class="list-stack">${rows.slice(0,50).map(x=>itemCard(x,{subtitle:descriptionOf(x),badge:cardBadge(x.status),meta:`#${ref(x)} · ${date(x.createdAt)}`})).join('')||empty()}</div>`;}
 function renderScreen(){if(!currentUser||!platformState)return;updateShell();if(renderAdminScreen(activeScreen))return;if(activeScreen==='home')renderHome();else if(activeScreen==='orders')renderSupplierOrders();else if(activeScreen==='requests')renderRequests();else if(activeScreen==='offers')renderOffers();else if(activeScreen==='notifications')renderNotifications();else renderAccount();hydrateImages($('screen'));}
 
+function quoteTotal(q,r){
+  const unit=Number(q?.unitPrice),quantity=Number(r?.quantity);
+  return Number.isFinite(unit)&&Number.isFinite(quantity)&&quantity>0?unit*quantity:null;
+}
+function clientQuoteCard(q,r){
+  const total=quoteTotal(q,r),selected=r.selectedQuoteId===q.id;
+  return `<article class="quote-card client-compare-quote ${selected?'selected':''}">
+    ${gallery(q.images)}
+    <div class="client-quote-price-row"><div><small>${esc(tr('سعر الوحدة','Unit price'))}</small><strong>${money(q.unitPrice,q.currency)}</strong></div>${total!==null?`<div><small>${esc(tr('الإجمالي','Total'))}</small><strong>${money(total,q.currency)}</strong></div>`:''}</div>
+    <div class="facts"><span>MOQ ${esc(q.moq||'—')}</span><span>${esc(t('leadTime'))}: ${esc(q.leadTime||'—')}</span><span>${esc(t('sampleCost'))}: ${esc(q.sampleCost||'—')}</span></div>
+    ${descriptionOf(q)?`<p>${esc(descriptionOf(q))}</p>`:''}
+    <button class="${selected?'secondary-btn':'primary-btn'} full" data-select-quote="${esc(q.id)}" data-request-id="${esc(r.id)}" ${r.selectedQuoteId?'disabled':''}>${esc(selected?tr('العرض المختار','Selected quote'):r.selectedQuoteId?tr('تم اختيار عرض آخر','Another quote selected'):t('selectQuote'))}</button>
+  </article>`;
+}
+async function markClientQuotesSeen(r,quotes){
+  if(newQuoteCount(r)<=0||!quotes.length)return r;
+  try{
+    const latest=new Date(Math.max(...quotes.map(quoteTime))).toISOString();
+    await mutate('requests',r.id,r.version,{lastSeenQuoteAt:new Date().toISOString()});
+    r.version=Number(r.version||0)+1;r.lastSeenQuoteAt=latest;updateShell();
+  }catch{}
+  return r;
+}
+function selectedQuotePanel(r){
+  const q=(platformState?.quotes||[]).find(x=>x.id===r.selectedQuoteId&&x.status==='published');
+  if(!q)return '';
+  const total=quoteTotal(q,r);
+  return `<section class="client-selected-quote"><div class="client-detail-section-head"><div><small>${esc(tr('العرض المختار','Selected quote'))}</small><strong>#${esc(ref(q))}</strong></div><span class="status-pill status-published">${esc(tr('مختار','Selected'))}</span></div><div class="client-selected-values"><div><span>${esc(tr('سعر الوحدة','Unit price'))}</span><strong>${money(q.unitPrice,q.currency)}</strong></div><div><span>${esc(tr('الكمية','Quantity'))}</span><strong>${esc(r.quantity||'—')}</strong></div><div class="total"><span>${esc(tr('الإجمالي','Total'))}</span><strong>${total!==null?money(total,q.currency):'—'}</strong></div></div></section>`;
+}
+function clientRequestActionPanel(r){
+  const order=clientOrders().find(o=>o.type==='custom'&&o.id===r.id),action=order?clientOrderNeedsAction(order):null;
+  if(!action)return '';
+  return `<section class="client-detail-action ${esc(action.tone||'action')}"><div><small>${esc(tr('الإجراء المطلوب','Action required'))}</small><strong>${esc(action.label)}</strong></div>${action.key==='new_quotes'||action.key==='choose_quote'?`<button type="button" class="primary-small" data-client-offers-request="${esc(r.id)}">${esc(tr('عرض العروض','View quotes'))}</button>`:''}</section>`;
+}
+async function openClientOffers(requestId){
+  let r=(platformState.requests||[]).find(x=>x.id===requestId);if(!r)return;
+  const quotes=(platformState.quotes||[]).filter(q=>q.requestId===r.id&&q.status==='published').sort((a,b)=>quoteTime(b)-quoteTime(a));
+  await markClientQuotesSeen(r,quotes);
+  const summary=`<section class="client-order-summary"><div><small>#${esc(ref(r))}</small><strong>${esc(titleOf(r))}</strong></div><div class="client-order-summary-facts"><span>${esc(tr('الكمية','Quantity'))}: ${esc(r.quantity||'—')}</span><span>${esc(tr('عدد العروض','Quotes'))}: ${esc(quotes.length)}</span></div></section>`;
+  openModal(tr('مقارنة العروض','Compare quotes'),`#${ref(r)}`,`${summary}<div class="client-compare-list">${quotes.map(q=>clientQuoteCard(q,r)).join('')||empty()}</div>`);
+}
 async function openClientRequest(requestId){
   let r=(platformState.requests||[]).find(x=>x.id===requestId);if(!r)return;
   const quotes=(platformState.quotes||[]).filter(q=>q.requestId===r.id&&q.status==='published');
-  if(newQuoteCount(r)>0){try{await mutate('requests',r.id,r.version,{lastSeenQuoteAt:new Date().toISOString()});r.version=Number(r.version||0)+1;r.lastSeenQuoteAt=new Date(Math.max(...quotes.map(quoteTime))).toISOString();}catch{}updateShell();}
-  const selected=r.selectedQuoteId;
-  const quoteHtml=quotes.length?quotes.map(q=>`<article class="quote-card">${gallery(q.images)}<div class="quote-price">${money(q.unitPrice,q.currency)}</div><div class="facts"><span>MOQ ${esc(q.moq||'—')}</span><span>${esc(t('leadTime'))}: ${esc(q.leadTime||'—')}</span><span>${esc(t('sampleCost'))}: ${esc(q.sampleCost||'—')}</span></div><p>${esc(descriptionOf(q))}</p><button class="${selected===q.id?'secondary-btn':'primary-btn'}" data-select-quote="${esc(q.id)}" data-request-id="${esc(r.id)}" ${selected?'disabled':''}>${esc(selected===q.id?t('selected'):t('selectQuote'))}</button></article>`).join(''):empty();
-  openModal(titleOf(r),`#${ref(r)}`,`${trackingTimeline(r)}${paymentPanel(r,'request')}${gallery(r.images)}<div class="facts"><span>${esc(t('quantity'))}: ${esc(r.quantity||'—')}</span><span>${esc(r.country||'—')}</span><span>${esc(t('neededDate'))}: ${esc(r.neededDate||'—')}</span></div><h3>${esc(t('specifications'))}</h3><p class="long-copy">${esc(descriptionOf(r)||'—')}</p><button type="button" class="secondary-btn full repeat-request-btn" data-repeat-request="${esc(r.id)}">${esc(tr('تكرار الطلب','Repeat request'))}</button><h3>${esc(t('receivedQuotes'))}</h3><div class="quote-list">${quoteHtml}</div>`);
+  const actionPanel=clientRequestActionPanel(r),status=requestTrackingStatus(r),selectedPanel=selectedQuotePanel(r);
+  const compareButton=quotes.length?`<button type="button" class="secondary-btn full client-view-quotes" data-client-offers-request="${esc(r.id)}">${esc(r.selectedQuoteId?tr('عرض جميع العروض','View all quotes'):tr('عرض ومقارنة العروض','View & compare quotes'))}</button>`:'';
+  const summary=`<section class="client-order-summary"><div class="client-order-summary-title"><small>#${esc(ref(r))} · ${esc(tr('طلب خاص','Custom request'))}</small><strong>${esc(titleOf(r))}</strong></div><div class="client-order-summary-facts"><span>${esc(tr('الكمية','Quantity'))}: ${esc(r.quantity||'—')}</span><span>${esc(tr('الدولة','Country'))}: ${esc(r.country||'—')}</span><span>${esc(t('neededDate'))}: ${esc(r.neededDate||'—')}</span></div></section>`;
+  const statusCard=`<section class="client-current-status"><small>${esc(tr('الحالة الحالية','Current status'))}</small><strong>${esc(trackingLabel(status))}</strong>${r.trackingUpdatedAt?`<span>${esc(tr('آخر تحديث','Last update'))}: ${esc(date(r.trackingUpdatedAt))}</span>`:''}</section>`;
+  openModal(titleOf(r),`#${ref(r)}`,`${summary}${actionPanel}${statusCard}${selectedPanel}${compareButton}${paymentPanel(r,'request')}${trackingTimeline(r)}<section class="client-detail-content"><h3>${esc(t('specifications'))}</h3><p class="long-copy">${esc(descriptionOf(r)||'—')}</p>${gallery(r.images)}</section><button type="button" class="secondary-btn full repeat-request-btn" data-repeat-request="${esc(r.id)}">${esc(tr('تكرار الطلب','Repeat request'))}</button>`);
 }
 async function openPublicOffer(offerId){
   const o=(platformState.publicOffers||[]).find(x=>x.id===offerId);if(!o)return;
