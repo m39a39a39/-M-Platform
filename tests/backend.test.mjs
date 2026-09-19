@@ -85,6 +85,14 @@ test('payment notifications preserve admin message and route to the right workfl
  assert.equal(required.bodyAr,'حوّل الدفعة الأولى ثم أرفق الإيصال.');
  assert.equal(required.action,'upload_receipt');
  assert.deepEqual(required.target,{screen:'customerPayment',entityType:'request',entityId:'r1'});
+ const submitted=notificationPayload(
+  {id:3,event:'payment_required_request',entity_id:'r1',read_at:null,created_at:'2026-09-19'},
+  undefined,
+  {display_no:10002,data:{paymentStatus:'receipt_submitted',paymentMessage:'old request message'}}
+ );
+ assert.equal(submitted.titleAr,'تم إرسال إيصال الدفع');
+ assert.equal(submitted.action,undefined);
+ assert.match(submitted.bodyAr,/بانتظار مراجعة الإدارة/);
 
  const admin=notificationPayload(
   {id:2,event:'payment_receipt_submitted_interest',entity_id:'i1',read_at:null,created_at:'2026-09-19'},
