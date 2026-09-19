@@ -94,6 +94,25 @@ function trackingTimeline(item,{flow=TRACKING_FLOW,statusResolver=requestTrackin
   const found=flow.findIndex(x=>x[0]===lastLinear),currentIndex=Math.max(0,found);
   return `<section class="tracking-card"><div class="tracking-head"><div><small>${esc(t('tracking'))}</small><strong>${esc(trackingLabel(current))}</strong></div>${item.trackingUpdatedAt?`<span>${esc(t('lastUpdate'))}: ${esc(date(item.trackingUpdatedAt))}</span>`:''}</div>${exception?`<div class="tracking-exception">${esc(trackingLabel(current))}</div>`:''}<div class="tracking-timeline">${flow.map((step,i)=>`<div class="tracking-step ${i<currentIndex?'done':i===currentIndex&&!exception?'current':''}"><span class="tracking-dot">${i<currentIndex?'✓':i+1}</span><b>${esc(lang==='ar'?step[1]:step[2])}</b></div>`).join('')}</div>${item.trackingNote?`<p class="tracking-note"><b>${esc(t('trackingNote'))}:</b> ${esc(item.trackingNote)}</p>`:''}</section>`;
 }
+const PAYMENT_LABELS={
+  awaiting_receipt:['بانتظار إيصال الدفع','Waiting for payment receipt'],
+  receipt_submitted:['تم إرسال الإيصال — بانتظار المراجعة','Receipt submitted — awaiting review'],
+  confirmed:['تم تأكيد الدفع','Payment confirmed'],
+  reupload_requested:['مطلوب إعادة رفع الإيصال','Receipt re-upload requested']
+};
+function paymentLabel(status){const row=PAYMENT_LABELS[status];return row?(lang==='ar'?row[0]:row[1]):status||'—';}
+function paymentEntity(type,id){return type==='request'?(platformState?.requests||[]).find(x=>x.id===id):(platformState?.interests||[]).find(x=>x.id===id);}
+function paymentPanel(item,entityType){
+  const status=item?.paymentStatus;
+  if(!status&&item?.trackingStatus!=='payment_confirmation')return '';
+  const receipt=item?.paymentReceipt,canUpload=['awaiting_receipt','reupload_requested'].includes(status);
+  const message=item?.paymentMessage||tr('يرجى إتمام عملية الدفع وإرفاق إيصال الدفع لتأكيد طلبك.','Please complete payment and upload the receipt to confirm your order.');
+  const receiptHtml=receipt?.src?(receipt.mime==='application/pdf'
+    ?\`<button type="button" class="secondary-btn full" data-payment-document="\${esc(receipt.src)}">\${esc(tr('عرض إيصال PDF','View PDF receipt'))}</button>\`
+    :\`<div class="payment-receipt-preview" data-viewer-gallery><img alt="" data-media="\${esc(receipt.src)}" data-image-viewer></div>\`):'';
+  const uploadText=status==='reupload_requested'?tr('إعادة رفع إيصال الدفع','Upload receipt again'):tr('إرفاق إيصال الدفع','Upload payment receipt');
+  return \`<section class="payment-card"><div class="payment-card-head"><div><small>\${esc(tr('الدفع','Payment'))}</small><strong>\${esc(paymentLabel(status||'awaiting_receipt'))}</strong></div></div><p>\${esc(message)}</p>\${item?.paymentReviewNote?\`<p class="payment-review-note"><b>\${esc(tr('ملاحظة الإدارة','Admin note'))}:</b> \${esc(item.paymentReviewNote)}</p>\`:''}\${receiptHtml}\${canUpload?\`<button class="primary-btn full" type="button" data-payment-upload data-entity-type="\${entityType}" data-entity-id="\${esc(item.id)}">\${esc(uploadText)}</button>\`:''}</section>\`;
+}
 function titleOf(item){const x=item?.translation||{};return (lang==='ar'?(x.titleAr||x.titleEn):(x.titleEn||x.titleAr))||item?.product||item?.title||`#${ref(item)}`;}
 function descriptionOf(item){const x=item?.translation||{};return (lang==='ar'?(x.descriptionAr||x.descriptionEn):(x.descriptionEn||x.descriptionAr))||item?.specs||item?.notes||'';}
 function quoteTime(q){return Date.parse(q?.publishedAt||q?.updatedAt||q?.createdAt||0)||0;}
