@@ -164,43 +164,58 @@ session.onReset(reason=>{
 });
 
 function updateShell(){
-  const role=currentUser?.role||'client',bottom=$('bottomNav'),requestLabel=document.querySelector('#bottomNav [data-nav="requests"]'),offersLabel=document.querySelector('#bottomNav [data-nav="offers"]'),accountLabel=document.querySelector('#bottomNav [data-nav="account"]'),requestButton=requestLabel?.closest('button'),accountButton=accountLabel?.closest('button'),utilityNav=$('navUnread')?.closest('button');
+  const role=currentUser?.role||'client',bottom=$('bottomNav'),requestLabel=document.querySelector('#bottomNav [data-nav="requests"]'),offersLabel=document.querySelector('#bottomNav [data-nav="offers"]'),accountLabel=document.querySelector('#bottomNav [data-nav="account"]'),requestButton=requestLabel?.closest('button'),offersButton=offersLabel?.closest('button'),accountButton=accountLabel?.closest('button'),utilityNav=$('navUnread')?.closest('button');
   $('headerRole').textContent=t(role);
   $('appLangBtn').textContent=lang==='ar'?'EN':'AR';
   const homeLabel=document.querySelector('[data-nav="home"]');if(homeLabel)homeLabel.textContent=t('home');
-  if(requestLabel)requestLabel.textContent=role==='supplier'?tr('طلبات عروض الأسعار','Quote requests'):role==='client'?tr('طلباتي','My orders'):t('requests');
-  if(offersLabel)offersLabel.textContent=t('offers');
-  if(accountLabel)accountLabel.textContent=t('account');
+  if(requestLabel)requestLabel.textContent=role==='supplier'?tr('طلبات عروض الأسعار','Quote requests'):role==='client'?tr('طلباتي','My orders'):tr('الطلبات','Requests');
+  if(offersLabel)offersLabel.textContent=tr('العروض','Offers');
+  if(accountLabel)accountLabel.textContent=role==='admin'?tr('المزيد','More'):t('account');
+  if(accountButton){
+    accountButton.dataset.screen=role==='admin'?'more':'account';
+    const icon=accountButton.querySelector('span');if(icon)icon.textContent=role==='admin'?'☰':'○';
+  }
   if(role==='supplier'){
     if(utilityNav){
       utilityNav.classList.remove('hidden');utilityNav.dataset.screen='orders';
       const label=utilityNav.querySelector('[data-nav="notifications"]'),icon=utilityNav.querySelector('span');if(label)label.textContent=tr('الطلبات','Orders');if(icon)icon.textContent='▣';
       if(requestButton)bottom.insertBefore(utilityNav,requestButton);
     }
-    document.querySelector('#bottomNav [data-screen="offers"]')?.classList.remove('hidden');
+    offersButton?.classList.remove('hidden');
     $('bottomNav').classList.remove('client-nav');
     $('headerNotificationsBtn')?.classList.remove('hidden');
+    if(activeScreen==='operations'||activeScreen==='more')activeScreen='home';
   }else if(role==='client'){
     if(utilityNav){utilityNav.dataset.screen='notifications';utilityNav.classList.add('hidden');}
-    document.querySelector('#bottomNav [data-screen="offers"]')?.classList.remove('hidden');
+    offersButton?.classList.remove('hidden');
     $('bottomNav').classList.add('client-nav');
     $('headerNotificationsBtn')?.classList.remove('hidden');
-    if(activeScreen==='orders')activeScreen='home';
+    if(['orders','operations','more'].includes(activeScreen))activeScreen='home';
+  }else if(role==='admin'){
+    if(utilityNav){
+      utilityNav.classList.remove('hidden');utilityNav.dataset.screen='operations';
+      const label=utilityNav.querySelector('[data-nav="notifications"]'),icon=utilityNav.querySelector('span');if(label)label.textContent=tr('العمليات','Operations');if(icon)icon.textContent='▦';
+      if(accountButton)bottom.insertBefore(utilityNav,accountButton);
+    }
+    offersButton?.classList.remove('hidden');
+    $('bottomNav').classList.remove('client-nav');
+    $('headerNotificationsBtn')?.classList.remove('hidden');
+    if(['orders','notifications','account'].includes(activeScreen))activeScreen='home';
   }else{
     if(utilityNav){
       utilityNav.classList.remove('hidden');utilityNav.dataset.screen='notifications';
       const label=utilityNav.querySelector('[data-nav="notifications"]'),icon=utilityNav.querySelector('span');if(label)label.textContent=t('notifications');if(icon)icon.textContent='♢';
       if(accountButton)bottom.insertBefore(utilityNav,accountButton);
     }
-    document.querySelector('#bottomNav [data-screen="offers"]')?.classList.remove('hidden');
+    offersButton?.classList.remove('hidden');
     $('bottomNav').classList.remove('client-nav');
     $('headerNotificationsBtn')?.classList.add('hidden');
-    if(activeScreen==='orders')activeScreen='home';
+    if(['orders','operations','more'].includes(activeScreen))activeScreen='home';
   }
   const unread=notifications.filter(n=>!n.readAt).length,badge=unread>99?'99+':String(unread);
   $('navUnread').textContent=badge;$('headerUnread').textContent=badge;
-  $('navUnread').classList.toggle('hidden',role!=='admin'||!unread);
-  $('headerUnread').classList.toggle('hidden',!['supplier','client'].includes(role)||!unread);
+  $('navUnread').classList.add('hidden');
+  $('headerUnread').classList.toggle('hidden',!['supplier','client','admin'].includes(role)||!unread);
   document.querySelectorAll('#bottomNav button').forEach(b=>b.classList.toggle('active',b.dataset.screen===activeScreen));
 }
 
