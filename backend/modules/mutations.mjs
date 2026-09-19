@@ -3,6 +3,7 @@ import {can} from './auth.mjs';
 import {tables,assertOpenRequest,active,open} from './records.mjs';
 const contact=v=>/(?:https?:\/\/|www\.|wa\.me|@[a-z0-9]|[\w.+-]+@[\w.-]+\.[a-z]{2,}|(?:\+|00)\d[\d\s()-]{7,})/i.test(String(v));
 const contentFields={requests:['product','specs','quantity','country','neededDate','images'],quotes:['unitPrice','currency','moq','leadTime','sampleCost','notes','images'],publicOffers:['product','specs','country','unitPrice','currency','moq','stock','leadTime','validUntil','images','categoryId']};
+const PAYMENT_CURRENCIES=['USD','SAR','AED','CNY','EUR'];
 export const TRACKING_FLOW=['received','reviewing','sourcing','quotes_available','quote_selected','payment_confirmation','production','quality_check','ready_to_ship','shipped','in_delivery','delivered','completed'];
 export const READY_TRACKING_FLOW=['received','payment_confirmation','production','quality_check','ready_to_ship','shipped','in_delivery','delivered','completed'];
 export const TRACKING_EXCEPTIONS=['customer_action','on_hold','cancelled'];
@@ -37,6 +38,27 @@ export function normalizeCategories(input){
     return {id,nameAr,nameEn,active:raw.active!==false,order:index};
   });
 }
+export function normalizeBankAccounts(input){
+  assert(Array.isArray(input)&&input.length<=30,400,'حسابات بنكية غير صالحة / Invalid bank accounts');
+  const ids=new Set();
+  return input.map((raw,index)=>{
+    assert(raw&&typeof raw==='object'&&!Array.isArray(raw),400);
+    const id=String(raw.id||'').trim(),label=String(raw.label||'').trim(),beneficiary=String(raw.beneficiary||'').trim(),bankName=String(raw.bankName||'').trim();
+    const iban=String(raw.iban||'').trim().replace(/\s+/g,' '),swift=String(raw.swift||'').trim(),accountNumber=String(raw.accountNumber||'').trim(),country=String(raw.country||'').trim(),currency=String(raw.currency||'').trim().toUpperCase();
+    assert(/^[A-Za-z0-9-]{1,80}$/.test(id)&&!ids.has(id),400,'معرّف الحساب البنكي غير صالح / Invalid bank account id');
+    assert(label&&label.length<=100&&beneficiary&&beneficiary.length<=160&&bankName&&bankName.length<=160,400,'أكمل بيانات الحساب البنكي / Complete bank account details');
+    assert((iban||accountNumber)&&iban.length<=120&&swift.length<=40&&accountNumber.length<=120&&country.length<=100,400,'تحقق من بيانات الحساب البنكي / Check bank account details');
+    assert(PAYMENT_CURRENCIES.includes(currency),400,'عملة الحساب البنكي غير مدعومة / Unsupported bank currency');
+    ids.add(id);
+    return {id,label,beneficiary,bankName,iban,swift,accountNumber,country,currency,active:raw.active!==false,order:index};
+  });
+}
+async function paymentAccountSnapshot(accountId){
+  const settings=await one('settings','site'),rows=Array.isArray(settings?.data?.bankAccounts)?settings.data.bankAccounts:[];
+  const account=rows.find(x=>x?.id===accountId&&x.active!==false);
+  assert(account,400,'اختر حسابًا بنكيًا نشطًا / Choose an active bank account');
+  return Object.fromEntries(['id','label','beneficiary','bankName','iban','swift','accountNumber','country','currency'].map(k=>[k,String(account[k]||'')]));
+}
 async function assertCategory(categoryId,{required=false,activeOnly=false}={}){
   const settings=await one('settings','site'),categories=Array.isArray(settings?.data?.categories)?settings.data.categories:[];
   const active=categories.filter(c=>c?.active!==false);
@@ -70,11 +92,16 @@ export async function mutate(user,body){
   const changes=Object.keys(patch),isAdmin=user.role==='admin';
   if(!original){
     assert(collection==='requests'?user.role==='client':collection==='interests'?user.role==='client':user.role==='supplier');
-    const allowed=collection==='interests'?['offerId','status']: [...contentFields[collection],...(collection==='quotes'?['requestId']:[]),'status'];
+    const allowed=collection==='interests'?['offerId','status']: [...contentFields[collection],...(collection==='quotes'?['requestId']:[]),...(collection==='requests'?['repeatedFromRequestId']:[]),'status'];
     assert(changes.every(k=>allowed.includes(k)),400);
     data=Object.fromEntries(changes.filter(k=>!['status','requestId','offerId'].includes(k)).map(k=>[k,patch[k]]));
     data.status=collection==='requests'?'review':collection==='interests'?'active':'pending';data.createdAt=now;
     if(collection==='requests'||collection==='interests')setTracking(data,'received',now,'');
+    if(collection==='requests'&&data.repeatedFromRequestId){
+      assert(/^[A-Za-z0-9-]{1,80}$/.test(data.repeatedFromRequestId),400,'مرجع الطلب المكرر غير صالح / Invalid repeat reference');
+      const source=await one('requests',data.repeatedFromRequestId);
+      assert(source&&source.owner_id===user.id&&open(source),404,'الطلب الأصلي غير متاح / Original request unavailable');
+    }
     if(collection==='quotes'){
       const r=await assertOpenRequest(patch.requestId);
       assert(r.data.status==='sent'&&!r.data.selectedQuoteId&&r.data.supplierIds?.includes(user.id));
@@ -145,6 +172,16 @@ export async function mutate(user,body){
       }else if((collection==='requests'||collection==='interests')&&key==='trackingNote'){
         assert(collection==='requests'?(can(user,'requests.edit')||can(user,'publish')):(can(user,'offers.edit')||can(user,'publish')));
         assert(typeof patch[key]==='string'&&patch[key].length<=1000,400,'ملاحظة المتابعة طويلة / Tracking note too long');data.trackingNote=patch[key];
+      }else if((collection==='requests'||collection==='interests')&&key==='paymentBankAccountId'){
+        assert(collection==='requests'?(can(user,'requests.edit')||can(user,'publish')):(can(user,'offers.edit')||can(user,'publish')));
+        assert(typeof patch[key]==='string'&&patch[key].length<=80,400,'اختر الحساب البنكي / Choose a bank account');
+        data.paymentBankAccountId=patch[key];data.paymentBankAccount=await paymentAccountSnapshot(patch[key]);
+      }else if((collection==='requests'||collection==='interests')&&key==='paymentAmount'){
+        assert(collection==='requests'?(can(user,'requests.edit')||can(user,'publish')):(can(user,'offers.edit')||can(user,'publish')));
+        const amount=Number(patch[key]);assert(Number.isFinite(amount)&&amount>0&&amount<=1e12,400,'أدخل مبلغ الدفع / Enter payment amount');data.paymentAmount=amount;
+      }else if((collection==='requests'||collection==='interests')&&key==='paymentCurrency'){
+        assert(collection==='requests'?(can(user,'requests.edit')||can(user,'publish')):(can(user,'offers.edit')||can(user,'publish')));
+        const currency=String(patch[key]||'').toUpperCase();assert(PAYMENT_CURRENCIES.includes(currency),400,'عملة الدفع غير مدعومة / Unsupported payment currency');data.paymentCurrency=currency;
       }else if((collection==='requests'||collection==='interests')&&key==='paymentMessage'){
         assert(collection==='requests'?(can(user,'requests.edit')||can(user,'publish')):(can(user,'offers.edit')||can(user,'publish')));
         assert(typeof patch[key]==='string'&&patch[key].trim()&&patch[key].trim().length<=2000,400,'اكتب رسالة الدفع للعميل / Add a payment message');
@@ -159,6 +196,7 @@ export async function mutate(user,body){
     }
     if((collection==='requests'||collection==='interests')&&changes.includes('trackingStatus')&&patch.trackingStatus==='payment_confirmation'&&original.data.trackingStatus!=='payment_confirmation'){
       assert(data.paymentMessage?.trim(),400,'اكتب رسالة الدفع للعميل / Add a payment message');
+      assert(data.paymentBankAccount?.id&&data.paymentAmount&&data.paymentCurrency,400,'أكمل الحساب البنكي والمبلغ والعملة / Complete bank account, amount, and currency');
       if(data.paymentStatus!=='confirmed'){
         data.paymentStatus='awaiting_receipt';
         data.paymentRequestedAt=now;
@@ -202,6 +240,7 @@ export async function saveSettings(user,body){
   const data=structuredClone(row.data||{}),prefixes=['homeTitle','homeSubtitle','customerTitle','customerSubtitle','supplierTitle','supplierSubtitle','adminTitle','adminSubtitle'];
   for(const [k,v] of Object.entries(body.data||{})){
     if(k==='categories'){data.categories=normalizeCategories(v);continue;}
+    if(k==='bankAccounts'){data.bankAccounts=normalizeBankAccounts(v);continue;}
     assert(['logo','logoText',...prefixes.flatMap(k=>[k+'Ar',k+'En'])].includes(k)&&typeof v==='string'&&v.length<=10000,400);
     if(k==='logo'&&v)await checkImages([v],user,row.data.logo?[row.data.logo]:[]);
     data[k]=v;
