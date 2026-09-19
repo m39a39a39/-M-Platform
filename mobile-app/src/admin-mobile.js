@@ -187,7 +187,35 @@ function goCard(value,label,view,tab=''){
   return '<button class="admin-queue-card" data-admin-go="'+esc(view)+'" '+(tab?'data-admin-tab-target="'+esc(tab)+'"':'')+'><strong>'+esc(value)+'</strong><span>'+esc(label)+'</span><b>›</b></button>';
 }
 
-function home(){const req=state?.requests||[],qs=state?.quotes||[],po=state?.publicOffers||[],ints=state?.interests||[],acc=state?.accounts||[],pr=req.filter(x=>!x.deletedAt&&!x.suspendedAt&&x.status==='review'),offers=[...qs.map(x=>({...x,__kind:'quote'})),...po.map(x=>({...x,__kind:'public'}))].filter(x=>!x.deletedAt&&x.status==='pending'),priority=[...pr.slice(0,3).map(x=>row(x,'request')),...offers.slice(0,3).map(x=>row(x,x.__kind))].join('');setRoot('home',page(tr('لوحة الإدارة','Admin dashboard'),tr('اعتماد الطلبات والعروض ومتابعة المنصة من الجوال.','Approve requests and offers and monitor the platform from mobile.'))+`<div class="stats-grid admin-stats"><button class="stat-card" data-admin-go="requests"><strong>${pr.length}</strong><span>${esc(tr('طلبات بانتظار الاعتماد','Requests pending approval'))}</span></button><button class="stat-card" data-admin-go="offers"><strong>${offers.length}</strong><span>${esc(tr('عروض بانتظار الاعتماد','Offers pending approval'))}</span></button><button class="stat-card" data-admin-go="offers" data-admin-tab-target="interests"><strong>${ints.length}</strong><span>${esc(tr('طلبات الاهتمام','Interest requests'))}</span></button><button class="stat-card" data-admin-go="account"><strong>${acc.filter(a=>['client','supplier'].includes(a.role)&&!a.deletedAt).length}</strong><span>${esc(tr('العملاء والموردون','Customers & suppliers'))}</span></button></div><section class="section-block"><div class="section-title"><h2>${esc(tr('الأولوية الآن','Priority now'))}</h2></div><div class="list-stack">${priority||empty()}</div></section>`);}
+function home(){
+  const entries=adminOrderEntries(),req=state?.requests||[],qs=state?.quotes||[],po=state?.publicOffers||[],acc=state?.accounts||[];
+  const pendingRequests=req.filter(x=>!x.deletedAt&&!x.suspendedAt&&x.status==='review');
+  const pendingOffers=[...qs,...po].filter(x=>!x.deletedAt&&x.status==='pending');
+  const supplierWait=entries.filter(needsSupplierConfirmationEntry);
+  const paymentReview=entries.filter(e=>needsPaymentReview(e.entity));
+  const inspection=entries.filter(isInspectionReady);
+  const problems=entries.filter(isExecutionProblem);
+  const active=entries.filter(e=>!['completed','cancelled'].includes(e.status));
+  const priority=[...paymentReview,...problems,...supplierWait,...inspection].filter((e,i,a)=>a.findIndex(x=>x.kind===e.kind&&x.entity.id===e.entity.id)===i).slice(0,8);
+  const queues='<div class="admin-queue-grid">'+
+    goCard(pendingRequests.length,tr('طلبات جديدة','New requests'),'requests')+
+    goCard(pendingOffers.length,tr('عروض تحتاج اعتماد','Offers to review'),'offers')+
+    goCard(supplierWait.length,tr('بانتظار تأكيد المورد','Awaiting supplier'),'operations','execution')+
+    goCard(paymentReview.length,tr('دفعات تحتاج مراجعة','Payments to review'),'operations','payments')+
+    goCard(inspection.length,tr('جاهز للفحص','Ready for inspection'),'operations','execution')+
+    goCard(problems.length,tr('مشاكل تحتاج تدخل','Issues needing action'),'operations','execution')+
+  '</div>';
+  const stats='<div class="stats-grid admin-overview-stats">'+
+    '<div class="stat-card"><strong>'+esc(active.length)+'</strong><span>'+esc(tr('طلبات نشطة','Active orders'))+'</span></div>'+
+    '<div class="stat-card"><strong>'+esc(acc.filter(a=>a.role==='client'&&!a.deletedAt).length)+'</strong><span>'+esc(tr('العملاء','Customers'))+'</span></div>'+
+    '<div class="stat-card"><strong>'+esc(acc.filter(a=>a.role==='supplier'&&!a.deletedAt).length)+'</strong><span>'+esc(tr('الموردون','Suppliers'))+'</span></div>'+
+    '<div class="stat-card"><strong>'+esc(entries.filter(e=>e.status==='completed').length)+'</strong><span>'+esc(tr('مكتملة','Completed'))+'</span></div>'+
+  '</div>';
+  setRoot('home',page(tr('لوحة التحكم','Dashboard'),tr('ابدأ بما يحتاج إجراء الآن، ثم انتقل إلى بقية الأقسام.','Start with items needing action, then move to the relevant workspace.'))+
+    '<section class="section-block admin-now"><div class="section-title"><div><h2>'+esc(tr('يتطلب إجراء الآن','Needs action now'))+'</h2><p>'+esc(tr('أهم قوائم العمل اليومية للإدارة.','Your main daily admin queues.'))+'</p></div></div>'+queues+'</section>'+
+    stats+
+    '<section class="section-block"><div class="section-title"><div><h2>'+esc(tr('الأولوية الآن','Priority now'))+'</h2><p>'+esc(tr('أعلى الطلبات التي تحتاج مراجعة أو قرارًا.','Highest-priority orders requiring review or a decision.'))+'</p></div></div><div class="list-stack">'+(priority.map(e=>operationalCard(e,isInspectionReady(e)||needsSupplierConfirmationEntry(e)?'execution':'payment')).join('')||empty())+'</div></section>');
+}
 function requestFilterControls(allRows){
   const count=s=>allRows.filter(x=>requestTracking(x)===s).length;
   const active=allRows.filter(x=>!['completed','cancelled'].includes(requestTracking(x))).length;
