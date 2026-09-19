@@ -700,7 +700,7 @@ async function handleAction(target){
   if(target.hasAttribute('data-supplier-order-cannot'))return openSupplierCannotFulfill(target.dataset.supplierOrderType,target.dataset.supplierOrderId);
   if(target.dataset.selectQuote){const r=(platformState.requests||[]).find(x=>x.id===target.dataset.requestId);if(!r)return;target.disabled=true;try{await mutate('requests',r.id,r.version,{selectedQuoteId:target.dataset.selectQuote});await loadData({render:false});closeModal();renderScreen();showToast(t('selected'));}catch(error){showToast(error.message);}return;}
   if(target.dataset.copyValue!==undefined)return copyText(target.dataset.copyValue);
-  if(target.dataset.paymentUpload)return openPaymentReceiptForm(target.dataset.entityType,target.dataset.entityId);
+  if(target.hasAttribute('data-payment-upload'))return openPaymentReceiptForm(target.dataset.entityType,target.dataset.entityId);
   if(target.dataset.paymentDocument)return openPaymentDocument(target.dataset.paymentDocument);
   if(target.dataset.paymentNotification){
     const n=notifications.find(x=>String(x.id)===String(target.dataset.paymentNotification));if(!n)return;
