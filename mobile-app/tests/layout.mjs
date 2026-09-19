@@ -15,10 +15,10 @@ const bankAccounts=[{id:'bank-usd',label:'MIG USD',beneficiary:'MIG COMPANY',ban
 requests[0]={...requests[0],status:'sent',trackingStatus:'payment_confirmation',trackingNote:'',selectedQuoteId:'q0',paymentStatus:'awaiting_receipt',paymentMessage:'يرجى تحويل الدفعة الأولى ثم إرفاق إيصال الدفع.',paymentBankAccountId:'bank-usd',paymentBankAccount:bankAccounts[0],paymentAmount:5250,paymentCurrency:'USD',paymentRequestedAt:'2026-09-18'};
 requests[2]={...requests[2],status:'sent',trackingStatus:'quote_selected',selectedQuoteId:'q2',selectedForSupplier:true};
 const categories=[{id:'mobile',nameAr:'إكسسوارات الجوال',nameEn:'Mobile accessories',active:true,order:0},{id:'electronics',nameAr:'إلكترونيات',nameEn:'Electronics',active:true,order:1},{id:'home',nameAr:'المنزل',nameEn:'Home',active:true,order:2}];
-const publicOffers = Array.from({ length: 45 }, (_, i) => ({ id: `p${i}`, displayNo: 10101+i, product: titleAr, translation, specs: titleEn, images: images.slice(0,(i%5)+1), status:'published', supplierId:'supplier', categoryId:categories[i%3].id, currency:'USD', unitPrice:12, moq:500, leadTime:30 }));
+const publicOffers = Array.from({ length: 45 }, (_, i) => ({ id: `p${i}`, displayNo: 10101+i, product: titleAr, translation, specs: titleEn, images: images.slice(0,(i%5)+1), status:'published', supplierId:'supplier', categoryId:categories[i%3].id, currency:'USD', unitPrice:12, moq:500, stock:'2000', leadTime:30 }));
 const quotes = requests.slice(0,4).map((r,i)=>({id:`q${i}`,requestId:r.id,supplierId:'supplier',status:i%2?'pending':'published',unitPrice:10,moq:500,leadTime:20,currency:'USD',images,translation,createdAt:'2026-09-17'}));
 const accounts = ['client','supplier','admin'].map(role=>({id:role,role,name: role==='admin'?'مدير المنصة':titleAr,company:titleEn,email:`${role}@example.test`,isOwner:role==='admin'}));
-const interests = [{id:'i1',displayNo:11001,offerId:'p0',status:'active',trackingStatus:'payment_confirmation',trackingUpdatedAt:'2026-09-18',trackingNote:'بانتظار تأكيد الدفع',supplierOrderStatus:'pending_confirmation',supplierOrderNote:'',paymentStatus:'receipt_submitted',paymentMessage:'يرجى دفع قيمة المنتج وإرسال الإيصال.',paymentReceipt:{src:images[0],mime:'image/jpeg',submittedAt:'2026-09-18'},createdAt:'2026-09-17',customerId:'client',version:1}];
+const interests = [{id:'i1',displayNo:11001,offerId:'p0',status:'active',trackingStatus:'payment_confirmation',trackingUpdatedAt:'2026-09-18',trackingNote:'بانتظار تأكيد الدفع',quantity:600,unitPrice:12,currency:'USD',moq:500,total:7200,supplierOrderStatus:'pending_confirmation',supplierOrderNote:'',paymentStatus:'receipt_submitted',paymentMessage:'يرجى دفع قيمة المنتج وإرسال الإيصال.',paymentReceipt:{src:images[0],mime:'image/jpeg',submittedAt:'2026-09-18'},createdAt:'2026-09-17',customerId:'client',version:1}];
 const notes = Array.from({length:20},(_,i)=>({id:i+1,titleAr,titleEn,bodyAr:titleAr,bodyEn:titleEn,createdAt:'2026-09-17'}));
 const clientPaymentNote={id:9001,event:'payment_required_request',entityId:'r0',titleAr:'بانتظار تأكيد الدفع',titleEn:'Awaiting payment confirmation',bodyAr:'يرجى تحويل الدفعة الأولى ثم إرفاق إيصال الدفع.',bodyEn:'Please upload the payment receipt.',action:'upload_receipt',target:{screen:'customerPayment',entityType:'request',entityId:'r0'},createdAt:'2026-09-19'};
 const adminPaymentNote={id:9002,event:'payment_receipt_submitted_interest',entityId:'i1',titleAr:'إيصال دفع جديد',titleEn:'New payment receipt',bodyAr:'تم رفع إيصال دفع جديد لطلب منتج جاهز.',bodyEn:'A new receipt was uploaded.',target:{screen:'adminPayment',entityType:'interest',entityId:'i1'},createdAt:'2026-09-19'};
@@ -194,12 +194,31 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
       await firstOffer.locator('.public-offer-content').click();
       await page.locator('#modal').waitFor({state:'visible'});
       assert.ok((await page.locator('#modalBody').textContent()).includes('30'),'Production time must remain in ready-product details');
-      assert.equal(await page.locator('#modal [data-interest]').count(),1,'Request-this-offer button must remain in ready-product details');
+      assert.equal(await page.locator('#modal .public-order-summary').count(),1,'Existing public-offer request must show requested quantity and total');
+      assert.ok((await page.locator('#modal .public-order-summary').textContent()).includes('600'),'Existing public-offer request must show the requested quantity');
+      assert.ok((await page.locator('#modal .public-order-summary').textContent()).includes('7,200')||(await page.locator('#modal .public-order-summary').textContent()).includes('7200'),'Existing public-offer request must show total');
       assert.equal(await page.locator('#modal .tracking-timeline').count(),1,'Requested ready product must show the unified order timeline');
       assert.equal(await page.locator('#modal .tracking-step').count(),9,'Ready-product timeline must skip sourcing and quote stages');
       assert.equal(await page.locator('#modal .payment-card').count(),1,'Ready-product payment status must appear inside the order');
       assert.ok((await page.locator('#modal .payment-card').textContent()).includes(language==='ar'?'بانتظار المراجعة':'awaiting review'),'Submitted ready-product receipt must show as awaiting review');
       await page.locator('.modal-close').click();
+
+      const secondOffer=page.locator('.public-offer-card').nth(1);
+      await secondOffer.locator('.public-offer-content').click();
+      await page.locator('#publicInterestForm').waitFor();
+      assert.equal(await page.locator('#publicInterestQuantity').getAttribute('min'),'500','Public offer quantity must enforce supplier MOQ');
+      assert.equal(await page.locator('#publicInterestQuantity').getAttribute('max'),'2000','Public offer quantity must respect numeric stock');
+      assert.equal(await page.locator('#publicInterestQuantity').inputValue(),'500','Requested quantity must default to MOQ');
+      await page.locator('#publicInterestQuantity').fill('499');
+      assert.equal(await page.locator('#publicInterestQuantity').evaluate(el=>el.checkValidity()),false,'Quantity below MOQ must be invalid');
+      await page.locator('#publicInterestQuantity').fill('750');
+      assert.ok((await page.locator('#publicInterestTotal').textContent()).includes('9,000')||(await page.locator('#publicInterestTotal').textContent()).includes('9000'),'Total must update as unit price × quantity');
+      await page.locator('#publicInterestForm button[type="submit"]').click();
+      await page.locator('#modal').waitFor({state:'hidden'});
+      assert.equal(interestMutation?.collection,'interests','Public offer request must create an interest/order record');
+      assert.equal(Number(interestMutation?.patch?.quantity),750,'Public offer request must store the customer quantity');
+      interestMutation=null;
+      await page.locator('#bottomNav [data-screen="home"]').click();
     }
     if(role==='supplier'){
       assert.equal(await page.locator('#screen .supplier-public-cta [data-action="new-public"]').count(),1,'Supplier home must expose Add public offer prominently');
