@@ -11,12 +11,15 @@ const translation = { titleAr, titleEn, descriptionAr: titleAr.repeat(2), descri
 const images = Array.from({ length: 5 }, (_, i) => `/api/media/test-${i}`);
 const trackingFlow=['received','reviewing','sourcing','quotes_available','quote_selected','payment_confirmation','production','quality_check','ready_to_ship','shipped','in_delivery','delivered','completed'];
 const requests = Array.from({ length: 100 }, (_, i) => ({ id: `r${i}`, displayNo: 10001+i, product: titleAr, translation, specs: titleEn, quantity: 1000, country: 'United Arab Emirates', createdAt: '2026-09-17', neededDate: '2026-10-17', images, customerId: 'client', supplierIds: ['supplier'], status: i%2 ? 'sent' : 'review', trackingStatus:trackingFlow[i%trackingFlow.length], trackingUpdatedAt:'2026-09-18', trackingNote:i===0?'المصنع يتوقع اكتمال الإنتاج قريبًا':'', version: 1 }));
+requests[0]={...requests[0],status:'sent',trackingStatus:'payment_confirmation',trackingNote:'',paymentStatus:'awaiting_receipt',paymentMessage:'يرجى تحويل الدفعة الأولى ثم إرفاق إيصال الدفع.',paymentRequestedAt:'2026-09-18'};
 const categories=[{id:'mobile',nameAr:'إكسسوارات الجوال',nameEn:'Mobile accessories',active:true,order:0},{id:'electronics',nameAr:'إلكترونيات',nameEn:'Electronics',active:true,order:1},{id:'home',nameAr:'المنزل',nameEn:'Home',active:true,order:2}];
 const publicOffers = Array.from({ length: 45 }, (_, i) => ({ id: `p${i}`, displayNo: 10101+i, product: titleAr, translation, specs: titleEn, images: images.slice(0,(i%5)+1), status:'published', supplierId:'supplier', categoryId:categories[i%3].id, currency:'USD', unitPrice:12, moq:500, leadTime:30 }));
 const quotes = requests.slice(0,4).map((r,i)=>({id:`q${i}`,requestId:r.id,supplierId:'supplier',status:i%2?'pending':'published',unitPrice:10,moq:500,leadTime:20,currency:'USD',images,translation,createdAt:'2026-09-17'}));
 const accounts = ['client','supplier','admin'].map(role=>({id:role,role,name: role==='admin'?'مدير المنصة':titleAr,company:titleEn,email:`${role}@example.test`,isOwner:role==='admin'}));
-const interests = [{id:'i1',offerId:'p0',status:'active',trackingStatus:'payment_confirmation',trackingUpdatedAt:'2026-09-18',trackingNote:'بانتظار تأكيد الدفع',createdAt:'2026-09-17',customerId:'client',version:1}];
+const interests = [{id:'i1',offerId:'p0',status:'active',trackingStatus:'payment_confirmation',trackingUpdatedAt:'2026-09-18',trackingNote:'بانتظار تأكيد الدفع',paymentStatus:'receipt_submitted',paymentMessage:'يرجى دفع قيمة المنتج وإرسال الإيصال.',paymentReceipt:{src:images[0],mime:'image/jpeg',submittedAt:'2026-09-18'},createdAt:'2026-09-17',customerId:'client',version:1}];
 const notes = Array.from({length:20},(_,i)=>({id:i+1,titleAr,titleEn,bodyAr:titleAr,bodyEn:titleEn,createdAt:'2026-09-17'}));
+const clientPaymentNote={id:9001,event:'payment_required_request',entityId:'r0',titleAr:'بانتظار تأكيد الدفع',titleEn:'Awaiting payment confirmation',bodyAr:'يرجى تحويل الدفعة الأولى ثم إرفاق إيصال الدفع.',bodyEn:'Please upload the payment receipt.',action:'upload_receipt',target:{screen:'customerPayment',entityType:'request',entityId:'r0'},createdAt:'2026-09-19'};
+const adminPaymentNote={id:9002,event:'payment_receipt_submitted_interest',entityId:'i1',titleAr:'إيصال دفع جديد',titleEn:'New payment receipt',bodyAr:'تم رفع إيصال دفع جديد لطلب منتج جاهز.',bodyEn:'A new receipt was uploaded.',target:{screen:'adminPayment',entityType:'interest',entityId:'i1'},createdAt:'2026-09-19'};
 const results = [];
 let failures = 0;
 
@@ -53,6 +56,8 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
   let publicOfferMutation=null;
   let interestMutation=null;
   let requestTrackingMutation=null;
+  let paymentReceiptSubmission=null;
+  let paymentReviewSubmission=null;
   const uploadedSources=[];
   page.on('pageerror',e=>errors.push(e.message));
   await page.addInitScript(lang=>localStorage.setItem('CapacitorStorage.language',lang),language);
@@ -65,7 +70,10 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
     let body={};
     if(path.endsWith('/auth/login')) body={user:accounts.find(a=>a.role===role),tokens:{accessToken:'fixture',refreshToken:'fixture'}};
     else if(path.endsWith('/state')) { stateCalls++; body={user:accounts.find(a=>a.role===role),requests,quotes,publicOffers,accounts,interests,settings:{categories,_version:1}}; }
-    else if(path.endsWith('/notifications')) body=notes;
+    else if(path.endsWith('/notifications')) body=role==='client'?[clientPaymentNote,...notes.slice(1)]:role==='admin'?[adminPaymentNote,...notes.slice(1)]:notes;
+    else if(path.endsWith('/notifications/read')) body={ok:true};
+    else if(path.endsWith('/payment-receipts')) {paymentReceiptSubmission=route.request().postDataJSON();body={ok:true,paymentStatus:'receipt_submitted'};}
+    else if(path.endsWith('/payment-review')) {paymentReviewSubmission=route.request().postDataJSON();body={ok:true,paymentStatus:paymentReviewSubmission.action==='confirm'?'confirmed':'reupload_requested'};}
     else if(path.endsWith('/app-config')) body={apiVersion:1};
     else if(path.endsWith('/uploads')) {
       const upload=route.request().postDataJSON();
