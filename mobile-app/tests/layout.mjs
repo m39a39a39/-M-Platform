@@ -11,8 +11,9 @@ const translation = { titleAr, titleEn, descriptionAr: titleAr.repeat(2), descri
 const images = Array.from({ length: 5 }, (_, i) => `/api/media/test-${i}`);
 const trackingFlow=['received','reviewing','sourcing','quotes_available','quote_selected','payment_confirmation','production','quality_check','ready_to_ship','shipped','in_delivery','delivered','completed'];
 const requests = Array.from({ length: 100 }, (_, i) => ({ id: `r${i}`, displayNo: 10001+i, product: titleAr, translation, specs: titleEn, quantity: 1000, country: 'United Arab Emirates', createdAt: '2026-09-17', neededDate: '2026-10-17', images, customerId: 'client', supplierIds: ['supplier'], status: i%2 ? 'sent' : 'review', trackingStatus:trackingFlow[i%trackingFlow.length], trackingUpdatedAt:'2026-09-18', trackingNote:i===0?'المصنع يتوقع اكتمال الإنتاج قريبًا':'', version: 1 }));
-const bankAccounts=[{id:'bank-aed',label:'حساب الإمارات',beneficiary:'MIG COMPANY',bankName:'Fixture Bank',iban:'AE070331234567890123456',swift:'FIXTAEAD',accountNumber:'1234567890',country:'United Arab Emirates',currency:'AED',active:true,order:0}];
-requests[0]={...requests[0],status:'sent',trackingStatus:'payment_confirmation',trackingNote:'',paymentStatus:'awaiting_receipt',paymentMessage:'يرجى تحويل الدفعة الأولى ثم إرفاق إيصال الدفع.',paymentBankAccountId:'bank-aed',paymentBankAccount:bankAccounts[0],paymentAmount:5250,paymentCurrency:'AED',paymentRequestedAt:'2026-09-18'};
+const bankAccounts=[{id:'bank-usd',label:'MIG USD',beneficiary:'MIG COMPANY',bankName:'Fixture Bank',iban:'AE070331234567890123456',swift:'FIXTAEAD',accountNumber:'1234567890',country:'United Arab Emirates',currency:'USD',active:true,order:0},{id:'bank-aed',label:'حساب الإمارات',beneficiary:'MIG COMPANY',bankName:'Fixture Bank AED',iban:'AE090331234567890123457',swift:'FIXTAEAD',accountNumber:'9876543210',country:'United Arab Emirates',currency:'AED',active:true,order:1}];
+requests[0]={...requests[0],status:'sent',trackingStatus:'payment_confirmation',trackingNote:'',selectedQuoteId:'q0',paymentStatus:'awaiting_receipt',paymentMessage:'يرجى تحويل الدفعة الأولى ثم إرفاق إيصال الدفع.',paymentBankAccountId:'bank-usd',paymentBankAccount:bankAccounts[0],paymentAmount:5250,paymentCurrency:'USD',paymentRequestedAt:'2026-09-18'};
+requests[2]={...requests[2],status:'sent',trackingStatus:'quote_selected',selectedQuoteId:'q2'};
 const categories=[{id:'mobile',nameAr:'إكسسوارات الجوال',nameEn:'Mobile accessories',active:true,order:0},{id:'electronics',nameAr:'إلكترونيات',nameEn:'Electronics',active:true,order:1},{id:'home',nameAr:'المنزل',nameEn:'Home',active:true,order:2}];
 const publicOffers = Array.from({ length: 45 }, (_, i) => ({ id: `p${i}`, displayNo: 10101+i, product: titleAr, translation, specs: titleEn, images: images.slice(0,(i%5)+1), status:'published', supplierId:'supplier', categoryId:categories[i%3].id, currency:'USD', unitPrice:12, moq:500, leadTime:30 }));
 const quotes = requests.slice(0,4).map((r,i)=>({id:`q${i}`,requestId:r.id,supplierId:'supplier',status:i%2?'pending':'published',unitPrice:10,moq:500,leadTime:20,currency:'USD',images,translation,createdAt:'2026-09-17'}));
@@ -292,7 +293,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
           assert.equal(await page.locator('[data-client-request-group="ready"] [data-public-offer]').count(),1,'Ready-product requests must be inside Requests');
         }
         await page.screenshot({path:`${output}/${label}-requests.png`});
-        const card=page.locator(role==='admin'?'[data-admin-open="request"]':role==='supplier'?'[data-supplier-request]':'[data-request]').first();
+        const card=role==='admin'?page.locator('[data-admin-open="request"][data-admin-id="r2"]'):page.locator(role==='supplier'?'[data-supplier-request]':'[data-request]').first();
         await card.locator('.list-card-title').click();
         await page.locator('#modal').waitFor({state:'visible'});
         await geometry(page,'#modal');
@@ -305,7 +306,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
           assert.ok((await page.locator('#modal .payment-bank-card').textContent()).includes('5250'),'Payment card must show the requested amount');
           assert.equal(await page.locator('#modal [data-repeat-request]').count(),1,'Customer request details must include Repeat request');
         }
-        if(role==='admin')assert.equal(await page.locator('#modal [data-admin-tracking-status]').count(),1,'Admin request details must include tracking status control');
+        if(role==='admin'){assert.equal(await page.locator('#modal [data-admin-tracking-status]').count(),1,'Admin request details must include tracking status control');assert.equal(await page.locator('#modal .admin-selected-quote-card:not(.missing)').count(),1,'Admin request details must show the selected quote summary');}
         if(role==='supplier')assert.equal(await page.locator('#modal .payment-card,#modal .admin-payment-review').count(),0,'Supplier must never see payment receipt or payment instructions');
         const viewable=page.locator('#modal img[data-image-viewer]').first();
         if(await viewable.count()){
@@ -317,18 +318,20 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
         if(role==='admin'){
           await page.locator('#modal [data-admin-tracking-status]').selectOption('payment_confirmation');
           assert.equal(await page.locator('#modal .admin-payment-message-field:not(.hidden)').count(),1,'Choosing payment stage must reveal the editable customer payment message');
-          await page.locator('#modal [data-admin-payment-bank]').selectOption('bank-aed');
-          await page.locator('#modal [data-admin-payment-amount]').fill('1500');
-          await page.locator('#modal [data-admin-payment-currency]').selectOption('AED');
+          assert.equal(await page.locator('#modal [data-admin-payment-bank]').inputValue(),'bank-usd','Matching bank account should be selected automatically for the quote currency');
+          assert.equal(await page.locator('#modal [data-admin-payment-amount]').inputValue(),'10000','Amount due must default to unit price × request quantity');
+          assert.equal(await page.locator('#modal [data-admin-payment-currency]').inputValue(),'USD','Payment currency must come from the selected quote');
+          assert.equal(await page.locator('#modal [data-admin-payment-currency]').isDisabled(),true,'RFQ payment currency must be locked to the selected quote currency');
+          await page.locator('#modal [data-admin-payment-amount]').fill('3000');
           await page.locator('#modal [data-admin-payment-message]').fill('يرجى تحويل 30% وإرفاق إيصال الدفع.');
           await page.locator('#modal [data-admin-save-tracking]').click();
           await page.locator('#modal').waitFor({state:'hidden'});
           assert.equal(requestTrackingMutation?.collection,'requests','Admin request tracking must submit a requests mutation');
           assert.equal(requestTrackingMutation?.patch?.trackingStatus,'payment_confirmation','Admin must save the payment-confirmation stage');
           assert.equal(requestTrackingMutation?.patch?.paymentMessage,'يرجى تحويل 30% وإرفاق إيصال الدفع.','Admin payment message must be sent with the stage update');
-          assert.equal(requestTrackingMutation?.patch?.paymentBankAccountId,'bank-aed','Admin must attach the selected bank account');
-          assert.equal(requestTrackingMutation?.patch?.paymentAmount,'1500','Admin must attach the requested payment amount');
-          assert.equal(requestTrackingMutation?.patch?.paymentCurrency,'AED','Admin must attach the payment currency');
+          assert.equal(requestTrackingMutation?.patch?.paymentBankAccountId,'bank-usd','Admin must attach the selected bank account');
+          assert.equal(requestTrackingMutation?.patch?.paymentAmount,'3000','Admin must be able to reduce the auto-calculated total for a partial payment');
+          assert.equal(requestTrackingMutation?.patch?.paymentCurrency,'USD','Admin payment currency must match the selected quote');
           assert.equal(requestTrackingMutation?.redactionConfirmed,false,'Payment-stage updates must not require redaction');
           requestTrackingMutation=null;
         }else await page.locator('.modal-close').click();
