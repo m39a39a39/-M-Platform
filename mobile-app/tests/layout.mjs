@@ -367,13 +367,17 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
         assert.equal(await page.locator('[data-admin-interest="i1"]').count(),1,'Payments queue must include a ready-product receipt awaiting review');
         await page.locator('[data-admin-interest="i1"]').click();
         await page.locator('[data-admin-interest-tracking-status]').waitFor();
-        assert.equal(await page.locator('#modal [data-admin-interest-tracking-status] option[value="production"]').count(),1,'Production stage must remain visible in the admin status list');
-        assert.equal(await page.locator('#modal [data-admin-interest-tracking-status] option[value="quality_check"]').count(),1,'Inspection stage must remain visible in the admin status list');
-        assert.equal(await page.locator('#modal [data-admin-interest-tracking-status] option[value="ready_to_ship"]').count(),1,'Ready-to-ship stage must remain visible in the admin status list');
-        assert.equal(await page.locator('#modal [data-admin-interest-tracking-status] option[value="shipped"]').count(),1,'Shipped stage must remain visible in the admin status list');
-        assert.equal(await page.locator('#modal [data-admin-interest-tracking-status] option[value="delivered"]').count(),1,'Delivered stage must remain visible in the admin status list');
-        assert.equal(await page.locator('#modal [data-admin-interest-tracking-status] option[value="completed"]').count(),1,'Completed stage must remain visible in the admin status list');
-        assert.notEqual(await page.locator('#modal [data-admin-interest-tracking-status] option[value="production"]').getAttribute('disabled'),null,'System-managed stages must stay visible but unavailable for manual jumps');
+        assert.equal(await page.locator('#modal select[data-admin-interest-tracking-status]').count(),0,'Admin status control must not use the oversized native iOS select');
+        await page.locator('#modal [data-admin-interest-tracking-status]').click();
+        await page.locator('#modal [data-admin-status-options]:not(.hidden)').waitFor();
+        assert.equal(await page.locator('#modal [data-admin-status-value="production"]').count(),1,'Production stage must remain visible in the admin status list');
+        assert.equal(await page.locator('#modal [data-admin-status-value="quality_check"]').count(),1,'Inspection stage must remain visible in the admin status list');
+        assert.equal(await page.locator('#modal [data-admin-status-value="ready_to_ship"]').count(),1,'Ready-to-ship stage must remain visible in the admin status list');
+        assert.equal(await page.locator('#modal [data-admin-status-value="shipped"]').count(),1,'Shipped stage must remain visible in the admin status list');
+        assert.equal(await page.locator('#modal [data-admin-status-value="delivered"]').count(),1,'Delivered stage must remain visible in the admin status list');
+        assert.equal(await page.locator('#modal [data-admin-status-value="completed"]').count(),1,'Completed stage must remain visible in the admin status list');
+        assert.equal(await page.locator('#modal [data-admin-status-value="production"]').isDisabled(),true,'System-managed stages must stay visible but unavailable for manual jumps');
+        assert.ok(await page.locator('#modal [data-admin-status-options]').evaluate(el=>el.getBoundingClientRect().height<=312),'Custom status list must stay compact on iPhone');
         assert.equal(await page.locator('#modal .admin-selected-quote-card').count(),1,'Public-offer order must show quantity and total');
         assert.equal(await page.locator('#modal .admin-payment-review').count(),1,'Payments queue must open receipt review controls');
         assert.equal(await page.locator('#modal [data-admin-payment-confirm]').count(),1,'Admin must be able to confirm payment');
@@ -420,7 +424,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
           await page.locator('[data-admin-interest="i2"]').click();
           await page.locator('[data-admin-interest-tracking-status]').waitFor();
           assert.equal(await page.locator('#modal .admin-supplier-confirmation.pending').count(),1,'New public-offer order must show supplier confirmation pending');
-          assert.notEqual(await page.locator('#modal [data-admin-interest-tracking-status] option[value="payment_confirmation"]').getAttribute('disabled'),null,'Payment must remain unavailable until supplier confirmation');
+          assert.equal(await page.locator('#modal [data-admin-status-value="payment_confirmation"]').isDisabled(),true,'Payment must remain unavailable until supplier confirmation');
           assert.equal(await page.locator('#modal [data-admin-send-interest-supplier]').count(),1,'Admin must be able to approve and send a public-offer order to the supplier');
           await page.locator('#modal [data-admin-send-interest-supplier]').click();
           await page.locator('#modal').waitFor({state:'hidden'});
@@ -476,7 +480,11 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
           await page.locator('[data-image-viewer-close]').click();
         }
         if(role==='admin'){
-          await page.locator('#modal [data-admin-tracking-status]').selectOption('payment_confirmation');
+          assert.equal(await page.locator('#modal select[data-admin-tracking-status]').count(),0,'Request tracking must avoid the oversized native iOS select');
+          await page.locator('#modal [data-admin-tracking-status]').click();
+          await page.locator('#modal [data-admin-status-options]:not(.hidden)').waitFor();
+          await page.locator('#modal [data-admin-status-value="payment_confirmation"]').click();
+          assert.equal(await page.locator('#modal [data-admin-tracking-status]').getAttribute('data-value'),'payment_confirmation','Custom status picker must select payment confirmation');
           assert.equal(await page.locator('#modal .admin-payment-message-field:not(.hidden)').count(),1,'Choosing payment stage must reveal the editable customer payment message');
           assert.equal(await page.locator('#modal [data-admin-payment-bank]').inputValue(),'bank-usd','Matching bank account should be selected automatically for the quote currency');
           assert.equal(await page.locator('#modal [data-admin-payment-amount]').inputValue(),'10000','Amount due must default to unit price × request quantity');
