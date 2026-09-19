@@ -456,6 +456,15 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
           await page.locator('#toast:not(.hidden)').waitFor();
           assert.ok((await page.locator('#toast').textContent()).toLowerCase().includes(language==='ar'?'تم النسخ':'copied'),'Bank detail copy must work through the iOS-safe fallback');
           assert.equal(await page.locator('#modal [data-repeat-request]').count(),1,'Customer request details must include Repeat request');
+          if(label==='chromium-390-ar-client'){
+            await page.locator('#modal [data-payment-upload]').click();
+            await page.locator('#paymentReceiptForm').waitFor();
+            assert.equal(await page.locator('#paymentReceiptFile').count(),1,'Payment button inside order details must open the receipt picker form');
+            assert.equal(await page.locator('#paymentReceiptFile').getAttribute('accept'),'image/*,application/pdf,.pdf','Receipt picker must accept images and PDF');
+            await page.locator('.modal-close').click();
+            await card.click();
+            await page.locator('#modal').waitFor({state:'visible'});
+          }
         }
         if(role==='admin'){assert.equal(await page.locator('#modal [data-admin-tracking-status]').count(),1,'Admin request details must include tracking status control');assert.equal(await page.locator('#modal .admin-selected-quote-card:not(.missing)').count(),1,'Admin request details must show the selected quote summary');assert.equal(await page.locator('#modal .admin-supplier-confirmation.confirmed').count(),1,'Admin request details must show supplier fulfillment confirmation before payment');assert.equal(await page.locator('#modal .admin-activity-log').count(),1,'Admin request details must include an activity log');}
         if(role==='supplier')assert.equal(await page.locator('#modal .payment-card,#modal .admin-payment-review').count(),0,'Supplier must never see payment receipt or payment instructions');
