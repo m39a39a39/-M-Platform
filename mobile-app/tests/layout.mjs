@@ -300,6 +300,18 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
         assert.ok(await firstOffer.locator('h3').evaluate(el=>getComputedStyle(el).whiteSpace==='nowrap'),'Ready-product title must stay on one line');
         assert.ok(await firstOffer.locator('p').evaluate(el=>getComputedStyle(el).whiteSpace==='nowrap'),'Ready-product description must stay on one line');
       }
+      if(screen==='offers'&&role==='client'){
+        assert.equal(await page.locator('#screen .client-quote-groups .client-quote-group-card').count(),4,'Client Quotes must group published quotes by request');
+        assert.equal(await page.locator('#screen .client-offers-stats .stat-card').count(),3,'Client Quotes must show concise quote stats');
+        await page.locator('#screen .client-quote-group-card').first().click();
+        await page.locator('#modal .client-compare-list').waitFor();
+        assert.ok(await page.locator('#modal .client-compare-quote').count()>0,'Quote group must open comparison cards');
+        assert.equal(await page.locator('#modal .client-quote-price-row').count()>0,true,'Quote comparison must show unit price and total');
+        await page.locator('.modal-close').click();
+      }
+      if(screen==='account'&&role==='client'){
+        assert.equal(await page.locator('#screen .account-setting-row [data-action="toggle-language"]').count(),1,'Customer account must include language setting');
+      }
       if(screen==='offers'&&role==='admin'){
         await page.locator('[data-admin-offer-tab="all"]').click();
         await page.locator('[data-admin-open="public"]').first().click();
