@@ -2384,7 +2384,7 @@ body.image-viewer-open {
 .admin-bulk-table th{position:sticky;top:0;z-index:3;background:#f4f7f9;font-size:12px;text-align:start}
 .admin-bulk-table .sticky-col{position:sticky;inset-inline-start:0;z-index:2;background:#fff;min-width:105px}
 .admin-bulk-table thead .sticky-col{z-index:4;background:#f4f7f9}
-.admin-bulk-table input,.admin-bulk-table select,.admin-bulk-table textarea{min-width:120px;padding:9px;border-radius:9px;font-size:13px}
+.admin-bulk-table input,.admin-bulk-table select,.admin-bulk-table textarea{min-width:120px;padding:9px;border-radius:9px;font-size:16px;line-height:1.35}
 .admin-bulk-table textarea{min-height:74px;resize:vertical}
 .admin-bulk-table td:nth-child(2),.admin-bulk-table td:nth-child(3),.admin-bulk-table td:nth-last-child(-n+4){min-width:200px}
 .admin-bulk-table small{display:block;color:var(--muted);margin-top:4px}
@@ -2408,3 +2408,12 @@ body.image-viewer-open {
 .invoice-document-btn b{position:absolute;inset-inline-end:9px;top:9px;padding:3px 6px;border-radius:999px;background:#e8f5ee;color:#16794a;font-size:9px}
 .invoice-document-btn.paid{border-color:#b8dfca;background:#f5fbf7}
 @media(max-width:420px){.invoice-document-actions{grid-template-columns:minmax(0,1fr)}}
+
+/* iOS: keep bulk editor controls at Safari's non-zooming text size and contain horizontal table scrolling. */
+.admin-bulk-products-form{min-width:0;max-width:100%}
+.admin-bulk-products-form .admin-bulk-table-wrap{-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-x pan-y}
+@supports (-webkit-touch-callout:none){
+  .admin-bulk-products-form input,
+  .admin-bulk-products-form textarea,
+  .admin-bulk-products-form select{font-size:16px!important}
+}
