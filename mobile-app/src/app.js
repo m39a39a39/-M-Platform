@@ -320,7 +320,7 @@ function invoicePanel(item,entityType){
   const proforma=item?.proformaInvoice,finalInvoice=item?.finalInvoice;
   if(!proforma&&!finalInvoice)return '';
   const button=(invoice,kind,label)=>invoice?.number?`<button type="button" class="invoice-document-btn ${kind==='final'?'paid':''}" data-invoice-pdf="${kind}" data-invoice-type="${entityType}" data-invoice-id="${esc(item.id)}"><span>${esc(label)}</span><strong>${esc(invoice.number)}</strong>${kind==='final'?'<b>PAID</b>':''}</button>`:'';
-  return `<section class="invoice-documents-card"><div><small>${esc(tr('الفواتير','Invoices'))}</small><strong>${esc(tr('مستندات PDF الرسمية','Official PDF documents'))}</strong></div><div class="invoice-document-actions">${button(proforma,'proforma','Proforma Invoice')}${button(finalInvoice,'final',tr('الفاتورة النهائية','Final Invoice'))}</div></section>`;
+  return `<section class="invoice-documents-card"><div><small>${esc(tr('الفواتير والمستندات','Invoices & documents'))}</small><strong>${esc(tr('مستندات PDF الرسمية','Official PDF documents'))}</strong></div><div class="invoice-document-actions">${button(proforma,'proforma','Proforma Invoice')}${button(finalInvoice,'final',tr('الفاتورة النهائية','Final Invoice'))}</div></section>`;
 }
 async function openInvoicePdf(target){
   const entityType=target.dataset.invoiceType,id=target.dataset.invoiceId,kind=target.dataset.invoicePdf;
