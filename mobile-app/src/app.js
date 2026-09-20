@@ -17,6 +17,8 @@ let readyProductsPage=1;
 let readyCategory='all';
 let readyCountry='all';
 let readySearch='';
+const GUEST_CART_KEY='m-platform.guest-cart.v1';
+const POST_AUTH_KEY='m-platform.post-auth-action.v1';
 let cartItems=[];
 let clientOrderSeen={};
 let clientRequestFilter='all';
@@ -116,6 +118,35 @@ function supplyCountryFilters(){
   return `<div class="supply-country-filter" role="tablist"><span>${esc(tr('بلد التوريد','Supply country'))}</span><button type="button" data-supply-country="all" class="${readyCountry==='all'?'active':''}">${esc(tr('الكل','All'))}</button>${rows.map(x=>`<button type="button" data-supply-country="${esc(x[0])}" class="${readyCountry===x[0]?'active':''}">${esc(lang==='ar'?x[1]:x[2])}</button>`).join('')}</div>`;
 }
 function cartStorageKey(){return currentUser?.id?`m-platform.cart.v1.${currentUser.id}`:'';}
+function readGuestCart(){
+  try{
+    const rows=JSON.parse(localStorage.getItem(GUEST_CART_KEY)||'[]');
+    return Array.isArray(rows)?rows.filter(x=>x&&typeof x.offerId==='string'&&Number.isInteger(Number(x.quantity))&&Number(x.quantity)>0).slice(0,10).map(x=>({offerId:x.offerId,quantity:Number(x.quantity)})):[];
+  }catch{return[];}
+}
+function mergeGuestCart(){
+  if(currentUser?.role!=='client')return false;
+  const guest=readGuestCart();if(!guest.length)return false;
+  const offers=(platformState?.publicOffers||[]).filter(o=>o.status==='published');
+  const validGuest=guest.filter(x=>offers.some(o=>o.id===x.offerId));
+  if(!validGuest.length){try{localStorage.removeItem(GUEST_CART_KEY);}catch{}return false;}
+  const guestCurrency=String(offers.find(o=>o.id===validGuest[0].offerId)?.currency||'').toUpperCase();
+  const currentCurrency=cartCurrency();
+  if(cartItems.length&&currentCurrency&&guestCurrency&&currentCurrency!==guestCurrency){
+    cartItems=validGuest;
+  }else{
+    for(const row of validGuest){
+      const existing=cartItems.find(x=>x.offerId===row.offerId);
+      if(existing)existing.quantity=row.quantity;
+      else if(cartItems.length<10)cartItems.push(row);
+    }
+  }
+  try{localStorage.removeItem(GUEST_CART_KEY);}catch{}
+  saveCart();return true;
+}
+function takePostAuthAction(){
+  try{const action=localStorage.getItem(POST_AUTH_KEY)||'';if(action)localStorage.removeItem(POST_AUTH_KEY);return action;}catch{return'';}
+}
 function loadCart(){
   cartItems=[];
   const key=cartStorageKey();if(!key)return;
@@ -297,7 +328,7 @@ async function loadData({render=true}={}){
   ]);
   if(epoch!==session.epoch)return;
   platformState=next;currentUser=next.user;notifications=nextNotifications;lastDataLoadedAt=Date.now();
-  if(currentUser?.role==='client'){loadCart();reconcileCart();loadClientOrderSeen();}else{cartItems=[];clientOrderSeen={};updateCartBadge();updateClientNavBadges();}
+  if(currentUser?.role==='client'){loadCart();mergeGuestCart();reconcileCart();loadClientOrderSeen();}else{cartItems=[];clientOrderSeen={};updateCartBadge();updateClientNavBadges();}
   updateAdminState(next);updateShell();
   if(render)renderScreen();
 }
@@ -1085,7 +1116,10 @@ async function logout(){
 async function enterWorkspace(){
   await loadData({render:false});
   if(!currentUser)return;
+  const postAuth=currentUser.role==='client'?takePostAuthAction():'';
   showView('appView');activeScreen='home';activeSub='primary';renderScreen();
+  if(postAuth==='open-cart')setTimeout(()=>openCart(),0);
+  else if(postAuth==='new-request')setTimeout(()=>openNewRequest(),0);
 }
 function recovery(error){showView('sessionView');$('sessionMessage').textContent=errorText(error);}
 $('loginForm').addEventListener('submit',async e=>{
