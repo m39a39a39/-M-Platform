@@ -10,7 +10,7 @@ const COUNTRY_ALIASES=new Map([
 ]);
 const FIELD_ALIASES={
   sku:['sku','رمز المنتج','كود المنتج'],
-  product:['product name','product','name','اسم المنتج','المنتج'],
+  product:['product name','product','name','اسم المنتج','المنتج','اسم'],
   specs:['description','specifications','specs','الوصف','المواصفات'],
   unitPrice:['price','unit price','السعر','سعر الوحدة'],
   currency:['currency','العملة'],
@@ -22,14 +22,14 @@ const FIELD_ALIASES={
   validUntil:['valid until','expiry date','expires','صالح حتى','تاريخ الصلاحية']
 };
 const IMAGE_ALIASES=Array.from({length:5},(_,i)=>[
-  'image '+(i+1),'image'+(i+1),'photo '+(i+1),'photo'+(i+1),'صورة '+(i+1),'الصورة '+(i+1)
+  'image '+(i+1),'image'+(i+1),'photo '+(i+1),'photo'+(i+1),'صورة '+(i+1),'الصورة '+(i+1),'صورة'+(i+1),'الصورة'+(i+1)
 ]);
 
 const textDecoder=new TextDecoder('utf-8');
 const xmlDecode=value=>String(value??'')
   .replaceAll('&lt;','<').replaceAll('&gt;','>').replaceAll('&quot;','"')
   .replaceAll('&apos;',"'").replaceAll('&amp;','&').trim();
-const norm=value=>String(value??'').trim().toLowerCase().replace(/\s+/g,' ');
+const norm=value=>String(value??'').replace(/[\u200e\u200f\ufeff]/g,'').trim().toLowerCase().replace(/\s+/g,' ');
 const contact=value=>/(?:https?:\/\/|www\.|wa\.me|@[a-z0-9]|[\w.+-]+@[\w.-]+\.[a-z]{2,}|(?:\+|00)\d[\d\s()-]{7,})/i.test(String(value||''));
 const colIndex=letters=>[...String(letters||'').toUpperCase()].reduce((n,c)=>n*26+(c.charCodeAt(0)-64),0)-1;
 const resolvePath=(source,target)=>{
@@ -161,12 +161,86 @@ async function parseImages(zip,drawingPath){
   }
   return images;
 }
+function sheetCellMetadata(xml){
+  const out=new Map();
+  for(const m of String(xml).matchAll(/<c\b([^>]*)>([\s\S]*?)<\/c>|<c\b([^>]*)\/>/g)){
+    const attrs=m[1]||m[3]||'',ref=attr(attrs,'r'),vm=Number(attr(attrs,'vm')||0);
+    if(!ref||!vm)continue;
+    const letters=(ref.match(/[A-Z]+/i)||[''])[0],row=Number((ref.match(/\d+/)||['0'])[0]),col=colIndex(letters);
+    if(row>0&&col>=0)out.set(vm,{row,col});
+  }
+  return out;
+}
+function metadataRichIndexes(xml){
+  const out=[];
+  const block=(String(xml).match(/<valueMetadata\b[^>]*>([\s\S]*?)<\/valueMetadata>/i)||[])[1]||'';
+  for(const bk of block.matchAll(/<bk\b[^>]*>([\s\S]*?)<\/bk>/g)){
+    const rc=(bk[1].match(/<rc\b[^>]*\/?>/)||[])[0]||'',raw=attr(rc,'v');
+    out.push(raw===''?null:Number(raw));
+  }
+  return out;
+}
+function richValueRelationSlots(xml){
+  const out=[];
+  for(const rv of String(xml).matchAll(/<rv\b[^>]*>([\s\S]*?)<\/rv>/g)){
+    const values=[...rv[1].matchAll(/<v\b([^>]*)>([\s\S]*?)<\/v>/g)];
+    let slot=null;
+    for(const v of values){
+      const kind=attr(v[1],'kind'),raw=xmlDecode(v[2].replace(/<[^>]+>/g,''));
+      if(kind==='rel'){slot=Number(raw);break;}
+    }
+    if(slot===null&&values.length){
+      const raw=xmlDecode(values[0][2].replace(/<[^>]+>/g,''));
+      if(/^-?\d+$/.test(raw))slot=Number(raw);
+    }
+    out.push(Number.isFinite(slot)?slot:null);
+  }
+  return out;
+}
+function richValueRelIds(xml){
+  return [...String(xml).matchAll(/<rel\b[^>]*\/?>/g)].map(m=>attr(m[0],'r:id')).filter(Boolean);
+}
+async function parseCellImages(zip,sheetXml){
+  const cellByVm=sheetCellMetadata(sheetXml);
+  if(!cellByVm.size)return [];
+  const metadataXml=await readXml(zip,'xl/metadata.xml');
+  if(!metadataXml)return [];
+  const richIndexes=metadataRichIndexes(metadataXml);
+  if(!richIndexes.length)return [];
+  const paths=[...zip.entries.keys()];
+  const richValuePath=paths.find(p=>/^xl\/richData\/(?:rd)?richvalue\.xml$/i.test(p));
+  const richRelPath=paths.find(p=>/^xl\/richData\/richValueRel\.xml$/i.test(p));
+  if(!richValuePath||!richRelPath)return [];
+  const richValues=richValueRelationSlots(await readXml(zip,richValuePath));
+  const relIds=richValueRelIds(await readXml(zip,richRelPath));
+  const relMap=relationships(await readXml(zip,relsPath(richRelPath)));
+  const images=[];
+  for(const [vm,cell] of cellByVm){
+    const richIndex=richIndexes[vm-1];
+    if(richIndex===null||richIndex===undefined)continue;
+    const slot=richValues[richIndex];
+    if(slot===null||slot===undefined)continue;
+    const rid=relIds[slot],target=relMap.get(rid);
+    if(!target)continue;
+    const path=resolvePath(richRelPath,target),bytes=await zip.read(path);
+    if(!bytes)continue;
+    const ext=(path.split('.').pop()||'').toLowerCase();
+    const mime=ext==='png'?'image/png':ext==='jpg'||ext==='jpeg'?'image/jpeg':ext==='webp'?'image/webp':ext==='gif'?'image/gif':ext==='bmp'?'image/bmp':'';
+    images.push({row:cell.row,col:cell.col,path,mime,size:bytes.length,source:mime?bytesToDataUrl(bytes,mime):''});
+  }
+  return images;
+}
+
+function headerVariants(value){
+  const n=norm(value);
+  return [...new Set([n,...n.split(/[\\/|\n\r•·:؛-]+/).map(norm)].filter(Boolean))];
+}
 function findHeader(rows){
   let best=null;
   for(const [rowNo,cells] of [...rows].filter(([n])=>n<=10)){
     const matches={};
     for(const [col,value] of cells){
-      const n=norm(value),variants=[n,...n.split('/').map(norm)].filter(Boolean);
+      const variants=headerVariants(value);
       for(const [field,aliases] of Object.entries(FIELD_ALIASES))if(variants.some(v=>aliases.includes(v)))matches[field]=col;
       IMAGE_ALIASES.forEach((aliases,i)=>{if(variants.some(v=>aliases.includes(v)))matches['image'+(i+1)]=col;});
     }
@@ -312,7 +386,8 @@ export async function parseBulkProductWorkbook(file,context={}){
   if(!sheetXml)throw new Error('invalid_xlsx');
   const shared=parseSharedStrings(await readXml(zip,'xl/sharedStrings.xml'));
   const sheetRows=parseSheet(sheetXml,shared),header=findHeader(sheetRows),sheetRels=await readXml(zip,relsPath(sheetPath));
-  const drawingPath=findDrawingPath(sheetXml,sheetPath,sheetRels),pictures=await parseImages(zip,drawingPath);
+  const drawingPath=findDrawingPath(sheetXml,sheetPath,sheetRels);
+  const pictures=[...(await parseImages(zip,drawingPath)),...(await parseCellImages(zip,sheetXml))];
   const rows=[];
   for(const [rowNo,cells] of [...sheetRows].sort((a,b)=>a[0]-b[0])){
     if(rowNo<=header.rowNo)continue;
