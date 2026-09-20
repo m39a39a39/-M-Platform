@@ -6,6 +6,7 @@ import {anonymous,ownRecord} from '../backend/modules/records.mjs';
 import {validateContent,normalizeCategories,normalizeSubcategories,normalizeSupplyCountries,TRACKING_STATUSES,READY_TRACKING_STATUSES,requiresRedaction,allowedAdminTrackingTransition,TRACKING_FLOW,READY_TRACKING_FLOW} from '../backend/modules/mutations.mjs';
 import {decodeImage,decodePaymentReceipt} from '../backend/modules/media.mjs';
 import {notificationPayload} from '../backend/modules/notifications.mjs';
+import {buildInvoiceSnapshot,INVOICE_COMPANY} from '../backend/modules/invoices.mjs';
 
 test('client cannot grant itself admin permission',()=>{
  assert.equal(can({role:'client',is_owner:true,permissions:['team']},'team'),false);
@@ -126,4 +127,32 @@ test('catalog taxonomy supports managed supply countries and subcategories',()=>
  assert.equal(subs[0].parentId,'mobile');
  assert.equal(countries[0].id,'cn-stock');
  assert.throws(()=>normalizeSubcategories([{id:'bad',parentId:'missing',nameAr:'خطأ',nameEn:'Bad'}],cats));
+});
+
+
+test('corporate invoice snapshot uses SAR and never contains banking data',()=>{
+ const invoice=buildInvoiceSnapshot({
+   kind:'proforma',number:'PI-2026-10001',issuedAt:'2026-09-20T00:00:00Z',
+   customer:{name:'Customer',company:'Example Co',email:'buyer@example.com',phone:'+966500000000',country:'Saudi Arabia'},
+   sourceCurrency:'USD',orderId:'order-1',
+   items:[{sku:'MG-1',product:'Power Bank',quantity:2,unitPrice:100,total:200}]
+ });
+ assert.equal(invoice.currency,'SAR');
+ assert.equal(invoice.currencyLabel,'SAR – Saudi Riyal');
+ assert.equal(invoice.company.nameEn,'GUANGZHOU MIG TRADING CO., LTD.');
+ assert.equal(invoice.company.nameZh,'广州米各贸易有限公司');
+ assert.equal(invoice.company.address,INVOICE_COMPANY.address);
+ assert.equal(invoice.number,'PI-2026-10001');
+ assert.equal(invoice.total,200);
+ assert.equal(JSON.stringify(invoice).toLowerCase().includes('bank'),false);
+});
+
+test('final invoice snapshot is marked PAID',()=>{
+ const invoice=buildInvoiceSnapshot({
+   kind:'final',number:'INV-2026-10001',issuedAt:'2026-09-20T00:00:00Z',paidAt:'2026-09-20T00:00:00Z',
+   customer:{name:'Customer'},items:[{product:'Cable',quantity:5,unitPrice:20,total:100}]
+ });
+ assert.equal(invoice.status,'PAID');
+ assert.equal(invoice.number,'INV-2026-10001');
+ assert.equal(invoice.total,100);
 });
