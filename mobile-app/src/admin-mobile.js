@@ -267,7 +267,7 @@ function translations(x,editable){const t=x.translation||{},d=editable?'':'disab
 function supplierPicker(x){const s=(state?.accounts||[]).filter(a=>a.role==='supplier'&&!a.deletedAt&&!a.blockedAt);return`<section class="admin-supplier-picker"><h3>${esc(tr('الموردون المدعوون','Invited suppliers'))}</h3><div class="admin-check-list">${s.map(a=>`<label><input type="checkbox" data-admin-supplier value="${esc(a.id)}" ${(x.supplierIds||[]).includes(a.id)?'checked':''}><span>${esc(a.company||a.name||'#'+String(a.id).slice(0,8))}</span></label>`).join('')}</div></section>`;}
 function categorySelector(x){
   const rows=activeCategories(),current=x?.categoryId||'';
-  if(!rows.length)return`<section class="admin-category-select-box"><strong>${esc(tr('التصنيف','Category'))}</strong><p>${esc(tr('أضف تصنيفًا من تبويب التصنيفات أولًا.','Add a category from the Categories tab first.'))}</p></section>`;
+  if(!rows.length)return`<section class="admin-category-select-box"><strong>${esc(tr('التصنيف','Category'))}</strong><p>${esc(tr('أضف تصنيفًا من الحساب > التصنيفات أولًا.','Add a category from Account > Categories first.'))}</p></section>`;
   return `<section class="admin-category-select-box"><label><span>${esc(tr('التصنيف','Category'))}</span><select data-admin-category-select><option value="">—</option>${rows.map(cat=>`<option value="${esc(cat.id)}" ${current===cat.id?'selected':''}>${esc(tr(cat.nameAr,cat.nameEn))}</option>`).join('')}</select></label></section>`;
 }
 function publicTranslationFields(x){
