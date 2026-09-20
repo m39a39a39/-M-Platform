@@ -1,6 +1,7 @@
 import {one,db,rpc,assert} from '../lib/supabase.mjs';
 import {can} from './auth.mjs';
 import {uploadPaymentReceipt} from './media.mjs';
+import {issueFinalInvoice} from './invoices.mjs';
 
 const TYPES={
   request:{table:'requests',permission:'requests.edit'},
@@ -53,6 +54,8 @@ export async function reviewPaymentReceipt(user,body={}){
     data.paymentStatus='confirmed';
     data.paymentConfirmedAt=now;
     data.paymentReviewNote='';
+    const customer=await one('profiles',row.owner_id);
+    data.finalInvoice=await issueFinalInvoice(customer,data,row.id,now);
   }else{
     data.paymentStatus='reupload_requested';
     data.paymentReviewNote=note;
