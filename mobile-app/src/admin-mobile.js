@@ -1,14 +1,14 @@
 import { session } from './session.js';
 import { filesToCompressedSources } from './image-upload.js';
 let state=null,revision=0;
-let requestFilter='active',offerTab='pending',timer=null;
+let requestFilter='all',offerTab='pending',timer=null;
 const searches=new Map(),mediaCache=new Map(),mediaTasks=new Map();
 const MEDIA_CONCURRENCY=6;
 let reloadWorkspace=async()=>{};
 export function configureAdmin({reload}) { reloadWorkspace=reload; }
 export function resetAdmin() {
   clearTimeout(timer); state=null; revision++;
-  requestFilter='active'; offerTab='pending'; searches.clear();
+  requestFilter='all'; offerTab='pending'; searches.clear();
   for(const url of mediaCache.values()) URL.revokeObjectURL(url);
   mediaCache.clear();mediaTasks.clear();
 }
@@ -151,7 +151,8 @@ function row(x,kind){
   const currentStatus=kind==='request'?requestTracking(x):kind==='interest'?interestTracking(x):x.status;
   const item=offer||x,openAttrs=kind==='interest'?`data-admin-interest="${esc(x.id)}"`:`data-admin-open="${kind}" data-admin-id="${esc(x.id)}"`;
   const kindLabel=kind==='request'?tr('طلب عرض سعر','RFQ order'):kind==='interest'?tr('طلب منتج','Product order'):kind==='quote'?tr('عرض سعر','Quote'):tr('منتج','Product');
-  return`<article class="list-card admin-record-card" ${openAttrs}><div class="list-card-main"><div class="list-card-title"><small>#${esc(ref(offer||x))}</small><h3>${esc(title(item))}</h3></div>${badge(currentStatus)}</div>${desc(item)?`<p>${esc(desc(item))}</p>`:''}<div class="admin-record-meta"><span class="status-pill">${esc(kindLabel)}</span>${o?`<span>${esc(o.company||o.name||tr('صاحب المحتوى','Owner'))}</span>`:''}${linked?`<span>${esc(tr('الطلب','Order'))} #${esc(ref(linked))}</span>`:''}<span>${esc(date(x.createdAt))}</span></div>${gallery(item.images||[])}</article>`;
+  const pendingQuoteCount=kind==='request'?(state?.quotes||[]).filter(q=>q.requestId===x.id&&!q.deletedAt&&q.status==='pending').length:0;
+  return`<article class="list-card admin-record-card" ${openAttrs}><div class="list-card-main"><div class="list-card-title"><small>#${esc(ref(offer||x))}</small><h3>${esc(title(item))}</h3></div>${badge(currentStatus)}</div>${desc(item)?`<p>${esc(desc(item))}</p>`:''}<div class="admin-record-meta"><span class="status-pill">${esc(kindLabel)}</span>${pendingQuoteCount?`<span class="status-pill status-review">${esc(tr('عروض للمراجعة','Quotes to review'))}: ${pendingQuoteCount}</span>`:''}${o?`<span>${esc(o.company||o.name||tr('صاحب المحتوى','Owner'))}</span>`:''}${linked?`<span>${esc(tr('الطلب','Order'))} #${esc(ref(linked))}</span>`:''}<span>${esc(date(x.createdAt))}</span></div>${gallery(item.images||[])}</article>`;
 }
 function matches(x,kind=''){if(!searchText().trim())return true;const q=searchText().trim().toLowerCase(),o=ownerOf(x),linked=kind==='quote'?(state?.requests||[]).find(r=>r.id===x.requestId):null,offer=kind==='interest'?(state?.publicOffers||[]).find(v=>v.id===x.offerId):null,client=linked?account(linked.customerId):null,requestQuotes=kind==='request'?(state?.quotes||[]).filter(v=>v.requestId===x.id):[],quoteSuppliers=requestQuotes.map(v=>account(v.supplierId));return[ref(x),ref(offer),x.name,x.company,x.email,x.phone,x.product,x.specs,x.notes,x.country,offer?title(offer):'',offer?desc(offer):'',o?.name,o?.company,linked?.displayNo,client?.name,client?.company,...requestQuotes.flatMap(v=>[ref(v),v.product,v.specs]),...quoteSuppliers.flatMap(v=>[v?.name,v?.company])].filter(Boolean).join(' ').toLowerCase().includes(q);}
 
@@ -167,8 +168,9 @@ const unifiedRequestTracking=x=>x.__kind==='interest'?interestTracking(x):reques
 function requestFilterControls(allRows){
   const count=s=>allRows.filter(x=>unifiedRequestTracking(x)===s).length;
   const active=allRows.filter(x=>!['completed','cancelled'].includes(unifiedRequestTracking(x))).length;
+  const pendingQuotes=(state?.quotes||[]).filter(q=>!q.deletedAt&&q.status==='pending').length;
   const options=[`<option value="all" ${requestFilter==='all'?'selected':''}>${esc(tr('كل الحالات','All statuses'))} (${allRows.length})</option>`,...TRACKING.map(([key,ar,en])=>`<option value="${key}" ${requestFilter===key?'selected':''}>${esc(tr(ar,en))} (${count(key)})</option>`)].join('');
-  return `<div class="admin-request-filters"><button type="button" data-admin-request-active class="${requestFilter==='active'?'active':''}">${esc(tr('الطلبات النشطة','Active requests'))} (${active})</button><label class="admin-filter-select"><span>${esc(tr('تصفية حسب الحالة','Filter by status'))}</span><select data-admin-request-filter>${options}</select></label></div>`;
+  return `<div class="admin-request-filters"><button type="button" data-admin-request-all class="${requestFilter==='all'?'active':''}">${esc(tr('كل الطلبات','All orders'))} (${allRows.length})</button><button type="button" data-admin-request-active class="${requestFilter==='active'?'active':''}">${esc(tr('الطلبات النشطة','Active orders'))} (${active})</button><button type="button" data-admin-request-quotes class="${requestFilter==='quotes_pending'?'active':''}">${esc(tr('عروض تحتاج مراجعة','Quotes to review'))} (${pendingQuotes})</button><label class="admin-filter-select"><span>${esc(tr('تصفية حسب الحالة','Filter by status'))}</span><select data-admin-request-filter>${options}</select></label></div>`;
 }
 function requests(){
   const custom=(state?.requests||[]).filter(x=>!x.deletedAt&&!x.suspendedAt&&matches(x,'request')).map(x=>({...x,__kind:'request'}));
@@ -176,7 +178,10 @@ function requests(){
   const allRows=[...custom,...interests];
   let rows=[...allRows];rows.sort((a,b)=>(a.__kind==='request'&&a.status==='review'?0:1)-(b.__kind==='request'&&b.status==='review'?0:1)||String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
   if(requestFilter==='active')rows=rows.filter(x=>!['completed','cancelled'].includes(unifiedRequestTracking(x)));
-  else if(requestFilter!=='all')rows=rows.filter(x=>unifiedRequestTracking(x)===requestFilter);
+  else if(requestFilter==='quotes_pending'){
+    const requestIds=new Set((state?.quotes||[]).filter(q=>!q.deletedAt&&q.status==='pending').map(q=>q.requestId));
+    rows=rows.filter(x=>x.__kind==='request'&&requestIds.has(x.id));
+  }else if(requestFilter!=='all')rows=rows.filter(x=>unifiedRequestTracking(x)===requestFilter);
   setRoot('requests',page(tr('الطلبات','Orders'),tr('جميع طلبات العملاء: طلبات عروض الأسعار وطلبات المنتجات.','All customer orders: RFQs and product orders.'))+search(tr('ابحث برقم الطلب أو اسم العميل أو رقم العرض أو المورد','Search order, customer, quote, or supplier'))+requestFilterControls(allRows)+`<div class="list-stack" data-admin-results>${rows.map(x=>row(x,x.__kind)).join('')||empty()}</div>`);
 }
 function categoryPanel(){
@@ -504,7 +509,9 @@ function go(view,tab){if(view==='offers'&&tab)offerTab=tab;document.querySelecto
 document.addEventListener('click',e=>{
   if(!isAdmin()||document.getElementById('appView').classList.contains('hidden'))return;
   const g=e.target.closest('[data-admin-go]');if(g){go(g.dataset.adminGo,g.dataset.adminTabTarget);return;}
+  const all=e.target.closest('[data-admin-request-all]');if(all){requestFilter='all';schedule();return;}
   const active=e.target.closest('[data-admin-request-active]');if(active){requestFilter='active';schedule();return;}
+  const quoteReview=e.target.closest('[data-admin-request-quotes]');if(quoteReview){requestFilter='quotes_pending';schedule();return;}
   const ot=e.target.closest('[data-admin-offer-tab]');if(ot){offerTab=ot.dataset.adminOfferTab;schedule();return;}
   const tn=e.target.closest('[data-admin-team-new]');if(tn){teamDialog();return;}
   const te=e.target.closest('[data-admin-team-edit]');if(te){teamDialog(te.dataset.adminTeamEdit);return;}
