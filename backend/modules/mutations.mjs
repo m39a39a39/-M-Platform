@@ -1,6 +1,7 @@
 import {one,db,rpc,assert,sb} from '../lib/supabase.mjs';
 import {can} from './auth.mjs';
 import {tables,assertOpenRequest,active,open} from './records.mjs';
+import {issueQuoteProforma,issueInterestProforma} from './invoices.mjs';
 const contact=v=>/(?:https?:\/\/|www\.|wa\.me|@[a-z0-9]|[\w.+-]+@[\w.-]+\.[a-z]{2,}|(?:\+|00)\d[\d\s()-]{7,})/i.test(String(v));
 const contentFields={requests:['product','specs','quantity','country','neededDate','images'],quotes:['unitPrice','currency','moq','leadTime','sampleCost','notes','images'],publicOffers:['sku','product','specs','country','unitPrice','currency','moq','stock','leadTime','validUntil','images','categoryId','subcategoryId']};
 const DEFAULT_SUPPLY_COUNTRIES=[{id:'China',nameAr:'الصين',nameEn:'China',active:true,order:0},{id:'United Arab Emirates',nameAr:'الإمارات',nameEn:'UAE',active:true,order:1}];
@@ -186,7 +187,8 @@ export async function mutate(user,body){
       data.currency=String(offer.data.currency||'').toUpperCase();
       data.moq=moq;
       data.total=quantity*unitPrice;
-      data.offerSnapshot={unitPrice, currency:data.currency, moq, stock:offer.data.stock||'', product:offer.data.product||'', translation:offer.data.translation||{}};
+      data.offerSnapshot={unitPrice, currency:data.currency, moq, stock:offer.data.stock||'', sku:offer.data.sku||'', product:offer.data.product||'', translation:offer.data.translation||{}};
+      data.proformaInvoice=await issueInterestProforma(user,data,id,now);
     }
     if(collection!=='interests'){
       validateContent(collection,data);await checkImages(data.images||[],user);
@@ -200,6 +202,7 @@ export async function mutate(user,body){
         const r=await assertOpenRequest(id),q=await one('quotes',patch.selectedQuoteId);
         assert(!r.data.selectedQuoteId&&r.data.status==='sent'&&open(q)&&q.request_id===id&&q.data.status==='published'&&active(await one('profiles',q.owner_id)),409,'العرض غير متاح أو سبق اختيار عرض / Quote unavailable or already selected');
         data.selectedQuoteId=q.id;setTracking(data,'supplier_confirmation',now,'');
+        if(!data.proformaInvoice)data.proformaInvoice=await issueQuoteProforma(user,r,q,now);
       }else{
         const published=await db('quotes',`request_id=eq.${encodeURIComponent(id)}&data->>status=eq.published&data->>deletedAt=is.null`);
         const latest=published.map(q=>q.data.publishedAt||q.data.updatedAt||q.data.reviewedAt||q.created_at).filter(Boolean).sort().at(-1);
