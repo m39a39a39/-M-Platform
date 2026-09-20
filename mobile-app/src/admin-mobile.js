@@ -49,9 +49,14 @@ const bankAccounts=()=>{const rows=Array.isArray(state?.settings?.bankAccounts)?
 const activeBankAccounts=()=>bankAccounts().filter(x=>x.active!==false);
 const selectedQuoteForRequest=x=>x?.selectedQuoteId?(state?.quotes||[]).find(q=>q.id===x.selectedQuoteId&&q.requestId===x.id):null;
 function requestPricing(x){
+  if(x?.orderType==='cart'){
+    const total=Number(x.cartTotal),quantity=Number(x.cartItemCount),currency=String(x.currency||'').toUpperCase();
+    if(!Number.isFinite(total)||total<=0||!Number.isFinite(quantity)||quantity<=0||!currency)return null;
+    return {isCart:true,quote:null,unitPrice:null,quantity,total,currency};
+  }
   const quote=selectedQuoteForRequest(x),unitPrice=Number(quote?.unitPrice),quantity=Number(x?.quantity);
   if(!quote||!Number.isFinite(unitPrice)||unitPrice<=0||!Number.isFinite(quantity)||quantity<=0)return null;
-  return {quote,unitPrice,quantity,total:unitPrice*quantity,currency:String(quote.currency||'').toUpperCase()};
+  return {isCart:false,quote,unitPrice,quantity,total:unitPrice*quantity,currency:String(quote.currency||'').toUpperCase()};
 }
 function interestPricing(x){
   const offer=(state?.publicOffers||[]).find(o=>o.id===x?.offerId),unitPrice=Number(x?.unitPrice||offer?.unitPrice),quantity=Number(x?.quantity),total=Number(x?.total),currency=String(x?.currency||offer?.currency||'').toUpperCase();
@@ -66,13 +71,22 @@ function formatMoney(value,currency){
 function selectedQuoteCard(x){
   const pricing=requestPricing(x);
   if(!pricing)return '<section class="admin-selected-quote-card missing"><div><small>'+esc(tr('العرض المختار','Selected quote'))+'</small><strong>'+esc(tr('لم يختار العميل عرضًا بعد','The customer has not selected a quote yet'))+'</strong></div><p>'+esc(tr('لا يمكن الانتقال إلى تأكيد الطلب والدفع قبل اختيار عرض.','The order cannot move to payment confirmation before a quote is selected.'))+'</p></section>';
-  const {quote,unitPrice,quantity,total,currency}=pricing;
+  const {quote,unitPrice,quantity,total,currency,isCart}=pricing;
+  if(isCart)return '<section class="admin-selected-quote-card"><div class="admin-selected-quote-head"><div><small>'+esc(tr('إجمالي طلب المنتجات','Product order total'))+'</small><strong>'+esc(Number(quantity).toLocaleString())+' '+esc(tr('منتجات','products'))+'</strong></div><span class="status-pill status-published">'+esc(currency)+'</span></div><div class="admin-selected-quote-values"><div class="total"><span>'+esc(tr('الإجمالي الكلي','Grand total'))+'</span><strong>'+esc(formatMoney(total,currency))+'</strong></div></div><small>'+esc(tr('تم تثبيت سعر وكمية كل منتج عند إرسال العميل للطلب.','Each product price and quantity were locked when the customer submitted the order.'))+'</small></section>';
   return '<section class="admin-selected-quote-card"><div class="admin-selected-quote-head"><div><small>'+esc(tr('العرض المختار','Selected quote'))+'</small><strong>#'+esc(ref(quote))+'</strong></div><span class="status-pill status-published">'+esc(tr('مختار','Selected'))+'</span></div><div class="admin-selected-quote-values"><div><span>'+esc(tr('سعر الوحدة','Unit price'))+'</span><strong>'+esc(formatMoney(unitPrice,currency))+'</strong></div><div><span>'+esc(tr('الكمية','Quantity'))+'</span><strong>'+esc(Number(quantity).toLocaleString())+'</strong></div><div class="total"><span>'+esc(tr('الإجمالي','Total'))+'</span><strong>'+esc(formatMoney(total,currency))+'</strong></div></div><small>'+esc(tr('الإجمالي = سعر الوحدة × كمية الطلب، ويُستخدم تلقائيًا كمبلغ الدفع المطلوب.','Total = unit price × order quantity and is used automatically as the amount due.'))+'</small></section>';
 }
 function supplierExecutionInfo(x,kind){
+  if(kind==='request'&&x?.orderType==='cart'){
+    const children=(state?.interests||[]).filter(i=>i.cartOrderId===x.id);
+    if(!children.length)return {status:'pending_confirmation',note:'',confirmed:false,count:0,confirmedCount:0,isCart:true};
+    const statuses=children.map(i=>i.supplierOrderStatus||'pending_confirmation'),confirmedCount=statuses.filter(s=>['confirmed','production','ready_for_inspection'].includes(s)).length;
+    const status=statuses.some(s=>s==='cannot_fulfill')?'cannot_fulfill':statuses.every(s=>s==='ready_for_inspection')?'ready_for_inspection':statuses.some(s=>s==='production'||s==='ready_for_inspection')?'production':statuses.every(s=>s==='confirmed')?'confirmed':'pending_confirmation';
+    const notes=children.filter(i=>i.supplierOrderNote).map(i=>i.supplierOrderNote);
+    return {status,note:notes.join(' · '),confirmed:confirmedCount===children.length,count:children.length,confirmedCount,isCart:true};
+  }
   const source=kind==='request'?requestPricing(x)?.quote:x;
   const status=source?.supplierOrderStatus||'pending_confirmation',note=source?.supplierOrderNote||'';
-  return {status,note,confirmed:['confirmed','production','ready_for_inspection'].includes(status)};
+  return {status,note,confirmed:['confirmed','production','ready_for_inspection'].includes(status),isCart:false};
 }
 function supplierConfirmationCard(x,kind){
   if(kind==='request'&&!requestPricing(x))return '';
@@ -150,11 +164,11 @@ function row(x,kind){
   const o=ownerOf(x),linked=kind==='quote'?(state?.requests||[]).find(r=>r.id===x.requestId):null,offer=kind==='interest'?(state?.publicOffers||[]).find(v=>v.id===x.offerId):null;
   const currentStatus=kind==='request'?requestTracking(x):kind==='interest'?interestTracking(x):x.status;
   const item=offer||x,openAttrs=kind==='interest'?`data-admin-interest="${esc(x.id)}"`:`data-admin-open="${kind}" data-admin-id="${esc(x.id)}"`;
-  const kindLabel=kind==='request'?tr('طلب عرض سعر','RFQ order'):kind==='interest'?tr('طلب منتج','Product order'):kind==='quote'?tr('عرض سعر','Quote'):tr('منتج','Product');
+  const kindLabel=kind==='request'?(x.orderType==='cart'?tr('طلب منتجات','Product order'):tr('طلب عرض سعر','RFQ order')):kind==='interest'?tr('طلب منتج','Product order'):kind==='quote'?tr('عرض سعر','Quote'):tr('منتج','Product');
   const pendingQuoteCount=kind==='request'?(state?.quotes||[]).filter(q=>q.requestId===x.id&&!q.deletedAt&&q.status==='pending').length:0;
   return`<article class="list-card admin-record-card" ${openAttrs}><div class="list-card-main"><div class="list-card-title"><small>#${esc(ref(offer||x))}</small><h3>${esc(title(item))}</h3></div>${badge(currentStatus)}</div>${desc(item)?`<p>${esc(desc(item))}</p>`:''}<div class="admin-record-meta"><span class="status-pill">${esc(kindLabel)}</span>${kind==='public'&&x.sku?`<span>SKU: ${esc(x.sku)}</span>`:''}${pendingQuoteCount?`<span class="status-pill status-review">${esc(tr('عروض للمراجعة','Quotes to review'))}: ${pendingQuoteCount}</span>`:''}${o?`<span>${esc(o.company||o.name||tr('صاحب المحتوى','Owner'))}</span>`:''}${linked?`<span>${esc(tr('الطلب','Order'))} #${esc(ref(linked))}</span>`:''}<span>${esc(date(x.createdAt))}</span></div>${gallery(item.images||[])}</article>`;
 }
-function matches(x,kind=''){if(!searchText().trim())return true;const q=searchText().trim().toLowerCase(),o=ownerOf(x),linked=kind==='quote'?(state?.requests||[]).find(r=>r.id===x.requestId):null,offer=kind==='interest'?(state?.publicOffers||[]).find(v=>v.id===x.offerId):null,client=linked?account(linked.customerId):null,requestQuotes=kind==='request'?(state?.quotes||[]).filter(v=>v.requestId===x.id):[],quoteSuppliers=requestQuotes.map(v=>account(v.supplierId));return[ref(x),ref(offer),x.sku,x.name,x.company,x.email,x.phone,x.product,x.specs,x.notes,x.country,offer?title(offer):'',offer?desc(offer):'',o?.name,o?.company,linked?.displayNo,client?.name,client?.company,...requestQuotes.flatMap(v=>[ref(v),v.product,v.specs]),...quoteSuppliers.flatMap(v=>[v?.name,v?.company])].filter(Boolean).join(' ').toLowerCase().includes(q);}
+function matches(x,kind=''){if(!searchText().trim())return true;const q=searchText().trim().toLowerCase(),o=ownerOf(x),linked=kind==='quote'?(state?.requests||[]).find(r=>r.id===x.requestId):null,offer=kind==='interest'?(state?.publicOffers||[]).find(v=>v.id===x.offerId):null,client=linked?account(linked.customerId):null,requestQuotes=kind==='request'?(state?.quotes||[]).filter(v=>v.requestId===x.id):[],quoteSuppliers=requestQuotes.map(v=>account(v.supplierId)),cartChildren=kind==='request'&&x.orderType==='cart'?(state?.interests||[]).filter(v=>v.cartOrderId===x.id):[],cartOffers=cartChildren.map(v=>(state?.publicOffers||[]).find(o=>o.id===v.offerId)).filter(Boolean),cartSuppliers=cartOffers.map(v=>account(v.supplierId));return[ref(x),ref(offer),x.sku,x.name,x.company,x.email,x.phone,x.product,x.specs,x.notes,x.country,offer?title(offer):'',offer?desc(offer):'',o?.name,o?.company,linked?.displayNo,client?.name,client?.company,...requestQuotes.flatMap(v=>[ref(v),v.product,v.specs]),...quoteSuppliers.flatMap(v=>[v?.name,v?.company]),...(x.cartItems||[]).flatMap(v=>[v.sku,v.product,v.translation?.titleAr,v.translation?.titleEn]),...cartOffers.flatMap(v=>[v.sku,title(v),desc(v)]),...cartSuppliers.flatMap(v=>[v?.name,v?.company])].filter(Boolean).join(' ').toLowerCase().includes(q);}
 
 function home(){
   const req=state?.requests||[],qs=state?.quotes||[],po=state?.publicOffers||[],ints=(state?.interests||[]).filter(activeInterest),acc=state?.accounts||[];
@@ -174,7 +188,7 @@ function requestFilterControls(allRows){
 }
 function requests(){
   const custom=(state?.requests||[]).filter(x=>!x.deletedAt&&!x.suspendedAt&&matches(x,'request')).map(x=>({...x,__kind:'request'}));
-  const interests=(state?.interests||[]).filter(x=>matches(x,'interest')).map(x=>({...x,__kind:'interest'}));
+  const interests=(state?.interests||[]).filter(x=>!x.cartOrderId&&matches(x,'interest')).map(x=>({...x,__kind:'interest'}));
   const allRows=[...custom,...interests];
   let rows=[...allRows];rows.sort((a,b)=>(a.__kind==='request'&&a.status==='review'?0:1)-(b.__kind==='request'&&b.status==='review'?0:1)||String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
   if(requestFilter==='active')rows=rows.filter(x=>!['completed','cancelled'].includes(unifiedRequestTracking(x)));
