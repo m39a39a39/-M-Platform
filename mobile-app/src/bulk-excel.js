@@ -193,6 +193,58 @@ function categoryId(value,categories){
 }
 export function normalizeSupplyCountry(value){return COUNTRY_ALIASES.get(norm(value))||'';}
 
+function crc32(bytes){
+  let crc=0xffffffff;
+  for(const b of bytes){
+    crc^=b;
+    for(let i=0;i<8;i++)crc=(crc>>>1)^(0xedb88320&-(crc&1));
+  }
+  return (crc^0xffffffff)>>>0;
+}
+const le16=n=>new Uint8Array([n&255,(n>>>8)&255]);
+const le32=n=>new Uint8Array([n&255,(n>>>8)&255,(n>>>16)&255,(n>>>24)&255]);
+function concatBytes(parts){
+  const size=parts.reduce((n,p)=>n+p.length,0),out=new Uint8Array(size);let off=0;
+  for(const p of parts){out.set(p,off);off+=p.length;}return out;
+}
+function zipStoredFiles(files){
+  const enc=new TextEncoder(),locals=[],centrals=[];let offset=0;
+  for(const [name,text] of Object.entries(files)){
+    const nameBytes=enc.encode(name),data=enc.encode(text),crc=crc32(data);
+    const local=concatBytes([
+      le32(0x04034b50),le16(20),le16(0),le16(0),le16(0),le16(0),le32(crc),le32(data.length),le32(data.length),
+      le16(nameBytes.length),le16(0),nameBytes,data
+    ]);
+    const central=concatBytes([
+      le32(0x02014b50),le16(20),le16(20),le16(0),le16(0),le16(0),le16(0),le32(crc),le32(data.length),le32(data.length),
+      le16(nameBytes.length),le16(0),le16(0),le16(0),le16(0),le32(0),le32(offset),nameBytes
+    ]);
+    locals.push(local);centrals.push(central);offset+=local.length;
+  }
+  const centralData=concatBytes(centrals),localData=concatBytes(locals),count=centrals.length;
+  const end=concatBytes([le32(0x06054b50),le16(0),le16(0),le16(count),le16(count),le32(centralData.length),le32(localData.length),le16(0)]);
+  return concatBytes([localData,centralData,end]);
+}
+const xesc=v=>String(v).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
+const lettersFromIndex=i=>{let s='',n=i+1;while(n){n--;s=String.fromCharCode(65+n%26)+s;n=Math.floor(n/26);}return s;};
+export function downloadBulkProductTemplate(){
+  const headers=['SKU','Image 1 / الصورة 1','Image 2 / الصورة 2','Image 3 / الصورة 3','Image 4 / الصورة 4','Image 5 / الصورة 5','Product Name / اسم المنتج','Description / الوصف','Price / السعر','Currency / العملة','MOQ / الحد الأدنى','Stock / المخزون','Production Days / مدة الإنتاج','Category / التصنيف','Supply Country / بلد التوريد','Valid Until / صالح حتى'];
+  const cells=headers.map((h,i)=>\`<c r="\${lettersFromIndex(i)}1" t="inlineStr"><is><t>\${xesc(h)}</t></is></c>\`).join('');
+  const sheet=\`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1">\${cells}</row></sheetData></worksheet>\`;
+  const files={
+    '[Content_Types].xml':'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>',
+    '_rels/.rels':'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>',
+    'xl/workbook.xml':'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Products" sheetId="1" r:id="rId1"/></sheets></workbook>',
+    'xl/_rels/workbook.xml.rels':'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>',
+    'xl/worksheets/sheet1.xml':sheet
+  };
+  const blob=new Blob([zipStoredFiles(files)],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download='M-Platform-products-template.xlsx';document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
+
 export function validateBulkProductRows(input,{categories=[],existingOffers=[]}={}){
   const rows=input.map(r=>({...r,errors:[],warnings:[],duplicateOfferId:'',duplicateOfferVersion:0}));
   const skuCounts=new Map();
