@@ -171,6 +171,8 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
       assert.equal(await page.locator('#screen .public-offer-card').count(),20,'Client home must show at most 20 ready products');
        assert.equal(await page.locator('#screen [data-product-search]').count(),1,'Client home must include product search');
        assert.equal(await page.locator('#headerCartBtn:not(.hidden)').count(),1,'Client header must include the cart');
+      assert.equal(await page.locator('#navOrdersBadge:not(.hidden)').textContent(),'1','My Orders tab must show unresolved/new order badge');
+      assert.equal(await page.locator('#navOffersBadge:not(.hidden)').textContent(),'2','Offers tab must show total unseen published quotes');
        await page.locator('#screen [data-product-search]').fill('SKU-44');
        assert.equal(await page.locator('#screen .public-offer-card').count(),1,'Product search must filter by SKU');
        await page.locator('#screen [data-product-search]').fill('');
@@ -336,7 +338,9 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
       if(screen==='offers'&&role==='client'){
         assert.equal(await page.locator('#screen .client-quote-groups .client-quote-group-card').count(),2,'Client Quotes must group only published quotes by request');
         assert.equal(await page.locator('#screen .client-offers-stats .stat-card').count(),3,'Client Quotes must show concise quote stats');
+        const offersBadgeBefore=Number(await page.locator('#navOffersBadge:not(.hidden)').textContent());
         await page.locator('#screen .client-quote-group-card').first().click();
+        assert.equal(Number(await page.locator('#navOffersBadge:not(.hidden)').textContent()),offersBadgeBefore-1,'Opening a quote group must decrement Offers badge');
         await page.locator('#modal .client-compare-list').waitFor();
         assert.ok(await page.locator('#modal .client-compare-quote').count()>0,'Quote group must open comparison cards');
         assert.equal(await page.locator('#modal .client-quote-price-row').count()>0,true,'Quote comparison must show unit price and total');
@@ -446,6 +450,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
         }
         if(role==='client'){
           assert.equal(await page.locator('#screen .client-order-filters button').count(),3,'My orders must include All, Active, and Completed filters');
+          assert.equal(await page.locator('#navOrdersBadge:not(.hidden)').textContent(),'1','Action-required order badge must remain until the action is resolved');
           assert.equal(await page.locator('#screen .client-order-card').count(),102,'My orders must combine RFQs, one cart order, and legacy ready-product orders');
           assert.equal(await page.locator('#screen [data-request]').count(),100,'RFQ requests must remain accessible inside My orders');
            assert.equal(await page.locator('#screen [data-cart-order]').count(),1,'Cart products must appear as one customer order');
