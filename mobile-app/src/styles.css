@@ -2388,3 +2388,23 @@ body.image-viewer-open {
 .admin-bulk-table textarea{min-height:74px;resize:vertical}
 .admin-bulk-table td:nth-child(2),.admin-bulk-table td:nth-child(3),.admin-bulk-table td:nth-last-child(-n+4){min-width:200px}
 .admin-bulk-table small{display:block;color:var(--muted);margin-top:4px}
+
+
+/* Corporate invoice document controls */
+.invoice-documents-card{
+  display:grid;gap:12px;margin:14px 0;padding:15px;border:1px solid var(--line);
+  border-radius:16px;background:#fff;
+}
+.invoice-documents-card>div:first-child{display:grid;gap:3px}
+.invoice-documents-card small{color:var(--muted);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em}
+.invoice-documents-card>div:first-child strong{font-size:15px;color:var(--navy)}
+.invoice-document-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.invoice-document-btn{
+  position:relative;display:grid;gap:4px;min-width:0;text-align:start;padding:12px 13px;
+  border:1px solid var(--line);border-radius:13px;background:#f7fafb;color:var(--navy);
+}
+.invoice-document-btn span{font-size:12px;font-weight:800}
+.invoice-document-btn strong{font-size:11px;overflow-wrap:anywhere}
+.invoice-document-btn b{position:absolute;inset-inline-end:9px;top:9px;padding:3px 6px;border-radius:999px;background:#e8f5ee;color:#16794a;font-size:9px}
+.invoice-document-btn.paid{border-color:#b8dfca;background:#f5fbf7}
+@media(max-width:420px){.invoice-document-actions{grid-template-columns:minmax(0,1fr)}}
