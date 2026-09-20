@@ -15,9 +15,6 @@ if [[ ! -f package.json || ! -d ios ]]; then
 fi
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
-files=(package.json package-lock.json index.html src/styles.css src/app.js src/admin-mobile.js src/guest.js src/session-core.js src/session.js src/language.js src/views.js src/image-upload.js src/image-viewer.js src/bulk-excel.js)
-
-# Download one repository archive instead of many raw.githubusercontent.com files.
 archive="$stage/repo.tar.gz"
 source_root="$stage/repo"
 mkdir -p "$source_root"
@@ -27,26 +24,35 @@ curl --fail --location --retry 5 --retry-all-errors --retry-delay 3 \
   --output "$archive"
 tar -xzf "$archive" -C "$source_root" --strip-components=1
 source_app="$source_root/mobile-app"
-for file in "${files[@]}"; do
-  [[ -s "$source_app/$file" ]] || { echo "Missing $file in revision $revision" >&2; exit 1; }
+for required in package.json package-lock.json index.html src; do
+  [[ -e "$source_app/$required" ]] || { echo "Missing $required in revision $revision" >&2; exit 1; }
 done
 
-# Build the complete version in staging before changing the installed files.
+# Validate the full source tree before changing the installed app.
 ( cd "$source_app" && npm ci && npm run build )
-# Preserve the existing native project and signing settings.
+
 backup="web-backup-$(date +%Y%m%d-%H%M%S)"
-mkdir -p "$backup/src"
-for file in "${files[@]}"; do
-  if [[ -f "$file" ]]; then cp "$file" "$backup/$file"; fi
-done
-for file in "${files[@]}"; do cp "$source_app/$file" "$file"; done
+mkdir -p "$backup"
+cp package.json package-lock.json index.html "$backup/"
+cp -R src "$backup/src"
+
+restore_previous(){
+  rm -rf src
+  cp -R "$backup/src" ./src
+  cp "$backup/package.json" "$backup/package-lock.json" "$backup/index.html" ./
+}
+
+# Copy the complete web source tree. This avoids missing future modules.
+rm -rf src
+cp -R "$source_app/src" ./src
+cp "$source_app/package.json" "$source_app/package-lock.json" "$source_app/index.html" ./
+
 if ! npm ci || ! npm run build; then
-  for file in "${files[@]}"; do
-    if [[ -f "$backup/$file" ]]; then cp "$backup/$file" "$file"; else rm -f "$file"; fi
-  done
+  restore_previous
   echo "Build failed. Previous web source restored from $backup. iOS was not synced." >&2
   exit 1
 fi
+
 # Raise only obsolete deployment targets; keep bundle ID, signing and team settings.
 native_project=ios/App/App.xcodeproj/project.pbxproj
 cp "$native_project" "$backup/project.pbxproj"
