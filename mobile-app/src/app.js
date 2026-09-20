@@ -16,6 +16,8 @@ let activeSub='primary';
 let readyProductsPage=1;
 let readyCategory='all';
 let readyCountry='all';
+let readySearch='';
+let cartItems=[];
 let clientRequestFilter='all';
 let bulkImportRows=[];
 let bulkImportFileName='';
@@ -97,6 +99,8 @@ function filteredReadyOffers(){
   let offers=(platformState?.publicOffers||[]).filter(o=>o.status==='published');
   if(readyCategory!=='all')offers=offers.filter(o=>o.categoryId===readyCategory);
   if(readyCountry!=='all')offers=offers.filter(o=>o.country===readyCountry);
+  const q=readySearch.trim().toLowerCase();
+  if(q)offers=offers.filter(o=>[o.sku,titleOf(o),descriptionOf(o),o.country].filter(Boolean).join(' ').toLowerCase().includes(q));
   return offers;
 }
 function categoryFilters(){
@@ -110,6 +114,70 @@ function supplyCountryFilters(){
   if(!rows.length)return '';
   return `<div class="supply-country-filter" role="tablist"><span>${esc(tr('بلد التوريد','Supply country'))}</span><button type="button" data-supply-country="all" class="${readyCountry==='all'?'active':''}">${esc(tr('الكل','All'))}</button>${rows.map(x=>`<button type="button" data-supply-country="${esc(x[0])}" class="${readyCountry===x[0]?'active':''}">${esc(lang==='ar'?x[1]:x[2])}</button>`).join('')}</div>`;
 }
+function cartStorageKey(){return currentUser?.id?`m-platform.cart.v1.${currentUser.id}`:'';}
+function loadCart(){
+  cartItems=[];
+  const key=cartStorageKey();if(!key)return;
+  try{
+    const parsed=JSON.parse(localStorage.getItem(key)||'[]');
+    if(Array.isArray(parsed))cartItems=parsed.filter(x=>x&&typeof x.offerId==='string'&&Number.isInteger(Number(x.quantity))&&Number(x.quantity)>0).slice(0,10).map(x=>({offerId:x.offerId,quantity:Number(x.quantity)}));
+  }catch{}
+  updateCartBadge();
+}
+function saveCart(){
+  const key=cartStorageKey();if(key)try{localStorage.setItem(key,JSON.stringify(cartItems));}catch{}
+  updateCartBadge();
+}
+function updateCartBadge(){
+  const btn=$('headerCartBtn'),badge=$('headerCartCount'),client=currentUser?.role==='client';
+  if(btn)btn.classList.toggle('hidden',!client);
+  const count=cartItems.length;
+  if(badge){badge.textContent=count>99?'99+':String(count);badge.classList.toggle('hidden',!client||!count);}
+}
+function cartRows(){
+  const offers=platformState?.publicOffers||[];
+  return cartItems.map(item=>{
+    const offer=offers.find(o=>o.id===item.offerId&&o.status==='published');
+    if(!offer)return null;
+    const quantity=Number(item.quantity),unitPrice=Number(offer.unitPrice),total=quantity*unitPrice;
+    return {item,offer,quantity,unitPrice,total,currency:String(offer.currency||'').toUpperCase()};
+  }).filter(Boolean);
+}
+function cartCurrency(){return cartRows()[0]?.currency||'';}
+function cartTotal(){return cartRows().reduce((sum,row)=>sum+row.total,0);}
+function setCartQuantity(offerId,quantity){
+  const row=cartItems.find(x=>x.offerId===offerId),offer=(platformState?.publicOffers||[]).find(o=>o.id===offerId&&o.status==='published');if(!row||!offer)return false;
+  const q=Number(quantity),moq=Math.max(1,Math.ceil(Number(offer.moq)||1)),stock=Number(offer.stock);
+  if(!Number.isInteger(q)||q<moq||(Number.isFinite(stock)&&stock>0&&q>stock))return false;
+  row.quantity=q;saveCart();return true;
+}
+function addToCart(offer,quantity){
+  const q=Number(quantity),moq=Math.max(1,Math.ceil(Number(offer?.moq)||1)),stock=Number(offer?.stock);
+  if(!offer||offer.status!=='published')throw new Error(tr('هذا المنتج غير متاح حاليًا.','This product is currently unavailable.'));
+  if(!Number.isInteger(q)||q<moq)throw new Error(tr('الكمية يجب ألا تقل عن الحد الأدنى للطلب.','Quantity cannot be below the MOQ.'));
+  if(Number.isFinite(stock)&&stock>0&&q>stock)throw new Error(tr('الكمية المطلوبة أكبر من المخزون المتاح.','Requested quantity exceeds available stock.'));
+  const existing=cartItems.find(x=>x.offerId===offer.id);
+  const currency=String(offer.currency||'').toUpperCase(),current=cartCurrency();
+  if(current&&currency!==current)throw new Error(tr(`السلة الحالية بعملة ${current}. أرسلها أولًا أو أفرغها لإضافة منتج بعملة ${currency}.`,`Your cart uses ${current}. Submit or clear it before adding a ${currency} product.`));
+  if(!existing&&cartItems.length>=10)throw new Error(tr('الحد الأقصى 10 منتجات في الطلب الواحد.','Maximum 10 products per cart order.'));
+  if(existing)existing.quantity=q;else cartItems.push({offerId:offer.id,quantity:q});
+  saveCart();
+}
+function productSearchBar(){
+  return `<label class="product-search-bar"><span>⌕</span><input type="search" inputmode="search" enterkeyhint="search" data-product-search value="${esc(readySearch)}" placeholder="${esc(tr('ابحث عن منتج أو SKU','Search products or SKU'))}" aria-label="${esc(tr('البحث عن المنتجات','Search products'))}"></label>`;
+}
+function productResultsHtml(){
+  const offers=filteredReadyOffers(),totalPages=Math.max(1,Math.ceil(offers.length/PAGE_SIZE));
+  readyProductsPage=Math.min(Math.max(readyProductsPage,1),totalPages);
+  const pageOffers=offers.slice((readyProductsPage-1)*PAGE_SIZE,readyProductsPage*PAGE_SIZE);
+  return {grid:pageOffers.map(publicOfferCard).join('')||empty(),pagination:productPagination(readyProductsPage,totalPages)};
+}
+function refreshProductResults(){
+  const result=productResultsHtml(),grid=$('readyProductsGrid'),pager=$('readyProductsPagination');
+  if(grid)grid.innerHTML=result.grid;if(pager)pager.innerHTML=result.pagination;
+  if(grid)hydrateImages(grid);
+}
+
 function trackingTimeline(item,{flow=TRACKING_FLOW,statusResolver=requestTrackingStatus}={}){
   const current=statusResolver(item),exception=TRACKING_EXCEPTIONS[current];
   const history=Array.isArray(item.trackingHistory)?item.trackingHistory:[];
