@@ -165,9 +165,9 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
       assert.equal(await page.locator('#headerNotificationsBtn:not(.hidden)').count(),1,'Client notification bell must be visible in the header');
       assert.equal(await page.locator('#bottomNav').evaluate(el=>getComputedStyle(el).gridTemplateColumns.split(' ').length),4,'Client navigation must use four equal columns');
       assert.ok(await page.locator('#screen').evaluate(el=>el.firstElementChild?.classList.contains('special-request-card')),'New request card must be first on client home');
-      assert.equal(await page.locator('#screen .client-action-needed').count(),1,'Client home must include Needs your action');
+      assert.equal(await page.locator('#screen .client-action-needed').count(),0,'Client home must not duplicate order actions from My Orders');
       assert.equal(await page.locator('#screen .client-home-stats .stat-card').count(),0,'Client home must not duplicate order and quote statistics');
-      assert.equal(await page.locator('#screen .client-action-card').count()>0,true,'Client home must surface actionable items');
+      assert.equal(await page.locator('#screen .client-action-card').count(),0,'Client home must leave order and quote updates to navigation badges');
       assert.equal(await page.locator('#screen .public-offer-card').count(),20,'Client home must show at most 20 ready products');
        assert.equal(await page.locator('#screen [data-product-search]').count(),1,'Client home must include product search');
        assert.equal(await page.locator('#headerCartBtn:not(.hidden)').count(),1,'Client header must include the cart');
