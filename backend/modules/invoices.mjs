@@ -1,3 +1,4 @@
+// Development release marker: cached catalog images + corporate invoices.
 import {rpc,assert} from '../lib/supabase.mjs';
 
 export const INVOICE_COMPANY=Object.freeze({
