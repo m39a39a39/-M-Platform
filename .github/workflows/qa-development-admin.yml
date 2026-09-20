@@ -1,0 +1,44 @@
+name: QA development admin products split
+on:
+  push:
+    branches: [development]
+    paths:
+      - 'mobile-app/**'
+      - '.github/workflows/qa-development-admin.yml'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: mobile-app
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Verify admin navigation source
+        run: |
+          grep -q "role==='admin'?tr('المنتجات','Products')" src/app.js
+          grep -q "جميع طلبات العملاء: طلبات عروض الأسعار وطلبات المنتجات" src/admin-mobile.js
+          grep -q "requestQuotesPanel" src/admin-mobile.js
+          grep -q "categoryPanel());" src/admin-mobile.js
+          ! grep -q "data-admin-offer-tab=\"categories\"" src/admin-mobile.js
+          ! grep -q "data-admin-offer-tab=\"interests\"" src/admin-mobile.js
+      - name: Install browser test tools
+        run: npm install --no-save --package-lock=false playwright@1.58.2
+      - run: npx playwright install --with-deps chromium webkit
+      - name: Test phone layouts
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/mobile-preview.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail http://127.0.0.1:4173 > /dev/null; then break; fi
+            sleep 1
+          done
+          node tests/layout.mjs
+          node tests/accounts-search.mjs
