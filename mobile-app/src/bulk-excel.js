@@ -47,7 +47,8 @@ const relsPath=source=>{
   return [...parts,'_rels',file+'.rels'].join('/');
 };
 const attr=(tag,name)=>{
-  const m=String(tag).match(new RegExp('(?:^|\\s)'+name.replace(':','\\\\:')+'="([^"]*)"'));
+  const safe=String(name).replace(/[.*+?^$()|[\]\\]/g,'\\$&');
+  const m=String(tag).match(new RegExp('(?:^|\\s)'+safe+'="([^"]*)"'));
   return m?xmlDecode(m[1]):'';
 };
 const tagText=(block,name)=>{
@@ -215,7 +216,6 @@ async function parseCellImages(zip,sheetXml){
   const relIds=richValueRelIds(await readXml(zip,richRelPath));
   const relMap=relationships(await readXml(zip,relsPath(richRelPath)));
   const images=[];
-  if(typeof process!=='undefined'&&process?.env?.CI)console.log('CELL_IMAGE_DEBUG',{cellByVm:[...cellByVm],richIndexes,richValuePath,richRelPath,richValues,relIds,relTargets:[...relMap]});
   for(const [vm,cell] of cellByVm){
     const richIndex=richIndexes[vm-1];
     if(richIndex===null||richIndex===undefined)continue;
