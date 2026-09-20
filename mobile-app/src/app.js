@@ -4,7 +4,7 @@ import { showView } from './views.js';
 import { configureAdmin, updateAdminState, resetAdmin, renderAdminScreen, openAdminPayment } from './admin-mobile.js';
 import { App } from '@capacitor/app';
 import { filesToCompressedSources } from './image-upload.js';
-import { parseBulkProductWorkbook, validateBulkProductRows, normalizeSupplyCountry } from './bulk-excel.js';
+import { parseBulkProductWorkbook, validateBulkProductRows, normalizeSupplyCountry, downloadBulkProductTemplate } from './bulk-excel.js';
 import './image-viewer.js';
 
 let currentUser=null;
@@ -690,41 +690,41 @@ function bulkWorkbookError(error){
   return map[error?.message]||error?.message||tr('تعذر قراءة الملف.','Could not read the file.');
 }
 function bulkCategoryOptions(selected){
-  return categories().map(cat=>\`<option value="\${esc(cat.id)}" \${selected===cat.id?'selected':''}>\${esc(lang==='ar'?cat.nameAr:cat.nameEn)}</option>\`).join('');
+  return categories().map(cat=>\`<option value="${esc(cat.id)}" ${selected===cat.id?'selected':''}>${esc(lang==='ar'?cat.nameAr:cat.nameEn)}</option>\`).join('');
 }
 function bulkRowCard(row,index){
   const ready=!row.errors.length,duplicate=row.duplicateOfferId;
-  const imageHtml=(row.images||[]).map((img,i)=>\`<div class="bulk-image-item"><img src="\${esc(img.source)}" alt=""><button type="button" data-bulk-remove-image="\${index}:\${i}" aria-label="\${esc(tr('حذف الصورة','Remove image'))}">×</button><small>\${i===0?esc(tr('رئيسية','Main')):i+1}</small></div>\`).join('');
-  const issues=[...row.errors.map(x=>\`<span class="bulk-error">\${esc(bulkErrorLabel(x))}</span>\`),...(row.warnings||[]).map(x=>x==='existing_sku'?\`<span class="bulk-warning">\${esc(tr('يوجد منتج بنفس SKU','Existing product with same SKU'))}</span>\`:'')].join('');
-  const duplicateControl=duplicate?\`<label><span>\${esc(tr('المنتج موجود مسبقًا','Existing SKU'))}</span><select data-bulk-field="duplicateAction" data-bulk-row="\${index}"><option value="skip" \${row.duplicateAction==='skip'?'selected':''}>\${esc(tr('تجاهل','Skip'))}</option><option value="update" \${row.duplicateAction==='update'?'selected':''}>\${esc(tr('تحديث وإرسال للمراجعة','Update & send for review'))}</option></select></label>\`:'';
-  return \`<article class="bulk-preview-card \${ready?'ready':'invalid'}">
-    <div class="bulk-preview-head"><div><small>\${esc(tr('صف','Row'))} \${row.rowNumber}</small><strong>\${esc(row.product||row.sku||'—')}</strong></div><span class="status-pill \${ready?'status-published':'status-review'}">\${esc(ready?tr('جاهز','Ready'):tr('يحتاج تعديل','Needs fixing'))}</span></div>
-    <div class="bulk-image-grid">\${imageHtml||\`<div class="bulk-no-image">\${esc(tr('لا توجد صورة','No image'))}</div>\`}</div>
+  const imageHtml=(row.images||[]).map((img,i)=>\`<div class="bulk-image-item"><img src="${esc(img.source)}" alt=""><button type="button" data-bulk-remove-image="${index}:${i}" aria-label="${esc(tr('حذف الصورة','Remove image'))}">×</button><small>${i===0?esc(tr('رئيسية','Main')):i+1}</small></div>\`).join('');
+  const issues=[...row.errors.map(x=>\`<span class="bulk-error">${esc(bulkErrorLabel(x))}</span>\`),...(row.warnings||[]).map(x=>x==='existing_sku'?\`<span class="bulk-warning">${esc(tr('يوجد منتج بنفس SKU','Existing product with same SKU'))}</span>\`:'')].join('');
+  const duplicateControl=duplicate?\`<label><span>${esc(tr('المنتج موجود مسبقًا','Existing SKU'))}</span><select data-bulk-field="duplicateAction" data-bulk-row="${index}"><option value="skip" ${row.duplicateAction==='skip'?'selected':''}>${esc(tr('تجاهل','Skip'))}</option><option value="update" ${row.duplicateAction==='update'?'selected':''}>${esc(tr('تحديث وإرسال للمراجعة','Update & send for review'))}</option></select></label>\`:'';
+  return \`<article class="bulk-preview-card ${ready?'ready':'invalid'}">
+    <div class="bulk-preview-head"><div><small>${esc(tr('صف','Row'))} ${row.rowNumber}</small><strong>${esc(row.product||row.sku||'—')}</strong></div><span class="status-pill ${ready?'status-published':'status-review'}">${esc(ready?tr('جاهز','Ready'):tr('يحتاج تعديل','Needs fixing'))}</span></div>
+    <div class="bulk-image-grid">${imageHtml||\`<div class="bulk-no-image">${esc(tr('لا توجد صورة','No image'))}</div>\`}</div>
     <div class="bulk-edit-grid">
-      <label><span>SKU</span><input data-bulk-field="sku" data-bulk-row="\${index}" value="\${esc(row.sku)}" maxlength="80"></label>
-      <label><span>\${esc(t('product'))}</span><input data-bulk-field="product" data-bulk-row="\${index}" value="\${esc(row.product)}" maxlength="300"></label>
-      <label class="bulk-wide"><span>\${esc(t('specifications'))}</span><textarea data-bulk-field="specs" data-bulk-row="\${index}" maxlength="10000">\${esc(row.specs)}</textarea></label>
-      <label><span>\${esc(t('price'))}</span><input data-bulk-field="unitPrice" data-bulk-row="\${index}" type="number" step="0.01" min="0.01" value="\${esc(row.unitPrice)}"></label>
-      <label><span>\${esc(t('currency'))}</span><select data-bulk-field="currency" data-bulk-row="\${index}">\${['USD','SAR','AED','CNY','EUR'].map(x=>\`<option \${row.currency===x?'selected':''}>\${x}</option>\`).join('')}</select></label>
-      <label><span>\${esc(t('moq'))}</span><input data-bulk-field="moq" data-bulk-row="\${index}" type="number" min="1" step="1" value="\${esc(row.moq)}"></label>
-      <label><span>\${esc(t('stock'))}</span><input data-bulk-field="stock" data-bulk-row="\${index}" type="number" min="0" step="1" value="\${esc(row.stock)}"></label>
-      <label><span>\${esc(t('leadTime'))}</span><input data-bulk-field="leadTime" data-bulk-row="\${index}" type="number" min="1" value="\${esc(row.leadTime)}"></label>
-      <label><span>\${esc(t('category'))}</span><select data-bulk-field="category" data-bulk-row="\${index}"><option value="">—</option>\${bulkCategoryOptions(row.categoryId)}</select></label>
-      <label><span>\${esc(tr('بلد التوريد','Supply country'))}</span><select data-bulk-field="country" data-bulk-row="\${index}"><option value="China" \${normalizeSupplyCountry(row.country)==='China'?'selected':''}>\${esc(tr('الصين','China'))}</option><option value="United Arab Emirates" \${normalizeSupplyCountry(row.country)==='United Arab Emirates'?'selected':''}>\${esc(tr('الإمارات','UAE'))}</option></select></label>
-      <label><span>\${esc(t('validUntil'))}</span><input data-bulk-field="validUntil" data-bulk-row="\${index}" type="date" value="\${esc(row.validUntil)}"></label>
-      \${duplicateControl}
+      <label><span>SKU</span><input data-bulk-field="sku" data-bulk-row="${index}" value="${esc(row.sku)}" maxlength="80"></label>
+      <label><span>${esc(t('product'))}</span><input data-bulk-field="product" data-bulk-row="${index}" value="${esc(row.product)}" maxlength="300"></label>
+      <label class="bulk-wide"><span>${esc(t('specifications'))}</span><textarea data-bulk-field="specs" data-bulk-row="${index}" maxlength="10000">${esc(row.specs)}</textarea></label>
+      <label><span>${esc(t('price'))}</span><input data-bulk-field="unitPrice" data-bulk-row="${index}" type="number" step="0.01" min="0.01" value="${esc(row.unitPrice)}"></label>
+      <label><span>${esc(t('currency'))}</span><select data-bulk-field="currency" data-bulk-row="${index}">${['USD','SAR','AED','CNY','EUR'].map(x=>\`<option ${row.currency===x?'selected':''}>${x}</option>\`).join('')}</select></label>
+      <label><span>${esc(t('moq'))}</span><input data-bulk-field="moq" data-bulk-row="${index}" type="number" min="1" step="1" value="${esc(row.moq)}"></label>
+      <label><span>${esc(t('stock'))}</span><input data-bulk-field="stock" data-bulk-row="${index}" type="number" min="0" step="1" value="${esc(row.stock)}"></label>
+      <label><span>${esc(t('leadTime'))}</span><input data-bulk-field="leadTime" data-bulk-row="${index}" type="number" min="1" value="${esc(row.leadTime)}"></label>
+      <label><span>${esc(t('category'))}</span><select data-bulk-field="category" data-bulk-row="${index}"><option value="">—</option>${bulkCategoryOptions(row.categoryId)}</select></label>
+      <label><span>${esc(tr('بلد التوريد','Supply country'))}</span><select data-bulk-field="country" data-bulk-row="${index}"><option value="China" ${normalizeSupplyCountry(row.country)==='China'?'selected':''}>${esc(tr('الصين','China'))}</option><option value="United Arab Emirates" ${normalizeSupplyCountry(row.country)==='United Arab Emirates'?'selected':''}>${esc(tr('الإمارات','UAE'))}</option></select></label>
+      <label><span>${esc(t('validUntil'))}</span><input data-bulk-field="validUntil" data-bulk-row="${index}" type="date" value="${esc(row.validUntil)}"></label>
+      ${duplicateControl}
     </div>
-    <div class="bulk-issues">\${issues}</div>
+    <div class="bulk-issues">${issues}</div>
   </article>\`;
 }
 function renderBulkPreview(message=''){
   bulkRevalidate();
   const valid=bulkImportRows.filter(r=>!r.errors.length).length,invalid=bulkImportRows.length-valid,duplicates=bulkImportRows.filter(r=>r.duplicateOfferId).length;
-  $('modalBody').innerHTML=\`<section class="bulk-summary"><div><strong>\${bulkImportRows.length}</strong><span>\${esc(tr('منتج','Products'))}</span></div><div><strong>\${valid}</strong><span>\${esc(tr('جاهز','Ready'))}</span></div><div><strong>\${invalid}</strong><span>\${esc(tr('يحتاج تعديل','Needs fixing'))}</span></div><div><strong>\${duplicates}</strong><span>\${esc(tr('مكرر','Duplicates'))}</span></div></section>
-    <div class="bulk-file-bar"><span>\${esc(bulkImportFileName)}</span><button type="button" class="text-btn" id="bulkChooseAnother">\${esc(tr('اختيار ملف آخر','Choose another file'))}</button></div>
-    <p class="form-message" id="bulkImportMessage">\${esc(message)}</p>
-    <div class="bulk-preview-list">\${bulkImportRows.map(bulkRowCard).join('')}</div>
-    <div class="bulk-import-footer"><button type="button" class="secondary-btn" id="bulkRecheck">\${esc(tr('إعادة التحقق','Recheck'))}</button><button type="button" class="primary-btn" id="bulkImportReady" \${valid?'':'disabled'}>\${esc(tr(\`استيراد الجاهزة (\${valid})\`,\`Import ready (\${valid})\`))}</button></div>\`;
+  $('modalBody').innerHTML=\`<section class="bulk-summary"><div><strong>${bulkImportRows.length}</strong><span>${esc(tr('منتج','Products'))}</span></div><div><strong>${valid}</strong><span>${esc(tr('جاهز','Ready'))}</span></div><div><strong>${invalid}</strong><span>${esc(tr('يحتاج تعديل','Needs fixing'))}</span></div><div><strong>${duplicates}</strong><span>${esc(tr('مكرر','Duplicates'))}</span></div></section>
+    <div class="bulk-file-bar"><span>${esc(bulkImportFileName)}</span><button type="button" class="text-btn" id="bulkChooseAnother">${esc(tr('اختيار ملف آخر','Choose another file'))}</button></div>
+    <p class="form-message" id="bulkImportMessage">${esc(message)}</p>
+    <div class="bulk-preview-list">${bulkImportRows.map(bulkRowCard).join('')}</div>
+    <div class="bulk-import-footer"><button type="button" class="secondary-btn" id="bulkRecheck">${esc(tr('إعادة التحقق','Recheck'))}</button><button type="button" class="primary-btn" id="bulkImportReady" ${valid?'':'disabled'}>${esc(tr(\`استيراد الجاهزة (${valid})\`,\`Import ready (${valid})\`))}</button></div>\`;
   $('bulkChooseAnother')?.addEventListener('click',openBulkPublicImport);
   $('bulkRecheck')?.addEventListener('click',()=>renderBulkPreview());
   $('bulkImportReady')?.addEventListener('click',importBulkProducts);
@@ -752,13 +752,14 @@ function openBulkPublicImport(){
   bulkImportRows=[];bulkImportFileName='';
   openModal(tr('استيراد المنتجات من Excel','Import products from Excel'),tr('Excel واحد مع الصور','One Excel file with embedded images'),\`
     <section class="bulk-upload-intro">
-      <h3>\${esc(tr('ارفع ملف .xlsx واحد','Upload one .xlsx file'))}</h3>
-      <p>\${esc(tr('كل منتج في صف، والصور تكون داخل أعمدة Image 1 إلى Image 5 في نفس الصف. بعد الرفع يمكنك تعديل أي خطأ قبل الاستيراد.','Each product is one row, with images embedded in Image 1–5 columns. You can edit mistakes before importing.'))}</p>
-      <a class="secondary-btn bulk-template-link" href="/bulk-products-template.xlsx" download>\${esc(tr('تحميل قالب Excel','Download Excel template'))}</a>
-      <label class="bulk-file-picker"><span>\${esc(tr('اختيار ملف Excel','Choose Excel file'))}</span><input id="bulkExcelFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></label>
-      <small>\${esc(tr('حتى 500 منتج، 5 صور لكل منتج، وحجم Excel حتى 30 MB.','Up to 500 products, 5 images per product, Excel file up to 30 MB.'))}</small>
+      <h3>${esc(tr('ارفع ملف .xlsx واحد','Upload one .xlsx file'))}</h3>
+      <p>${esc(tr('كل منتج في صف، والصور تكون داخل أعمدة Image 1 إلى Image 5 في نفس الصف. بعد الرفع يمكنك تعديل أي خطأ قبل الاستيراد.','Each product is one row, with images embedded in Image 1–5 columns. You can edit mistakes before importing.'))}</p>
+      <button type="button" class="secondary-btn bulk-template-link" id="bulkDownloadTemplate">${esc(tr('تحميل قالب Excel','Download Excel template'))}</button>
+      <label class="bulk-file-picker"><span>${esc(tr('اختيار ملف Excel','Choose Excel file'))}</span><input id="bulkExcelFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></label>
+      <small>${esc(tr('حتى 500 منتج، 5 صور لكل منتج، وحجم Excel حتى 30 MB.','Up to 500 products, 5 images per product, Excel file up to 30 MB.'))}</small>
       <p class="form-message" id="bulkFileMessage"></p>
     </section>\`);
+  $('bulkDownloadTemplate')?.addEventListener('click',downloadBulkProductTemplate);
   $('bulkExcelFile')?.addEventListener('change',e=>handleBulkWorkbookFile(e.target.files?.[0]));
 }
 async function importBulkProducts(){
@@ -770,7 +771,7 @@ async function importBulkProducts(){
   const imported=new Set();
   try{
     for(const row of ready){
-      const msg=$('bulkImportMessage');if(msg)msg.textContent=tr(\`جارٍ استيراد \${done+1} من \${ready.length}...\`,\`Importing \${done+1} of \${ready.length}...\`);
+      const msg=$('bulkImportMessage');if(msg)msg.textContent=tr(\`جارٍ استيراد ${done+1} من ${ready.length}...\`,\`Importing ${done+1} of ${ready.length}...\`);
       try{
         const images=await uploadSources(row.images.map(x=>x.source));
         const patch={sku:row.sku,product:row.product,specs:row.specs,country:normalizeSupplyCountry(row.country),unitPrice:String(row.unitPrice),currency:row.currency,moq:String(row.moq),stock:String(row.stock??''),leadTime:String(row.leadTime),validUntil:row.validUntil||'',categoryId:row.categoryId,images};
@@ -785,8 +786,8 @@ async function importBulkProducts(){
     bulkImportRows=bulkImportRows.filter(r=>!imported.has(r.rowNumber));
     if(!bulkImportRows.length||bulkImportRows.every(r=>r.duplicateAction==='skip'&&!r.errors.length)){
       closeModal();activeScreen='offers';activeSub='public';renderScreen();
-      showToast(tr(\`تم استيراد \${done} منتج بنجاح.\`,\`\${done} products imported successfully.\`));
-    }else renderBulkPreview(tr(\`تم استيراد \${done}، وتعذر \${failed}. راجع المنتجات المتبقية.\`,\`Imported \${done}; \${failed} failed. Review the remaining products.\`));
+      showToast(tr(\`تم استيراد ${done} منتج بنجاح.\`,\`${done} products imported successfully.\`));
+    }else renderBulkPreview(tr(\`تم استيراد ${done}، وتعذر ${failed}. راجع المنتجات المتبقية.\`,\`Imported ${done}; ${failed} failed. Review the remaining products.\`));
   }finally{busy=false;}
 }
 
