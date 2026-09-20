@@ -2021,7 +2021,7 @@ body.image-viewer-open {
 /* Public offer quantity request */
 .public-interest-form,.public-order-summary{display:grid;gap:12px;margin-top:16px;padding:14px;border:1px solid var(--line,#d9e2ea);border-radius:16px;background:var(--surface,#fff)}
 .public-interest-head{display:flex;justify-content:space-between;gap:12px}.public-interest-head strong{display:block}.public-interest-head small{display:block;margin-top:4px;color:var(--muted,#64748b)}
-.public-interest-form label{display:grid;gap:6px}.public-interest-form input{min-height:48px;border:1px solid var(--line,#cfd8df);border-radius:12px;padding:10px 12px;font:inherit;background:#fff}
+.public-interest-form label{display:grid;gap:6px}.public-interest-form input{min-height:48px;border:1px solid var(--line,#cfd8df);border-radius:12px;padding:10px 12px;font:inherit;font-size:16px;background:#fff}
 .public-interest-total{display:flex;justify-content:space-between;gap:12px;align-items:end;padding:11px 12px;border-radius:12px;background:var(--soft,#f5f7f9)}
 .public-interest-total span{color:var(--muted,#64748b);font-size:13px}.public-interest-total strong{font-size:20px}
 .public-order-summary{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.public-order-summary>div{padding:10px;border-radius:12px;background:var(--soft,#f5f7f9)}
@@ -2176,7 +2176,7 @@ body.image-viewer-open {
   background:transparent;
   color:var(--navy);
   font:inherit;
-  font-size:14px;
+  font-size:16px;
   padding:12px 0;
 }
 .header-cart{position:relative}
@@ -2270,6 +2270,7 @@ body.image-viewer-open {
   border-radius:10px;
   padding:6px 4px;
   font:inherit;
+  font-size:16px;
   text-align:center;
   background:#fff;
 }
@@ -2330,7 +2331,7 @@ body.image-viewer-open {
   .cart-line-price strong{font-size:12px}
   .cart-line-total strong{font-size:12px}
   .cart-line-qty{padding-inline:2px}
-  .cart-line-qty input{min-height:36px;padding-inline:2px;font-size:12px}
+  .cart-line-qty input{min-height:36px;padding-inline:2px;font-size:16px}
   .cart-line-remove{font-size:10px}
   .cart-actions{grid-template-columns:minmax(0,1fr)}
 }
