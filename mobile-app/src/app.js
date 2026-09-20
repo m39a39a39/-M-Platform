@@ -4,6 +4,7 @@ import { showView } from './views.js';
 import { configureAdmin, updateAdminState, resetAdmin, renderAdminScreen, openAdminPayment } from './admin-mobile.js';
 import { App } from '@capacitor/app';
 import { filesToCompressedSources } from './image-upload.js';
+import { parseBulkProductWorkbook, validateBulkProductRows, normalizeSupplyCountry } from './bulk-excel.js';
 import './image-viewer.js';
 
 let currentUser=null;
@@ -14,7 +15,10 @@ let activeScreen='home';
 let activeSub='primary';
 let readyProductsPage=1;
 let readyCategory='all';
+let readyCountry='all';
 let clientRequestFilter='all';
+let bulkImportRows=[];
+let bulkImportFileName='';
 let busy=false;
 let lastDataLoadedAt=0;
 const PAGE_SIZE=20;
@@ -81,14 +85,30 @@ function categories(activeOnly=true){
   const rows=Array.isArray(platformState?.settings?.categories)?platformState.settings.categories:[];
   return rows.filter(c=>!activeOnly||c.active!==false).sort((a,b)=>(a.order||0)-(b.order||0));
 }
+const SUPPLY_COUNTRIES=[
+  ['China','الصين','China'],
+  ['United Arab Emirates','الإمارات','UAE']
+];
+function supplyCountryLabel(value){
+  const row=SUPPLY_COUNTRIES.find(x=>x[0]===value);
+  return row?(lang==='ar'?row[1]:row[2]):value||'—';
+}
 function filteredReadyOffers(){
-  const offers=(platformState?.publicOffers||[]).filter(o=>o.status==='published');
-  return readyCategory==='all'?offers:offers.filter(o=>o.categoryId===readyCategory);
+  let offers=(platformState?.publicOffers||[]).filter(o=>o.status==='published');
+  if(readyCategory!=='all')offers=offers.filter(o=>o.categoryId===readyCategory);
+  if(readyCountry!=='all')offers=offers.filter(o=>o.country===readyCountry);
+  return offers;
 }
 function categoryFilters(){
   const rows=categories();
   if(!rows.length)return '';
   return `<div class="category-filter-bar" role="tablist"><button type="button" data-category="all" class="${readyCategory==='all'?'active':''}">${esc(t('allCategories'))}</button>${rows.map(cat=>`<button type="button" data-category="${esc(cat.id)}" class="${readyCategory===cat.id?'active':''}">${esc(lang==='ar'?cat.nameAr:cat.nameEn)}</button>`).join('')}</div>`;
+}
+function supplyCountryFilters(){
+  const available=new Set((platformState?.publicOffers||[]).filter(o=>o.status==='published').map(o=>o.country));
+  const rows=SUPPLY_COUNTRIES.filter(x=>available.has(x[0]));
+  if(!rows.length)return '';
+  return `<div class="supply-country-filter" role="tablist"><span>${esc(tr('بلد التوريد','Supply country'))}</span><button type="button" data-supply-country="all" class="${readyCountry==='all'?'active':''}">${esc(tr('الكل','All'))}</button>${rows.map(x=>`<button type="button" data-supply-country="${esc(x[0])}" class="${readyCountry===x[0]?'active':''}">${esc(lang==='ar'?x[1]:x[2])}</button>`).join('')}</div>`;
 }
 function trackingTimeline(item,{flow=TRACKING_FLOW,statusResolver=requestTrackingStatus}={}){
   const current=statusResolver(item),exception=TRACKING_EXCEPTIONS[current];
@@ -260,7 +280,7 @@ function empty(){return `<div class="empty-state"><span>◇</span><p>${esc(t('em
 function itemCard(item,{subtitle='',meta='',badge='',action='',images=false}={}){return `<article class="list-card" ${action}><div class="list-card-main"><div class="list-card-title"><small>#${esc(ref(item))}</small><h3>${esc(titleOf(item))}</h3></div>${badge}</div>${subtitle?`<p>${esc(subtitle)}</p>`:''}${meta?`<div class="meta-line">${meta}</div>`:''}${images?gallery(item.images):''}<div class="chevron">›</div></article>`;}
 function publicOfferCard(item){
   const image=(item.images||[])[0];
-  return `<article class="public-offer-card" data-public-offer="${esc(item.id)}"><div class="public-offer-media" data-viewer-gallery>${image?`<img alt="" data-media="${esc(image)}" data-image-viewer />`:'<div class="public-offer-placeholder">M</div>'}</div><div class="public-offer-content"><h3>${esc(titleOf(item))}</h3><p>${esc(descriptionOf(item)||'—')}</p><div class="public-offer-facts"><span><b>${esc(t('price'))}</b><strong>${money(item.unitPrice,item.currency)}</strong></span><span><b>${esc(t('moq'))}</b><strong>${esc(item.moq||'—')}</strong></span></div></div></article>`;
+  return `<article class="public-offer-card" data-public-offer="${esc(item.id)}"><div class="public-offer-media" data-viewer-gallery>${image?`<img alt="" data-media="${esc(image)}" data-image-viewer />`:'<div class="public-offer-placeholder">M</div>'}</div><div class="public-offer-content"><div class="public-offer-origin">${esc(supplyCountryLabel(item.country))}</div><h3>${esc(titleOf(item))}</h3><p>${esc(descriptionOf(item)||'—')}</p><div class="public-offer-facts"><span><b>${esc(t('price'))}</b><strong>${money(item.unitPrice,item.currency)}</strong></span><span><b>${esc(t('moq'))}</b><strong>${esc(item.moq||'—')}</strong></span></div></div></article>`;
 }
 function supplierPublicOfferPreview(item){
   const image=(item.images||[])[0];
@@ -397,14 +417,14 @@ function renderHome(){
       `<section class="special-request-card client-new-request"><div class="special-request-copy"><div class="special-request-heading"><span class="special-request-icon">＋</span><h2>${esc(tr('أرسل طلب جديد','Send a new request'))}</h2></div><p>${esc(tr('إذا لم تجد المنتج المناسب، أرسل مواصفاتك وسنطلب عروضًا لك.','If you cannot find the right product, send your specifications and we will source quotes for you.'))}</p></div><button class="primary-btn" data-action="new-request">+ ${esc(tr('أرسل طلب جديد','Send new request'))}</button></section>`+
       `<section class="section-block client-action-needed"><div class="section-title"><div><h2>${esc(tr('يتطلب إجراء منك','Needs your action'))}</h2><p>${esc(tr('اعرض ما يحتاج قرارك أو دفعتك أولًا.','Items waiting for your decision or payment.'))}</p></div></div><div class="client-action-list">${actions.slice(0,5).map(x=>clientActionCard(x.order,x.action)).join('')||`<div class="client-clear-state">✓ ${esc(tr('لا يوجد شيء مطلوب منك حاليًا','Nothing needs your action right now'))}</div>`}</div></section>`+
       `<div class="stats-grid client-home-stats client-three-stats">${statCard(activeOrders,tr('طلبات نشطة','Active orders'),'requests')}${statCard(newQuotes,tr('عروض جديدة','New quotes'),'offers')}${statCard(actions.length,tr('يحتاج إجراء','Needs action'),'requests')}</div>`+
-      `<section class="ready-products-section"><div class="section-title ready-products-title"><div><h2>${esc(tr('العروض العامة','Public offers'))}</h2><p>${esc(tr('منتجات جاهزة يمكنك طلبها مباشرة بالكمية التي تحتاجها.','Ready products you can order directly in the quantity you need.'))}</p></div></div>${categoryFilters()}<div class="public-offers-grid">${pageOffers.map(publicOfferCard).join('')||empty()}</div>${productPagination(readyProductsPage,totalPages)}</section>`+
+      `<section class="ready-products-section"><div class="section-title ready-products-title"><div><h2>${esc(tr('العروض العامة','Public offers'))}</h2><p>${esc(tr('منتجات جاهزة يمكنك طلبها مباشرة بالكمية التي تحتاجها.','Ready products you can order directly in the quantity you need.'))}</p></div></div>${categoryFilters()}${supplyCountryFilters()}<div class="public-offers-grid">${pageOffers.map(publicOfferCard).join('')||empty()}</div>${productPagination(readyProductsPage,totalPages)}</section>`+
       companyFooterCard();
   }else if(role==='supplier'){
     const quotes=platformState.quotes||[],answered=new Set(quotes.map(q=>q.requestId)),invites=(platformState.requests||[]).filter(r=>!answered.has(r.id));
     const pub=platformState.publicOffers||[],orders=supplierOrders(),pendingOrders=orders.filter(o=>o.status==='pending_confirmation'),activeOrders=orders.filter(o=>!['ready_for_inspection','cannot_fulfill'].includes(o.status)),publishedPublic=pub.filter(o=>o.status==='published').length,recentOrders=orders.slice(0,3);
     const needed=[...pendingOrders.slice(0,3).map(supplierOrderCard),...invites.slice(0,Math.max(0,3-pendingOrders.length)).map(r=>itemCard(r,{subtitle:descriptionOf(r),meta:`${t('quantity')}: ${r.quantity||'—'} · ${r.country||'—'}`,badge:`<span class="status-pill status-review">${esc(tr('تقديم عرض','Submit quote'))}</span>`,action:`data-supplier-request="${esc(r.id)}"`}))];
     $('screen').innerHTML=pageHeader(`${tr('مرحبًا','Welcome')} ${esc(currentUser.name||currentUser.company||'')}`,tr('ركز على الطلبات التي تحتاج إجراء منك أولًا.','Focus first on the items that need your action.'))+
-      `<section class="supplier-public-cta"><div class="supplier-public-cta-copy"><span class="supplier-public-cta-icon">＋</span><div><h2>${esc(tr('إضافة عرض عام جديد','Add a new public offer'))}</h2><p>${esc(tr('أضف منتجًا جاهزًا للبيع ليظهر للعملاء بعد مراجعة الإدارة.','Add a ready-to-sell product for customers to see after admin review.'))}</p></div></div><button class="primary-btn" type="button" data-action="new-public">+ ${esc(t('newPublicOffer'))}</button></section>`+
+      `<section class="supplier-public-cta"><div class="supplier-public-cta-copy"><span class="supplier-public-cta-icon">＋</span><div><h2>${esc(tr('إضافة المنتجات','Add products'))}</h2><p>${esc(tr('أضف منتجًا واحدًا أو استورد عدة منتجات من ملف Excel واحد مع الصور.','Add one product or import multiple products from one Excel file with embedded images.'))}</p></div></div><div class="supplier-public-cta-actions"><button class="secondary-btn" type="button" data-action="bulk-public-import">${esc(tr('استيراد من Excel','Import from Excel'))}</button><button class="primary-btn" type="button" data-action="new-public">+ ${esc(t('newPublicOffer'))}</button></div></section>`+
       `<section class="section-block supplier-action-needed"><div class="section-title"><div><h2>${esc(tr('يتطلب إجراء منك','Needs your action'))}</h2><p>${esc(tr('طلبات جديدة أو دعوات تحتاج ردك.','New orders or quote requests waiting for your response.'))}</p></div></div><div class="supplier-action-list">${needed.join('')||`<div class="supplier-clear-state">✓ ${esc(tr('لا يوجد إجراء مطلوب حاليًا','No action needed right now'))}</div>`}</div></section>`+
       `<div class="stats-grid supplier-home-stats supplier-three-stats">${statCard(activeOrders.length,tr('الطلبات النشطة','Active orders'),'orders')}${statCard(invites.length,tr('طلبات عروض الأسعار','Quote requests'),'requests')}${statCard(publishedPublic,tr('العروض العامة المنشورة','Published public offers'),'view-public-offers')}</div>`+
       `<section class="section-block supplier-recent-orders"><div class="section-title"><div><h2>${esc(tr('آخر الطلبات','Recent orders'))}</h2><p>${esc(tr('آخر الطلبات التي أصبحت جاهزة للتنفيذ.','Latest orders ready for fulfillment.'))}</p></div><button class="text-btn" type="button" data-action="orders">${esc(tr('عرض الكل','View all'))}</button></div><div class="supplier-orders-list">${recentOrders.map(supplierOrderCard).join('')||empty()}</div></section>`;
@@ -444,7 +464,7 @@ function renderOffers(){
       $('screen').innerHTML=pageHeader(t('submittedOffers'))+tabs+`<div class="list-stack">${quotes.map(q=>{const r=(platformState.requests||[]).find(x=>x.id===q.requestId);return itemCard(q,{subtitle:q.notes||descriptionOf(q),meta:`${money(q.unitPrice,q.currency)} · MOQ ${q.moq||'—'} · ${date(q.createdAt)}`,badge:cardBadge(q.status),action:`data-edit-quote="${esc(q.id)}"`,images:true});}).join('')||empty()}</div>`;
     }else{
       const offers=platformState.publicOffers||[];
-      $('screen').innerHTML=pageHeader(t('myPublicOffers'),'',`<button class="primary-small" data-action="new-public">+ ${esc(t('newPublicOffer'))}</button>`)+tabs+`<div class="list-stack">${offers.map(o=>itemCard(o,{subtitle:o.specs||'',meta:`${money(o.unitPrice,o.currency)} · MOQ ${o.moq||'—'} · ${date(o.createdAt)}`,badge:cardBadge(o.status),action:`data-public-offer="${esc(o.id)}"`,images:true})).join('')||empty()}</div>`;
+      $('screen').innerHTML=pageHeader(t('myPublicOffers'),'',`<div class="page-head-actions"><button class="secondary-btn compact" data-action="bulk-public-import">${esc(tr('استيراد Excel','Import Excel'))}</button><button class="primary-small" data-action="new-public">+ ${esc(t('newPublicOffer'))}</button></div>`)+tabs+`<div class="list-stack">${offers.map(o=>itemCard(o,{subtitle:o.specs||'',meta:`${money(o.unitPrice,o.currency)} · MOQ ${o.moq||'—'} · ${date(o.createdAt)}`,badge:cardBadge(o.status),action:`data-public-offer="${esc(o.id)}"`,images:true})).join('')||empty()}</div>`;
     }
   }else renderAdminCollection('offers');
 }
@@ -533,7 +553,7 @@ async function openPublicOffer(offerId){
     <p class="form-message" id="publicInterestMessage"></p>
     <button class="primary-btn full" type="submit">${esc(t('requestOffer'))}</button>
   </form>`:'';
-  openModal(titleOf(o),`#${ref(o)}`,`${gallery(o.images)}<div class="quote-price">${money(o.unitPrice,o.currency)}</div><div class="facts"><span>MOQ ${esc(o.moq||'—')}</span><span>${esc(t('stock'))}: ${esc(o.stock||'—')}</span><span>${esc(t('leadTime'))}: ${esc(o.leadTime||'—')}</span><span>${esc(t('validUntil'))}: ${esc(o.validUntil||'—')}</span></div><p class="long-copy">${esc(descriptionOf(o)||'—')}</p>${requestForm}`);
+  openModal(titleOf(o),`#${ref(o)}`,`${gallery(o.images)}<div class="quote-price">${money(o.unitPrice,o.currency)}</div><div class="facts"><span>MOQ ${esc(o.moq||'—')}</span><span>${esc(t('stock'))}: ${esc(o.stock||'—')}</span><span>${esc(t('leadTime'))}: ${esc(o.leadTime||'—')}</span><span>${esc(tr('بلد التوريد','Supply country'))}: ${esc(supplyCountryLabel(o.country))}</span><span>${esc(t('validUntil'))}: ${esc(o.validUntil||'—')}</span></div><p class="long-copy">${esc(descriptionOf(o)||'—')}</p>${requestForm}`);
   if(currentUser.role==='client'){
     const form=$('publicInterestForm'),input=$('publicInterestQuantity'),total=$('publicInterestTotal');
     input?.addEventListener('input',()=>{const q=Number(input.value);total.textContent=money((Number.isFinite(q)?q:0)*Number(o.unitPrice||0),o.currency);});
@@ -639,7 +659,136 @@ function openNewRequest(source=null){
 }
 function quoteFormHtml(q=null,requestId=''){return `<form id="quoteForm" class="form-stack" data-id="${esc(q?.id||'')}" data-request="${esc(requestId||q?.requestId||'')}"><div class="form-two"><label><span>${esc(t('price'))}</span><input name="unitPrice" type="number" step="0.01" min="0.01" value="${esc(q?.unitPrice||'')}" required /></label><label><span>${esc(t('currency'))}</span><select name="currency">${['USD','SAR','AED','CNY','EUR'].map(c=>`<option ${q?.currency===c?'selected':''}>${c}</option>`).join('')}</select></label></div><div class="form-two"><label><span>${esc(t('moq'))}</span><input name="moq" type="number" min="1" value="${esc(q?.moq||'')}" required /></label><label><span>${esc(t('leadTime'))}</span><input name="leadTime" type="number" min="1" value="${esc(q?.leadTime||'')}" required /></label></div><label><span>${esc(t('sampleCost'))}</span><input name="sampleCost" value="${esc(q?.sampleCost||'')}" maxlength="10000" /></label><label><span>${esc(t('notes'))}</span><textarea name="notes" maxlength="10000">${esc(q?.notes||'')}</textarea></label>${fileField('quoteFiles')}<p class="form-message" id="quoteFormMessage"></p><button class="primary-btn" type="submit">${esc(q?t('save'):t('submit'))}</button></form>`;}
 function openQuoteForm(requestId,q=null){openModal(q?t('editQuote'):t('submitQuote'),q?`#${ref(q)}`:`#${ref((platformState.requests||[]).find(r=>r.id===requestId))}`,quoteFormHtml(q,requestId));$('quoteForm').addEventListener('submit',submitQuote);}
-function openNewPublic(){const cats=categories();openModal(t('newPublicOffer'),'M Platform',`<form id="publicForm" class="form-stack"><label><span>${esc(t('product'))}</span><input name="product" required maxlength="300" /></label>${cats.length?`<label><span>${esc(t('category'))}</span><select name="categoryId" required><option value="">—</option>${cats.map(cat=>`<option value="${esc(cat.id)}">${esc(lang==='ar'?cat.nameAr:cat.nameEn)}</option>`).join('')}</select></label>`:''}<label><span>${esc(t('specifications'))}</span><textarea name="specs" required maxlength="10000"></textarea></label><div class="form-two"><label><span>${esc(t('price'))}</span><input name="unitPrice" type="number" step="0.01" min="0.01" required /></label><label><span>${esc(t('currency'))}</span><select name="currency">${['USD','SAR','AED','CNY','EUR'].map(c=>`<option>${c}</option>`).join('')}</select></label></div><div class="form-two"><label><span>${esc(t('moq'))}</span><input name="moq" type="number" min="1" required /></label><label><span>${esc(t('stock'))}</span><input name="stock" maxlength="100" /></label></div><div class="form-two"><label><span>${esc(t('leadTime'))}</span><input name="leadTime" type="number" min="1" required /></label><label><span>${esc(t('country'))}</span><input name="country" maxlength="100" /></label></div><label><span>${esc(t('validUntil'))}</span><input name="validUntil" type="date" /></label>${fileField('publicFiles')}<p class="form-message" id="publicFormMessage"></p><button class="primary-btn" type="submit">${esc(t('submit'))}</button></form>`);$('publicForm').addEventListener('submit',submitPublic);}
+function openNewPublic(){const cats=categories();openModal(t('newPublicOffer'),'M Platform',`<form id="publicForm" class="form-stack"><label><span>SKU</span><input name="sku" required maxlength="80" pattern="[A-Za-z0-9._-]+" /></label><label><span>${esc(t('product'))}</span><input name="product" required maxlength="300" /></label>${cats.length?`<label><span>${esc(t('category'))}</span><select name="categoryId" required><option value="">—</option>${cats.map(cat=>`<option value="${esc(cat.id)}">${esc(lang==='ar'?cat.nameAr:cat.nameEn)}</option>`).join('')}</select></label>`:''}<label><span>${esc(t('specifications'))}</span><textarea name="specs" required maxlength="10000"></textarea></label><div class="form-two"><label><span>${esc(t('price'))}</span><input name="unitPrice" type="number" step="0.01" min="0.01" required /></label><label><span>${esc(t('currency'))}</span><select name="currency">${['USD','SAR','AED','CNY','EUR'].map(c=>`<option>${c}</option>`).join('')}</select></label></div><div class="form-two"><label><span>${esc(t('moq'))}</span><input name="moq" type="number" min="1" required /></label><label><span>${esc(t('stock'))}</span><input name="stock" type="number" min="0" step="1" /></label></div><div class="form-two"><label><span>${esc(t('leadTime'))}</span><input name="leadTime" type="number" min="1" required /></label><label><span>${esc(tr('بلد التوريد','Supply country'))}</span><select name="country" required><option value="China">${esc(tr('الصين','China'))}</option><option value="United Arab Emirates">${esc(tr('الإمارات','UAE'))}</option></select></label></div><label><span>${esc(t('validUntil'))}</span><input name="validUntil" type="date" /></label>${fileField('publicFiles')}<p class="form-message" id="publicFormMessage"></p><button class="primary-btn" type="submit">${esc(t('submit'))}</button></form>`);$('publicForm').addEventListener('submit',submitPublic);}
+
+
+const BULK_ERROR_COPY={
+  sku:['تحقق من SKU','Check SKU'],duplicate_sku:['SKU مكرر داخل الملف','Duplicate SKU in file'],
+  product:['اسم المنتج مطلوب','Product name is required'],specs:['الوصف مطلوب','Description is required'],
+  contact:['احذف بيانات التواصل من الاسم أو الوصف','Remove contact details from product text'],
+  unitPrice:['السعر غير صحيح','Invalid price'],currency:['العملة غير مدعومة','Unsupported currency'],
+  moq:['MOQ غير صحيح','Invalid MOQ'],stock:['المخزون غير صحيح','Invalid stock'],
+  leadTime:['مدة الإنتاج غير صحيحة','Invalid production time'],category:['التصنيف غير موجود','Category not found'],
+  country:['اختر الصين أو الإمارات','Choose China or UAE'],validUntil:['تاريخ الصلاحية غير صحيح','Invalid valid-until date'],
+  images:['أضف صورة واحدة على الأقل','Add at least one image'],
+  image_format:['هناك صورة غير مدعومة أو أكبر من 5 MB','An image is unsupported or larger than 5 MB'],
+  server:['تعذر استيراد هذا المنتج','Could not import this product']
+};
+function bulkErrorLabel(key){const row=BULK_ERROR_COPY[key];return row?tr(row[0],row[1]):key;}
+function bulkContext(){return {categories:categories(),existingOffers:platformState?.publicOffers||[]};}
+function bulkRevalidate(){bulkImportRows=validateBulkProductRows(bulkImportRows,bulkContext());}
+function bulkWorkbookError(error){
+  const map={
+    xlsx_only:tr('اختر ملف Excel بصيغة .xlsx فقط.','Choose an .xlsx Excel file.'),
+    workbook_too_large:tr('حجم ملف Excel كبير جدًا. الحد الأقصى 30 MB.','Excel file is too large. Maximum 30 MB.'),
+    invalid_xlsx:tr('تعذر قراءة ملف Excel. تأكد أنه ملف .xlsx سليم.','Could not read the Excel file. Make sure it is a valid .xlsx file.'),
+    unsupported_xlsx_compression:tr('هذا الجهاز لا يدعم فك هذا النوع من ملفات Excel.','This device cannot unpack this Excel file.'),
+    headers_not_found:tr('لم يتم العثور على أعمدة القالب المطلوبة. استخدم قالب المنصة.','Required template columns were not found. Use the platform template.'),
+    too_many_rows:tr('الحد الأقصى 500 منتج في الملف الواحد.','Maximum 500 products per file.'),
+    no_products:tr('لم يتم العثور على منتجات داخل الملف.','No products were found in the file.')
+  };
+  return map[error?.message]||error?.message||tr('تعذر قراءة الملف.','Could not read the file.');
+}
+function bulkCategoryOptions(selected){
+  return categories().map(cat=>\`<option value="\${esc(cat.id)}" \${selected===cat.id?'selected':''}>\${esc(lang==='ar'?cat.nameAr:cat.nameEn)}</option>\`).join('');
+}
+function bulkRowCard(row,index){
+  const ready=!row.errors.length,duplicate=row.duplicateOfferId;
+  const imageHtml=(row.images||[]).map((img,i)=>\`<div class="bulk-image-item"><img src="\${esc(img.source)}" alt=""><button type="button" data-bulk-remove-image="\${index}:\${i}" aria-label="\${esc(tr('حذف الصورة','Remove image'))}">×</button><small>\${i===0?esc(tr('رئيسية','Main')):i+1}</small></div>\`).join('');
+  const issues=[...row.errors.map(x=>\`<span class="bulk-error">\${esc(bulkErrorLabel(x))}</span>\`),...(row.warnings||[]).map(x=>x==='existing_sku'?\`<span class="bulk-warning">\${esc(tr('يوجد منتج بنفس SKU','Existing product with same SKU'))}</span>\`:'')].join('');
+  const duplicateControl=duplicate?\`<label><span>\${esc(tr('المنتج موجود مسبقًا','Existing SKU'))}</span><select data-bulk-field="duplicateAction" data-bulk-row="\${index}"><option value="skip" \${row.duplicateAction==='skip'?'selected':''}>\${esc(tr('تجاهل','Skip'))}</option><option value="update" \${row.duplicateAction==='update'?'selected':''}>\${esc(tr('تحديث وإرسال للمراجعة','Update & send for review'))}</option></select></label>\`:'';
+  return \`<article class="bulk-preview-card \${ready?'ready':'invalid'}">
+    <div class="bulk-preview-head"><div><small>\${esc(tr('صف','Row'))} \${row.rowNumber}</small><strong>\${esc(row.product||row.sku||'—')}</strong></div><span class="status-pill \${ready?'status-published':'status-review'}">\${esc(ready?tr('جاهز','Ready'):tr('يحتاج تعديل','Needs fixing'))}</span></div>
+    <div class="bulk-image-grid">\${imageHtml||\`<div class="bulk-no-image">\${esc(tr('لا توجد صورة','No image'))}</div>\`}</div>
+    <div class="bulk-edit-grid">
+      <label><span>SKU</span><input data-bulk-field="sku" data-bulk-row="\${index}" value="\${esc(row.sku)}" maxlength="80"></label>
+      <label><span>\${esc(t('product'))}</span><input data-bulk-field="product" data-bulk-row="\${index}" value="\${esc(row.product)}" maxlength="300"></label>
+      <label class="bulk-wide"><span>\${esc(t('specifications'))}</span><textarea data-bulk-field="specs" data-bulk-row="\${index}" maxlength="10000">\${esc(row.specs)}</textarea></label>
+      <label><span>\${esc(t('price'))}</span><input data-bulk-field="unitPrice" data-bulk-row="\${index}" type="number" step="0.01" min="0.01" value="\${esc(row.unitPrice)}"></label>
+      <label><span>\${esc(t('currency'))}</span><select data-bulk-field="currency" data-bulk-row="\${index}">\${['USD','SAR','AED','CNY','EUR'].map(x=>\`<option \${row.currency===x?'selected':''}>\${x}</option>\`).join('')}</select></label>
+      <label><span>\${esc(t('moq'))}</span><input data-bulk-field="moq" data-bulk-row="\${index}" type="number" min="1" step="1" value="\${esc(row.moq)}"></label>
+      <label><span>\${esc(t('stock'))}</span><input data-bulk-field="stock" data-bulk-row="\${index}" type="number" min="0" step="1" value="\${esc(row.stock)}"></label>
+      <label><span>\${esc(t('leadTime'))}</span><input data-bulk-field="leadTime" data-bulk-row="\${index}" type="number" min="1" value="\${esc(row.leadTime)}"></label>
+      <label><span>\${esc(t('category'))}</span><select data-bulk-field="category" data-bulk-row="\${index}"><option value="">—</option>\${bulkCategoryOptions(row.categoryId)}</select></label>
+      <label><span>\${esc(tr('بلد التوريد','Supply country'))}</span><select data-bulk-field="country" data-bulk-row="\${index}"><option value="China" \${normalizeSupplyCountry(row.country)==='China'?'selected':''}>\${esc(tr('الصين','China'))}</option><option value="United Arab Emirates" \${normalizeSupplyCountry(row.country)==='United Arab Emirates'?'selected':''}>\${esc(tr('الإمارات','UAE'))}</option></select></label>
+      <label><span>\${esc(t('validUntil'))}</span><input data-bulk-field="validUntil" data-bulk-row="\${index}" type="date" value="\${esc(row.validUntil)}"></label>
+      \${duplicateControl}
+    </div>
+    <div class="bulk-issues">\${issues}</div>
+  </article>\`;
+}
+function renderBulkPreview(message=''){
+  bulkRevalidate();
+  const valid=bulkImportRows.filter(r=>!r.errors.length).length,invalid=bulkImportRows.length-valid,duplicates=bulkImportRows.filter(r=>r.duplicateOfferId).length;
+  $('modalBody').innerHTML=\`<section class="bulk-summary"><div><strong>\${bulkImportRows.length}</strong><span>\${esc(tr('منتج','Products'))}</span></div><div><strong>\${valid}</strong><span>\${esc(tr('جاهز','Ready'))}</span></div><div><strong>\${invalid}</strong><span>\${esc(tr('يحتاج تعديل','Needs fixing'))}</span></div><div><strong>\${duplicates}</strong><span>\${esc(tr('مكرر','Duplicates'))}</span></div></section>
+    <div class="bulk-file-bar"><span>\${esc(bulkImportFileName)}</span><button type="button" class="text-btn" id="bulkChooseAnother">\${esc(tr('اختيار ملف آخر','Choose another file'))}</button></div>
+    <p class="form-message" id="bulkImportMessage">\${esc(message)}</p>
+    <div class="bulk-preview-list">\${bulkImportRows.map(bulkRowCard).join('')}</div>
+    <div class="bulk-import-footer"><button type="button" class="secondary-btn" id="bulkRecheck">\${esc(tr('إعادة التحقق','Recheck'))}</button><button type="button" class="primary-btn" id="bulkImportReady" \${valid?'':'disabled'}>\${esc(tr(\`استيراد الجاهزة (\${valid})\`,\`Import ready (\${valid})\`))}</button></div>\`;
+  $('bulkChooseAnother')?.addEventListener('click',openBulkPublicImport);
+  $('bulkRecheck')?.addEventListener('click',()=>renderBulkPreview());
+  $('bulkImportReady')?.addEventListener('click',importBulkProducts);
+  document.querySelectorAll('[data-bulk-field]').forEach(el=>el.addEventListener('change',()=>{
+    const row=bulkImportRows[Number(el.dataset.bulkRow)];if(!row)return;
+    row[el.dataset.bulkField]=el.value;
+    renderBulkPreview();
+  }));
+  document.querySelectorAll('[data-bulk-remove-image]').forEach(btn=>btn.addEventListener('click',()=>{
+    const [ri,ii]=btn.dataset.bulkRemoveImage.split(':').map(Number),row=bulkImportRows[ri];
+    if(!row)return;row.images.splice(ii,1);renderBulkPreview();
+  }));
+}
+async function handleBulkWorkbookFile(file){
+  const message=$('bulkFileMessage');if(!file)return;
+  try{
+    message.textContent=tr('جارٍ قراءة Excel والصور...','Reading Excel and embedded images...');
+    bulkImportFileName=file.name;
+    bulkImportRows=await parseBulkProductWorkbook(file,bulkContext());
+    renderBulkPreview();
+  }catch(error){message.textContent=bulkWorkbookError(error);}
+}
+function openBulkPublicImport(){
+  if(currentUser?.role!=='supplier')return;
+  bulkImportRows=[];bulkImportFileName='';
+  openModal(tr('استيراد المنتجات من Excel','Import products from Excel'),tr('Excel واحد مع الصور','One Excel file with embedded images'),\`
+    <section class="bulk-upload-intro">
+      <h3>\${esc(tr('ارفع ملف .xlsx واحد','Upload one .xlsx file'))}</h3>
+      <p>\${esc(tr('كل منتج في صف، والصور تكون داخل أعمدة Image 1 إلى Image 5 في نفس الصف. بعد الرفع يمكنك تعديل أي خطأ قبل الاستيراد.','Each product is one row, with images embedded in Image 1–5 columns. You can edit mistakes before importing.'))}</p>
+      <a class="secondary-btn bulk-template-link" href="/bulk-products-template.xlsx" download>\${esc(tr('تحميل قالب Excel','Download Excel template'))}</a>
+      <label class="bulk-file-picker"><span>\${esc(tr('اختيار ملف Excel','Choose Excel file'))}</span><input id="bulkExcelFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></label>
+      <small>\${esc(tr('حتى 500 منتج، 5 صور لكل منتج، وحجم Excel حتى 30 MB.','Up to 500 products, 5 images per product, Excel file up to 30 MB.'))}</small>
+      <p class="form-message" id="bulkFileMessage"></p>
+    </section>\`);
+  $('bulkExcelFile')?.addEventListener('change',e=>handleBulkWorkbookFile(e.target.files?.[0]));
+}
+async function importBulkProducts(){
+  if(busy)return;
+  bulkRevalidate();
+  const ready=bulkImportRows.filter(r=>!r.errors.length&&r.duplicateAction!=='skip');
+  if(!ready.length){$('bulkImportMessage').textContent=tr('لا توجد منتجات جاهزة للاستيراد.','No products are ready to import.');return;}
+  busy=true;let done=0,failed=0;
+  const imported=new Set();
+  try{
+    for(const row of ready){
+      const msg=$('bulkImportMessage');if(msg)msg.textContent=tr(\`جارٍ استيراد \${done+1} من \${ready.length}...\`,\`Importing \${done+1} of \${ready.length}...\`);
+      try{
+        const images=await uploadSources(row.images.map(x=>x.source));
+        const patch={sku:row.sku,product:row.product,specs:row.specs,country:normalizeSupplyCountry(row.country),unitPrice:String(row.unitPrice),currency:row.currency,moq:String(row.moq),stock:String(row.stock??''),leadTime:String(row.leadTime),validUntil:row.validUntil||'',categoryId:row.categoryId,images};
+        if(row.duplicateOfferId&&row.duplicateAction==='update')await mutate('publicOffers',row.duplicateOfferId,row.duplicateOfferVersion,patch);
+        else await mutate('publicOffers',id(),0,patch);
+        imported.add(row.rowNumber);done++;
+      }catch(error){
+        row.errors=['server'];row.serverError=error.message;failed++;
+      }
+    }
+    await loadData({render:false});
+    bulkImportRows=bulkImportRows.filter(r=>!imported.has(r.rowNumber));
+    if(!bulkImportRows.length||bulkImportRows.every(r=>r.duplicateAction==='skip'&&!r.errors.length)){
+      closeModal();activeScreen='offers';activeSub='public';renderScreen();
+      showToast(tr(\`تم استيراد \${done} منتج بنجاح.\`,\`\${done} products imported successfully.\`));
+    }else renderBulkPreview(tr(\`تم استيراد \${done}، وتعذر \${failed}. راجع المنتجات المتبقية.\`,\`Imported \${done}; \${failed} failed. Review the remaining products.\`));
+  }finally{busy=false;}
+}
 
 async function filesToSources(input){
   try{return await filesToCompressedSources(input);}
@@ -653,15 +802,17 @@ async function filesToSources(input){
 async function uploadSources(sources){const out=[];for(const source of sources){const result=await request('/api/v1/uploads',{method:'POST',auth:true,body:{source}});out.push(result.src);}return out;}
 async function submitNewRequest(e){e.preventDefault();if(busy)return;busy=true;const f=e.currentTarget,m=$('requestFormMessage');try{m.textContent=t('uploading');const kept=[...f.querySelectorAll('[data-repeat-image]:checked')].map(x=>x.value),uploaded=await uploadSources(await filesToSources($('requestFiles'))),images=[...kept,...uploaded];if(images.length>5)throw new Error(tr('الحد الأقصى 5 صور للطلب.','Maximum 5 request images.'));if(!images.length)throw new Error(tr('أضف صورة واحدة على الأقل.','Add at least one image.'));m.textContent=t('saving');const patch={product:f.product.value.trim(),specs:f.specs.value.trim(),quantity:f.quantity.value,country:f.country.value.trim(),neededDate:f.neededDate.value,images};if(f.dataset.repeatFrom)patch.repeatedFromRequestId=f.dataset.repeatFrom;await mutate('requests',id(),0,patch);await loadData({render:false});closeModal();activeScreen='requests';renderScreen();showToast(f.dataset.repeatFrom?tr('تم إنشاء طلب جديد من الطلب السابق.','New request created from the previous request.'):t('created'));}catch(error){m.textContent=error.message;}finally{busy=false;}}
 async function submitQuote(e){e.preventDefault();if(busy)return;busy=true;const f=e.currentTarget,m=$('quoteFormMessage'),quoteId=f.dataset.id,requestId=f.dataset.request;try{const sources=await filesToSources($('quoteFiles'));const images=sources.length?await uploadSources(sources):null;const patch={unitPrice:f.unitPrice.value,currency:f.currency.value,moq:f.moq.value,leadTime:f.leadTime.value,sampleCost:f.sampleCost.value.trim(),notes:f.notes.value.trim()};if(images)patch.images=images;if(quoteId){const q=(platformState.quotes||[]).find(x=>x.id===quoteId);await mutate('quotes',q.id,q.version,patch);}else{patch.requestId=requestId;patch.images=images||[];await mutate('quotes',id(),0,patch);}await loadData({render:false});closeModal();activeScreen='offers';activeSub='submitted';renderScreen();showToast(t('created'));}catch(error){m.textContent=error.message;}finally{busy=false;}}
-async function submitPublic(e){e.preventDefault();if(busy)return;busy=true;const f=e.currentTarget,m=$('publicFormMessage');try{m.textContent=t('uploading');const images=await uploadSources(await filesToSources($('publicFiles')));if(!images.length)throw new Error(tr('أضف صورة واحدة على الأقل.','Add at least one image.'));m.textContent=t('saving');await mutate('publicOffers',id(),0,{product:f.product.value.trim(),specs:f.specs.value.trim(),country:f.country.value.trim(),unitPrice:f.unitPrice.value,currency:f.currency.value,moq:f.moq.value,stock:f.stock.value.trim(),leadTime:f.leadTime.value,validUntil:f.validUntil.value,categoryId:f.categoryId?.value||'',images});await loadData({render:false});closeModal();activeScreen='offers';activeSub='public';renderScreen();showToast(t('created'));}catch(error){m.textContent=error.message;}finally{busy=false;}}
+async function submitPublic(e){e.preventDefault();if(busy)return;busy=true;const f=e.currentTarget,m=$('publicFormMessage');try{m.textContent=t('uploading');const images=await uploadSources(await filesToSources($('publicFiles')));if(!images.length)throw new Error(tr('أضف صورة واحدة على الأقل.','Add at least one image.'));m.textContent=t('saving');await mutate('publicOffers',id(),0,{sku:f.sku.value.trim(),product:f.product.value.trim(),specs:f.specs.value.trim(),country:f.country.value,unitPrice:f.unitPrice.value,currency:f.currency.value,moq:f.moq.value,stock:f.stock.value.trim(),leadTime:f.leadTime.value,validUntil:f.validUntil.value,categoryId:f.categoryId?.value||'',images});await loadData({render:false});closeModal();activeScreen='offers';activeSub='public';renderScreen();showToast(t('created'));}catch(error){m.textContent=error.message;}finally{busy=false;}}
 
 async function handleAction(target){
   if(target.dataset.category){readyCategory=target.dataset.category;readyProductsPage=1;renderHome();$('screen').scrollTop=0;return;}
+  if(target.dataset.supplyCountry){readyCountry=target.dataset.supplyCountry;readyProductsPage=1;renderHome();$('screen').scrollTop=0;return;}
   if(target.dataset.action==='ready-products-prev'){if(readyProductsPage>1){readyProductsPage--;renderHome();$('screen').scrollTop=0;}return;}
   if(target.dataset.action==='ready-products-next'){const total=Math.max(1,Math.ceil(filteredReadyOffers().length/PAGE_SIZE));if(readyProductsPage<total){readyProductsPage++;renderHome();$('screen').scrollTop=0;}return;}
   if(target.dataset.action==='new-request')return openNewRequest();
   if(target.dataset.repeatRequest){const source=(platformState.requests||[]).find(x=>x.id===target.dataset.repeatRequest);if(source)return openNewRequest(source);}
   if(target.dataset.action==='new-public')return openNewPublic();
+  if(target.dataset.action==='bulk-public-import')return openBulkPublicImport();
   if(target.dataset.action==='view-public-offers'){activeScreen='offers';activeSub='public';renderScreen();$('screen').scrollTop=0;return;}
   if(target.dataset.action==='toggle-language')return toggleLanguage();
   if(target.dataset.action==='logout')return logout();
@@ -738,7 +889,7 @@ $('headerNotificationsBtn').addEventListener('click',()=>{if(!currentUser)return
 onLanguageChange(value=>{lang=value;applyLanguage();applyRegistrationLanguage();});
 $('refreshBtn').addEventListener('click',async()=>{if(busy)return;busy=true;$('refreshBtn').classList.add('spin');try{await loadData();showToast(t('refreshing'));}catch(e){showToast(errorText(e));}finally{busy=false;$('refreshBtn').classList.remove('spin');}});
 $('bottomNav').addEventListener('click',e=>{const b=e.target.closest('button[data-screen]');if(!b)return;activeScreen=b.dataset.screen;if(activeScreen==='offers')activeSub='primary';renderScreen();$('screen').scrollTop=0;});
-$('screen').addEventListener('click',e=>{const sub=e.target.closest('[data-sub]');if(sub){activeSub=sub.dataset.sub;renderScreen();return;}const target=e.target.closest('[data-action],[data-category],[data-client-order-filter],[data-client-offers-request],[data-request],[data-supplier-request],[data-supplier-order-id],[data-public-offer],[data-edit-quote],[data-quote-request],[data-select-quote],[data-interest],[data-notification],[data-payment-notification],[data-payment-upload],[data-payment-document],[data-copy-value]');if(target)handleAction(target);});
+$('screen').addEventListener('click',e=>{const sub=e.target.closest('[data-sub]');if(sub){activeSub=sub.dataset.sub;renderScreen();return;}const target=e.target.closest('[data-action],[data-category],[data-supply-country],[data-client-order-filter],[data-client-offers-request],[data-request],[data-supplier-request],[data-supplier-order-id],[data-public-offer],[data-edit-quote],[data-quote-request],[data-select-quote],[data-interest],[data-notification],[data-payment-notification],[data-payment-upload],[data-payment-document],[data-copy-value]');if(target)handleAction(target);});
 $('modal').addEventListener('click',e=>{if(e.target.closest('[data-close-modal]')){closeModal();return;}const target=e.target.closest('[data-client-offers-request],[data-edit-quote],[data-quote-request],[data-select-quote],[data-interest],[data-supplier-order-status],[data-supplier-order-cannot],[data-payment-upload],[data-payment-document],[data-copy-value]');if(target)handleAction(target);});
 
 App.addListener('appUrlOpen',async event=>{const url=event.url||'';if(!currentUser)return;if(url.includes('/notifications')){activeScreen='notifications';renderScreen();return;}const m=url.match(/\/requests\/([^?]+)/);if(m){if(currentUser.role==='supplier')openSupplierRequest(decodeURIComponent(m[1]));else openClientRequest(decodeURIComponent(m[1]));}});
