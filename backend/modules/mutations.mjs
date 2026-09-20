@@ -9,7 +9,7 @@ const PAYMENT_CURRENCIES=['USD','SAR','AED','CNY','EUR'];
 const SUPPLIER_ORDER_STATUSES=['confirmed','production','ready_for_inspection','cannot_fulfill'];
 function updateSupplierOrder(data,patch,now){
   const next=String(patch.supplierOrderStatus||''),current=data.supplierOrderStatus||'pending_confirmation';
-  const transitions={pending_confirmation:['confirmed','cannot_fulfill'],confirmed:['production','cannot_fulfill'],production:['ready_for_inspection','cannot_fulfill'],ready_for_inspection:[],cannot_fulfill:[]};
+  const transitions={pending_confirmation:['confirmed','cannot_fulfill'],confirmed:['production'],production:['ready_for_inspection'],ready_for_inspection:[],cannot_fulfill:[]};
   assert(SUPPLIER_ORDER_STATUSES.includes(next)&&transitions[current]?.includes(next),409,'تحديث حالة الطلب غير متاح / Order status transition unavailable');
   const note=String(patch.supplierOrderNote||'').trim();
   assert(note.length<=1000,400,'ملاحظة المورد طويلة / Supplier note too long');
