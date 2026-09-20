@@ -232,8 +232,8 @@ async function parseCellImages(zip,sheetXml){
 }
 
 function headerVariants(value){
-  const n=norm(value);
-  return [...new Set([n,...n.split(/[\\/|\n\r•·:؛-]+/).map(norm)].filter(Boolean))];
+  const raw=String(value??'').replace(/[\u200e\u200f\ufeff]/g,'').trim();
+  return [...new Set([norm(raw),...raw.split(/[\\/|\n\r•·:؛-]+/).map(norm)].filter(Boolean))];
 }
 function findHeader(rows){
   let best=null;
