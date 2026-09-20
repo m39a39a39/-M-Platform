@@ -96,7 +96,12 @@ function supplierConfirmationCard(x,kind){
     production:[tr('المورد أكد التنفيذ وبدأ الإنتاج','Supplier confirmed and started production'),'confirmed'],
     ready_for_inspection:[tr('المورد أكد التنفيذ والطلب جاهز للفحص','Supplier confirmed; order ready for inspection'),'confirmed'],
     cannot_fulfill:[tr('تعذر على المورد التنفيذ','Supplier cannot fulfill'),'blocked']
-  },row=labels[info.status]||labels.pending_confirmation;
+  };
+  if(info.isCart){
+    const cartLabel=info.status==='cannot_fulfill'?tr('يوجد مورد تعذر عليه التنفيذ','A supplier cannot fulfill an item'):info.confirmed?tr('جميع الموردين أكدوا التنفيذ','All suppliers confirmed fulfillment'):tr(`${info.confirmedCount} من ${info.count} مورد/منتج تم تأكيده`,`${info.confirmedCount} of ${info.count} supplier items confirmed`);
+    return '<section class="admin-supplier-confirmation '+esc(info.status==='cannot_fulfill'?'blocked':info.confirmed?'confirmed':'pending')+'"><div class="admin-supplier-confirmation-head"><div><small>'+esc(tr('تأكيد الموردين','Supplier confirmations'))+'</small><strong>'+esc(cartLabel)+'</strong></div><span>'+esc(info.confirmed?'✓':info.status==='cannot_fulfill'?'✕':'…')+'</span></div>'+(info.note?'<p><b>'+esc(tr('ملاحظات الموردين','Supplier notes'))+':</b> '+esc(info.note)+'</p>':'')+'<small>'+esc(info.confirmed?tr('يمكن الآن الانتقال إلى تأكيد الطلب والدفع للإجمالي الكامل.','The full order can now move to payment confirmation.'):info.status==='cannot_fulfill'?tr('راجع المنتج الذي تعذر تنفيذه قبل المتابعة.','Review the item that cannot be fulfilled before continuing.'):tr('الدفع يبقى غير متاح حتى يؤكد جميع الموردين التنفيذ.','Payment remains unavailable until all suppliers confirm fulfillment.'))+'</small></section>';
+  }
+  const row=labels[info.status]||labels.pending_confirmation;
   return '<section class="admin-supplier-confirmation '+esc(row[1])+'"><div class="admin-supplier-confirmation-head"><div><small>'+esc(tr('تأكيد المورد','Supplier confirmation'))+'</small><strong>'+esc(row[0])+'</strong></div><span>'+esc(info.confirmed?'✓':info.status==='cannot_fulfill'?'✕':'…')+'</span></div>'+(info.note?'<p><b>'+esc(tr('ملاحظة المورد','Supplier note'))+':</b> '+esc(info.note)+'</p>':'')+'<small>'+esc(info.confirmed?tr('يمكن الآن الانتقال إلى تأكيد الطلب والدفع.','The order can now move to payment confirmation.'):info.status==='cannot_fulfill'?tr('لا يمكن الانتقال للدفع. راجع سبب تعذر التنفيذ.','Payment cannot start. Review the supplier reason.'):tr('تأكيد الطلب والدفع سيبقى غير متاح حتى يؤكد المورد التنفيذ.','Payment confirmation remains unavailable until the supplier confirms fulfillment.'))+'</small></section>';
 }
 function trackingOptions(rows,current,canPay){
@@ -385,7 +390,8 @@ function paymentMessageField(x,kind,current){
   const banks=matchingBanks;
   const bankSelect=banks.length?'<label><span>'+esc(tr('حساب استلام المبلغ','Receiving bank account'))+'</span><select data-admin-payment-bank required><option value="">—</option>'+banks.map(a=>'<option value="'+esc(a.id)+'" '+(selected===a.id?'selected':'')+'>'+esc(a.label||a.bankName)+' · '+esc(a.currency||'')+'</option>').join('')+'</select></label>':'<p class="payment-review-note">'+esc(derivedCurrency?tr('لا يوجد حساب بنكي نشط بعملة '+derivedCurrency+'. أضف حسابًا بهذه العملة من صفحة الحسابات.','There is no active bank account in '+derivedCurrency+'. Add one from the Accounts page.'):tr('أضف حسابًا بنكيًا نشطًا من صفحة الحسابات أولًا.','Add an active bank account from the Accounts page first.'))+'</p>';
   const amount=x?.paymentAmount||pricing?.total||'';
-  const currencyField=pricing?'<label><span>'+esc(tr('العملة','Currency'))+'</span><select data-admin-payment-currency disabled>'+['AED','SAR','USD','CNY','EUR'].map(v=>'<option '+(currency===v?'selected':'')+'>'+v+'</option>').join('')+'</select><small>'+esc(kind==='request'?tr('تُحدد تلقائيًا من العرض المختار.','Set automatically from the selected quote.'):tr('تُحدد تلقائيًا من العرض العام.','Set automatically from the public offer.'))+'</small></label>':'<label><span>'+esc(tr('العملة','Currency'))+'</span><select data-admin-payment-currency>'+['AED','SAR','USD','CNY','EUR'].map(v=>'<option '+(currency===v?'selected':'')+'>'+v+'</option>').join('')+'</select></label>';
+  const currencyHint=pricing?.isCart?tr('تُحدد تلقائيًا من عملة طلب المنتجات.','Set automatically from the product order currency.'):kind==='request'?tr('تُحدد تلقائيًا من العرض المختار.','Set automatically from the selected quote.'):tr('تُحدد تلقائيًا من العرض العام.','Set automatically from the public offer.');
+  const currencyField=pricing?'<label><span>'+esc(tr('العملة','Currency'))+'</span><select data-admin-payment-currency disabled>'+['AED','SAR','USD','CNY','EUR'].map(v=>'<option '+(currency===v?'selected':'')+'>'+v+'</option>').join('')+'</select><small>'+esc(currencyHint)+'</small></label>':'<label><span>'+esc(tr('العملة','Currency'))+'</span><select data-admin-payment-currency>'+['AED','SAR','USD','CNY','EUR'].map(v=>'<option '+(currency===v?'selected':'')+'>'+v+'</option>').join('')+'</select></label>';
   const amountHint=pricing?'<small>'+esc(tr('تم تعبئة الإجمالي تلقائيًا. يمكنك تخفيض المبلغ إذا كانت هذه دفعة جزئية أو عربونًا.','The total is filled automatically. You can reduce it for a partial payment or deposit.'))+'</small>':'';
   return '<section class="admin-payment-message-field'+hidden+'"><h4>'+esc(tr('بيانات الدفع','Payment details'))+'</h4>'+bankSelect+'<div class="form-two"><label><span>'+esc(tr('المبلغ المطلوب','Amount due'))+'</span><input type="number" min="0.01" step="0.01" data-admin-payment-amount value="'+esc(amount)+'" required>'+amountHint+'</label>'+currencyField+'</div><label><span>'+esc(tr('رسالة الدفع للعميل','Payment message to customer'))+'</span><textarea data-admin-payment-message maxlength="2000">'+esc(defaultPaymentMessage(x,kind))+'</textarea><small>'+esc(tr('سيشاهد العميل بيانات الحساب والمبلغ داخل الطلب ثم يرفع الإيصال.','The customer will see the account details and amount inside the order, then upload the receipt.'))+'</small></label></section>';
 }
@@ -414,8 +420,9 @@ async function sendInterestToSupplier(id){
   try{await mutate('interests',x,{trackingStatus:'supplier_confirmation',trackingNote:''});closeModal();schedule();toast(tr('تم اعتماد الطلب وإرساله للمورد للتأكيد.','Order approved and sent to the supplier for confirmation.'));}catch(e){toast(e.message);}
 }
 function trackingEditor(x){
-  const current=requestTracking(x),supplier=supplierExecutionInfo(x,'request'),canPay=supplier.confirmed||current==='payment_confirmation';
-  return '<section class="admin-tracking-editor"><h3>'+esc(tr('متابعة الطلب','Order tracking'))+'</h3><label><span>'+esc(tr('الحالة الحالية','Current status'))+'</span><select data-admin-tracking-status>'+trackingOptions(TRACKING,current,canPay)+'</select></label>'+paymentMessageField(x,'request',current)+'<label><span>'+esc(tr('ملاحظة للعميل (اختياري)','Customer note (optional)'))+'</span><textarea data-admin-tracking-note maxlength="1000">'+esc(x.trackingNote||'')+'</textarea></label><small>'+(x.trackingUpdatedAt?esc(tr('آخر تحديث','Last update'))+': '+esc(date(x.trackingUpdatedAt)):'')+'</small><button class="primary-btn" type="button" data-admin-save-tracking="'+esc(x.id)+'">'+esc(tr('حفظ حالة الطلب','Save order status'))+'</button></section>'+paymentReviewPanel(x,'request');
+  const current=requestTracking(x),supplier=supplierExecutionInfo(x,'request'),canPay=supplier.confirmed||current==='payment_confirmation',flow=x.orderType==='cart'?READY_TRACKING:TRACKING;
+  const approve=x.orderType==='cart'&&current==='received'?'<button class="primary-btn admin-send-to-supplier" type="button" data-admin-send-cart-suppliers="'+esc(x.id)+'">'+esc(tr('اعتماد وإرسال المنتجات للموردين','Approve & send items to suppliers'))+'</button>':'';
+  return '<section class="admin-tracking-editor"><h3>'+esc(tr('متابعة الطلب','Order tracking'))+'</h3>'+approve+'<label><span>'+esc(tr('الحالة الحالية','Current status'))+'</span><select data-admin-tracking-status>'+trackingOptions(flow,current,canPay)+'</select></label>'+paymentMessageField(x,'request',current)+'<label><span>'+esc(tr('ملاحظة للعميل (اختياري)','Customer note (optional)'))+'</span><textarea data-admin-tracking-note maxlength="1000">'+esc(x.trackingNote||'')+'</textarea></label><small>'+(x.trackingUpdatedAt?esc(tr('آخر تحديث','Last update'))+': '+esc(date(x.trackingUpdatedAt)):'')+'</small><button class="primary-btn" type="button" data-admin-save-tracking="'+esc(x.id)+'">'+esc(tr('حفظ حالة الطلب','Save order status'))+'</button></section>'+paymentReviewPanel(x,'request');
 }
 async function reviewPayment(entityType,id,action){
   const rows=entityType==='request'?(state?.requests||[]):(state?.interests||[]),x=rows.find(item=>item.id===id);if(!x)return;
@@ -466,6 +473,24 @@ async function savePublicCategory(id){
   const x=(state?.publicOffers||[]).find(item=>item.id===id),categoryId=document.querySelector('[data-admin-category-select]')?.value||'';if(!x)return;
   try{await mutate('publicOffers',x,{categoryId});closeModal();schedule();toast(tr('تم تحديث التصنيف.','Category updated.'));}catch(e){toast(e.message);}
 }
+function cartSupplierStatus(value){
+  const labels={pending_confirmation:tr('بانتظار التأكيد','Awaiting confirmation'),confirmed:tr('تم التأكيد','Confirmed'),production:tr('قيد الإنتاج','In production'),ready_for_inspection:tr('جاهز للفحص','Ready for inspection'),cannot_fulfill:tr('تعذر التنفيذ','Unable to fulfill')};
+  return labels[value]||labels.pending_confirmation;
+}
+function cartOrderAdminPanel(request){
+  const snapshots=Array.isArray(request.cartItems)?request.cartItems:[],children=(state?.interests||[]).filter(i=>i.cartOrderId===request.id);
+  const rows=snapshots.map((item,index)=>{
+    const child=children.find(i=>i.id===item.interestId),offer=(state?.publicOffers||[]).find(o=>o.id===item.offerId),supplier=offer?account(offer.supplierId):null,statusValue=child?.supplierOrderStatus||'pending_confirmation';
+    const name=lang()==='ar'?(item.translation?.titleAr||item.translation?.titleEn||item.product):(item.translation?.titleEn||item.translation?.titleAr||item.product);
+    const image=(item.images||[])[0];
+    return '<article class="admin-cart-line">'+(image?'<div class="admin-cart-line-image"><img alt="" data-admin-media="'+esc(image)+'" data-image-viewer></div>':'')+'<div class="admin-cart-line-main"><div><small>'+esc(tr('المنتج','Product'))+' '+(index+1)+'</small><strong>'+esc(name||tr('منتج','Product'))+'</strong></div><div class="facts"><span>'+esc(tr('الكمية','Quantity'))+': '+esc(item.quantity||'—')+'</span><span>'+esc(tr('سعر الوحدة','Unit price'))+': '+esc(formatMoney(item.unitPrice,item.currency))+'</span><span>'+esc(tr('الإجمالي','Total'))+': '+esc(formatMoney(item.total,item.currency))+'</span></div><div class="admin-record-meta">'+(supplier?'<span>'+esc(tr('المورد','Supplier'))+': '+esc(supplier.company||supplier.name||'#'+String(supplier.id||'').slice(0,8))+'</span>':'')+'<span class="status-pill">'+esc(cartSupplierStatus(statusValue))+'</span></div>'+(child?.supplierOrderNote?'<p class="muted">'+esc(child.supplierOrderNote)+'</p>':'')+'</div></article>';
+  }).join('');
+  return '<section class="section-block admin-cart-order-panel"><div class="section-title"><div><h3>'+esc(tr('منتجات الطلب','Order products'))+' ('+snapshots.length+')</h3><p>'+esc(tr('كل منتج مرتبط بمورده ويُتابع تنفيذه بشكل مستقل.','Each item is linked to its supplier and tracked independently.'))+'</p></div></div><div class="admin-cart-lines">'+(rows||empty())+'</div><div class="admin-selected-quote-card"><div class="admin-selected-quote-values"><div class="total"><span>'+esc(tr('الإجمالي الكلي','Grand total'))+'</span><strong>'+esc(formatMoney(request.cartTotal,request.currency))+'</strong></div></div></div></section>';
+}
+async function sendCartToSuppliers(id){
+  const x=(state?.requests||[]).find(item=>item.id===id&&item.orderType==='cart');if(!x)return;
+  try{await mutate('requests',x,{trackingStatus:'supplier_confirmation',trackingNote:''});closeModal();schedule();toast(tr('تم اعتماد الطلب وإرسال كل منتج إلى مورده.','Order approved and each item was sent to its supplier.'));}catch(e){toast(e.message);}
+}
 function requestQuotesPanel(request){
   const rows=(state?.quotes||[]).filter(q=>q.requestId===request.id&&!q.deletedAt).sort((a,b)=>(a.status==='pending'?0:1)-(b.status==='pending'?0:1)||String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
   if(!rows.length)return `<section class="section-block"><div class="section-title"><div><h3>${esc(tr('عروض الأسعار المستلمة','Received quotes'))}</h3><p>${esc(tr('لم يصل عرض سعر لهذا الطلب بعد.','No quote has been received for this order yet.'))}</p></div></div></section>`;
@@ -474,6 +499,10 @@ function requestQuotesPanel(request){
 }
 function openRecord(kind,id){
   const arr=kind==='request'?state?.requests:kind==='quote'?state?.quotes:state?.publicOffers,x=(arr||[]).find(v=>v.id===id);if(!x)return;
+  if(kind==='request'&&x.orderType==='cart'){
+    const html=ownerBox(x)+cartOrderAdminPanel(x)+selectedQuoteCard(x)+supplierConfirmationCard(x,'request')+((can('requests.edit')||can('publish'))?trackingEditor(x):'');
+    modal('#'+ref(x)+' — '+tr('طلب منتجات','Product order'),status(requestTracking(x)),html);return;
+  }
   const pending=kind==='request'?x.status==='review':x.status==='pending',editPerm=kind==='request'?'requests.edit':'offers.edit',editImages=pending&&can(editPerm),editTr=pending&&can('translate'),approve=pending&&can('publish'),linked=kind==='quote'?(state?.requests||[]).find(r=>r.id===x.requestId):null;
   let html=ownerBox(x)+`<section class="admin-source-box"><h3>${esc(tr('المحتوى الأصلي','Original content'))}</h3><strong>${esc(x.product||linked?.product||title(x))}</strong><p>${esc(x.specs||x.notes||'—')}</p>${kind==='request'?`<div class="facts"><span>${esc(tr('الكمية','Quantity'))}: ${esc(x.quantity||'—')}</span><span>${esc(tr('الدولة','Country'))}: ${esc(x.country||'—')}</span><span>${esc(tr('تاريخ الاحتياج','Needed date'))}: ${esc(x.neededDate||'—')}</span></div>${x.repeatedFromRequestId?`<p class="payment-review-note"><b>${esc(tr('طلب مكرر من','Repeated from'))}:</b> #${esc(ref((state?.requests||[]).find(r=>r.id===x.repeatedFromRequestId)||{id:x.repeatedFromRequestId}))}</p>`:''}`:''}${linked?`<div class="facts"><span>${esc(tr('الطلب المرتبط','Linked request'))}: #${esc(ref(linked))}</span></div>`:''}</section>`;
   if(kind==='request')html+=requestQuotesPanel(x);
@@ -540,6 +569,7 @@ document.addEventListener('click',e=>{
   const ct=e.target.closest('[data-admin-category-toggle]');if(ct){toggleCategory(ct.dataset.adminCategoryToggle);return;}
   const cd=e.target.closest('[data-admin-category-delete]');if(cd){deleteCategory(cd.dataset.adminCategoryDelete);return;}
   const st=e.target.closest('[data-admin-save-tracking]');if(st){saveTracking(st.dataset.adminSaveTracking);return;}
+  const sendCart=e.target.closest('[data-admin-send-cart-suppliers]');if(sendCart){sendCartToSuppliers(sendCart.dataset.adminSendCartSuppliers);return;}
   const sendSupplier=e.target.closest('[data-admin-send-interest-supplier]');if(sendSupplier){sendInterestToSupplier(sendSupplier.dataset.adminSendInterestSupplier);return;}
   const si=e.target.closest('[data-admin-save-interest-tracking]');if(si){saveInterestTracking(si.dataset.adminSaveInterestTracking);return;}
   const interest=e.target.closest('[data-admin-interest]');if(interest){openInterest(interest.dataset.adminInterest);return;}
