@@ -232,6 +232,8 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
       assert.equal(await page.locator('#bottomNav [data-screen="orders"]').count(),1,'Supplier bottom navigation must include Orders');
       assert.equal(await page.locator('#bottomNav [data-screen="notifications"]').count(),0,'Supplier notifications must move out of bottom navigation');
       assert.equal(await page.locator('#headerNotificationsBtn:not(.hidden)').count(),1,'Supplier notifications must be available from the header');
+      assert.equal(await page.locator('#bottomNav [data-screen="requests"] [data-nav="requests"]').textContent(),language==='ar'?'طلبات الأسعار':'Quote requests','Supplier quote-request navigation must be distinct from executable orders');
+      assert.equal(await page.locator('#bottomNav [data-screen="offers"] [data-nav="offers"]').textContent(),language==='ar'?'المنتجات':'Products','Supplier public catalog navigation must be Products');
       await page.locator('#screen .supplier-public-cta [data-action="new-public"]').click();
       await page.locator('#publicForm').waitFor();
       assert.equal(await page.locator('#publicForm input[name="product"]').count(),1,'Supplier home CTA must open the existing public-offer form');
@@ -317,6 +319,12 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
         assert.equal(await page.locator('[data-admin-category-new]').count(),1,'Admin account must contain product category management');
         assert.equal(await page.locator('.admin-category-row').count(),3,'Admin account must list configured product categories');
       }
+      if(screen==='offers'&&role==='supplier'){
+        assert.equal(await page.locator('#screen [data-sub]').count(),0,'Supplier Products must not contain quote tabs');
+        assert.equal(await page.locator('#screen [data-public-offer]').count(),45,'Supplier Products must contain public products only');
+        assert.equal(await page.locator('#screen [data-action="bulk-public-import"]').count(),1,'Supplier Products must preserve Excel import');
+        assert.equal(await page.locator('#screen [data-action="new-public"]').count(),1,'Supplier Products must preserve add-product action');
+      }
       if(screen==='offers'&&role==='admin'){
         assert.equal(await page.locator('#bottomNav [data-screen="offers"] [data-nav="offers"]').textContent(),language==='ar'?'المنتجات':'Products','Admin catalog navigation must be Products');
         assert.equal(await page.locator('[data-admin-offer-tab]').count(),2,'Admin products must have only Pending review and All products tabs');
@@ -342,6 +350,14 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
       }
       if(screen==='requests'){
         assert.ok(await page.locator('#screen').evaluate(el=>el.scrollHeight>el.clientHeight),'Long list did not scroll');
+        if(role==='supplier'){
+          assert.equal(await page.locator('#screen [data-sub="pending"]').count(),1,'Quote Requests must include Awaiting quote tab');
+          assert.equal(await page.locator('#screen [data-sub="submitted"]').count(),1,'Quote Requests must include Submitted quotes tab');
+          assert.ok((await page.locator('#screen [data-sub="pending"]').textContent()).includes('96'),'Awaiting quote count must exclude requests already quoted');
+          await page.locator('#screen [data-sub="submitted"]').click();
+          assert.equal(await page.locator('#screen [data-edit-quote]').count(),4,'Submitted quotes tab must preserve all submitted quote cards');
+          await page.locator('#screen [data-sub="pending"]').click();
+        }
         if(role==='admin'){
           assert.equal(await page.locator('[data-admin-request-filter]').count(),1,'Admin orders must include status filter');
           assert.equal(await page.locator('[data-admin-request-all]').count(),1,'Admin orders must include All orders quick filter');
