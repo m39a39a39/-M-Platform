@@ -552,10 +552,9 @@ function renderHome(){
   const role=currentUser.role;
   if(role==='client'){
     if(readyCategory!=='all'&&!categories().some(cat=>cat.id===readyCategory))readyCategory='all';
-    const orders=clientOrders(),actions=orders.map(o=>({order:o,action:clientOrderNeedsAction(o)})).filter(x=>x.action&&!['new_quotes','choose_quote'].includes(x.action.key)),products=productResultsHtml();
+    const products=productResultsHtml();
     $('screen').innerHTML=
       `<section class="special-request-card client-new-request"><div class="special-request-copy"><div class="special-request-heading"><span class="special-request-icon">＋</span><h2>${esc(tr('أرسل طلب جديد','Send a new request'))}</h2></div><p>${esc(tr('إذا لم تجد المنتج المناسب، أرسل مواصفاتك وسنطلب عروضًا لك.','If you cannot find the right product, send your specifications and we will source quotes for you.'))}</p></div><button class="primary-btn" data-action="new-request">+ ${esc(tr('أرسل طلب جديد','Send new request'))}</button></section>`+
-      (actions.length?`<section class="section-block client-action-needed compact"><div class="section-title"><div><h2>${esc(tr('يتطلب إجراء منك','Needs your action'))}</h2></div></div><div class="client-action-list">${actions.slice(0,3).map(x=>clientActionCard(x.order,x.action)).join('')}</div></section>`:'')+
       `<section class="ready-products-section"><div class="section-title ready-products-title"><div><h2>${esc(tr('المنتجات','Products'))}</h2><p>${esc(tr('ابحث واختر الكمية، ثم اجمع المنتجات في طلب واحد.','Search, choose quantities, and combine products into one order.'))}</p></div></div>${productSearchBar()}${categoryFilters()}${supplyCountryFilters()}<div id="readyProductsGrid" class="public-offers-grid">${products.grid}</div><div id="readyProductsPagination">${products.pagination}</div></section>`+
       companyFooterCard();
   }else if(role==='supplier'){
