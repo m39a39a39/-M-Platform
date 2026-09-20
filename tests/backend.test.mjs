@@ -1,4 +1,4 @@
-// Prepared for the next validation step. These tests have NOT been run for this delivery.
+// Backend validation regression tests.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {can} from '../backend/modules/auth.mjs';
@@ -61,7 +61,7 @@ test('tracking-only admin updates never require redaction',()=>{
 });
 
 test('ready-product requests use fulfillment tracking statuses',()=>{
- const expected=['received','payment_confirmation','production','quality_check','ready_to_ship','shipped','in_delivery','delivered','completed','customer_action','on_hold','cancelled'];
+ const expected=['received','supplier_confirmation','payment_confirmation','production','quality_check','ready_to_ship','shipped','in_delivery','delivered','completed','customer_action','on_hold','cancelled'];
  assert.deepEqual(READY_TRACKING_STATUSES,expected);
  for(const legacy of ['pending','coordinating','accepted'])assert.equal(READY_TRACKING_STATUSES.includes(legacy),false);
 });

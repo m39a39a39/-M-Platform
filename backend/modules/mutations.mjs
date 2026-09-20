@@ -2,7 +2,7 @@ import {one,db,rpc,assert,sb} from '../lib/supabase.mjs';
 import {can} from './auth.mjs';
 import {tables,assertOpenRequest,active,open} from './records.mjs';
 const contact=v=>/(?:https?:\/\/|www\.|wa\.me|@[a-z0-9]|[\w.+-]+@[\w.-]+\.[a-z]{2,}|(?:\+|00)\d[\d\s()-]{7,})/i.test(String(v));
-const contentFields={requests:['product','specs','quantity','country','neededDate','images'],quotes:['unitPrice','currency','moq','leadTime','sampleCost','notes','images'],publicOffers:['product','specs','country','unitPrice','currency','moq','stock','leadTime','validUntil','images','categoryId']};
+const contentFields={requests:['product','specs','quantity','country','neededDate','images'],quotes:['unitPrice','currency','moq','leadTime','sampleCost','notes','images'],publicOffers:['sku','product','specs','country','unitPrice','currency','moq','stock','leadTime','validUntil','images','categoryId']};
 const PAYMENT_CURRENCIES=['USD','SAR','AED','CNY','EUR'];
 const SUPPLIER_ORDER_STATUSES=['confirmed','production','ready_for_inspection','cannot_fulfill'];
 function updateSupplierOrder(data,patch,now){
@@ -82,6 +82,10 @@ export function validateContent(kind,d){
   if(kind!=='requests')assert(['USD','SAR','AED','CNY','EUR'].includes(d.currency),400,'عملة غير مدعومة / Unsupported currency');
   for(const k of ['product','specs','notes','sampleCost'])if(d[k]!==undefined)assert(typeof d[k]==='string'&&d[k].length<=10000&&!contact(d[k]),400,'احذف بيانات التواصل وتحقق من طول النص / Check text and remove contact details');
   if(kind!=='quotes')assert(d.product?.trim()&&d.specs?.trim(),400,'أكمل اسم المنتج والوصف / Product and description required');
+  if(kind==='publicOffers'){
+    if(d.sku!==undefined)assert(/^[A-Za-z0-9._-]{1,80}$/.test(String(d.sku||'').trim()),400,'تحقق من SKU / Check SKU');
+    assert(['China','United Arab Emirates'].includes(String(d.country||'')),400,'اختر بلد التوريد: الصين أو الإمارات / Choose China or United Arab Emirates as supply country');
+  }
   for(const key of ['country','neededDate','validUntil','stock'])if(d[key]!==undefined)assert(typeof d[key]==='string'&&d[key].length<=100,400);
   if(d.categoryId!==undefined)assert(typeof d.categoryId==='string'&&d.categoryId.length<=80,400,'تصنيف غير صالح / Invalid category');
 }
@@ -181,6 +185,16 @@ export async function mutate(user,body){
         data.translation={};
         data.reviewedAt=null;
       }
+    }else if(collection==='publicOffers'&&user.role==='supplier'&&original.owner_id===user.id){
+      assert(changes.length&&changes.every(k=>contentFields.publicOffers.includes(k)),400,'يمكن تعديل بيانات العرض فقط / Only offer fields can be edited');
+      assert(['pending','published'].includes(data.status),409,'العرض غير قابل للتعديل / Offer is not editable');
+      for(const key of changes)data[key]=patch[key];
+      validateContent('publicOffers',data);
+      await checkImages(data.images||[],user,original.data.images||[]);
+      await assertCategory(data.categoryId,{required:true,activeOnly:true});
+      data.status='pending';
+      data.translation={};
+      data.reviewedAt=null;
     }else if(collection==='interests'&&user.role==='supplier'){
       const offer=await one('public_offers',original.offer_id);
       assert(offer&&offer.owner_id===user.id&&open(offer),403,'غير مصرح بهذا الطلب / Unauthorized order');
