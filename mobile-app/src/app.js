@@ -18,6 +18,7 @@ let readyCategory='all';
 let readyCountry='all';
 let readySearch='';
 let cartItems=[];
+let clientOrderSeen={};
 let clientRequestFilter='all';
 let bulkImportRows=[];
 let bulkImportFileName='';
@@ -139,6 +140,61 @@ function updateCartBadge(){
   const count=cartItems.length;
   if(badge){badge.textContent=count>99?'99+':String(count);badge.classList.toggle('hidden',!client||!count);}
 }
+function clientOrderSeenKey(){return currentUser?.id?`m-platform.order-seen.v1.${currentUser.id}`:'';}
+function clientOrderKey(order){return `${order?.type||'order'}:${order?.id||''}`;}
+function clientOrderTime(order){return Date.parse(order?.updatedAt||order?.createdAt||0)||0;}
+function saveClientOrderSeen(){
+  const key=clientOrderSeenKey();if(!key)return;
+  try{localStorage.setItem(key,JSON.stringify(clientOrderSeen));}catch{}
+}
+function loadClientOrderSeen(){
+  clientOrderSeen={};
+  const key=clientOrderSeenKey();if(!key)return;
+  let existed=false;
+  try{
+    const raw=localStorage.getItem(key);existed=raw!==null;
+    const parsed=raw?JSON.parse(raw):{};
+    if(parsed&&typeof parsed==='object'&&!Array.isArray(parsed))clientOrderSeen=parsed;
+  }catch{}
+  const orders=clientOrders(),current=new Set(orders.map(clientOrderKey));
+  for(const keyName of Object.keys(clientOrderSeen))if(!current.has(keyName))delete clientOrderSeen[keyName];
+  if(!existed){
+    for(const order of orders)clientOrderSeen[clientOrderKey(order)]=clientOrderTime(order);
+  }
+  saveClientOrderSeen();
+}
+function markClientOrdersSeen(orders){
+  if(currentUser?.role!=='client')return;
+  let changed=false;
+  for(const order of orders||[]){
+    const key=clientOrderKey(order),at=clientOrderTime(order);
+    if(Number(clientOrderSeen[key]||0)<at){clientOrderSeen[key]=at;changed=true;}
+  }
+  if(changed)saveClientOrderSeen();
+  updateClientNavBadges();
+}
+function clientNavBadgeCounts(){
+  if(currentUser?.role!=='client')return {orders:0,offers:0};
+  const orders=clientOrders(),orderKeys=new Set();
+  for(const order of orders){
+    const key=clientOrderKey(order),at=clientOrderTime(order);
+    if(at>Number(clientOrderSeen[key]||0))orderKeys.add(key);
+    const action=clientOrderNeedsAction(order);
+    if(action&&!['new_quotes','choose_quote'].includes(action.key))orderKeys.add(key);
+  }
+  const offers=(platformState?.requests||[]).reduce((sum,r)=>sum+newQuoteCount(r),0);
+  return {orders:orderKeys.size,offers};
+}
+function setBottomNavBadge(id,count,show){
+  const el=$(id);if(!el)return;
+  el.textContent=count>99?'99+':String(count||'');
+  el.classList.toggle('hidden',!show||!count);
+}
+function updateClientNavBadges(){
+  const client=currentUser?.role==='client',counts=clientNavBadgeCounts();
+  setBottomNavBadge('navOrdersBadge',counts.orders,client);
+  setBottomNavBadge('navOffersBadge',counts.offers,client);
+}
 function cartRows(){
   const offers=platformState?.publicOffers||[];
   return cartItems.map(item=>{
@@ -241,13 +297,13 @@ async function loadData({render=true}={}){
   ]);
   if(epoch!==session.epoch)return;
   platformState=next;currentUser=next.user;notifications=nextNotifications;lastDataLoadedAt=Date.now();
-  if(currentUser?.role==='client'){loadCart();reconcileCart();}else{cartItems=[];updateCartBadge();}
+  if(currentUser?.role==='client'){loadCart();reconcileCart();loadClientOrderSeen();}else{cartItems=[];clientOrderSeen={};updateCartBadge();updateClientNavBadges();}
   updateAdminState(next);updateShell();
   if(render)renderScreen();
 }
 configureAdmin({reload:()=>loadData({render:false})});
 session.onReset(reason=>{
-  currentUser=null;platformState=null;notifications=[];activeScreen='home';activeSub='primary';readyProductsPage=1;readyCategory='all';readyCountry='all';readySearch='';cartItems=[];clientRequestFilter='all';
+  currentUser=null;platformState=null;notifications=[];activeScreen='home';activeSub='primary';readyProductsPage=1;readyCategory='all';readyCountry='all';readySearch='';cartItems=[];clientOrderSeen={};clientRequestFilter='all';
   resetAdmin();closeModal();
   for(const url of mediaCache.values())URL.revokeObjectURL(url);
   mediaCache.clear();mediaTasks.clear();lastDataLoadedAt=0;$('screen').replaceChildren();$('headerRole').textContent='';
@@ -292,6 +348,7 @@ function updateShell(){
     if(activeScreen==='orders')activeScreen='home';
   }
   updateCartBadge();
+  updateClientNavBadges();
   const unread=notifications.filter(n=>!n.readAt).length,badge=unread>99?'99+':String(unread);
   $('navUnread').textContent=badge;$('headerUnread').textContent=badge;
   $('navUnread').classList.toggle('hidden',role!=='admin'||!unread);
@@ -495,7 +552,7 @@ function renderHome(){
   const role=currentUser.role;
   if(role==='client'){
     if(readyCategory!=='all'&&!categories().some(cat=>cat.id===readyCategory))readyCategory='all';
-    const orders=clientOrders(),actions=orders.map(o=>({order:o,action:clientOrderNeedsAction(o)})).filter(x=>x.action),products=productResultsHtml();
+    const orders=clientOrders(),actions=orders.map(o=>({order:o,action:clientOrderNeedsAction(o)})).filter(x=>x.action&&!['new_quotes','choose_quote'].includes(x.action.key)),products=productResultsHtml();
     $('screen').innerHTML=
       `<section class="special-request-card client-new-request"><div class="special-request-copy"><div class="special-request-heading"><span class="special-request-icon">＋</span><h2>${esc(tr('أرسل طلب جديد','Send a new request'))}</h2></div><p>${esc(tr('إذا لم تجد المنتج المناسب، أرسل مواصفاتك وسنطلب عروضًا لك.','If you cannot find the right product, send your specifications and we will source quotes for you.'))}</p></div><button class="primary-btn" data-action="new-request">+ ${esc(tr('أرسل طلب جديد','Send new request'))}</button></section>`+
       (actions.length?`<section class="section-block client-action-needed compact"><div class="section-title"><div><h2>${esc(tr('يتطلب إجراء منك','Needs your action'))}</h2></div></div><div class="client-action-list">${actions.slice(0,3).map(x=>clientActionCard(x.order,x.action)).join('')}</div></section>`:'')+
@@ -517,7 +574,8 @@ function renderHome(){
 
 function renderRequests(){
   if(currentUser.role==='client'){
-    const all=clientOrders(),active=all.filter(o=>!['completed','cancelled'].includes(o.status)),completed=all.filter(o=>['completed','cancelled'].includes(o.status));
+    const all=clientOrders();markClientOrdersSeen(all);
+    const active=all.filter(o=>!['completed','cancelled'].includes(o.status)),completed=all.filter(o=>['completed','cancelled'].includes(o.status));
     if(!['all','active','completed'].includes(clientRequestFilter))clientRequestFilter='all';
     const rows=clientRequestFilter==='active'?active:clientRequestFilter==='completed'?completed:all;
     const tabs=`<div class="client-order-filters"><button class="${clientRequestFilter==='all'?'active':''}" data-client-order-filter="all">${esc(tr('الكل','All'))} <span>${all.length}</span></button><button class="${clientRequestFilter==='active'?'active':''}" data-client-order-filter="active">${esc(tr('النشطة','Active'))} <span>${active.length}</span></button><button class="${clientRequestFilter==='completed'?'active':''}" data-client-order-filter="completed">${esc(tr('المكتملة','Completed'))} <span>${completed.length}</span></button></div>`;
@@ -608,6 +666,7 @@ async function openClientOffers(requestId){
 }
 async function openClientRequest(requestId){
   let r=(platformState.requests||[]).find(x=>x.id===requestId);if(!r)return;
+  const seenOrder=clientOrders().find(o=>o.type==='custom'&&o.id===requestId);if(seenOrder)markClientOrdersSeen([seenOrder]);
   const quotes=(platformState.quotes||[]).filter(q=>q.requestId===r.id&&q.status==='published');
   const actionPanel=clientRequestActionPanel(r),status=requestTrackingStatus(r),selectedPanel=selectedQuotePanel(r);
   const compareButton=quotes.length?`<button type="button" class="secondary-btn full client-view-quotes" data-client-offers-request="${esc(r.id)}">${esc(r.selectedQuoteId?tr('عرض جميع العروض','View all quotes'):tr('عرض ومقارنة العروض','View & compare quotes'))}</button>`:'';
@@ -624,6 +683,7 @@ async function snapshotTitle(item={}){
   const x=item.translation||{};return (lang==='ar'?(x.titleAr||x.titleEn):(x.titleEn||x.titleAr))||item.product||tr('منتج','Product');
 }
 function openPublicOffer(offerId){
+  if(currentUser?.role==='client'){const seenOrder=clientOrders().find(o=>o.type==='ready'&&o.offer?.id===offerId);if(seenOrder)markClientOrdersSeen([seenOrder]);}
   const o=(platformState.publicOffers||[]).find(x=>x.id===offerId);if(!o)return;
   const interest=(platformState.interests||[]).find(i=>i.offerId===o.id&&!i.cartOrderId);
   const cartItem=cartItems.find(x=>x.offerId===o.id);
@@ -704,6 +764,7 @@ async function submitCartOrder(e){
 }
 function openCartOrder(orderId){
   const r=(platformState.requests||[]).find(x=>x.id===orderId&&x.orderType==='cart');if(!r)return;
+  const seenOrder=clientOrders().find(o=>o.type==='cart'&&o.id===orderId);if(seenOrder)markClientOrdersSeen([seenOrder]);
   const children=(platformState.interests||[]).filter(i=>i.cartOrderId===r.id),snapshots=Array.isArray(r.cartItems)?r.cartItems:[];
   const lines=snapshots.map(line=>{
     const child=children.find(i=>i.id===line.interestId),status=child?readyTrackingStatus(child):'received',image=(line.images||[])[0];
