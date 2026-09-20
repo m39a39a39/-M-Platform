@@ -1,0 +1,26 @@
+name: QA bulk Excel import
+on:
+  push:
+    branches: ['feature/bulk-excel-product-import']
+    paths: ['mobile-app/**','backend/**','.github/workflows/qa-bulk-import.yml']
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - name: Root backend tests
+        run: npm test
+      - name: Mobile tests
+        working-directory: mobile-app
+        run: |
+          npm ci
+          node --test tests/session.test.mjs tests/bulk-excel.test.mjs
+      - name: Mobile build
+        working-directory: mobile-app
+        run: npm run build
