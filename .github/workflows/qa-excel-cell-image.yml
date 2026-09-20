@@ -1,0 +1,21 @@
+name: QA Excel name and cell image fix
+on:
+  push:
+    branches: ['fix/excel-name-cell-images']
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: mobile-app
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - run: npm ci
+      - run: node --test tests/session.test.mjs tests/bulk-excel.test.mjs tests/bulk-excel-cell-image.test.mjs
+      - run: npm run build
