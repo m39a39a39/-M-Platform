@@ -613,24 +613,29 @@ function clientReadyActionPanel(interest,offer){
   if(!action)return '';
   return `<section class="client-detail-action ${esc(action.tone||'action')}"><div><small>${esc(tr('الإجراء المطلوب','Action required'))}</small><strong>${esc(action.label)}</strong></div></section>`;
 }
-async function openPublicOffer(offerId){
+async function snapshotTitle(item={}){
+  const x=item.translation||{};return (lang==='ar'?(x.titleAr||x.titleEn):(x.titleEn||x.titleAr))||item.product||tr('منتج','Product');
+}
+function openPublicOffer(offerId){
   const o=(platformState.publicOffers||[]).find(x=>x.id===offerId);if(!o)return;
-  const interest=(platformState.interests||[]).find(i=>i.offerId===o.id);
+  const interest=(platformState.interests||[]).find(i=>i.offerId===o.id&&!i.cartOrderId);
+  const cartItem=cartItems.find(x=>x.offerId===o.id);
   const moq=Math.max(1,Math.ceil(Number(o.moq)||1)),stock=Number(o.stock),maxAttr=Number.isFinite(stock)&&stock>0?` max="${esc(Math.floor(stock))}"`:'';
   if(currentUser.role==='client'&&interest){
-    const order=clientOrders().find(x=>x.type==='ready'&&x.id===interest.id),status=readyTrackingStatus(interest),total=interest.total||Number(interest.quantity||0)*Number(interest.unitPrice||o.unitPrice||0);
+    const status=readyTrackingStatus(interest),total=interest.total||Number(interest.quantity||0)*Number(interest.unitPrice||o.unitPrice||0);
     const summary=`<section class="client-order-summary"><div class="client-order-summary-title"><small>#${esc(ref(interest))} · ${esc(tr('منتج جاهز','Ready product'))}</small><strong>${esc(titleOf(o))}</strong></div><div class="client-order-summary-facts"><span>${esc(tr('الكمية','Quantity'))}: ${esc(interest.quantity||'—')}</span><span>${esc(tr('سعر الوحدة','Unit price'))}: ${money(interest.unitPrice||o.unitPrice,interest.currency||o.currency)}</span><span>${esc(tr('الإجمالي','Total'))}: ${money(total,interest.currency||o.currency)}</span></div></section>`;
     const statusCard=`<section class="client-current-status"><small>${esc(tr('الحالة الحالية','Current status'))}</small><strong>${esc(trackingLabel(status))}</strong>${interest.trackingUpdatedAt?`<span>${esc(tr('آخر تحديث','Last update'))}: ${esc(date(interest.trackingUpdatedAt))}</span>`:''}</section>`;
     openModal(titleOf(o),`#${ref(interest)}`,`${summary}${clientReadyActionPanel(interest,o)}${statusCard}${paymentPanel(interest,'interest')}${trackingTimeline(interest,{flow:READY_TRACKING_FLOW,statusResolver:readyTrackingStatus})}<section class="client-detail-content"><h3>${esc(t('specifications'))}</h3><p class="long-copy">${esc(descriptionOf(o)||'—')}</p><div class="facts"><span>MOQ ${esc(o.moq||'—')}</span><span>${esc(t('stock'))}: ${esc(o.stock||'—')}</span><span>${esc(t('leadTime'))}: ${esc(o.leadTime||'—')}</span></div>${gallery(o.images)}</section>`);
     return;
   }
+  const initialQty=cartItem?.quantity||moq;
   const requestForm=currentUser.role==='client'?`<form id="publicInterestForm" class="public-interest-form" data-offer-id="${esc(o.id)}">
     <div class="public-interest-head"><div><strong>${esc(tr('حدد الكمية المطلوبة','Choose requested quantity'))}</strong><small>${esc(tr('الحد الأدنى للطلب','Minimum order'))}: ${esc(o.moq||'—')}</small></div></div>
-    <label><span>${esc(tr('الكمية','Quantity'))}</span><input id="publicInterestQuantity" name="quantity" type="number" min="${esc(moq)}" step="1" value="${esc(moq)}"${maxAttr} required></label>
-    <div class="public-interest-total"><span>${esc(tr('الإجمالي التقديري','Estimated total'))}</span><strong id="publicInterestTotal">${money(moq*Number(o.unitPrice||0),o.currency)}</strong></div>
+    <label><span>${esc(tr('الكمية','Quantity'))}</span><input id="publicInterestQuantity" name="quantity" type="number" min="${esc(moq)}" step="1" value="${esc(initialQty)}"${maxAttr} required></label>
+    <div class="public-interest-total"><span>${esc(tr('إجمالي هذا المنتج','This product total'))}</span><strong id="publicInterestTotal">${money(initialQty*Number(o.unitPrice||0),o.currency)}</strong></div>
     ${Number.isFinite(stock)&&stock>0?`<small>${esc(tr('المخزون المتاح','Available stock'))}: ${esc(stock)}</small>`:''}
     <p class="form-message" id="publicInterestMessage"></p>
-    <button class="primary-btn full" type="submit">${esc(t('requestOffer'))}</button>
+    <button class="primary-btn full" type="submit">${esc(cartItem?tr('تحديث الكمية في السلة','Update quantity in cart'):tr('أضف إلى الطلب','Add to order'))}</button>
   </form>`:'';
   openModal(titleOf(o),`#${ref(o)}`,`${gallery(o.images)}<div class="quote-price">${money(o.unitPrice,o.currency)}</div><div class="facts"><span>MOQ ${esc(o.moq||'—')}</span><span>${esc(t('stock'))}: ${esc(o.stock||'—')}</span><span>${esc(t('leadTime'))}: ${esc(o.leadTime||'—')}</span><span>${esc(tr('بلد التوريد','Supply country'))}: ${esc(supplyCountryLabel(o.country))}</span><span>${esc(t('validUntil'))}: ${esc(o.validUntil||'—')}</span></div><p class="long-copy">${esc(descriptionOf(o)||'—')}</p>${requestForm}`);
   if(currentUser.role==='client'){
@@ -643,16 +648,62 @@ async function submitPublicInterest(e){
   e.preventDefault();if(busy)return;busy=true;
   const form=e.currentTarget,offerId=form.dataset.offerId,o=(platformState.publicOffers||[]).find(x=>x.id===offerId),message=$('publicInterestMessage');
   if(!o){busy=false;return;}
-  const quantity=Number(form.quantity.value),moq=Number(o.moq)||1,stock=Number(o.stock);
   try{
-    if(!Number.isFinite(quantity)||quantity<moq)throw new Error(tr('الكمية يجب ألا تقل عن الحد الأدنى للطلب.','Quantity cannot be below the minimum order.'));
-    if(Number.isFinite(stock)&&stock>0&&quantity>stock)throw new Error(tr('الكمية المطلوبة أكبر من المخزون المتاح.','Requested quantity exceeds available stock.'));
-    form.querySelector('button[type="submit"]').disabled=true;
-    if(message)message.textContent=tr('جارٍ إرسال الطلب...','Submitting request...');
-    await mutate('interests',id(),0,{offerId,quantity,status:'pending'});
-    await loadData({render:false});closeModal();activeScreen='requests';renderScreen();showToast(t('requested'));
+    addToCart(o,Number(form.quantity.value));
+    closeModal();
+    showToast(tr('تمت إضافة المنتج إلى الطلب.','Product added to the order.'));
   }catch(error){if(message)message.textContent=error.message;else showToast(error.message);}
   finally{busy=false;}
+}
+function openCart(){
+  if(currentUser?.role!=='client')return;
+  const rows=cartRows();
+  if(!rows.length){
+    openModal(tr('سلة الطلب','Order cart'),tr('طلب متعدد المنتجات','Multi-product order'),`<div class="empty-state cart-empty"><span>🛒</span><p>${esc(tr('السلة فارغة. أضف منتجات من الصفحة الرئيسية.','Your cart is empty. Add products from the home page.'))}</p></div>`);
+    return;
+  }
+  const currency=rows[0].currency,total=rows.reduce((sum,row)=>sum+row.total,0);
+  const html=`<form id="cartCheckoutForm" class="cart-checkout-form">
+    <div class="cart-lines">${rows.map(row=>{
+      const o=row.offer,image=(o.images||[])[0],stock=Number(o.stock),maxAttr=Number.isFinite(stock)&&stock>0?` max="${esc(Math.floor(stock))}"`:'';
+      return `<article class="cart-line" data-cart-line="${esc(o.id)}"><div class="cart-line-image">${image?`<img alt="" data-media="${esc(image)}">`:'<div>M</div>'}</div><div class="cart-line-body"><div class="cart-line-title"><strong>${esc(titleOf(o))}</strong><button type="button" class="danger-text" data-cart-remove="${esc(o.id)}">${esc(tr('حذف','Remove'))}</button></div><small>${money(row.unitPrice,row.currency)} · MOQ ${esc(o.moq||'—')}</small><div class="cart-line-controls"><label><span>${esc(tr('الكمية','Quantity'))}</span><input type="number" data-cart-qty="${esc(o.id)}" min="${esc(Math.max(1,Math.ceil(Number(o.moq)||1)))}" step="1" value="${esc(row.quantity)}"${maxAttr}></label><div><span>${esc(tr('الإجمالي','Total'))}</span><strong>${money(row.total,row.currency)}</strong></div></div></div></article>`;
+    }).join('')}</div>
+    <section class="cart-summary"><div><span>${esc(tr('عدد المنتجات','Products'))}</span><strong>${rows.length}</strong></div><div class="cart-grand-total"><span>${esc(tr('الإجمالي الكلي','Grand total'))}</span><strong>${money(total,currency)}</strong></div><small>${esc(tr('يتم تثبيت السعر والكمية عند إرسال الطلب. يجب أن تكون جميع المنتجات بنفس العملة.','Price and quantity are locked when the order is submitted. All products must use the same currency.'))}</small></section>
+    <p class="form-message" id="cartMessage"></p>
+    <div class="cart-actions"><button type="button" class="secondary-btn" data-cart-clear>${esc(tr('إفراغ السلة','Clear cart'))}</button><button class="primary-btn" type="submit">${esc(tr('إرسال الطلب','Submit order'))}</button></div>
+  </form>`;
+  openModal(tr('سلة الطلب','Order cart'),tr(`${rows.length} منتجات · ${currency}`,`${rows.length} products · ${currency}`),html);
+  $('cartCheckoutForm')?.addEventListener('submit',submitCartOrder);
+  $('modalBody').querySelectorAll('[data-cart-qty]').forEach(input=>input.addEventListener('change',()=>{
+    if(!setCartQuantity(input.dataset.cartQty,Number(input.value))){showToast(tr('تحقق من الكمية والحد الأدنى والمخزون.','Check quantity, MOQ, and stock.'));openCart();return;}
+    openCart();
+  }));
+  $('modalBody').querySelectorAll('[data-cart-remove]').forEach(button=>button.addEventListener('click',()=>{
+    cartItems=cartItems.filter(x=>x.offerId!==button.dataset.cartRemove);saveCart();openCart();
+  }));
+  $('modalBody').querySelector('[data-cart-clear]')?.addEventListener('click',()=>{cartItems=[];saveCart();openCart();});
+}
+async function submitCartOrder(e){
+  e.preventDefault();if(busy)return;busy=true;
+  const message=$('cartMessage'),button=e.currentTarget.querySelector('button[type="submit"]');
+  try{
+    const rows=cartRows();if(!rows.length)throw new Error(tr('السلة فارغة.','Cart is empty.'));
+    button.disabled=true;if(message)message.textContent=tr('جارٍ إنشاء الطلب...','Creating order...');
+    const result=await request('/api/v1/cart-orders',{method:'POST',auth:true,body:{items:rows.map(row=>({offerId:row.offer.id,quantity:row.quantity}))}});
+    cartItems=[];saveCart();await loadData({render:false});closeModal();activeScreen='requests';renderScreen();
+    showToast(tr(`تم إنشاء الطلب #${result.displayNo||''} بنجاح.`,`Order #${result.displayNo||''} created successfully.`));
+  }catch(error){if(message)message.textContent=error.message||tr('تعذر إنشاء الطلب.','Could not create order.');if(button)button.disabled=false;}
+  finally{busy=false;}
+}
+function openCartOrder(orderId){
+  const r=(platformState.requests||[]).find(x=>x.id===orderId&&x.orderType==='cart');if(!r)return;
+  const children=(platformState.interests||[]).filter(i=>i.cartOrderId===r.id),snapshots=Array.isArray(r.cartItems)?r.cartItems:[];
+  const lines=snapshots.map(line=>{
+    const child=children.find(i=>i.id===line.interestId),status=child?readyTrackingStatus(child):'received',image=(line.images||[])[0];
+    return `<article class="cart-order-line"><div class="cart-order-line-image">${image?`<img alt="" data-media="${esc(image)}">`:'<div>M</div>'}</div><div><strong>${esc(snapshotTitle(line))}</strong><small>${esc(tr('الكمية','Quantity'))}: ${esc(line.quantity||'—')} · ${money(line.unitPrice,line.currency)}</small><b>${money(line.total,line.currency)}</b><span class="status-pill status-${esc(status)}">${esc(trackingLabel(status))}</span></div></article>`;
+  }).join('');
+  const summary=`<section class="client-order-summary cart-order-summary"><div class="client-order-summary-title"><small>#${esc(ref(r))} · ${esc(tr('طلب منتجات','Product order'))}</small><strong>${esc(tr(`${r.cartItemCount||snapshots.length} منتجات`,`${r.cartItemCount||snapshots.length} products`))}</strong></div><div class="client-order-summary-facts"><span>${esc(tr('الإجمالي','Total'))}: ${money(r.cartTotal,r.currency)}</span><span>${esc(tr('الحالة','Status'))}: ${esc(trackingLabel(requestTrackingStatus(r)))}</span></div></section>`;
+  openModal(tr('تفاصيل طلب المنتجات','Product order details'),`#${ref(r)}`,`${summary}<section class="cart-order-items"><h3>${esc(tr('المنتجات','Products'))}</h3>${lines||empty()}</section>${paymentPanel(r,'request')}${trackingTimeline(r,{flow:READY_TRACKING_FLOW,statusResolver:requestTrackingStatus})}`);
 }
 function openSupplierRequest(requestId){
   const r=(platformState.requests||[]).find(x=>x.id===requestId);if(!r)return;
