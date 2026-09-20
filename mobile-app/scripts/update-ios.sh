@@ -15,7 +15,7 @@ if [[ ! -f package.json || ! -d ios ]]; then
 fi
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
-files=(package.json package-lock.json index.html src/styles.css src/app.js src/admin-mobile.js src/guest.js src/session-core.js src/session.js src/language.js src/views.js src/image-upload.js src/image-viewer.js)
+files=(package.json package-lock.json index.html src/styles.css src/app.js src/admin-mobile.js src/guest.js src/session-core.js src/session.js src/language.js src/views.js src/image-upload.js src/image-viewer.js src/bulk-excel.js)
 
 # Download one repository archive instead of many raw.githubusercontent.com files.
 archive="$stage/repo.tar.gz"
