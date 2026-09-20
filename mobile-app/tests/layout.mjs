@@ -9,13 +9,14 @@ const titleAr = 'باور بنك وشاحن متنقل بسعة كبيرة مع 
 const titleEn = 'Power bank with multiple cables and a digital display ' + 'LongUnbrokenProductCode'.repeat(4);
 const translation = { titleAr, titleEn, descriptionAr: titleAr.repeat(2), descriptionEn: titleEn };
 const images = Array.from({ length: 5 }, (_, i) => `/api/media/test-${i}`);
-const trackingFlow=['received','reviewing','sourcing','quotes_available','quote_selected','payment_confirmation','production','quality_check','ready_to_ship','shipped','in_delivery','delivered','completed'];
+const trackingFlow=['received','reviewing','sourcing','quotes_available','quote_selected','supplier_confirmation','payment_confirmation','production','quality_check','ready_to_ship','shipped','in_delivery','delivered','completed'];
 const requests = Array.from({ length: 100 }, (_, i) => ({ id: `r${i}`, displayNo: 10001+i, product: titleAr, translation, specs: titleEn, quantity: 1000, country: 'United Arab Emirates', createdAt: '2026-09-17', neededDate: '2026-10-17', images, customerId: 'client', supplierIds: ['supplier'], status: i%2 ? 'sent' : 'review', trackingStatus:trackingFlow[i%trackingFlow.length], trackingUpdatedAt:'2026-09-18', trackingNote:i===0?'المصنع يتوقع اكتمال الإنتاج قريبًا':'', version: 1 }));
 const bankAccounts=[{id:'bank-usd',label:'MIG USD',beneficiary:'MIG COMPANY',bankName:'Fixture Bank',iban:'AE070331234567890123456',swift:'FIXTAEAD',accountNumber:'1234567890',country:'United Arab Emirates',currency:'USD',active:true,order:0},{id:'bank-aed',label:'حساب الإمارات',beneficiary:'MIG COMPANY',bankName:'Fixture Bank AED',iban:'AE090331234567890123457',swift:'FIXTAEAD',accountNumber:'9876543210',country:'United Arab Emirates',currency:'AED',active:true,order:1}];
 requests[0]={...requests[0],status:'sent',trackingStatus:'payment_confirmation',trackingNote:'',selectedQuoteId:'q0',paymentStatus:'awaiting_receipt',paymentMessage:'يرجى تحويل الدفعة الأولى ثم إرفاق إيصال الدفع.',paymentBankAccountId:'bank-usd',paymentBankAccount:bankAccounts[0],paymentAmount:5250,paymentCurrency:'USD',paymentRequestedAt:'2026-09-18'};
 requests[2]={...requests[2],status:'sent',trackingStatus:'supplier_confirmation',selectedQuoteId:'q2',selectedForSupplier:true};
 const categories=[{id:'mobile',nameAr:'إكسسوارات الجوال',nameEn:'Mobile accessories',active:true,order:0},{id:'electronics',nameAr:'إلكترونيات',nameEn:'Electronics',active:true,order:1},{id:'home',nameAr:'المنزل',nameEn:'Home',active:true,order:2}];
-const publicOffers = Array.from({ length: 45 }, (_, i) => ({ id: `p${i}`, displayNo: 10101+i, product: titleAr, translation, specs: titleEn, images: images.slice(0,(i%5)+1), status:'published', supplierId:'supplier', sku:`SKU-${i}`, categoryId:categories[i%3].id, currency:'USD', unitPrice:12, moq:500, stock:'2000', leadTime:30 }));
+const supplyCountries=[{id:'cn-stock',nameAr:'الصين',nameEn:'China',active:true,order:0},{id:'uae-stock',nameAr:'الإمارات',nameEn:'UAE',active:true,order:1}];
+const publicOffers = Array.from({ length: 45 }, (_, i) => ({ id: `p${i}`, displayNo: 10101+i, product: titleAr, translation, specs: titleEn, images: images.slice(0,(i%5)+1), status:'published', supplierId:'supplier', sku:`SKU-${i}`, categoryId:categories[i%3].id, country:supplyCountries[i%2].id, currency:'USD', unitPrice:12, moq:500, stock:'2000', leadTime:30 }));
 const quotes = requests.slice(0,4).map((r,i)=>({id:`q${i}`,requestId:r.id,supplierId:'supplier',status:i%2?'pending':'published',unitPrice:10,moq:500,leadTime:20,currency:'USD',images,translation,createdAt:'2026-09-17'}));
 const accounts = ['client','supplier','admin'].map(role=>({id:role,role,name: role==='admin'?'مدير المنصة':titleAr,company:titleEn,email:`${role}@example.test`,isOwner:role==='admin'}));
 const interests = [{id:'i1',displayNo:11001,offerId:'p0',status:'active',trackingStatus:'payment_confirmation',trackingUpdatedAt:'2026-09-18',trackingNote:'بانتظار تأكيد الدفع',quantity:600,unitPrice:12,currency:'USD',moq:500,total:7200,supplierOrderStatus:'confirmed',supplierOrderNote:'',paymentStatus:'receipt_submitted',paymentMessage:'يرجى دفع قيمة المنتج وإرسال الإيصال.',paymentReceipt:{src:images[0],mime:'image/jpeg',submittedAt:'2026-09-18'},createdAt:'2026-09-17',customerId:'client',version:1}];
@@ -65,6 +66,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
   const errors=[];
   let stateCalls=0;
   let publicOfferMutation=null;
+  let bulkPublicOfferSubmission=null;
   let interestMutation=null;
   let requestTrackingMutation=null;
   let paymentReceiptSubmission=null;
@@ -82,7 +84,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
     }
     let body={};
     if(path.endsWith('/auth/login')) body={user:accounts.find(a=>a.role===role),tokens:{accessToken:'fixture',refreshToken:'fixture'}};
-    else if(path.endsWith('/state')) { stateCalls++; const roleQuotes=role==='admin'?quotes.map(q=>q.id==='q2'?{...q,supplierOrderStatus:'confirmed'}:q):quotes;const roleRequests=role==='supplier'?requests:[...requests,cartRequest];const roleInterests=role==='admin'?[...interests,adminPendingInterest,...cartInterests]:role==='client'?[...interests,...cartInterests]:interests;body={user:accounts.find(a=>a.role===role),requests:roleRequests,quotes:roleQuotes,publicOffers,accounts,interests:roleInterests,settings:{categories,...(role==='admin'?{bankAccounts}:{}),_version:1}}; }
+    else if(path.endsWith('/state')) { stateCalls++; const roleQuotes=role==='admin'?quotes.map(q=>q.id==='q2'?{...q,supplierOrderStatus:'confirmed'}:q):quotes;const roleRequests=role==='supplier'?requests:[...requests,cartRequest];const roleInterests=role==='admin'?[...interests,adminPendingInterest,...cartInterests]:role==='client'?[...interests,...cartInterests]:interests;body={user:accounts.find(a=>a.role===role),requests:roleRequests,quotes:roleQuotes,publicOffers,accounts,interests:roleInterests,settings:{categories,supplyCountries,...(role==='admin'?{bankAccounts}:{}),_version:1}}; }
     else if(path.endsWith('/notifications')) body=role==='client'?[clientPaymentNote,...notes.slice(1)]:role==='admin'?[adminPaymentNote,...notes.slice(1)]:notes;
     else if(path.endsWith('/notifications/read')) body={ok:true};
     else if(path.endsWith('/payment-receipts')) {paymentReceiptSubmission=route.request().postDataJSON();body={ok:true,paymentStatus:'receipt_submitted'};}
@@ -94,6 +96,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
       uploadedSources.push(upload.source);
       body={src:`/api/media/upload-${uploadedSources.length}`};
     }
+    else if(path.endsWith('/bulk-public-offers')) {bulkPublicOfferSubmission=route.request().postDataJSON();body={ok:true,count:bulkPublicOfferSubmission.items?.length||0};}
     else if(path.endsWith('/mutations')) {
       const mutation=route.request().postDataJSON();
       if(mutation.collection==='publicOffers') publicOfferMutation=mutation;
@@ -239,7 +242,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
         assert.ok(uploadedSources[0].startsWith('data:image/jpeg;base64,'),'Large selected image must be converted to compressed JPEG');
         assert.ok(uploadedSources[0].length<1300000,'Compressed upload payload should remain below the normal API body limit');
         await page.locator('#bottomNav [data-screen="home"]').click();
-        await page.locator('.special-request-card').waitFor();
+        await page.locator('#screen .special-request-card').waitFor();
       }else await page.locator('.modal-close').click();
       const firstOffer=page.locator('.public-offer-card').first();
       await firstOffer.locator('.public-offer-media').click();
@@ -385,7 +388,8 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
       }
       if(screen==='account'&&role==='admin'){
         assert.equal(await page.locator('[data-admin-category-new]').count(),1,'Admin account must contain product category management');
-        assert.equal(await page.locator('.admin-category-row').count(),3,'Admin account must list configured product categories');
+        assert.equal(await page.locator('.admin-main-category-panel .admin-category-row').count(),3,'Admin account must list configured product categories');
+        assert.equal(await page.locator('.admin-country-panel .admin-category-row').count(),2,'Admin account must list managed supply countries');
       }
       if(screen==='offers'&&role==='supplier'){
         assert.equal(await page.locator('#screen [data-sub]').count(),0,'Supplier Products must not contain quote tabs');
@@ -406,6 +410,8 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
         assert.equal(await page.locator('[data-admin-offer-tab]').count(),2,'Admin products must have only Pending review and All products tabs');
         assert.equal(await page.locator('[data-admin-offer-tab="interests"],[data-admin-offer-tab="categories"]').count(),0,'Product screen must not contain orders or categories tabs');
         await page.locator('[data-admin-offer-tab="all"]').click();
+        await page.locator('[data-admin-product-select]').first().waitFor();
+        assert.equal(await page.locator('[data-admin-product-select]').count(),45,'Admin must be able to select products for bulk editing');
         const adminProduct=page.locator('[data-admin-open="public"]').first();
         await adminProduct.locator('img[data-image-viewer]').first().click();
         await page.locator('#adminPublicOfferForm').waitFor();
@@ -428,6 +434,21 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
         assert.equal(publicOfferMutation?.patch?.images?.length,publicOffers[0].images.length,'Admin product edit must preserve selected images');
         assert.equal(publicOfferMutation?.redactionConfirmed,true,'Published product edits must confirm privacy review');
         publicOfferMutation=null;
+        await page.locator('#screen [data-admin-product-select]').nth(0).check();
+        await page.locator('#screen [data-admin-product-select]').nth(1).check();
+        assert.equal(await page.locator('[data-admin-bulk-edit]').isDisabled(),false,'Bulk edit must activate after selecting products');
+        await page.locator('[data-admin-bulk-edit]').click();
+        await page.locator('#adminBulkProductsForm').waitFor();
+        assert.equal(await page.locator('#adminBulkProductsForm [data-bulk-product-row]').count(),2,'Bulk editor must show the selected products in one table');
+        await page.locator('#adminBulkProductsForm [data-bulk-product-row]').nth(0).locator('[data-bulk-edit="unitPrice"]').fill('21');
+        await page.locator('#adminBulkProductsForm [data-bulk-product-row]').nth(1).locator('[data-bulk-edit="unitPrice"]').fill('22');
+        await page.locator('#adminBulkProductsForm [name="reviewed"]').check();
+        await page.locator('#adminBulkProductsForm button[type="submit"]').click();
+        await page.locator('#modal').waitFor({state:'hidden'});
+        assert.equal(bulkPublicOfferSubmission?.items?.length,2,'Bulk save must send all changed selected products in one request');
+        assert.equal(bulkPublicOfferSubmission?.items?.[0]?.patch?.unitPrice,'21','Bulk editor must save edited price');
+        assert.equal(bulkPublicOfferSubmission?.redactionConfirmed,true,'Bulk published edits must confirm content review');
+        bulkPublicOfferSubmission=null;
       }
       if(screen==='requests'){
         assert.ok(await page.locator('#screen').evaluate(el=>el.scrollHeight>el.clientHeight),'Long list did not scroll');
@@ -436,7 +457,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
           assert.equal(await page.locator('#screen [data-sub="submitted"]').count(),1,'Quote Requests must include Submitted quotes tab');
           assert.ok((await page.locator('#screen [data-sub="pending"]').textContent()).includes('96'),'Awaiting quote count must exclude requests already quoted');
           await page.locator('#screen [data-sub="submitted"]').click();
-          assert.equal(await page.locator('#screen [data-edit-quote]').count(),4,'Submitted quotes tab must preserve all submitted quote cards');
+          assert.equal(await page.locator('#screen [data-edit-quote]').count(),3,'Selected quote must move out of Submitted quotes and into supplier Orders');
           await page.locator('#screen [data-sub="pending"]').click();
         }
         if(role==='admin'){
@@ -460,7 +481,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
           await page.locator('[data-admin-interest="i2"] .list-card-title').click();
           await page.locator('[data-admin-interest-tracking-status]').waitFor();
           assert.equal(await page.locator('#modal .admin-supplier-confirmation.pending').count(),1,'New product order must show supplier confirmation pending');
-          assert.notEqual(await page.locator('#modal [data-admin-interest-tracking-status] option[value="payment_confirmation"]').getAttribute('disabled'),null,'Payment must stay disabled until supplier confirmation');
+          assert.equal(await page.locator('#modal [data-admin-interest-tracking-status] option[value="payment_confirmation"]').count(),0,'Payment must not be selectable before supplier confirmation');
           assert.equal(await page.locator('#modal [data-admin-send-interest-supplier]').count(),1,'Admin must have approve-and-send-to-supplier action for product orders');
           await page.locator('#modal [data-admin-send-interest-supplier]').click();
           await page.locator('#modal').waitFor({state:'hidden'});
@@ -470,7 +491,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
           await page.locator('[data-admin-interest="i1"] .list-card-title').click();
           await page.locator('[data-admin-interest-tracking-status]').waitFor();
           assert.equal(await page.locator('[data-admin-interest-status]').count(),0,'Legacy interest status selector must remain removed');
-          assert.equal(await page.locator('[data-admin-interest-tracking-status] option').count(),13,'Product orders must retain fulfillment statuses and exceptions');
+          assert.equal(await page.locator('[data-admin-interest-tracking-status] option').count(),5,'Product order status selector must show only the current, next, and exception states');
           const publicOrderSummary=await page.locator('#modal .admin-selected-quote-card').textContent();
           assert.ok(publicOrderSummary.includes('600'),'Admin product order must show requested quantity');
           assert.equal(await page.locator('#modal [data-admin-payment-amount]').inputValue(),'7200','Product-order total must auto-fill payment amount');

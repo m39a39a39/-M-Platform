@@ -1043,7 +1043,7 @@ input:focus,textarea:focus,select:focus {
 .guest-modal-login {
   width: 100%;
 }
-.guest-header-actions{display:flex;align-items:center;gap:6px}
+.guest-header-actions{display:flex;align-items:center;gap:6px;flex:0 0 auto}
 .guest-new-request{margin:4px 0 14px}
 .guest-auth-required{display:grid;gap:16px}
 .guest-auth-required p{margin:0;color:var(--muted);line-height:1.75}

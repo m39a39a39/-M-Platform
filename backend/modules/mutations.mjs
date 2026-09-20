@@ -440,6 +440,7 @@ export async function bulkUpdatePublicOffers(user,body={}){
     assert(Number(item.version)===row.version,409,'تغيّرت بيانات أحد المنتجات؛ حدّث الصفحة / A product changed; refresh and try again');
     const data=structuredClone(row.data||{}),keys=Object.keys(patch);
     const editable=new Set(['product','specs','unitPrice','moq','stock','categoryId','subcategoryId','country']);
+    assert(item.delete||keys.length,400,'لا توجد تغييرات / No changes');
     if(item.delete){
       assert(can(user,'trash'),403);
       data.deletedAt=now;
@@ -449,9 +450,13 @@ export async function bulkUpdatePublicOffers(user,body={}){
         if(editable.has(key)){assert(can(user,'offers.edit'),403);data[key]=patch[key];}
         else if(key==='translation'){
           assert(can(user,'translate'),403);
-          assert(patch.translation&&['titleAr','titleEn','descriptionAr','descriptionEn'].every(k=>typeof patch.translation[k]==='string'&&patch.translation[k].trim()&&patch.translation[k].length<=10000&&!contact(patch.translation[k])),400,'أكمل النصوص المترجمة / Complete translated text');
-          data.translation=Object.fromEntries(['titleAr','titleEn','descriptionAr','descriptionEn'].map(k=>[k,patch.translation[k].trim()]));
-          data.reviewedAt=now;
+          assert(patch.translation&&typeof patch.translation==='object'&&!Array.isArray(patch.translation),400,'ترجمة غير صالحة / Invalid translation');
+          const allowedTranslation=['titleAr','titleEn','descriptionAr','descriptionEn'],nextTranslation={...(data.translation||{})};
+          for(const field of Object.keys(patch.translation)){
+            assert(allowedTranslation.includes(field)&&typeof patch.translation[field]==='string'&&patch.translation[field].length<=10000&&!contact(patch.translation[field]),400,'تحقق من النصوص المترجمة / Check translated text');
+            nextTranslation[field]=patch.translation[field].trim();
+          }
+          data.translation=nextTranslation;data.reviewedAt=now;
         }else if(key==='status'){
           assert(can(user,'publish'),403);assert(['pending','published'].includes(patch.status),400,'حالة غير صالحة / Invalid status');
           if(patch.status==='published'&&data.status!=='published')data.publishedAt=now;
@@ -460,7 +465,10 @@ export async function bulkUpdatePublicOffers(user,body={}){
       }
       validateContent('publicOffers',data);
       await assertProductTaxonomy(data,{required:data.status==='published',activeOnly:data.status==='published'});
-      if(data.status==='published'&&keys.some(k=>k==='translation'||k==='status'||editable.has(k)))assert(body.redactionConfirmed===true,400,'أكد مراجعة النصوص والصور قبل الحفظ / Confirm content review before saving');
+      if(data.status==='published'){
+        assert(['titleAr','titleEn','descriptionAr','descriptionEn'].every(k=>data.translation?.[k]?.trim()),400,'أكمل الاسم والوصف بالعربية والإنجليزية قبل النشر / Complete Arabic and English name and description before publishing');
+        if(keys.some(k=>k==='translation'||k==='status'||editable.has(k)))assert(body.redactionConfirmed===true,400,'أكد مراجعة النصوص والصور قبل الحفظ / Confirm content review before saving');
+      }
     }
     data.updatedAt=now;
     data.history=[...(data.history||[]),{at:now,status:data.status,action:item.delete?'bulk_delete':'bulk_update'}].slice(-200);
