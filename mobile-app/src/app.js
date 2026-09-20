@@ -794,13 +794,35 @@ function openCart(){
   }));
   $('modalBody').querySelector('[data-cart-clear]')?.addEventListener('click',()=>{cartItems=[];saveCart();openCart();});
 }
+async function createCartOrderRequest(items){
+  try{
+    return await request('/api/v1/cart-orders',{method:'POST',auth:true,body:{items}});
+  }catch(error){
+    if(Number(error?.status)!==404)throw error;
+    const token=session.accessToken;
+    if(!token)throw error;
+    const response=await fetch('https://retpewhbjpdgbfekynjt.supabase.co/functions/v1/cart-orders-dev',{
+      method:'POST',
+      headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json','X-M-Client':'native'},
+      body:JSON.stringify({items})
+    });
+    let data={};
+    try{data=await response.json();}catch{}
+    if(!response.ok){
+      const fallback=new Error(data?.error||tr('تعذر إنشاء الطلب.','Could not create order.'));
+      fallback.status=response.status;throw fallback;
+    }
+    return data;
+  }
+}
 async function submitCartOrder(e){
   e.preventDefault();if(busy)return;busy=true;
   const message=$('cartMessage'),button=e.currentTarget.querySelector('button[type="submit"]');
   try{
     const rows=cartRows();if(!rows.length)throw new Error(tr('السلة فارغة.','Cart is empty.'));
     button.disabled=true;if(message)message.textContent=tr('جارٍ إنشاء الطلب...','Creating order...');
-    const result=await request('/api/v1/cart-orders',{method:'POST',auth:true,body:{items:rows.map(row=>({offerId:row.offer.id,quantity:row.quantity}))}});
+    const items=rows.map(row=>({offerId:row.offer.id,quantity:row.quantity}));
+    const result=await createCartOrderRequest(items);
     cartItems=[];saveCart();await loadData({render:false});closeModal();activeScreen='requests';renderScreen();
     showToast(tr(`تم إنشاء الطلب #${result.displayNo||''} بنجاح.`,`Order #${result.displayNo||''} created successfully.`));
   }catch(error){if(message)message.textContent=error.message||tr('تعذر إنشاء الطلب.','Could not create order.');if(button)button.disabled=false;}

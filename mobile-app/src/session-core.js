@@ -146,5 +146,6 @@ export function createSession({ storage, fetchImpl = (...args) => fetch(...args)
   return { raw, request, state, restore, logout, clear,
     login: body => authenticate('login',body), register: body => authenticate('register',body),
     get epoch() { return epoch; }, get active() { return !!tokens; },
+    get accessToken() { return tokens?.accessToken || ''; },
     onReset(listener) { listeners.add(listener); return () => listeners.delete(listener); } };
 }
