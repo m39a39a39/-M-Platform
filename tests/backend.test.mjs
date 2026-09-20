@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {can} from '../backend/modules/auth.mjs';
 import {anonymous,ownRecord} from '../backend/modules/records.mjs';
-import {validateContent,normalizeCategories,TRACKING_STATUSES,READY_TRACKING_STATUSES,requiresRedaction} from '../backend/modules/mutations.mjs';
+import {validateContent,normalizeCategories,TRACKING_STATUSES,READY_TRACKING_STATUSES,requiresRedaction,allowedAdminTrackingTransition,TRACKING_FLOW,READY_TRACKING_FLOW} from '../backend/modules/mutations.mjs';
 import {decodeImage,decodePaymentReceipt} from '../backend/modules/media.mjs';
 import {notificationPayload} from '../backend/modules/notifications.mjs';
 
@@ -40,7 +40,7 @@ test('categories normalize safely and tracking stages are complete',()=>{
  assert.equal(rows[0].order,0);
  assert.equal(rows[1].active,false);
  assert.throws(()=>normalizeCategories([{id:'x',nameAr:'مكرر',nameEn:'Same'},{id:'y',nameAr:'مكرر',nameEn:'Other'}]));
- for(const status of ['received','reviewing','sourcing','quotes_available','quote_selected','payment_confirmation','production','quality_check','ready_to_ship','shipped','in_delivery','delivered','completed','customer_action','on_hold','cancelled'])assert.ok(TRACKING_STATUSES.includes(status));
+ for(const status of ['received','reviewing','sourcing','quotes_available','quote_selected','supplier_confirmation','payment_confirmation','production','quality_check','ready_to_ship','shipped','in_delivery','delivered','completed','customer_action','on_hold','cancelled'])assert.ok(TRACKING_STATUSES.includes(status));
 });
 
 
@@ -105,4 +105,16 @@ test('payment notifications preserve admin message and route to the right workfl
 
 test('payment message does not trigger privacy redaction requirement',()=>{
  assert.equal(requiresRedaction('requests','sent',['trackingStatus','trackingNote','paymentMessage']),false);
+});
+
+test('admin tracking follows the order lifecycle without skipping stages',()=>{
+ const quality={trackingStatus:'quality_check',trackingHistory:[{status:'production'},{status:'quality_check'}]};
+ assert.equal(allowedAdminTrackingTransition(quality,'ready_to_ship',TRACKING_FLOW),true);
+ assert.equal(allowedAdminTrackingTransition(quality,'shipped',TRACKING_FLOW),false);
+ assert.equal(allowedAdminTrackingTransition(quality,'on_hold',TRACKING_FLOW),true);
+ const held={trackingStatus:'on_hold',trackingHistory:[{status:'quality_check'},{status:'on_hold'}]};
+ assert.equal(allowedAdminTrackingTransition(held,'quality_check',TRACKING_FLOW),true);
+ assert.equal(allowedAdminTrackingTransition(held,'ready_to_ship',TRACKING_FLOW),true);
+ assert.equal(allowedAdminTrackingTransition({trackingStatus:'delivered'},'completed',READY_TRACKING_FLOW),true);
+ assert.equal(allowedAdminTrackingTransition({trackingStatus:'completed'},'delivered',READY_TRACKING_FLOW),false);
 });

@@ -67,7 +67,7 @@ export async function snapshot(user){
     if(ids.length)interests=await rows('interests',`offer_id=in.(${inIds(ids)})`);
     interests=interests.filter(i=>{
       const tracking=i.data?.trackingStatus||'received';
-      return tracking!=='received'||['coordinating','accepted','completed'].includes(i.data?.status);
+      return !['completed','cancelled'].includes(tracking)&&(tracking!=='received'||['coordinating','accepted'].includes(i.data?.status));
     });
   }else{
     [settings,publicOffers]=await Promise.all([
@@ -79,7 +79,11 @@ export async function snapshot(user){
   const ownerIds=[...new Set([...requests,...quotes,...publicOffers].map(r=>r.owner_id))];
   const owners=ownerIds.length?await rows('profiles',`id=in.(${inIds(ownerIds)})`):[];
   const ownerActive=id=>active(owners.find(p=>p.id===id));
-  if(user?.role==='supplier')requests=requests.filter(r=>ownerActive(r.owner_id));
+  if(user?.role==='supplier')requests=requests.filter(r=>{
+    if(!ownerActive(r.owner_id)||['completed','cancelled'].includes(r.data?.trackingStatus))return false;
+    const selected=r.data?.selectedQuoteId;
+    return !selected||quotes.some(q=>q.id===selected&&q.owner_id===user.id);
+  });
   quotes=quotes.filter(q=>q.owner_id===user?.id||ownerActive(q.owner_id)&&open(requests.find(r=>r.id===q.request_id)));
   publicOffers=publicOffers.filter(o=>o.owner_id===user?.id||ownerActive(o.owner_id));
   const projectedRequests=requests.map(r=>{

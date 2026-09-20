@@ -2,11 +2,22 @@ name: Mobile layout regression
 on:
   push:
     branches: [main, development, fix/mobile-layout-single-shell, fix/mobile-accounts-search]
-    paths: ['mobile-app/**', '.github/workflows/mobile-layout.yml']
+    paths: ['mobile-app/**', 'backend/**', 'tests/backend.test.mjs', 'package.json', 'scripts/**', '.github/workflows/mobile-layout.yml']
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - run: npm test
+      - run: npm run check
+
   layout:
     runs-on: ubuntu-latest
     timeout-minutes: 15

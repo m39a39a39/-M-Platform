@@ -104,8 +104,20 @@ function supplierConfirmationCard(x,kind){
   const row=labels[info.status]||labels.pending_confirmation;
   return '<section class="admin-supplier-confirmation '+esc(row[1])+'"><div class="admin-supplier-confirmation-head"><div><small>'+esc(tr('تأكيد المورد','Supplier confirmation'))+'</small><strong>'+esc(row[0])+'</strong></div><span>'+esc(info.confirmed?'✓':info.status==='cannot_fulfill'?'✕':'…')+'</span></div>'+(info.note?'<p><b>'+esc(tr('ملاحظة المورد','Supplier note'))+':</b> '+esc(info.note)+'</p>':'')+'<small>'+esc(info.confirmed?tr('يمكن الآن الانتقال إلى تأكيد الطلب والدفع.','The order can now move to payment confirmation.'):info.status==='cannot_fulfill'?tr('لا يمكن الانتقال للدفع. راجع سبب تعذر التنفيذ.','Payment cannot start. Review the supplier reason.'):tr('تأكيد الطلب والدفع سيبقى غير متاح حتى يؤكد المورد التنفيذ.','Payment confirmation remains unavailable until the supplier confirms fulfillment.'))+'</small></section>';
 }
-function trackingOptions(rows,current,canPay){
-  return rows.map(([key,ar,en])=>'<option value="'+key+'" '+(current===key?'selected':'')+' '+(key==='payment_confirmation'&&!canPay&&current!=='payment_confirmation'?'disabled':'')+'>'+esc(tr(ar,en))+'</option>').join('');
+const TRACKING_EXCEPTION_KEYS=new Set(['customer_action','on_hold','cancelled']);
+function trackingOptions(rows,item,current,canPay,{rfq=false}={}){
+  const linear=rows.map(x=>x[0]).filter(key=>!TRACKING_EXCEPTION_KEYS.has(key)),allowed=new Set([current]);
+  if(!['completed','cancelled'].includes(current)){
+    if(TRACKING_EXCEPTION_KEYS.has(current)){
+      const history=Array.isArray(item?.trackingHistory)?item.trackingHistory:[],last=[...history].reverse().find(h=>linear.includes(h?.status))?.status||linear[0],index=linear.indexOf(last);
+      allowed.add(last);if(linear[index+1])allowed.add(linear[index+1]);
+    }else{
+      const index=linear.indexOf(current),next=linear[index+1];
+      if(next&&!(rfq&&!item?.selectedQuoteId&&['reviewing','sourcing','quotes_available'].includes(current)))allowed.add(next);
+    }
+    for(const key of TRACKING_EXCEPTION_KEYS)allowed.add(key);
+  }
+  return rows.filter(([key])=>allowed.has(key)).map(([key,ar,en])=>'<option value="'+key+'" '+(current===key?'selected':'')+' '+(key==='payment_confirmation'&&!canPay&&current!=='payment_confirmation'?'disabled':'')+'>'+esc(tr(ar,en))+'</option>').join('');
 }
 
 
@@ -398,7 +410,7 @@ function paymentMessageField(x,kind,current){
 function interestTrackingEditor(x){
   const current=interestTracking(x),supplier=supplierExecutionInfo(x,'interest'),canPay=supplier.confirmed||current==='payment_confirmation';
   const approve=current==='received'?'<button class="primary-btn admin-send-to-supplier" type="button" data-admin-send-interest-supplier="'+esc(x.id)+'">'+esc(tr('اعتماد وإرسال للمورد','Approve & send to supplier'))+'</button>':'';
-  return '<section class="admin-tracking-editor"><h3>'+esc(tr('متابعة طلب المنتج الجاهز','Ready-product order tracking'))+'</h3>'+approve+'<label><span>'+esc(tr('الحالة الحالية','Current status'))+'</span><select data-admin-interest-tracking-status>'+trackingOptions(READY_TRACKING,current,canPay)+'</select></label>'+paymentMessageField(x,'interest',current)+'<label><span>'+esc(tr('ملاحظة للعميل (اختياري)','Customer note (optional)'))+'</span><textarea data-admin-interest-tracking-note maxlength="1000">'+esc(x.trackingNote||'')+'</textarea></label><small>'+(x.trackingUpdatedAt?esc(tr('آخر تحديث','Last update'))+': '+esc(date(x.trackingUpdatedAt)):'')+'</small><button class="primary-btn" type="button" data-admin-save-interest-tracking="'+esc(x.id)+'">'+esc(tr('حفظ حالة الطلب','Save order status'))+'</button></section>'+paymentReviewPanel(x,'interest');
+  return '<section class="admin-tracking-editor"><h3>'+esc(tr('متابعة طلب المنتج الجاهز','Ready-product order tracking'))+'</h3>'+approve+'<label><span>'+esc(tr('الحالة الحالية','Current status'))+'</span><select data-admin-interest-tracking-status>'+trackingOptions(READY_TRACKING,x,current,canPay)+'</select></label>'+paymentMessageField(x,'interest',current)+'<label><span>'+esc(tr('ملاحظة للعميل (اختياري)','Customer note (optional)'))+'</span><textarea data-admin-interest-tracking-note maxlength="1000">'+esc(x.trackingNote||'')+'</textarea></label><small>'+(x.trackingUpdatedAt?esc(tr('آخر تحديث','Last update'))+': '+esc(date(x.trackingUpdatedAt)):'')+'</small><button class="primary-btn" type="button" data-admin-save-interest-tracking="'+esc(x.id)+'">'+esc(tr('حفظ حالة الطلب','Save order status'))+'</button></section>'+paymentReviewPanel(x,'interest');
 }
 function openInterest(id){
   const x=(state?.interests||[]).find(item=>item.id===id);if(!x)return;
@@ -422,7 +434,7 @@ async function sendInterestToSupplier(id){
 function trackingEditor(x){
   const current=requestTracking(x),supplier=supplierExecutionInfo(x,'request'),canPay=supplier.confirmed||current==='payment_confirmation',flow=x.orderType==='cart'?READY_TRACKING:TRACKING;
   const approve=x.orderType==='cart'&&current==='received'?'<button class="primary-btn admin-send-to-supplier" type="button" data-admin-send-cart-suppliers="'+esc(x.id)+'">'+esc(tr('اعتماد وإرسال المنتجات للموردين','Approve & send items to suppliers'))+'</button>':'';
-  return '<section class="admin-tracking-editor"><h3>'+esc(tr('متابعة الطلب','Order tracking'))+'</h3>'+approve+'<label><span>'+esc(tr('الحالة الحالية','Current status'))+'</span><select data-admin-tracking-status>'+trackingOptions(flow,current,canPay)+'</select></label>'+paymentMessageField(x,'request',current)+'<label><span>'+esc(tr('ملاحظة للعميل (اختياري)','Customer note (optional)'))+'</span><textarea data-admin-tracking-note maxlength="1000">'+esc(x.trackingNote||'')+'</textarea></label><small>'+(x.trackingUpdatedAt?esc(tr('آخر تحديث','Last update'))+': '+esc(date(x.trackingUpdatedAt)):'')+'</small><button class="primary-btn" type="button" data-admin-save-tracking="'+esc(x.id)+'">'+esc(tr('حفظ حالة الطلب','Save order status'))+'</button></section>'+paymentReviewPanel(x,'request');
+  return '<section class="admin-tracking-editor"><h3>'+esc(tr('متابعة الطلب','Order tracking'))+'</h3>'+approve+'<label><span>'+esc(tr('الحالة الحالية','Current status'))+'</span><select data-admin-tracking-status>'+trackingOptions(flow,x,current,canPay,{rfq:x.orderType!=='cart'})+'</select></label>'+paymentMessageField(x,'request',current)+'<label><span>'+esc(tr('ملاحظة للعميل (اختياري)','Customer note (optional)'))+'</span><textarea data-admin-tracking-note maxlength="1000">'+esc(x.trackingNote||'')+'</textarea></label><small>'+(x.trackingUpdatedAt?esc(tr('آخر تحديث','Last update'))+': '+esc(date(x.trackingUpdatedAt)):'')+'</small><button class="primary-btn" type="button" data-admin-save-tracking="'+esc(x.id)+'">'+esc(tr('حفظ حالة الطلب','Save order status'))+'</button></section>'+paymentReviewPanel(x,'request');
 }
 async function reviewPayment(entityType,id,action){
   const rows=entityType==='request'?(state?.requests||[]):(state?.interests||[]),x=rows.find(item=>item.id===id);if(!x)return;
@@ -512,7 +524,7 @@ function openRecord(kind,id){
   if(kind==='request'&&pending&&can('publish'))html+=supplierPicker(x);
   if(pending&&!(kind==='public'&&can('offers.edit'))){
     html+=`<section class="admin-redaction"><h3>${esc(tr('فحص الخصوصية','Privacy check'))}</h3><label><input type="checkbox" data-admin-redact="identity"><span>${esc(tr('تمت مراجعة الصور والنصوص وإزالة الهوية.','Images and text were checked and identity removed.'))}</span></label><label><input type="checkbox" data-admin-redact="contact"><span>${esc(tr('تمت إزالة بيانات التواصل المباشر.','Direct contact details were removed.'))}</span></label></section><div class="admin-review-actions">${editTr?`<button class="secondary-btn" data-admin-save-review data-kind="${kind}" data-id="${esc(x.id)}">${esc(tr('حفظ دون نشر','Save without publishing'))}</button>`:''}${approve?`<button class="primary-btn" data-admin-approve data-kind="${kind}" data-id="${esc(x.id)}">${esc(tr('اعتماد ونشر','Approve & publish'))}</button>`:''}</div>`;
-  }else if(kind==='request'&&x.status==='sent'&&can('publish'))html+=`<div class="admin-review-actions"><button class="secondary-btn" data-admin-reopen-request data-id="${esc(x.id)}">${esc(tr('إعادة للمراجعة','Return to review'))}</button><button class="primary-btn" data-admin-complete-request data-id="${esc(x.id)}">${esc(tr('تحديد كمكتمل','Mark completed'))}</button></div>`;
+  }else if(kind==='request'&&x.status==='sent'&&can('publish'))html+=`<div class="admin-review-actions"><button class="secondary-btn" data-admin-reopen-request data-id="${esc(x.id)}">${esc(tr('إعادة للمراجعة','Return to review'))}</button></div>`;
   modal(`#${ref(x)} — ${title(x)}`,kind==='request'?status(requestTracking(x)):status(x.status),html);
 }
 function accountActivity(a){
@@ -546,7 +558,6 @@ function readForm(x){const translation={};document.querySelectorAll('[data-admin
 async function approve(kind,id){const arr=kind==='request'?state.requests:kind==='quote'?state.quotes:state.publicOffers,x=arr.find(v=>v.id===id);if(!x)return;const f=readForm(x);if(Object.values(f.translation).some(v=>!v)){toast(tr('أكمل العنوان والوصف بالعربية والإنجليزية.','Complete Arabic and English title and description.'));return;}if(!f.identity||!f.contact){toast(tr('أكمل فحص إزالة الهوية وبيانات التواصل.','Complete both privacy checks.'));return;}if(kind==='request'&&!f.suppliers.length){toast(tr('اختر موردًا واحدًا على الأقل.','Select at least one supplier.'));return;}const patch={translation:f.translation,reviewedAt:new Date().toISOString(),status:kind==='request'?'sent':'published'},editPerm=kind==='request'?'requests.edit':'offers.edit';if(can(editPerm))patch.images=f.images;if(kind==='request')patch.supplierIds=f.suppliers;if(kind==='public'){if(activeCategories().length&&!f.categoryId){toast(tr('اختر التصنيف أولًا.','Choose a category first.'));return;}patch.categoryId=f.categoryId;}try{await mutate(kind==='request'?'requests':kind==='quote'?'quotes':'publicOffers',x,patch,true);closeModal();schedule();toast(tr('تم الاعتماد بنجاح.','Approved successfully.'));}catch(e){toast(e.message);}}
 async function saveReview(kind,id){const arr=kind==='request'?state.requests:kind==='quote'?state.quotes:state.publicOffers,x=arr.find(v=>v.id===id);if(!x)return;const f=readForm(x);if(Object.values(f.translation).some(v=>!v)){toast(tr('أكمل الترجمة أولًا.','Complete the translation first.'));return;}const patch={translation:f.translation,reviewedAt:new Date().toISOString()},editPerm=kind==='request'?'requests.edit':'offers.edit';if(can(editPerm))patch.images=f.images;if(kind==='public')patch.categoryId=f.categoryId;try{await mutate(kind==='request'?'requests':kind==='quote'?'quotes':'publicOffers',x,patch);closeModal();schedule();toast(tr('تم حفظ المراجعة.','Review saved.'));}catch(e){toast(e.message);}}
 async function requestStatus(id,s){const x=(state?.requests||[]).find(v=>v.id===id);if(!x)return;try{await mutate('requests',x,{status:s});closeModal();schedule();toast(tr('تم تحديث الحالة.','Status updated.'));}catch(e){toast(e.message);}}
-async function interestStatus(id,s){const x=(state?.interests||[]).find(v=>v.id===id);if(!x)return;try{await mutate('interests',x,{status:s});schedule();toast(tr('تم تحديث الحالة.','Status updated.'));}catch(e){toast(e.message);}}
 function go(view,tab){if(view==='offers'&&tab)offerTab=tab;document.querySelector(`#bottomNav button[data-screen="${view}"]`)?.click();setTimeout(schedule,30);}
 
 document.addEventListener('click',e=>{
@@ -581,7 +592,6 @@ document.addEventListener('click',e=>{
   const ap=e.target.closest('[data-admin-approve]');if(ap){approve(ap.dataset.kind,ap.dataset.id);return;}
   const sv=e.target.closest('[data-admin-save-review]');if(sv){saveReview(sv.dataset.kind,sv.dataset.id);return;}
   const rr=e.target.closest('[data-admin-reopen-request]');if(rr){requestStatus(rr.dataset.id,'review');return;}
-  const cr=e.target.closest('[data-admin-complete-request]');if(cr){requestStatus(cr.dataset.id,'completed');return;}
   const pc=e.target.closest('[data-admin-payment-confirm]');if(pc){reviewPayment(pc.dataset.entityType,pc.dataset.adminPaymentConfirm,'confirm');return;}
   const pr=e.target.closest('[data-admin-payment-reupload]');if(pr){reviewPayment(pr.dataset.entityType,pr.dataset.adminPaymentReupload,'reupload');return;}
   const pd=e.target.closest('[data-admin-payment-document]');if(pd){openAdminPaymentDocument(pd.dataset.adminPaymentDocument);return;}

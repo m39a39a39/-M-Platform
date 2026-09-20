@@ -616,16 +616,18 @@ function renderRequests(){
   }else if(currentUser.role==='supplier'){
     if(!['pending','submitted'].includes(activeSub))activeSub='pending';
     const quotes=(platformState.quotes||[]).slice().sort((a,b)=>(Date.parse(b.updatedAt||b.createdAt||0)||0)-(Date.parse(a.updatedAt||a.createdAt||0)||0));
+    const selectedRequestIds=new Set((platformState.requests||[]).filter(r=>r.selectedForSupplier).map(r=>r.id));
+    const submitted=quotes.filter(q=>!selectedRequestIds.has(q.requestId));
     const answered=new Set(quotes.map(q=>q.requestId));
     const pending=(platformState.requests||[]).filter(r=>!answered.has(r.id));
     const tabs=segment([
       ['pending',tr(`بانتظار عرض (${pending.length})`,`Awaiting quote (${pending.length})`)],
-      ['submitted',tr(`العروض المقدمة (${quotes.length})`,`Submitted quotes (${quotes.length})`)]
+      ['submitted',tr(`العروض المقدمة (${submitted.length})`,`Submitted quotes (${submitted.length})`)]
     ]);
     if(activeSub==='pending'){
       $('screen').innerHTML=pageHeader(tr('طلبات الأسعار','Quote requests'),tr('طلبات الأسعار التي أرسلتها الإدارة إليك. بعد تقديم السعر تنتقل تلقائيًا إلى العروض المقدمة.','Quote requests sent to you by admin. After you submit a quote, it moves automatically to Submitted quotes.'))+tabs+`<div class="list-stack">${pending.map(r=>itemCard(r,{subtitle:descriptionOf(r),meta:`${t('quantity')}: ${r.quantity||'—'} · ${r.country||'—'} · ${t('neededDate')}: ${r.neededDate||'—'}`,badge:`<span class="status-pill status-review">${esc(tr('بانتظار عرضك','Awaiting your quote'))}</span>`,action:`data-supplier-request="${esc(r.id)}"`,images:true})).join('')||empty()}</div>`;
     }else{
-      $('screen').innerHTML=pageHeader(tr('طلبات الأسعار','Quote requests'),tr('العروض التي قدمتها على طلبات العملاء، ويمكنك فتح العرض لمراجعته أو تعديله عندما يكون التعديل متاحًا.','Quotes you submitted for customer requests. Open a quote to review or edit it when editing is available.'))+tabs+`<div class="list-stack">${quotes.map(q=>{const r=(platformState.requests||[]).find(x=>x.id===q.requestId);return itemCard(q,{subtitle:q.notes||descriptionOf(r)||descriptionOf(q),meta:`${money(q.unitPrice,q.currency)} · MOQ ${q.moq||'—'} · ${date(q.updatedAt||q.createdAt)}`,badge:cardBadge(q.status),action:`data-edit-quote="${esc(q.id)}"`,images:true});}).join('')||empty()}</div>`;
+      $('screen').innerHTML=pageHeader(tr('طلبات الأسعار','Quote requests'),tr('العروض التي قدمتها على طلبات العملاء، ويمكنك فتح العرض لمراجعته أو تعديله عندما يكون التعديل متاحًا.','Quotes you submitted for customer requests. Open a quote to review or edit it when editing is available.'))+tabs+`<div class="list-stack">${submitted.map(q=>{const r=(platformState.requests||[]).find(x=>x.id===q.requestId);return itemCard(q,{subtitle:q.notes||descriptionOf(r)||descriptionOf(q),meta:`${money(q.unitPrice,q.currency)} · MOQ ${q.moq||'—'} · ${date(q.updatedAt||q.createdAt)}`,badge:cardBadge(q.status),action:`data-edit-quote="${esc(q.id)}"`,images:true});}).join('')||empty()}</div>`;
     }
   }else renderAdminCollection('requests');
 }
