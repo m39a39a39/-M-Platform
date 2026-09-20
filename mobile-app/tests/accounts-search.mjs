@@ -11,7 +11,8 @@ for(const [engine,type] of Object.entries({chromium,webkit}))for(const language 
  const errors=[],registrations=[];let failState=false,confirm=false,logins=0;
  const users=Object.fromEntries(['admin','client','supplier'].map(role=>[role,{id:role,role,name:`${role} PERSON`,company:`${role} COMPANY`,email:`${role}@example.test`,isOwner:role==='admin'}]));
  const requests=[{id:'admin-private',displayNo:501,product:'SecretAdmin',status:'review',customerId:'client',supplierIds:['supplier'],images:[],version:1}];
- const quotes=[{id:'offer1',displayNo:601,product:'Alpha',status:'pending',supplierId:'supplier',requestId:'admin-private',images:[]}];
+ const quotes=[{id:'offer1',displayNo:601,product:'Quoted Alpha',status:'pending',supplierId:'supplier',requestId:'admin-private',images:[]}];
+const publicOffers=[{id:'product1',displayNo:701,sku:'ALPHA-SKU',product:'Alpha',specs:'Search fixture product',status:'pending',supplierId:'supplier',images:[],version:1}];
  page.on('pageerror',e=>errors.push(e.message));
  await page.addInitScript(lang=>localStorage.setItem('CapacitorStorage.language',lang),language);
  await page.route('https://m-platform-tan.vercel.app/**',async route=>{
@@ -23,7 +24,7 @@ for(const [engine,type] of Object.entries({chromium,webkit}))for(const language 
    else if(path.endsWith('/auth/logout'))body={ok:true};
    else if(path.endsWith('/state')){
      if(role&&failState)return route.fulfill({status:503,json:{error:'Unavailable'}});
-     body={user:users[role]||null,requests:role==='admin'?requests:[],quotes:role==='admin'?quotes:[],publicOffers:[],interests:[],accounts:role==='admin'?Object.values(users):[]};
+     body={user:users[role]||null,requests:role==='admin'?requests:[],quotes:role==='admin'?quotes:[],publicOffers:role==='admin'?publicOffers:[],interests:[],accounts:role==='admin'?Object.values(users):[]};
    }else if(path.endsWith('/notifications'))body=[];
    else if(path.endsWith('/app-config'))body={apiVersion:1};
    else {errors.push(`Unexpected endpoint ${path}`);return route.fulfill({status:500,json:{error:'Unexpected fixture call'}});}
