@@ -2,8 +2,51 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {parseBulkProductWorkbook} from '../src/bulk-excel.js';
 
+const enc=new TextEncoder();
+const le16=n=>new Uint8Array([n&255,(n>>>8)&255]);
+const le32=n=>new Uint8Array([n&255,(n>>>8)&255,(n>>>16)&255,(n>>>24)&255]);
+const concat=parts=>{const out=new Uint8Array(parts.reduce((n,p)=>n+p.length,0));let o=0;for(const p of parts){out.set(p,o);o+=p.length;}return out;};
+function crc32(bytes){let crc=0xffffffff;for(const b of bytes){crc^=b;for(let i=0;i<8;i++)crc=(crc>>>1)^(0xedb88320&-(crc&1));}return (crc^0xffffffff)>>>0;}
+function zip(files){
+  const locals=[],centrals=[];let offset=0;
+  for(const [name,value] of Object.entries(files)){
+    const n=enc.encode(name),data=typeof value==='string'?enc.encode(value):value,crc=crc32(data);
+    const local=concat([le32(0x04034b50),le16(20),le16(0),le16(0),le16(0),le16(0),le32(crc),le32(data.length),le32(data.length),le16(n.length),le16(0),n,data]);
+    const central=concat([le32(0x02014b50),le16(20),le16(20),le16(0),le16(0),le16(0),le16(0),le32(crc),le32(data.length),le32(data.length),le16(n.length),le16(0),le16(0),le16(0),le16(0),le32(0),le32(offset),n]);
+    locals.push(local);centrals.push(central);offset+=local.length;
+  }
+  const ld=concat(locals),cd=concat(centrals);
+  return concat([ld,cd,le32(0x06054b50),le16(0),le16(0),le16(centrals.length),le16(centrals.length),le32(cd.length),le32(ld.length),le16(0)]);
+}
+const cell=(ref,value)=>'<c r="'+ref+'" t="inlineStr"><is><t>'+value+'</t></is></c>';
+
 test('parses product name and modern Excel Place in Cell image',async()=>{
-  const bytes=Buffer.from('UEsDBBQAAAAAACs0NF38Ngg2YgAAAGIAAAATAAAAW0NvbnRlbnRfVHlwZXNdLnhtbDw/eG1sIHZlcnNpb249JzEuMCc/PjxUeXBlcyB4bWxucz0naHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3BhY2thZ2UvMjAwNi9jb250ZW50LXR5cGVzJy8+UEsDBBQAAAAAACs0NF2W2u04wQAAAMEAAAALAAAAX3JlbHMvLnJlbHM8P3htbCB2ZXJzaW9uPScxLjAnPz48UmVsYXRpb25zaGlwcyB4bWxucz0naHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3BhY2thZ2UvMjAwNi9yZWxhdGlvbnNoaXBzJz48UmVsYXRpb25zaGlwIElkPSdySWQxJyBUeXBlPSdvZmZpY2VEb2N1bWVudCcgVGFyZ2V0PSd4bC93b3JrYm9vay54bWwnLz48L1JlbGF0aW9uc2hpcHM+UEsDBBQAAAAAACs0NF3S0xr9+wAAAPsAAAAPAAAAeGwvd29ya2Jvb2sueG1sPD94bWwgdmVyc2lvbj0nMS4wJz8+PHdvcmtib29rIHhtbG5zPSdodHRwOi8vc2NoZW1hcy5vcGVueG1sZm9ybWF0cy5vcmcvc3ByZWFkc2hlZXRtbC8yMDA2L21haW4nIHhtbG5zOnI9J2h0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9vZmZpY2VEb2N1bWVudC8yMDA2L3JlbGF0aW9uc2hpcHMnPjxzaGVldHM+PHNoZWV0IG5hbWU9J1Byb2R1Y3RzJyBzaGVldElkPScxJyByOmlkPSdySWQxJy8+PC9zaGVldHM+PC93b3JrYm9vaz5QSwMEFAAAAAAAKzQ0XRQuOXPCAAAAwgAAABoAAAB4bC9fcmVscy93b3JrYm9vay54bWwucmVsczw/eG1sIHZlcnNpb249JzEuMCc/PjxSZWxhdGlvbnNoaXBzIHhtbG5zPSdodHRwOi8vc2NoZW1hcy5vcGVueG1sZm9ybWF0cy5vcmcvcGFja2FnZS8yMDA2L3JlbGF0aW9uc2hpcHMnPjxSZWxhdGlvbnNoaXAgSWQ9J3JJZDEnIFR5cGU9J3dvcmtzaGVldCcgVGFyZ2V0PSd3b3Jrc2hlZXRzL3No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','base64');
+  const headers=[
+    cell('A1','SKU'),cell('B1','Image 1\nالصورة 1'),cell('C1','Product Name\nاسم المنتج'),
+    cell('D1','Description / الوصف'),cell('E1','Price / السعر'),cell('F1','Currency / العملة'),
+    cell('G1','MOQ / الحد الأدنى'),cell('H1','Stock / المخزون'),
+    cell('I1','Production Days / مدة الإنتاج'),cell('J1','Category / التصنيف'),
+    cell('K1','Supply Country / بلد التوريد')
+  ].join('');
+  const values=[
+    cell('A2','MG825'),'<c r="B2" vm="1"><v>0</v></c>',cell('C2','MG 825 Earbuds'),
+    cell('D2','Wireless TWS earbuds'),'<c r="E2"><v>8.5</v></c>',cell('F2','USD'),
+    '<c r="G2"><v>100</v></c>','<c r="H2"><v>5000</v></c>','<c r="I2"><v>7</v></c>',
+    cell('J2','Audio'),cell('K2','China')
+  ].join('');
+  const sheet='<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1">'+headers+'</row><row r="2">'+values+'</row></sheetData></worksheet>';
+  const bytes=zip({
+    '[Content_Types].xml':'<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>',
+    '_rels/.rels':'<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="officeDocument" Target="xl/workbook.xml"/></Relationships>',
+    'xl/workbook.xml':'<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Products" sheetId="1" r:id="rId1"/></sheets></workbook>',
+    'xl/_rels/workbook.xml.rels':'<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="worksheet" Target="worksheets/sheet1.xml"/></Relationships>',
+    'xl/worksheets/sheet1.xml':sheet,
+    'xl/metadata.xml':'<?xml version="1.0"?><metadata><valueMetadata count="1"><bk><rc t="1" v="0"/></bk></valueMetadata></metadata>',
+    'xl/richData/richValue.xml':'<?xml version="1.0"?><rvData><rv type="0"><v kind="rel">0</v></rv></rvData>',
+    'xl/richData/richValueRel.xml':'<?xml version="1.0"?><rvRel xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><rels><rel r:id="rId1"/></rels></rvRel>',
+    'xl/richData/_rels/richValueRel.xml.rels':'<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="image" Target="../media/image1.png"/></Relationships>',
+    'xl/media/image1.png':Uint8Array.from([137,80,78,71,13,10,26,10,0,0,0,0])
+  });
   const file={name:'in-cell.xlsx',size:bytes.length,async arrayBuffer(){return bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength);}};
   const rows=await parseBulkProductWorkbook(file,{categories:[{id:'audio',nameAr:'سماعات',nameEn:'Audio',active:true}]});
   assert.equal(rows.length,1);
