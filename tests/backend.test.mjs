@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {can} from '../backend/modules/auth.mjs';
 import {anonymous,ownRecord} from '../backend/modules/records.mjs';
-import {validateContent,normalizeCategories,TRACKING_STATUSES,READY_TRACKING_STATUSES,requiresRedaction,allowedAdminTrackingTransition,TRACKING_FLOW,READY_TRACKING_FLOW} from '../backend/modules/mutations.mjs';
+import {validateContent,normalizeCategories,normalizeSubcategories,normalizeSupplyCountries,TRACKING_STATUSES,READY_TRACKING_STATUSES,requiresRedaction,allowedAdminTrackingTransition,TRACKING_FLOW,READY_TRACKING_FLOW} from '../backend/modules/mutations.mjs';
 import {decodeImage,decodePaymentReceipt} from '../backend/modules/media.mjs';
 import {notificationPayload} from '../backend/modules/notifications.mjs';
 
@@ -117,4 +117,13 @@ test('admin tracking follows the order lifecycle without skipping stages',()=>{
  assert.equal(allowedAdminTrackingTransition(held,'ready_to_ship',TRACKING_FLOW),true);
  assert.equal(allowedAdminTrackingTransition({trackingStatus:'delivered'},'completed',READY_TRACKING_FLOW),true);
  assert.equal(allowedAdminTrackingTransition({trackingStatus:'completed'},'delivered',READY_TRACKING_FLOW),false);
+});
+
+test('catalog taxonomy supports managed supply countries and subcategories',()=>{
+ const cats=normalizeCategories([{id:'mobile',nameAr:'جوال',nameEn:'Mobile',active:true}]);
+ const subs=normalizeSubcategories([{id:'cables',parentId:'mobile',nameAr:'كيابل',nameEn:'Cables',active:true}],cats);
+ const countries=normalizeSupplyCountries([{id:'cn-stock',nameAr:'الصين',nameEn:'China',active:true}]);
+ assert.equal(subs[0].parentId,'mobile');
+ assert.equal(countries[0].id,'cn-stock');
+ assert.throws(()=>normalizeSubcategories([{id:'bad',parentId:'missing',nameAr:'خطأ',nameEn:'Bad'}],cats));
 });

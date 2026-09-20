@@ -3,11 +3,7 @@ const MAX_ROWS=500;
 const MAX_WORKBOOK_BYTES=30*1024*1024;
 const MAX_IMAGE_BYTES=5*1024*1024;
 const ALLOWED_CURRENCIES=new Set(['USD','SAR','AED','CNY','EUR']);
-const COUNTRY_ALIASES=new Map([
-  ['china','China'],['cn','China'],['中国','China'],['الصين','China'],
-  ['united arab emirates','United Arab Emirates'],['uae','United Arab Emirates'],['ae','United Arab Emirates'],
-  ['الإمارات','United Arab Emirates'],['الامارات','United Arab Emirates'],['الإمارات العربية المتحدة','United Arab Emirates'],['الامارات العربية المتحدة','United Arab Emirates']
-]);
+import {resolveTaxonomyId} from './catalog-taxonomy.js';
 const FIELD_ALIASES={
   sku:['sku','رمز المنتج','كود المنتج'],
   product:['product name','product','name','اسم المنتج','المنتج','اسم'],
@@ -17,7 +13,8 @@ const FIELD_ALIASES={
   moq:['moq','minimum order','minimum order quantity','الحد الأدنى','الحد الادنى','الحد الأدنى للطلب'],
   stock:['stock','inventory','المخزون'],
   leadTime:['production days','lead time','production time','مدة الإنتاج','مدة الانتاج','أيام الإنتاج','ايام الانتاج'],
-  category:['category','التصنيف'],
+  category:['category','main category','التصنيف','التصنيف الرئيسي'],
+  subcategory:['subcategory','sub category','التصنيف الفرعي'],
   country:['supply country','country of supply','origin country','بلد التوريد','دولة التوريد'],
   validUntil:['valid until','expiry date','expires','صالح حتى','تاريخ الصلاحية']
 };
@@ -261,12 +258,8 @@ function excelDate(value){
   }
   const d=new Date(s);return Number.isNaN(d.getTime())?s:d.toISOString().slice(0,10);
 }
-function categoryId(value,categories){
-  const n=norm(value);
-  const match=(categories||[]).find(c=>[c.id,c.nameAr,c.nameEn].some(x=>norm(x)===n));
-  return match?.id||'';
-}
-export function normalizeSupplyCountry(value){return COUNTRY_ALIASES.get(norm(value))||'';}
+function taxonomyId(value,rows){return resolveTaxonomyId(value,rows);}
+export function normalizeSupplyCountry(value,rows=[]){return taxonomyId(value,rows);}
 
 function crc32(bytes){
   let crc=0xffffffff;
@@ -303,7 +296,7 @@ function zipStoredFiles(files){
 const xesc=v=>String(v).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
 const lettersFromIndex=i=>{let s='',n=i+1;while(n){n--;s=String.fromCharCode(65+n%26)+s;n=Math.floor(n/26);}return s;};
 export function buildBulkProductTemplate(){
-  const headers=['SKU','Image 1 / الصورة 1','Image 2 / الصورة 2','Image 3 / الصورة 3','Image 4 / الصورة 4','Image 5 / الصورة 5','Product Name / اسم المنتج','Description / الوصف','Price / السعر','Currency / العملة','MOQ / الحد الأدنى','Stock / المخزون','Production Days / مدة الإنتاج','Category / التصنيف','Supply Country / بلد التوريد','Valid Until / صالح حتى'];
+  const headers=['SKU','Image 1 / الصورة 1','Image 2 / الصورة 2','Image 3 / الصورة 3','Image 4 / الصورة 4','Image 5 / الصورة 5','Product Name / اسم المنتج','Description / الوصف','Price / السعر','Currency / العملة','MOQ / الحد الأدنى','Stock / المخزون','Production Days / مدة الإنتاج','Main Category / التصنيف الرئيسي','Subcategory / التصنيف الفرعي','Supply Country / بلد التوريد','Valid Until / صالح حتى'];
   const cells=headers.map((h,i)=>`<c r="${lettersFromIndex(i)}1" t="inlineStr"><is><t>${xesc(h)}</t></is></c>`).join('');
   const sheet=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1">${cells}</row></sheetData></worksheet>`;
   const files={
@@ -336,7 +329,7 @@ export async function downloadBulkProductTemplate(){
 }
 
 
-export function validateBulkProductRows(input,{categories=[],existingOffers=[]}={}){
+export function validateBulkProductRows(input,{categories=[],subcategories=[],supplyCountries=[],existingOffers=[]}={}){
   const rows=input.map(r=>({...r,errors:[],warnings:[],duplicateOfferId:'',duplicateOfferVersion:0}));
   const skuCounts=new Map();
   rows.forEach(r=>skuCounts.set(norm(r.sku),(skuCounts.get(norm(r.sku))||0)+1));
@@ -347,8 +340,9 @@ export function validateBulkProductRows(input,{categories=[],existingOffers=[]}=
     r.product=String(r.product||'').trim().slice(0,300);
     r.specs=String(r.specs||'').trim().slice(0,10000);
     r.currency=String(r.currency||'').trim().toUpperCase();
-    r.categoryId=categoryId(r.category||r.categoryId,categories);
-    r.country=normalizeSupplyCountry(r.country)||String(r.country||'').trim();
+    r.categoryId=taxonomyId(r.category||r.categoryId,categories);
+    r.subcategoryId=taxonomyId(r.subcategory||r.subcategoryId,subcategories.filter(x=>!r.categoryId||x.parentId===r.categoryId));
+    r.country=normalizeSupplyCountry(r.country,supplyCountries)||String(r.country||'').trim();
     r.validUntil=excelDate(r.validUntil);
     if(!/^[A-Za-z0-9._-]{1,80}$/.test(r.sku))errors.push('sku');
     if(skuCounts.get(norm(r.sku))>1)errors.push('duplicate_sku');
@@ -361,7 +355,8 @@ export function validateBulkProductRows(input,{categories=[],existingOffers=[]}=
     if(r.stock!==''&&r.stock!==undefined&&!(Number.isFinite(Number(r.stock))&&Number(r.stock)>=0))errors.push('stock');
     if(!(Number(r.leadTime)>0))errors.push('leadTime');
     if(!r.categoryId)errors.push('category');
-    if(!['China','United Arab Emirates'].includes(r.country))errors.push('country');
+    if((r.subcategory||r.subcategoryId)&&!r.subcategoryId)errors.push('subcategory');
+    if(!supplyCountries.some(x=>x.id===r.country))errors.push('country');
     if(r.validUntil&&!/^\d{4}-\d{2}-\d{2}$/.test(r.validUntil))errors.push('validUntil');
     r.images=(r.images||[]).filter(Boolean).slice(0,5);
     if(!r.images.length)errors.push('images');
@@ -405,7 +400,7 @@ export async function parseBulkProductWorkbook(file,context={}){
     rows.push({
       rowNumber:rowNo,sku:get('sku'),product:get('product'),specs:get('specs'),
       unitPrice:get('unitPrice'),currency:get('currency'),moq:get('moq'),stock:get('stock'),
-      leadTime:get('leadTime'),category:get('category'),categoryId:'',
+      leadTime:get('leadTime'),category:get('category'),categoryId:'',subcategory:get('subcategory'),subcategoryId:'',
       country:get('country'),validUntil:get('validUntil'),images:rowImages,duplicateAction:'create'
     });
     if(rows.length>MAX_ROWS)throw new Error('too_many_rows');

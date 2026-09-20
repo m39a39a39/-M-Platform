@@ -1,5 +1,6 @@
 import { languageReady, getLanguage, onLanguageChange, toggleLanguage } from './language.js';
 import { showView } from './views.js';
+import { categoryRows, subcategoryRows, supplyCountryRows, taxonomyLabel } from './catalog-taxonomy.js';
 
 const API=String(import.meta.env?.VITE_API_ORIGIN||'https://m-platform-tan.vercel.app').replace(/\/$/,'');
 const $=id=>document.getElementById(id);
@@ -9,16 +10,13 @@ const POST_AUTH_KEY='m-platform.post-auth-action.v1';
 const PAGE_SIZE=20;
 const MEDIA_CONCURRENCY=6;
 const mediaTasks=new Map();
-const SUPPLY_COUNTRIES=[
-  ['China','الصين','China'],
-  ['United Arab Emirates','الإمارات','UAE']
-];
 
 let lang='ar';
 let state=null;
 let loadTask=null;
 let offersPage=1;
 let category='all';
+let subcategory='all';
 let supplyCountry='all';
 let searchText='';
 let cartItems=[];
@@ -65,12 +63,15 @@ const ref=o=>o?.displayNo||String(o?.id||'').slice(0,8)||'—';
 const title=o=>{const x=o?.translation||{};return (lang==='ar'?(x.titleAr||x.titleEn):(x.titleEn||x.titleAr))||o?.product||o?.title||`#${ref(o)}`;};
 const description=o=>{const x=o?.translation||{};return (lang==='ar'?(x.descriptionAr||x.descriptionEn):(x.descriptionEn||x.descriptionAr))||o?.specs||'';};
 const money=(value,currency)=>{const n=Number(value);if(!Number.isFinite(n))return `${currency||''} —`.trim();return `${String(currency||'').toUpperCase()} ${n.toLocaleString(lang==='ar'?'en-US':'en-US',{maximumFractionDigits:4})}`.trim();};
-const categories=()=>{const rows=Array.isArray(state?.settings?.categories)?state.settings.categories:[];return rows.filter(cat=>cat.active!==false).sort((a,b)=>(a.order||0)-(b.order||0));};
-const countryLabel=value=>{const row=SUPPLY_COUNTRIES.find(x=>x[0]===value);return row?(lang==='ar'?row[1]:row[2]):value||'—';};
+const categories=()=>categoryRows(state?.settings);
+const subcategories=(parentId='')=>subcategoryRows(state?.settings,{parentId});
+const countries=()=>supplyCountryRows(state?.settings);
+const countryLabel=value=>taxonomyLabel(supplyCountryRows(state?.settings,{activeOnly:false}).find(x=>x.id===value),lang)||value||'—';
 const publishedOffers=()=>Array.isArray(state?.publicOffers)?state.publicOffers.filter(o=>o.status==='published'):[];
 const filteredOffers=()=>{
   let offers=publishedOffers();
   if(category!=='all')offers=offers.filter(o=>o.categoryId===category);
+  if(subcategory!=='all')offers=offers.filter(o=>o.subcategoryId===subcategory);
   if(supplyCountry!=='all')offers=offers.filter(o=>o.country===supplyCountry);
   const q=searchText.trim().toLowerCase();
   if(q)offers=offers.filter(o=>[o.sku,title(o),description(o),o.country].filter(Boolean).join(' ').toLowerCase().includes(q));
@@ -125,11 +126,18 @@ function renderCategories(){
   $('guestCategoryFilters').innerHTML=rows.length?`<button type="button" data-guest-category="all" class="${category==='all'?'active':''}">${esc(t('allCategories'))}</button>${rows.map(cat=>`<button type="button" data-guest-category="${esc(cat.id)}" class="${category===cat.id?'active':''}">${esc(lang==='ar'?cat.nameAr:cat.nameEn)}</button>`).join('')}`:'';
   $('guestCategoryFilters').classList.toggle('hidden',!rows.length);
 }
+function renderSubcategories(){
+  let el=$('guestSubcategoryFilters');if(!el)return;
+  const available=new Set(publishedOffers().filter(o=>category==='all'||o.categoryId===category).map(o=>o.subcategoryId).filter(Boolean));
+  const rows=category==='all'?[]:subcategories(category).filter(x=>available.has(x.id));
+  if(subcategory!=='all'&&!rows.some(x=>x.id===subcategory))subcategory='all';
+  el.innerHTML=rows.length?`<button type="button" data-guest-subcategory="all" class="${subcategory==='all'?'active':''}">${esc(t('allCategories'))}</button>${rows.map(x=>`<button type="button" data-guest-subcategory="${esc(x.id)}" class="${subcategory===x.id?'active':''}">${esc(taxonomyLabel(x,lang))}</button>`).join('')}`:'';
+  el.classList.toggle('hidden',!rows.length);
+}
 function renderCountries(){
-  const available=new Set(publishedOffers().map(o=>o.country));
-  const rows=SUPPLY_COUNTRIES.filter(x=>available.has(x[0]));
-  if(supplyCountry!=='all'&&!rows.some(x=>x[0]===supplyCountry))supplyCountry='all';
-  $('guestSupplyCountryFilters').innerHTML=rows.length?`<span>${esc(t('supplyCountry'))}</span><button type="button" data-guest-country="all" class="${supplyCountry==='all'?'active':''}">${esc(t('allCountries'))}</button>${rows.map(x=>`<button type="button" data-guest-country="${esc(x[0])}" class="${supplyCountry===x[0]?'active':''}">${esc(lang==='ar'?x[1]:x[2])}</button>`).join('')}`:'';
+  const available=new Set(publishedOffers().map(o=>o.country)),rows=countries().filter(x=>available.has(x.id));
+  if(supplyCountry!=='all'&&!rows.some(x=>x.id===supplyCountry))supplyCountry='all';
+  $('guestSupplyCountryFilters').innerHTML=rows.length?`<span>${esc(t('supplyCountry'))}</span><button type="button" data-guest-country="all" class="${supplyCountry==='all'?'active':''}">${esc(t('allCountries'))}</button>${rows.map(x=>`<button type="button" data-guest-country="${esc(x.id)}" class="${supplyCountry===x.id?'active':''}">${esc(taxonomyLabel(x,lang))}</button>`).join('')}`:'';
   $('guestSupplyCountryFilters').classList.toggle('hidden',!rows.length);
 }
 
@@ -175,7 +183,7 @@ function offerCard(o){
   return `<article class="guest-offer-card" data-guest-offer="${esc(o.id)}">${offerImages(o)}<div class="guest-offer-body"><div class="public-offer-origin">${esc(countryLabel(o.country))}</div><h3>${esc(title(o))}</h3><p>${esc(description(o)||'—')}</p><div class="guest-facts"><span><b>${esc(t('price'))}</b>${money(o.unitPrice,o.currency)}</span><span><b>${esc(t('moq'))}</b>${esc(o.moq||'—')}</span></div></div></article>`;
 }
 function renderOffers(){
-  renderCategories();renderCountries();
+  renderCategories();renderSubcategories();renderCountries();
   const offers=filteredOffers(),totalPages=Math.max(1,Math.ceil(offers.length/PAGE_SIZE));
   offersPage=Math.min(Math.max(offersPage,1),totalPages);
   const pageOffers=offers.slice((offersPage-1)*PAGE_SIZE,offersPage*PAGE_SIZE);
@@ -282,7 +290,8 @@ $('guestCartBtn').addEventListener('click',openGuestCart);
 $('guestRequestBtn').addEventListener('click',()=>requireCustomerAuth('new-request'));
 $('guestProductSearch').addEventListener('input',e=>{searchText=e.target.value;offersPage=1;renderOffers();});
 onLanguageChange(value=>{lang=value;apply();});
-$('guestCategoryFilters').addEventListener('click',e=>{const b=e.target.closest('[data-guest-category]');if(!b)return;category=b.dataset.guestCategory;offersPage=1;renderOffers();});
+$('guestCategoryFilters').addEventListener('click',e=>{const b=e.target.closest('[data-guest-category]');if(!b)return;category=b.dataset.guestCategory;subcategory='all';offersPage=1;renderOffers();});
+$('guestSubcategoryFilters')?.addEventListener('click',e=>{const b=e.target.closest('[data-guest-subcategory]');if(!b)return;subcategory=b.dataset.guestSubcategory;offersPage=1;renderOffers();});
 $('guestSupplyCountryFilters').addEventListener('click',e=>{const b=e.target.closest('[data-guest-country]');if(!b)return;supplyCountry=b.dataset.guestCountry;offersPage=1;renderOffers();});
 $('guestOffers').addEventListener('click',e=>{const card=e.target.closest('[data-guest-offer]');if(card)openOffer(card.dataset.guestOffer);});
 $('modal').addEventListener('click',e=>{

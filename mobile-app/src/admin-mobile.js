@@ -1,5 +1,6 @@
 import { session } from './session.js';
 import { filesToCompressedSources } from './image-upload.js';
+import { categoryRows, subcategoryRows, supplyCountryRows, taxonomyLabel } from './catalog-taxonomy.js';
 let state=null,revision=0;
 let requestFilter='all',offerTab='pending',timer=null;
 const searches=new Map(),mediaCache=new Map(),mediaTasks=new Map();
@@ -43,8 +44,12 @@ const status=s=>({review:tr('قيد المراجعة','Under review'),sent:tr('�
 const requestTracking=x=>x?.trackingStatus||(x?.status==='completed'?'completed':x?.selectedQuoteId?'quote_selected':x?.status==='sent'?'sourcing':'received');
 const interestTracking=x=>x?.trackingStatus||(x?.status==='completed'?'completed':x?.status==='cancelled'?'cancelled':['coordinating','accepted'].includes(x?.status)?'payment_confirmation':'received');
 const activeInterest=x=>!['completed','cancelled'].includes(interestTracking(x));
-const categories=()=>{const rows=Array.isArray(state?.settings?.categories)?state.settings.categories:[];return [...rows].sort((a,b)=>(a.order||0)-(b.order||0));};
-const activeCategories=()=>categories().filter(cat=>cat.active!==false);
+const categories=()=>categoryRows(state?.settings,{activeOnly:false});
+const activeCategories=()=>categoryRows(state?.settings);
+const subcategories=()=>subcategoryRows(state?.settings,{activeOnly:false});
+const activeSubcategories=(parentId='')=>subcategoryRows(state?.settings,{parentId});
+const supplyCountries=()=>supplyCountryRows(state?.settings,{activeOnly:false});
+const activeSupplyCountries=()=>supplyCountryRows(state?.settings);
 const bankAccounts=()=>{const rows=Array.isArray(state?.settings?.bankAccounts)?state.settings.bankAccounts:[];return [...rows].sort((a,b)=>(a.order||0)-(b.order||0));};
 const activeBankAccounts=()=>bankAccounts().filter(x=>x.active!==false);
 const selectedQuoteForRequest=x=>x?.selectedQuoteId?(state?.quotes||[]).find(q=>q.id===x.selectedQuoteId&&q.requestId===x.id):null;
@@ -215,6 +220,16 @@ function requests(){
   }else if(requestFilter!=='all')rows=rows.filter(x=>unifiedRequestTracking(x)===requestFilter);
   setRoot('requests',page(tr('الطلبات','Orders'),tr('جميع طلبات العملاء: طلبات عروض الأسعار وطلبات المنتجات.','All customer orders: RFQs and product orders.'))+search(tr('ابحث برقم الطلب أو اسم العميل أو رقم العرض أو المورد','Search order, customer, quote, or supplier'))+requestFilterControls(allRows)+`<div class="list-stack" data-admin-results>${rows.map(x=>row(x,x.__kind)).join('')||empty()}</div>`);
 }
+function subcategoryPanel(){
+  if(!can('settings'))return '';
+  const rows=subcategories();
+  return `<section class="admin-category-panel"><div class="section-title"><div><h2>${esc(tr('التصنيفات الفرعية','Subcategories'))}</h2><p>${esc(tr('كل تصنيف فرعي مرتبط بتصنيف رئيسي.','Each subcategory belongs to a main category.'))}</p></div><button class="primary-small" type="button" data-admin-subcategory-new>+ ${esc(tr('إضافة تصنيف فرعي','Add subcategory'))}</button></div><div class="admin-category-list">${rows.map(x=>`<article class="admin-category-row"><div><strong>${esc(taxonomyLabel(x,lang()))}</strong><small>${esc(taxonomyLabel(categories().find(c=>c.id===x.parentId),lang()))}</small></div><div class="admin-category-actions"><button type="button" data-admin-subcategory-edit="${esc(x.id)}">${esc(tr('تعديل','Edit'))}</button><button type="button" data-admin-subcategory-toggle="${esc(x.id)}">${esc(x.active!==false?tr('إخفاء','Hide'):tr('إظهار','Show'))}</button><button class="danger-text" type="button" data-admin-subcategory-delete="${esc(x.id)}">${esc(tr('حذف','Delete'))}</button></div></article>`).join('')||empty()}</div></section>`;
+}
+function supplyCountryPanel(){
+  if(!can('settings'))return '';
+  const rows=supplyCountries();
+  return `<section class="admin-category-panel"><div class="section-title"><div><h2>${esc(tr('دول التوريد','Supply countries'))}</h2><p>${esc(tr('تُستخدم في المنتجات وفلترة العملاء.','Used by products and customer filters.'))}</p></div><button class="primary-small" type="button" data-admin-country-new>+ ${esc(tr('إضافة دولة','Add country'))}</button></div><div class="admin-category-list">${rows.map(x=>`<article class="admin-category-row"><div><strong>${esc(taxonomyLabel(x,lang()))}</strong><small>${esc(x.nameAr)} · ${esc(x.nameEn)}</small></div><div class="admin-category-actions"><button type="button" data-admin-country-edit="${esc(x.id)}">${esc(tr('تعديل','Edit'))}</button><button type="button" data-admin-country-toggle="${esc(x.id)}">${esc(x.active!==false?tr('إخفاء','Hide'):tr('إظهار','Show'))}</button><button class="danger-text" type="button" data-admin-country-delete="${esc(x.id)}">${esc(tr('حذف','Delete'))}</button></div></article>`).join('')||empty()}</div></section>`;
+}
 function categoryPanel(){
   const rows=categories();
   return `<section class="admin-category-panel"><div class="section-title"><div><h2>${esc(tr('التصنيفات','Categories'))}</h2><p>${esc(tr('تظهر للعميل كأزرار نصية فوق المنتجات الجاهزة.','Shown to customers as text buttons above ready products.'))}</p></div><button class="primary-small" type="button" data-admin-category-new>+ ${esc(tr('إضافة تصنيف','Add category'))}</button></div><div class="admin-category-list" data-admin-results>${rows.map((cat,i)=>`<article class="admin-category-row"><div><strong>${esc(tr(cat.nameAr,cat.nameEn))}</strong><small>${esc(cat.nameAr)} · ${esc(cat.nameEn)}</small><span class="status-pill ${cat.active!==false?'status-published':'status-cancelled'}">${esc(cat.active!==false?tr('ظاهر','Visible'):tr('مخفي','Hidden'))}</span></div><div class="admin-category-actions"><button type="button" data-admin-category-move="${esc(cat.id)}" data-direction="-1" ${i===0?'disabled':''}>↑</button><button type="button" data-admin-category-move="${esc(cat.id)}" data-direction="1" ${i===rows.length-1?'disabled':''}>↓</button><button type="button" data-admin-category-edit="${esc(cat.id)}">${esc(tr('تعديل','Edit'))}</button><button type="button" data-admin-category-toggle="${esc(cat.id)}">${esc(cat.active!==false?tr('إخفاء','Hide'):tr('إظهار','Show'))}</button><button class="danger-text" type="button" data-admin-category-delete="${esc(cat.id)}">${esc(tr('حذف','Delete'))}</button></div></article>`).join('')||empty()}</div></section>`;
@@ -287,7 +302,7 @@ async function submitTeamStatus(form){
     await reload();closeModal();schedule();toast(form.dataset.action==='block'?tr('تم إيقاف المدير.','Manager disabled.'):tr('تمت إعادة تفعيل المدير.','Manager reactivated.'));
   }catch(e){toast(e.message);}
 }
-function accounts(){const u=me(),rows=(state?.accounts||[]).filter(a=>['client','supplier'].includes(a.role)&&!a.deletedAt&&matches(a,'account'));setRoot('account',page(tr('الحساب والإعدادات','Account & settings'),tr('بيانات الإدارة والحسابات وإعدادات المنتجات.','Admin profile, accounts, and product settings.'))+`<section class="profile-card admin-profile"><div class="avatar">${esc((u?.name||u?.email||'M').charAt(0).toUpperCase())}</div><h2>${esc(u?.name||tr('الإدارة','Admin'))}</h2><p>${esc(tr('حساب إدارة','Admin account'))}</p><button class="danger-btn" data-action="logout">${esc(tr('تسجيل الخروج','Sign out'))}</button></section>`+teamPanel()+bankAccountPanel()+`<section class="section-block admin-directory"><div class="section-title"><h2>${esc(tr('العملاء والموردون','Customers & suppliers'))}</h2></div>${search(tr('ابحث بالاسم أو الشركة','Search name or company'))}<div class="list-stack" data-admin-results>${rows.slice(0,100).map(a=>`<button class="admin-account-row" data-admin-account="${esc(a.id)}"><div><strong>${esc(a.company||a.name||'#'+String(a.id).slice(0,8))}</strong><small>${esc(a.role==='client'?tr('عميل','Customer'):tr('مورد','Supplier'))} · ${esc(a.blockedAt?tr('متوقف','Disabled'):tr('نشط','Active'))}</small></div><span>›</span></button>`).join('')||empty()}</div></section>`+categoryPanel());}
+function accounts(){const u=me(),rows=(state?.accounts||[]).filter(a=>['client','supplier'].includes(a.role)&&!a.deletedAt&&matches(a,'account'));setRoot('account',page(tr('الحساب والإعدادات','Account & settings'),tr('بيانات الإدارة والحسابات وإعدادات المنتجات.','Admin profile, accounts, and product settings.'))+`<section class="profile-card admin-profile"><div class="avatar">${esc((u?.name||u?.email||'M').charAt(0).toUpperCase())}</div><h2>${esc(u?.name||tr('الإدارة','Admin'))}</h2><p>${esc(tr('حساب إدارة','Admin account'))}</p><button class="danger-btn" data-action="logout">${esc(tr('تسجيل الخروج','Sign out'))}</button></section>`+teamPanel()+bankAccountPanel()+`<section class="section-block admin-directory"><div class="section-title"><h2>${esc(tr('العملاء والموردون','Customers & suppliers'))}</h2></div>${search(tr('ابحث بالاسم أو الشركة','Search name or company'))}<div class="list-stack" data-admin-results>${rows.slice(0,100).map(a=>`<button class="admin-account-row" data-admin-account="${esc(a.id)}"><div><strong>${esc(a.company||a.name||'#'+String(a.id).slice(0,8))}</strong><small>${esc(a.role==='client'?tr('عميل','Customer'):tr('مورد','Supplier'))} · ${esc(a.blockedAt?tr('متوقف','Disabled'):tr('نشط','Active'))}</small></div><span>›</span></button>`).join('')||empty()}</div></section>`+categoryPanel()+subcategoryPanel()+supplyCountryPanel());}
 export function renderAdminScreen(v=activeView()){if(!isAdmin()||v==='notifications')return false;if(v==='home')home();else if(v==='requests')requests();else if(v==='offers')offers();else if(v==='account')accounts();return true;}
 function render(){if(!document.getElementById('appView')?.classList.contains('hidden'))renderAdminScreen();}
 
@@ -306,7 +321,7 @@ function publicTranslationFields(x){
   return `<div class="form-stack admin-public-translation"><label><span>${esc(tr('اسم المنتج بالعربية','Arabic product name'))}</span><input ${disabled} data-admin-public-tr="titleAr" value="${esc(t.titleAr||'')}"></label><label><span>${esc(tr('اسم المنتج بالإنجليزية','English product name'))}</span><input ${disabled} data-admin-public-tr="titleEn" value="${esc(t.titleEn||'')}"></label><label><span>${esc(tr('الوصف بالعربية','Arabic description'))}</span><textarea ${disabled} data-admin-public-tr="descriptionAr">${esc(t.descriptionAr||'')}</textarea></label><label><span>${esc(tr('الوصف بالإنجليزية','English description'))}</span><textarea ${disabled} data-admin-public-tr="descriptionEn">${esc(t.descriptionEn||'')}</textarea></label></div>`;
 }
 function publicOfferEditor(x){
-  const cats=activeCategories(),canPublish=can('publish');
+  const cats=activeCategories(),subs=activeSubcategories(x.categoryId),countries=activeSupplyCountries(),canPublish=can('publish');
   const currentImages=(x.images||[]).map((src,i)=>`<label class="admin-image-tile"><input checked type="checkbox" data-admin-public-image-index="${i}"><span><img alt="" data-admin-media="${esc(src)}" data-image-viewer></span><small>${esc(tr('إبقاء الصورة','Keep image'))}</small></label>`).join('');
   return `<form id="adminPublicOfferForm" class="form-stack admin-public-offer-editor" data-id="${esc(x.id)}">
     <h3>${esc(tr('تعديل المنتج','Edit product'))}</h3>
@@ -314,9 +329,9 @@ function publicOfferEditor(x){
     <label><span>${esc(tr('الوصف الأصلي','Original description'))}</span><textarea name="specs" required maxlength="10000">${esc(x.specs||'')}</textarea></label>
     <div class="form-two"><label><span>${esc(tr('السعر','Price'))}</span><input name="unitPrice" type="number" step="0.01" min="0.01" required value="${esc(x.unitPrice||'')}"></label><label><span>${esc(tr('العملة','Currency'))}</span><select name="currency">${['USD','SAR','AED','CNY','EUR'].map(v=>`<option ${x.currency===v?'selected':''}>${v}</option>`).join('')}</select></label></div>
     <div class="form-two"><label><span>${esc(tr('الحد الأدنى','MOQ'))}</span><input name="moq" type="number" min="1" required value="${esc(x.moq||'')}"></label><label><span>${esc(tr('المخزون','Stock'))}</span><input name="stock" maxlength="100" value="${esc(x.stock||'')}"></label></div>
-    <div class="form-two"><label><span>${esc(tr('مدة الإنتاج بالأيام','Production time (days)'))}</span><input name="leadTime" type="number" min="1" required value="${esc(x.leadTime||'')}"></label><label><span>${esc(tr('الدولة','Country'))}</span><input name="country" maxlength="100" value="${esc(x.country||'')}"></label></div>
+    <div class="form-two"><label><span>${esc(tr('مدة الإنتاج بالأيام','Production time (days)'))}</span><input name="leadTime" type="number" min="1" required value="${esc(x.leadTime||'')}"></label><label><span>${esc(tr('دولة التوريد','Supply country'))}</span><select name="country" required><option value="">—</option>${countries.map(v=>`<option value="${esc(v.id)}" ${x.country===v.id?'selected':''}>${esc(taxonomyLabel(v,lang()))}</option>`).join('')}</select></label></div>
     <label><span>${esc(tr('صالح حتى','Valid until'))}</span><input name="validUntil" type="date" value="${esc(x.validUntil||'')}"></label>
-    <label><span>${esc(tr('التصنيف','Category'))}</span><select name="categoryId"><option value="">—</option>${cats.map(cat=>`<option value="${esc(cat.id)}" ${x.categoryId===cat.id?'selected':''}>${esc(tr(cat.nameAr,cat.nameEn))}</option>`).join('')}</select></label>
+    <div class="form-two"><label><span>${esc(tr('التصنيف الرئيسي','Main category'))}</span><select name="categoryId"><option value="">—</option>${cats.map(cat=>`<option value="${esc(cat.id)}" ${x.categoryId===cat.id?'selected':''}>${esc(taxonomyLabel(cat,lang()))}</option>`).join('')}</select></label><label><span>${esc(tr('التصنيف الفرعي','Subcategory'))}</span><select name="subcategoryId"><option value="">—</option>${subs.map(s=>`<option value="${esc(s.id)}" ${x.subcategoryId===s.id?'selected':''}>${esc(taxonomyLabel(s,lang()))}</option>`).join('')}</select></label></div>
     ${canPublish?`<label><span>${esc(tr('حالة المنتج','Product status'))}</span><select name="status"><option value="published" ${x.status==='published'?'selected':''}>${esc(tr('منشور','Published'))}</option><option value="pending" ${x.status==='pending'?'selected':''}>${esc(tr('غير منشور / قيد المراجعة','Unpublished / pending'))}</option></select></label>`:''}
     <section><h3>${esc(tr('النص الظاهر للعملاء','Customer-facing text'))}</h3>${publicTranslationFields(x)}</section>
     <section><h3>${esc(tr('الصور الحالية','Current images'))}</h3><div class="admin-image-grid" data-viewer-gallery>${currentImages}</div></section>
@@ -355,7 +370,7 @@ async function savePublicOffer(form){
       product:form.product.value.trim(),specs:form.specs.value.trim(),
       unitPrice:form.unitPrice.value,currency:form.currency.value,moq:form.moq.value,
       stock:form.stock.value.trim(),leadTime:form.leadTime.value,country:form.country.value.trim(),
-      validUntil:form.validUntil.value,categoryId:form.categoryId.value,images
+      validUntil:form.validUntil.value,categoryId:form.categoryId.value,subcategoryId:form.subcategoryId.value,images
     };
     if(can('translate')){
       const translation={};form.querySelectorAll('[data-admin-public-tr]').forEach(el=>translation[el.dataset.adminPublicTr]=el.value.trim());
@@ -463,6 +478,22 @@ function categoryDialog(id=''){
   const current=categories().find(cat=>cat.id===id);
   modal(current?tr('تعديل التصنيف','Edit category'):tr('إضافة تصنيف','Add category'),'M Platform',`<form id="adminCategoryForm" class="form-stack" data-id="${esc(current?.id||'')}"><label><span>${esc(tr('الاسم بالعربية','Arabic name'))}</span><input name="nameAr" required maxlength="80" value="${esc(current?.nameAr||'')}"></label><label><span>${esc(tr('الاسم بالإنجليزية','English name'))}</span><input name="nameEn" required maxlength="80" value="${esc(current?.nameEn||'')}"></label><label class="admin-category-toggle-label"><input type="checkbox" name="active" ${current?.active===false?'':'checked'}><span>${esc(tr('إظهار التصنيف للعملاء','Show category to customers'))}</span></label><button class="primary-btn" type="submit">${esc(tr('حفظ','Save'))}</button></form>`);
 }
+function subcategoryDialog(id=''){
+  const current=subcategories().find(x=>x.id===id),parents=activeCategories();if(!parents.length){toast(tr('أضف تصنيفًا رئيسيًا أولًا.','Add a main category first.'));return;}
+  modal(current?tr('تعديل التصنيف الفرعي','Edit subcategory'):tr('إضافة تصنيف فرعي','Add subcategory'),'M Platform',`<form id="adminSubcategoryForm" class="form-stack" data-id="${esc(current?.id||'')}"><label><span>${esc(tr('التصنيف الرئيسي','Main category'))}</span><select name="parentId" required>${parents.map(x=>`<option value="${esc(x.id)}" ${current?.parentId===x.id?'selected':''}>${esc(taxonomyLabel(x,lang()))}</option>`).join('')}</select></label><label><span>${esc(tr('الاسم بالعربية','Arabic name'))}</span><input name="nameAr" required maxlength="80" value="${esc(current?.nameAr||'')}"></label><label><span>${esc(tr('الاسم بالإنجليزية','English name'))}</span><input name="nameEn" required maxlength="80" value="${esc(current?.nameEn||'')}"></label><button class="primary-btn" type="submit">${esc(tr('حفظ','Save'))}</button></form>`);
+}
+async function saveSubcategories(rows){try{await api('/api/v1/settings',{method:'POST',body:{version:Number(state.settings?._version||0),data:{subcategories:rows}}});await reload();schedule();return true;}catch(e){toast(e.message);return false;}}
+async function submitSubcategory(form){const id=form.dataset.id||crypto.randomUUID(),rows=subcategories(),next={id,parentId:form.parentId.value,nameAr:form.nameAr.value.trim(),nameEn:form.nameEn.value.trim(),active:true},i=rows.findIndex(x=>x.id===id);if(i>=0)rows[i]={...rows[i],...next};else rows.push(next);if(await saveSubcategories(rows))closeModal();}
+async function toggleSubcategory(id){const rows=subcategories(),x=rows.find(v=>v.id===id);if(!x)return;x.active=x.active===false;await saveSubcategories(rows);}
+async function deleteSubcategory(id){const used=(state?.publicOffers||[]).some(x=>x.subcategoryId===id&&!x.deletedAt);if(used){toast(tr('غيّر تصنيف المنتجات المرتبطة أولًا.','Reassign linked products first.'));return;}await saveSubcategories(subcategories().filter(x=>x.id!==id));}
+function supplyCountryDialog(id=''){
+  const current=supplyCountries().find(x=>x.id===id);
+  modal(current?tr('تعديل دولة التوريد','Edit supply country'):tr('إضافة دولة توريد','Add supply country'),'M Platform',`<form id="adminSupplyCountryForm" class="form-stack" data-id="${esc(current?.id||'')}"><label><span>${esc(tr('الاسم بالعربية','Arabic name'))}</span><input name="nameAr" required maxlength="80" value="${esc(current?.nameAr||'')}"></label><label><span>${esc(tr('الاسم بالإنجليزية','English name'))}</span><input name="nameEn" required maxlength="80" value="${esc(current?.nameEn||'')}"></label><button class="primary-btn" type="submit">${esc(tr('حفظ','Save'))}</button></form>`);
+}
+async function saveSupplyCountries(rows){try{await api('/api/v1/settings',{method:'POST',body:{version:Number(state.settings?._version||0),data:{supplyCountries:rows}}});await reload();schedule();return true;}catch(e){toast(e.message);return false;}}
+async function submitSupplyCountry(form){const id=form.dataset.id||crypto.randomUUID(),rows=supplyCountries(),next={id,nameAr:form.nameAr.value.trim(),nameEn:form.nameEn.value.trim(),active:true},i=rows.findIndex(x=>x.id===id);if(i>=0)rows[i]={...rows[i],...next};else rows.push(next);if(await saveSupplyCountries(rows))closeModal();}
+async function toggleSupplyCountry(id){const rows=supplyCountries(),x=rows.find(v=>v.id===id);if(!x)return;x.active=x.active===false;await saveSupplyCountries(rows);}
+async function deleteSupplyCountry(id){await saveSupplyCountries(supplyCountries().filter(x=>x.id!==id));}
 async function saveCategories(rows){
   try{await api('/api/v1/settings',{method:'POST',body:{version:Number(state.settings?._version||0),data:{categories:rows}}});await reload();schedule();toast(tr('تم حفظ التصنيفات.','Categories saved.'));return true;}catch(e){toast(e.message);return false;}
 }
@@ -579,6 +610,14 @@ document.addEventListener('click',e=>{
   const cm=e.target.closest('[data-admin-category-move]');if(cm){moveCategory(cm.dataset.adminCategoryMove,cm.dataset.direction);return;}
   const ct=e.target.closest('[data-admin-category-toggle]');if(ct){toggleCategory(ct.dataset.adminCategoryToggle);return;}
   const cd=e.target.closest('[data-admin-category-delete]');if(cd){deleteCategory(cd.dataset.adminCategoryDelete);return;}
+  const sn=e.target.closest('[data-admin-subcategory-new]');if(sn){subcategoryDialog();return;}
+  const se=e.target.closest('[data-admin-subcategory-edit]');if(se){subcategoryDialog(se.dataset.adminSubcategoryEdit);return;}
+  const stg=e.target.closest('[data-admin-subcategory-toggle]');if(stg){toggleSubcategory(stg.dataset.adminSubcategoryToggle);return;}
+  const sd=e.target.closest('[data-admin-subcategory-delete]');if(sd){deleteSubcategory(sd.dataset.adminSubcategoryDelete);return;}
+  const cntry=e.target.closest('[data-admin-country-new]');if(cntry){supplyCountryDialog();return;}
+  const ce2=e.target.closest('[data-admin-country-edit]');if(ce2){supplyCountryDialog(ce2.dataset.adminCountryEdit);return;}
+  const ct2=e.target.closest('[data-admin-country-toggle]');if(ct2){toggleSupplyCountry(ct2.dataset.adminCountryToggle);return;}
+  const cd2=e.target.closest('[data-admin-country-delete]');if(cd2){deleteSupplyCountry(cd2.dataset.adminCountryDelete);return;}
   const st=e.target.closest('[data-admin-save-tracking]');if(st){saveTracking(st.dataset.adminSaveTracking);return;}
   const sendCart=e.target.closest('[data-admin-send-cart-suppliers]');if(sendCart){sendCartToSuppliers(sendCart.dataset.adminSendCartSuppliers);return;}
   const sendSupplier=e.target.closest('[data-admin-send-interest-supplier]');if(sendSupplier){sendInterestToSupplier(sendSupplier.dataset.adminSendInterestSupplier);return;}
@@ -620,5 +659,7 @@ document.addEventListener('submit',e=>{
   else if(e.target.matches('#adminAccountEditForm')){e.preventDefault();submitAccountEdit(e.target);}
   else if(e.target.matches('#adminAccountStatusForm')){e.preventDefault();submitAccountStatus(e.target);}
   else if(e.target.matches('#adminCategoryForm')){e.preventDefault();submitCategory(e.target);}
+  else if(e.target.matches('#adminSubcategoryForm')){e.preventDefault();submitSubcategory(e.target);}
+  else if(e.target.matches('#adminSupplyCountryForm')){e.preventDefault();submitSupplyCountry(e.target);}
   else if(e.target.matches('#adminPublicOfferForm')){e.preventDefault();savePublicOffer(e.target);}
 });

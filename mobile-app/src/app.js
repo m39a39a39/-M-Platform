@@ -5,6 +5,7 @@ import { configureAdmin, updateAdminState, resetAdmin, renderAdminScreen, openAd
 import { App } from '@capacitor/app';
 import { filesToCompressedSources } from './image-upload.js';
 import { parseBulkProductWorkbook, validateBulkProductRows, normalizeSupplyCountry, downloadBulkProductTemplate } from './bulk-excel.js';
+import { categoryRows, subcategoryRows, supplyCountryRows, taxonomyLabel } from './catalog-taxonomy.js';
 import './image-viewer.js';
 
 let currentUser=null;
@@ -15,6 +16,7 @@ let activeScreen='home';
 let activeSub='primary';
 let readyProductsPage=1;
 let readyCategory='all';
+let readySubcategory='all';
 let readyCountry='all';
 let readySearch='';
 const GUEST_CART_KEY='m-platform.guest-cart.v1';
@@ -86,21 +88,14 @@ function readyTrackingStatus(item){
   if(item?.trackingStatus)return item.trackingStatus;
   return item?.status==='completed'?'completed':item?.status==='cancelled'?'cancelled':['coordinating','accepted'].includes(item?.status)?'payment_confirmation':'received';
 }
-function categories(activeOnly=true){
-  const rows=Array.isArray(platformState?.settings?.categories)?platformState.settings.categories:[];
-  return rows.filter(c=>!activeOnly||c.active!==false).sort((a,b)=>(a.order||0)-(b.order||0));
-}
-const SUPPLY_COUNTRIES=[
-  ['China','الصين','China'],
-  ['United Arab Emirates','الإمارات','UAE']
-];
-function supplyCountryLabel(value){
-  const row=SUPPLY_COUNTRIES.find(x=>x[0]===value);
-  return row?(lang==='ar'?row[1]:row[2]):value||'—';
-}
+function categories(activeOnly=true){return categoryRows(platformState?.settings,{activeOnly});}
+function subcategories(activeOnly=true,parentId=''){return subcategoryRows(platformState?.settings,{activeOnly,parentId});}
+function supplyCountries(activeOnly=true){return supplyCountryRows(platformState?.settings,{activeOnly});}
+function supplyCountryLabel(value){return taxonomyLabel(supplyCountries(false).find(x=>x.id===value),lang)||value||'—';}
 function filteredReadyOffers(){
   let offers=(platformState?.publicOffers||[]).filter(o=>o.status==='published');
   if(readyCategory!=='all')offers=offers.filter(o=>o.categoryId===readyCategory);
+  if(readySubcategory!=='all')offers=offers.filter(o=>o.subcategoryId===readySubcategory);
   if(readyCountry!=='all')offers=offers.filter(o=>o.country===readyCountry);
   const q=readySearch.trim().toLowerCase();
   if(q)offers=offers.filter(o=>[o.sku,titleOf(o),descriptionOf(o),o.country].filter(Boolean).join(' ').toLowerCase().includes(q));
@@ -111,11 +106,18 @@ function categoryFilters(){
   if(!rows.length)return '';
   return `<div class="category-filter-bar" role="tablist"><button type="button" data-category="all" class="${readyCategory==='all'?'active':''}">${esc(t('allCategories'))}</button>${rows.map(cat=>`<button type="button" data-category="${esc(cat.id)}" class="${readyCategory===cat.id?'active':''}">${esc(lang==='ar'?cat.nameAr:cat.nameEn)}</button>`).join('')}</div>`;
 }
+function subcategoryFilters(){
+  if(readyCategory==='all')return '';
+  const available=new Set((platformState?.publicOffers||[]).filter(o=>o.status==='published'&&o.categoryId===readyCategory).map(o=>o.subcategoryId).filter(Boolean));
+  const rows=subcategories(true,readyCategory).filter(x=>available.has(x.id));
+  if(!rows.length)return '';
+  return `<div class="category-filter-bar subcategory-filter-bar" role="tablist"><button type="button" data-subcategory="all" class="${readySubcategory==='all'?'active':''}">${esc(tr('الكل','All'))}</button>${rows.map(x=>`<button type="button" data-subcategory="${esc(x.id)}" class="${readySubcategory===x.id?'active':''}">${esc(taxonomyLabel(x,lang))}</button>`).join('')}</div>`;
+}
 function supplyCountryFilters(){
   const available=new Set((platformState?.publicOffers||[]).filter(o=>o.status==='published').map(o=>o.country));
-  const rows=SUPPLY_COUNTRIES.filter(x=>available.has(x[0]));
+  const rows=supplyCountries().filter(x=>available.has(x.id));
   if(!rows.length)return '';
-  return `<div class="supply-country-filter" role="tablist"><span>${esc(tr('بلد التوريد','Supply country'))}</span><button type="button" data-supply-country="all" class="${readyCountry==='all'?'active':''}">${esc(tr('الكل','All'))}</button>${rows.map(x=>`<button type="button" data-supply-country="${esc(x[0])}" class="${readyCountry===x[0]?'active':''}">${esc(lang==='ar'?x[1]:x[2])}</button>`).join('')}</div>`;
+  return `<div class="supply-country-filter" role="tablist"><span>${esc(tr('بلد التوريد','Supply country'))}</span><button type="button" data-supply-country="all" class="${readyCountry==='all'?'active':''}">${esc(tr('الكل','All'))}</button>${rows.map(x=>`<button type="button" data-supply-country="${esc(x.id)}" class="${readyCountry===x.id?'active':''}">${esc(taxonomyLabel(x,lang))}</button>`).join('')}</div>`;
 }
 function cartStorageKey(){return currentUser?.id?`m-platform.cart.v1.${currentUser.id}`:'';}
 function readGuestCart(){
@@ -334,7 +336,7 @@ async function loadData({render=true}={}){
 }
 configureAdmin({reload:()=>loadData({render:false})});
 session.onReset(reason=>{
-  currentUser=null;platformState=null;notifications=[];activeScreen='home';activeSub='primary';readyProductsPage=1;readyCategory='all';readyCountry='all';readySearch='';cartItems=[];clientOrderSeen={};clientRequestFilter='all';
+  currentUser=null;platformState=null;notifications=[];activeScreen='home';activeSub='primary';readyProductsPage=1;readyCategory='all';readySubcategory='all';readyCountry='all';readySearch='';cartItems=[];clientOrderSeen={};clientRequestFilter='all';
   resetAdmin();closeModal();
   for(const url of mediaCache.values())URL.revokeObjectURL(url);
   mediaCache.clear();mediaTasks.clear();lastDataLoadedAt=0;$('screen').replaceChildren();$('headerRole').textContent='';
@@ -586,7 +588,7 @@ function renderHome(){
     const products=productResultsHtml();
     $('screen').innerHTML=
       `<section class="special-request-card client-new-request"><div class="special-request-copy"><div class="special-request-heading"><span class="special-request-icon">＋</span><h2>${esc(tr('أرسل طلب جديد','Send a new request'))}</h2></div><p>${esc(tr('إذا لم تجد المنتج المناسب، أرسل مواصفاتك وسنطلب عروضًا لك.','If you cannot find the right product, send your specifications and we will source quotes for you.'))}</p></div><button class="primary-btn" data-action="new-request">+ ${esc(tr('أرسل طلب جديد','Send new request'))}</button></section>`+
-      `<section class="ready-products-section"><div class="section-title ready-products-title"><div><h2>${esc(tr('المنتجات','Products'))}</h2><p>${esc(tr('ابحث واختر الكمية، ثم اجمع المنتجات في طلب واحد.','Search, choose quantities, and combine products into one order.'))}</p></div></div>${productSearchBar()}${categoryFilters()}${supplyCountryFilters()}<div id="readyProductsGrid" class="public-offers-grid">${products.grid}</div><div id="readyProductsPagination">${products.pagination}</div></section>`+
+      `<section class="ready-products-section"><div class="section-title ready-products-title"><div><h2>${esc(tr('المنتجات','Products'))}</h2><p>${esc(tr('ابحث واختر الكمية، ثم اجمع المنتجات في طلب واحد.','Search, choose quantities, and combine products into one order.'))}</p></div></div>${productSearchBar()}${categoryFilters()}${subcategoryFilters()}${supplyCountryFilters()}<div id="readyProductsGrid" class="public-offers-grid">${products.grid}</div><div id="readyProductsPagination">${products.pagination}</div></section>`+
       companyFooterCard();
   }else if(role==='supplier'){
     const quotes=platformState.quotes||[],answered=new Set(quotes.map(q=>q.requestId)),invites=(platformState.requests||[]).filter(r=>!answered.has(r.id));
@@ -925,7 +927,13 @@ function openNewRequest(source=null){
 }
 function quoteFormHtml(q=null,requestId=''){return `<form id="quoteForm" class="form-stack" data-id="${esc(q?.id||'')}" data-request="${esc(requestId||q?.requestId||'')}"><div class="form-two"><label><span>${esc(t('price'))}</span><input name="unitPrice" type="number" step="0.01" min="0.01" value="${esc(q?.unitPrice||'')}" required /></label><label><span>${esc(t('currency'))}</span><select name="currency">${['USD','SAR','AED','CNY','EUR'].map(c=>`<option ${q?.currency===c?'selected':''}>${c}</option>`).join('')}</select></label></div><div class="form-two"><label><span>${esc(t('moq'))}</span><input name="moq" type="number" min="1" value="${esc(q?.moq||'')}" required /></label><label><span>${esc(t('leadTime'))}</span><input name="leadTime" type="number" min="1" value="${esc(q?.leadTime||'')}" required /></label></div><label><span>${esc(t('sampleCost'))}</span><input name="sampleCost" value="${esc(q?.sampleCost||'')}" maxlength="10000" /></label><label><span>${esc(t('notes'))}</span><textarea name="notes" maxlength="10000">${esc(q?.notes||'')}</textarea></label>${fileField('quoteFiles')}<p class="form-message" id="quoteFormMessage"></p><button class="primary-btn" type="submit">${esc(q?t('save'):t('submit'))}</button></form>`;}
 function openQuoteForm(requestId,q=null){openModal(q?t('editQuote'):t('submitQuote'),q?`#${ref(q)}`:`#${ref((platformState.requests||[]).find(r=>r.id===requestId))}`,quoteFormHtml(q,requestId));$('quoteForm').addEventListener('submit',submitQuote);}
-function openNewPublic(){const cats=categories();openModal(t('newPublicOffer'),'M Platform',`<form id="publicForm" class="form-stack"><label><span>SKU</span><input name="sku" required maxlength="80" pattern="[A-Za-z0-9._-]+" /></label><label><span>${esc(t('product'))}</span><input name="product" required maxlength="300" /></label>${cats.length?`<label><span>${esc(t('category'))}</span><select name="categoryId" required><option value="">—</option>${cats.map(cat=>`<option value="${esc(cat.id)}">${esc(lang==='ar'?cat.nameAr:cat.nameEn)}</option>`).join('')}</select></label>`:''}<label><span>${esc(t('specifications'))}</span><textarea name="specs" required maxlength="10000"></textarea></label><div class="form-two"><label><span>${esc(t('price'))}</span><input name="unitPrice" type="number" step="0.01" min="0.01" required /></label><label><span>${esc(t('currency'))}</span><select name="currency">${['USD','SAR','AED','CNY','EUR'].map(c=>`<option>${c}</option>`).join('')}</select></label></div><div class="form-two"><label><span>${esc(t('moq'))}</span><input name="moq" type="number" min="1" required /></label><label><span>${esc(t('stock'))}</span><input name="stock" type="number" min="0" step="1" /></label></div><div class="form-two"><label><span>${esc(t('leadTime'))}</span><input name="leadTime" type="number" min="1" required /></label><label><span>${esc(tr('بلد التوريد','Supply country'))}</span><select name="country" required><option value="China">${esc(tr('الصين','China'))}</option><option value="United Arab Emirates">${esc(tr('الإمارات','UAE'))}</option></select></label></div><label><span>${esc(t('validUntil'))}</span><input name="validUntil" type="date" /></label>${fileField('publicFiles')}<p class="form-message" id="publicFormMessage"></p><button class="primary-btn" type="submit">${esc(t('submit'))}</button></form>`);$('publicForm').addEventListener('submit',submitPublic);}
+function openNewPublic(){
+  const cats=categories(),subs=subcategories(),countries=supplyCountries();
+  openModal(t('newPublicOffer'),'M Platform',`<form id="publicForm" class="form-stack"><label><span>SKU</span><input name="sku" required maxlength="80" pattern="[A-Za-z0-9._-]+" /></label><label><span>${esc(t('product'))}</span><input name="product" required maxlength="300" /></label>${cats.length?`<div class="form-two"><label><span>${esc(tr('التصنيف الرئيسي','Main category'))}</span><select name="categoryId" required><option value="">—</option>${cats.map(cat=>`<option value="${esc(cat.id)}">${esc(taxonomyLabel(cat,lang))}</option>`).join('')}</select></label><label><span>${esc(tr('التصنيف الفرعي','Subcategory'))}</span><select name="subcategoryId"><option value="">—</option>${subs.map(s=>`<option value="${esc(s.id)}" data-parent="${esc(s.parentId)}">${esc(taxonomyLabel(s,lang))}</option>`).join('')}</select></label></div>`:''}<label><span>${esc(t('specifications'))}</span><textarea name="specs" required maxlength="10000"></textarea></label><div class="form-two"><label><span>${esc(t('price'))}</span><input name="unitPrice" type="number" step="0.01" min="0.01" required /></label><label><span>${esc(t('currency'))}</span><select name="currency">${['USD','SAR','AED','CNY','EUR'].map(c=>`<option>${c}</option>`).join('')}</select></label></div><div class="form-two"><label><span>${esc(t('moq'))}</span><input name="moq" type="number" min="1" required /></label><label><span>${esc(t('stock'))}</span><input name="stock" type="number" min="0" step="1" /></label></div><div class="form-two"><label><span>${esc(t('leadTime'))}</span><input name="leadTime" type="number" min="1" required /></label><label><span>${esc(tr('بلد التوريد','Supply country'))}</span><select name="country" required><option value="">—</option>${countries.map(x=>`<option value="${esc(x.id)}">${esc(taxonomyLabel(x,lang))}</option>`).join('')}</select></label></div><label><span>${esc(t('validUntil'))}</span><input name="validUntil" type="date" /></label>${fileField('publicFiles')}<p class="form-message" id="publicFormMessage"></p><button class="primary-btn" type="submit">${esc(t('submit'))}</button></form>`);
+  const form=$('publicForm'),cat=form.categoryId,sub=form.subcategoryId;
+  const sync=()=>{if(!sub)return;[...sub.options].forEach(o=>{if(o.value)o.hidden=!!cat?.value&&o.dataset.parent!==cat.value;});if(sub.selectedOptions[0]?.hidden)sub.value='';};
+  cat?.addEventListener('change',sync);sync();form.addEventListener('submit',submitPublic);
+}
 
 
 const BULK_ERROR_COPY={
@@ -941,7 +949,7 @@ const BULK_ERROR_COPY={
   server:['تعذر استيراد هذا المنتج','Could not import this product']
 };
 function bulkErrorLabel(key){const row=BULK_ERROR_COPY[key];return row?tr(row[0],row[1]):key;}
-function bulkContext(){return {categories:categories(),existingOffers:platformState?.publicOffers||[]};}
+function bulkContext(){return {categories:categories(),subcategories:subcategories(),supplyCountries:supplyCountries(),existingOffers:platformState?.publicOffers||[]};}
 function bulkRevalidate(){bulkImportRows=validateBulkProductRows(bulkImportRows,bulkContext());}
 function bulkWorkbookError(error){
   const map={
@@ -955,9 +963,9 @@ function bulkWorkbookError(error){
   };
   return map[error?.message]||error?.message||tr('تعذر قراءة الملف.','Could not read the file.');
 }
-function bulkCategoryOptions(selected){
-  return categories().map(cat=>`<option value="${esc(cat.id)}" ${selected===cat.id?'selected':''}>${esc(lang==='ar'?cat.nameAr:cat.nameEn)}</option>`).join('');
-}
+function bulkCategoryOptions(selected){return categories().map(cat=>`<option value="${esc(cat.id)}" ${selected===cat.id?'selected':''}>${esc(taxonomyLabel(cat,lang))}</option>`).join('');}
+function bulkSubcategoryOptions(selected,parentId){return subcategories(true,parentId).map(x=>`<option value="${esc(x.id)}" ${selected===x.id?'selected':''}>${esc(taxonomyLabel(x,lang))}</option>`).join('');}
+function bulkCountryOptions(selected){return supplyCountries().map(x=>`<option value="${esc(x.id)}" ${selected===x.id?'selected':''}>${esc(taxonomyLabel(x,lang))}</option>`).join('');}
 function bulkRowCard(row,index){
   const ready=!row.errors.length,duplicate=row.duplicateOfferId;
   const imageHtml=(row.images||[]).map((img,i)=>`<div class="bulk-image-item"><img src="${esc(img.source)}" alt=""><button type="button" data-bulk-remove-image="${index}:${i}" aria-label="${esc(tr('حذف الصورة','Remove image'))}">×</button><small>${i===0?esc(tr('رئيسية','Main')):i+1}</small></div>`).join('');
@@ -975,8 +983,9 @@ function bulkRowCard(row,index){
       <label><span>${esc(t('moq'))}</span><input data-bulk-field="moq" data-bulk-row="${index}" type="number" min="1" step="1" value="${esc(row.moq)}"></label>
       <label><span>${esc(t('stock'))}</span><input data-bulk-field="stock" data-bulk-row="${index}" type="number" min="0" step="1" value="${esc(row.stock)}"></label>
       <label><span>${esc(t('leadTime'))}</span><input data-bulk-field="leadTime" data-bulk-row="${index}" type="number" min="1" value="${esc(row.leadTime)}"></label>
-      <label><span>${esc(t('category'))}</span><select data-bulk-field="category" data-bulk-row="${index}"><option value="">—</option>${bulkCategoryOptions(row.categoryId)}</select></label>
-      <label><span>${esc(tr('بلد التوريد','Supply country'))}</span><select data-bulk-field="country" data-bulk-row="${index}"><option value="China" ${normalizeSupplyCountry(row.country)==='China'?'selected':''}>${esc(tr('الصين','China'))}</option><option value="United Arab Emirates" ${normalizeSupplyCountry(row.country)==='United Arab Emirates'?'selected':''}>${esc(tr('الإمارات','UAE'))}</option></select></label>
+      <label><span>${esc(tr('التصنيف الرئيسي','Main category'))}</span><select data-bulk-field="category" data-bulk-row="${index}"><option value="">—</option>${bulkCategoryOptions(row.categoryId)}</select></label>
+      <label><span>${esc(tr('التصنيف الفرعي','Subcategory'))}</span><select data-bulk-field="subcategory" data-bulk-row="${index}"><option value="">—</option>${bulkSubcategoryOptions(row.subcategoryId,row.categoryId)}</select></label>
+      <label><span>${esc(tr('بلد التوريد','Supply country'))}</span><select data-bulk-field="country" data-bulk-row="${index}"><option value="">—</option>${bulkCountryOptions(normalizeSupplyCountry(row.country,supplyCountries()))}</select></label>
       <label><span>${esc(t('validUntil'))}</span><input data-bulk-field="validUntil" data-bulk-row="${index}" type="date" value="${esc(row.validUntil)}"></label>
       ${duplicateControl}
     </div>
@@ -1051,7 +1060,7 @@ async function importBulkProducts(){
       const msg=$('bulkImportMessage');if(msg)msg.textContent=tr(`جارٍ استيراد ${done+1} من ${ready.length}...`,`Importing ${done+1} of ${ready.length}...`);
       try{
         const images=await uploadSources(row.images.map(x=>x.source));
-        const patch={sku:row.sku,product:row.product,specs:row.specs,country:normalizeSupplyCountry(row.country),unitPrice:String(row.unitPrice),currency:row.currency,moq:String(row.moq),stock:String(row.stock??''),leadTime:String(row.leadTime),validUntil:row.validUntil||'',categoryId:row.categoryId,images};
+        const patch={sku:row.sku,product:row.product,specs:row.specs,country:normalizeSupplyCountry(row.country,supplyCountries()),unitPrice:String(row.unitPrice),currency:row.currency,moq:String(row.moq),stock:String(row.stock??''),leadTime:String(row.leadTime),validUntil:row.validUntil||'',categoryId:row.categoryId,subcategoryId:row.subcategoryId||'',images};
         if(row.duplicateOfferId&&row.duplicateAction==='update')await mutate('publicOffers',row.duplicateOfferId,row.duplicateOfferVersion,patch);
         else await mutate('publicOffers',id(),0,patch);
         imported.add(row.rowNumber);done++;
@@ -1080,10 +1089,11 @@ async function filesToSources(input){
 async function uploadSources(sources){const out=[];for(const source of sources){const result=await request('/api/v1/uploads',{method:'POST',auth:true,body:{source}});out.push(result.src);}return out;}
 async function submitNewRequest(e){e.preventDefault();if(busy)return;busy=true;const f=e.currentTarget,m=$('requestFormMessage');try{m.textContent=t('uploading');const kept=[...f.querySelectorAll('[data-repeat-image]:checked')].map(x=>x.value),uploaded=await uploadSources(await filesToSources($('requestFiles'))),images=[...kept,...uploaded];if(images.length>5)throw new Error(tr('الحد الأقصى 5 صور للطلب.','Maximum 5 request images.'));if(!images.length)throw new Error(tr('أضف صورة واحدة على الأقل.','Add at least one image.'));m.textContent=t('saving');const patch={product:f.product.value.trim(),specs:f.specs.value.trim(),quantity:f.quantity.value,country:f.country.value.trim(),neededDate:f.neededDate.value,images};if(f.dataset.repeatFrom)patch.repeatedFromRequestId=f.dataset.repeatFrom;await mutate('requests',id(),0,patch);await loadData({render:false});closeModal();activeScreen='requests';renderScreen();showToast(f.dataset.repeatFrom?tr('تم إنشاء طلب جديد من الطلب السابق.','New request created from the previous request.'):t('created'));}catch(error){m.textContent=error.message;}finally{busy=false;}}
 async function submitQuote(e){e.preventDefault();if(busy)return;busy=true;const f=e.currentTarget,m=$('quoteFormMessage'),quoteId=f.dataset.id,requestId=f.dataset.request;try{const sources=await filesToSources($('quoteFiles'));const images=sources.length?await uploadSources(sources):null;const patch={unitPrice:f.unitPrice.value,currency:f.currency.value,moq:f.moq.value,leadTime:f.leadTime.value,sampleCost:f.sampleCost.value.trim(),notes:f.notes.value.trim()};if(images)patch.images=images;if(quoteId){const q=(platformState.quotes||[]).find(x=>x.id===quoteId);await mutate('quotes',q.id,q.version,patch);}else{patch.requestId=requestId;patch.images=images||[];await mutate('quotes',id(),0,patch);}await loadData({render:false});closeModal();activeScreen='requests';activeSub='submitted';renderScreen();showToast(t('created'));}catch(error){m.textContent=error.message;}finally{busy=false;}}
-async function submitPublic(e){e.preventDefault();if(busy)return;busy=true;const f=e.currentTarget,m=$('publicFormMessage');try{m.textContent=t('uploading');const images=await uploadSources(await filesToSources($('publicFiles')));if(!images.length)throw new Error(tr('أضف صورة واحدة على الأقل.','Add at least one image.'));m.textContent=t('saving');await mutate('publicOffers',id(),0,{sku:f.sku.value.trim(),product:f.product.value.trim(),specs:f.specs.value.trim(),country:f.country.value,unitPrice:f.unitPrice.value,currency:f.currency.value,moq:f.moq.value,stock:f.stock.value.trim(),leadTime:f.leadTime.value,validUntil:f.validUntil.value,categoryId:f.categoryId?.value||'',images});await loadData({render:false});closeModal();activeScreen='offers';activeSub='primary';renderScreen();showToast(t('created'));}catch(error){m.textContent=error.message;}finally{busy=false;}}
+async function submitPublic(e){e.preventDefault();if(busy)return;busy=true;const f=e.currentTarget,m=$('publicFormMessage');try{m.textContent=t('uploading');const images=await uploadSources(await filesToSources($('publicFiles')));if(!images.length)throw new Error(tr('أضف صورة واحدة على الأقل.','Add at least one image.'));m.textContent=t('saving');await mutate('publicOffers',id(),0,{sku:f.sku.value.trim(),product:f.product.value.trim(),specs:f.specs.value.trim(),country:f.country.value,unitPrice:f.unitPrice.value,currency:f.currency.value,moq:f.moq.value,stock:f.stock.value.trim(),leadTime:f.leadTime.value,validUntil:f.validUntil.value,categoryId:f.categoryId?.value||'',subcategoryId:f.subcategoryId?.value||'',images});await loadData({render:false});closeModal();activeScreen='offers';activeSub='primary';renderScreen();showToast(t('created'));}catch(error){m.textContent=error.message;}finally{busy=false;}}
 
 async function handleAction(target){
-  if(target.dataset.category){readyCategory=target.dataset.category;readyProductsPage=1;renderHome();$('screen').scrollTop=0;return;}
+  if(target.dataset.category){readyCategory=target.dataset.category;readySubcategory='all';readyProductsPage=1;renderHome();$('screen').scrollTop=0;return;}
+  if(target.dataset.subcategory){readySubcategory=target.dataset.subcategory;readyProductsPage=1;renderHome();$('screen').scrollTop=0;return;}
   if(target.dataset.supplyCountry){readyCountry=target.dataset.supplyCountry;readyProductsPage=1;renderHome();$('screen').scrollTop=0;return;}
   if(target.dataset.action==='ready-products-prev'){if(readyProductsPage>1){readyProductsPage--;renderHome();$('screen').scrollTop=0;}return;}
   if(target.dataset.action==='ready-products-next'){const total=Math.max(1,Math.ceil(filteredReadyOffers().length/PAGE_SIZE));if(readyProductsPage<total){readyProductsPage++;renderHome();$('screen').scrollTop=0;}return;}
@@ -1173,7 +1183,7 @@ $('headerNotificationsBtn').addEventListener('click',()=>{if(!currentUser)return
 onLanguageChange(value=>{lang=value;applyLanguage();applyRegistrationLanguage();});
 $('refreshBtn').addEventListener('click',async()=>{if(busy)return;busy=true;$('refreshBtn').classList.add('spin');try{await loadData();showToast(t('refreshing'));}catch(e){showToast(errorText(e));}finally{busy=false;$('refreshBtn').classList.remove('spin');}});
 $('bottomNav').addEventListener('click',e=>{const b=e.target.closest('button[data-screen]');if(!b)return;activeScreen=b.dataset.screen;if(activeScreen==='offers')activeSub='primary';if(activeScreen==='requests'&&currentUser?.role==='supplier')activeSub='pending';renderScreen();$('screen').scrollTop=0;});
-$('screen').addEventListener('click',e=>{const sub=e.target.closest('[data-sub]');if(sub){activeSub=sub.dataset.sub;renderScreen();return;}const target=e.target.closest('[data-action],[data-category],[data-supply-country],[data-client-order-filter],[data-cart-order],[data-ready-order],[data-client-offers-request],[data-request],[data-supplier-request],[data-supplier-order-id],[data-public-offer],[data-edit-quote],[data-quote-request],[data-select-quote],[data-interest],[data-notification],[data-payment-notification],[data-payment-upload],[data-payment-document],[data-copy-value]');if(target)handleAction(target);});
+$('screen').addEventListener('click',e=>{const sub=e.target.closest('[data-sub]');if(sub){activeSub=sub.dataset.sub;renderScreen();return;}const target=e.target.closest('[data-action],[data-category],[data-subcategory],[data-supply-country],[data-client-order-filter],[data-cart-order],[data-ready-order],[data-client-offers-request],[data-request],[data-supplier-request],[data-supplier-order-id],[data-public-offer],[data-edit-quote],[data-quote-request],[data-select-quote],[data-interest],[data-notification],[data-payment-notification],[data-payment-upload],[data-payment-document],[data-copy-value]');if(target)handleAction(target);});
 $('screen').addEventListener('input',e=>{const input=e.target.closest('[data-product-search]');if(!input)return;readySearch=input.value;readyProductsPage=1;refreshProductResults();});
 $('modal').addEventListener('click',e=>{if(e.target.closest('[data-close-modal]')){closeModal();return;}const target=e.target.closest('[data-ready-order],[data-client-offers-request],[data-edit-quote],[data-quote-request],[data-select-quote],[data-interest],[data-supplier-order-status],[data-supplier-order-cannot],[data-payment-upload],[data-payment-document],[data-copy-value]');if(target)handleAction(target);});
 
