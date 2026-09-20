@@ -189,7 +189,7 @@ function updateShell(){
   $('appLangBtn').textContent=lang==='ar'?'EN':'AR';
   const homeLabel=document.querySelector('[data-nav="home"]');if(homeLabel)homeLabel.textContent=t('home');
   if(requestLabel)requestLabel.textContent=role==='supplier'?tr('طلبات عروض الأسعار','Quote requests'):role==='client'?tr('طلباتي','My orders'):t('requests');
-  if(offersLabel)offersLabel.textContent=t('offers');
+  if(offersLabel)offersLabel.textContent=role==='admin'?tr('المنتجات','Products'):t('offers');
   if(accountLabel)accountLabel.textContent=t('account');
   if(role==='supplier'){
     if(utilityNav){
