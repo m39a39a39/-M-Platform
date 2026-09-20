@@ -1,6 +1,6 @@
 import {chromium,webkit} from 'playwright';
 import assert from 'node:assert/strict';
-import {mkdir} from 'node:fs/promises';
+import {mkdir,readFile} from 'node:fs/promises';
 
 await mkdir('layout-results',{recursive:true});
 const report=[];
@@ -54,7 +54,12 @@ for(const [engine,type] of Object.entries({chromium,webkit})) for(const language
     assert.equal(download.suggestedFilename(),'M-Platform-products-template.xlsx');
     const path=await download.path();
     assert.ok(path,'Template download path missing');
-    await page.locator('#bulkExcelFile').setInputFiles(path);
+    const buffer=await readFile(path);
+    await page.locator('#bulkExcelFile').setInputFiles({
+      name:'M-Platform-products-template.xlsx',
+      mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      buffer
+    });
     const expected=language==='ar'?'لم يتم العثور على منتجات داخل الملف.':'No products were found in the file.';
     await page.locator('#bulkFileMessage').filter({hasText:expected}).waitFor();
 
