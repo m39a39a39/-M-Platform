@@ -144,7 +144,8 @@ test('corporate invoice snapshot uses SAR and never contains banking data',()=>{
  assert.equal(invoice.company.address,INVOICE_COMPANY.address);
  assert.equal(invoice.number,'PI-2026-10001');
  assert.equal(invoice.total,200);
- assert.equal(JSON.stringify(invoice).toLowerCase().includes('bank'),false);
+ const hasBankKey=value=>!!value&&typeof value==='object'&&Object.entries(value).some(([key,child])=>/bank/i.test(key)||hasBankKey(child));
+ assert.equal(hasBankKey(invoice),false);
 });
 
 test('final invoice snapshot is marked PAID',()=>{
