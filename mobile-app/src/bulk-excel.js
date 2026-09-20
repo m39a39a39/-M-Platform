@@ -240,11 +240,24 @@ export function buildBulkProductTemplate(){
   };
   return zipStoredFiles(files);
 }
-export function downloadBulkProductTemplate(){
-  const blob=new Blob([buildBulkProductTemplate()],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
-  const url=URL.createObjectURL(blob),a=document.createElement('a');
-  a.href=url;a.download='M-Platform-products-template.xlsx';document.body.appendChild(a);a.click();a.remove();
-  setTimeout(()=>URL.revokeObjectURL(url),1000);
+export async function downloadBulkProductTemplate(){
+  const name='M-Platform-products-template.xlsx';
+  const type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  const bytes=buildBulkProductTemplate();
+  const file=new File([bytes],name,{type});
+  if(typeof navigator!=='undefined'&&typeof navigator.share==='function'&&
+     (!navigator.canShare||navigator.canShare({files:[file]}))){
+    try{
+      await navigator.share({files:[file],title:'M Platform Excel template'});
+      return {method:'share'};
+    }catch(error){
+      if(error?.name==='AbortError')return {method:'cancelled'};
+    }
+  }
+  const blob=new Blob([bytes],{type}),url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download=name;a.rel='noopener';document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),5000);
+  return {method:'download'};
 }
 
 
