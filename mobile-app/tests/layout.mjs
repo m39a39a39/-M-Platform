@@ -340,6 +340,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
         assert.equal(await page.locator('#screen .client-offers-stats .stat-card').count(),3,'Client Quotes must show concise quote stats');
         const offersBadgeBefore=Number(await page.locator('#navOffersBadge:not(.hidden)').textContent());
         await page.locator('#screen .client-quote-group-card').first().click();
+        await page.waitForFunction(expected=>Number(document.querySelector('#navOffersBadge')?.textContent||0)===expected,offersBadgeBefore-1);
         assert.equal(Number(await page.locator('#navOffersBadge:not(.hidden)').textContent()),offersBadgeBefore-1,'Opening a quote group must decrement Offers badge');
         await page.locator('#modal .client-compare-list').waitFor();
         assert.ok(await page.locator('#modal .client-compare-quote').count()>0,'Quote group must open comparison cards');
