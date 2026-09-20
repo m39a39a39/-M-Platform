@@ -216,13 +216,11 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
       await firstOffer.locator('.public-offer-content').click();
       await page.locator('#modal').waitFor({state:'visible'});
       assert.ok((await page.locator('#modalBody').textContent()).includes('30'),'Production time must remain in ready-product details');
-      assert.equal(await page.locator('#modal .client-order-summary').count(),1,'Existing public-offer order must start with a concise order summary');
-      assert.ok((await page.locator('#modal .client-order-summary').textContent()).includes('600'),'Existing public-offer order must show requested quantity');
-      assert.ok((await page.locator('#modal .client-order-summary').textContent()).includes('7200'),'Existing public-offer order must show total');
-      assert.equal(await page.locator('#modal .tracking-timeline').count(),1,'Requested ready product must show the unified order timeline');
-      assert.equal(await page.locator('#modal .tracking-step').count(),10,'Ready-product timeline must include supplier confirmation while skipping sourcing and quote stages');
-      assert.equal(await page.locator('#modal .payment-card').count(),1,'Ready-product payment status must appear inside the order');
-      assert.ok((await page.locator('#modal .payment-card').textContent()).includes(language==='ar'?'بانتظار المراجعة':'awaiting review'),'Submitted ready-product receipt must show as awaiting review');
+      assert.equal(await page.locator('#modal .client-order-summary').count(),0,'Catalog product page must never turn into a previous order');
+      assert.equal(await page.locator('#modal .tracking-timeline').count(),0,'Catalog product page must not show order tracking');
+      assert.equal(await page.locator('#modal .payment-card').count(),0,'Catalog product page must not show payment details');
+      assert.equal(await page.locator('#publicInterestForm').count(),1,'Catalog product page must always allow adding the product again');
+      assert.equal((await page.locator('#publicInterestForm button[type="submit"]').textContent()).trim(),language==='ar'?'إضافة إلى السلة':'Add to cart','Product CTA must say Add to cart');
       await page.locator('.modal-close').click();
 
       const secondOffer=page.locator('.public-offer-card').nth(1);
@@ -246,6 +244,9 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
       await page.locator('#headerCartBtn').click();
       await page.locator('#cartCheckoutForm').waitFor();
       assert.equal(await page.locator('#modal .cart-line').count(),2,'Cart must show both products in one order');
+      assert.equal(await page.locator('#modal .cart-table-head span').count(),6,'Cart must use the approved six-column order');
+      assert.equal(await page.locator('#modal .cart-line-price').count(),2,'Cart must show a clear unit-price column');
+      assert.equal(await page.locator('#modal .cart-summary small').count(),0,'Cart summary must not show the removed explanatory sentence');
       const cartText=await page.locator('#modal .cart-summary').textContent();
       assert.ok(cartText.includes('15000')||cartText.includes('15,000'),'Cart must show one grand total');
       await page.locator('#cartCheckoutForm button[type="submit"]').click();
@@ -455,7 +456,12 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
           assert.equal(await page.locator('#screen .client-order-card').count(),102,'My orders must combine RFQs, one cart order, and legacy ready-product orders');
           assert.equal(await page.locator('#screen [data-request]').count(),100,'RFQ requests must remain accessible inside My orders');
            assert.equal(await page.locator('#screen [data-cart-order]').count(),1,'Cart products must appear as one customer order');
-          assert.equal(await page.locator('#screen [data-public-offer]').count(),1,'Ready-product orders must remain accessible inside My orders');
+          assert.equal(await page.locator('#screen [data-ready-order]').count(),1,'Ready-product orders must open dedicated order details inside My orders');
+          await page.locator('#screen [data-ready-order]').click();
+          await page.locator('#modal .client-order-summary').waitFor();
+          assert.equal(await page.locator('#modal .tracking-timeline').count(),1,'Ready-product order details must preserve tracking inside My orders');
+          assert.equal(await page.locator('#modal .payment-card').count(),1,'Ready-product order details must preserve payment inside My orders');
+          await page.locator('.modal-close').click();
           await page.locator('#screen [data-client-order-filter="active"]').click();
           assert.ok(await page.locator('#screen .client-order-card').count()>0,'Active filter must show active orders');
           await page.locator('#screen [data-client-order-filter="all"]').click();
