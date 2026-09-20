@@ -1,7 +1,7 @@
 name: Mobile layout regression
 on:
   push:
-    branches: [main, development, fix/mobile-layout-single-shell, fix/mobile-accounts-search]
+    branches: [main, development, fix/mobile-layout-single-shell, fix/mobile-accounts-search, fix/mobile-bulk-editor-20260920]
     paths: ['mobile-app/**', 'backend/**', 'tests/backend.test.mjs', 'package.json', 'scripts/**', '.github/workflows/mobile-layout.yml']
   workflow_dispatch:
 permissions:
