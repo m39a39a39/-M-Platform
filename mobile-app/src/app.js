@@ -1116,10 +1116,10 @@ async function logout(){
 async function enterWorkspace(){
   await loadData({render:false});
   if(!currentUser)return;
-  const postAuth=currentUser.role==='client'?takePostAuthAction():'';
+  const postAuth=takePostAuthAction();
   showView('appView');activeScreen='home';activeSub='primary';renderScreen();
-  if(postAuth==='open-cart')setTimeout(()=>openCart(),0);
-  else if(postAuth==='new-request')setTimeout(()=>openNewRequest(),0);
+  if(currentUser.role==='client'&&postAuth==='open-cart')setTimeout(()=>openCart(),0);
+  else if(currentUser.role==='client'&&postAuth==='new-request')setTimeout(()=>openNewRequest(),0);
 }
 function recovery(error){showView('sessionView');$('sessionMessage').textContent=errorText(error);}
 $('loginForm').addEventListener('submit',async e=>{
