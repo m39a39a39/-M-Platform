@@ -1,6 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {one,rpc,assert} from '../lib/supabase.mjs';
 import {active,open} from './records.mjs';
+import {issueCartProforma} from './invoices.mjs';
 
 const MAX_CART_ITEMS=10;
 const SUPPORTED_CURRENCIES=new Set(['USD','SAR','AED','CNY','EUR']);
@@ -90,6 +91,8 @@ export async function createCartOrder(user,body={}){
     updatedAt:now,
     ...trackingStart(now)
   };
+
+  orderData.proformaInvoice=await issueCartProforma(user,orderData,orderId,now);
 
   const changes=[{
     table:'requests',id:orderId,version:0,ownerId:user.id,data:orderData,action:'cart_order_create'
