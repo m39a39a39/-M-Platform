@@ -114,6 +114,10 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
     await geometry(page,'#guestView');
     assert.equal(await page.locator('#guestOffers').evaluate(el=>getComputedStyle(el).gridTemplateColumns.split(' ').length),2,'Guest public offers must use two columns');
     assert.equal(await page.locator('#guestCategoryFilters button').count(),4,'Guest must show All plus three category buttons');
+    assert.equal(await page.locator('#guestProductSearch').count(),1,'Guest must be able to search products before sign in');
+    assert.ok(parseFloat(await page.locator('#guestProductSearch').evaluate(el=>getComputedStyle(el).fontSize))>=16,'Guest search must not trigger iPhone focus zoom');
+    assert.ok(await page.locator('#guestSupplyCountryFilters button').count()>=2,'Guest must be able to filter by supply country');
+    assert.equal(await page.locator('#guestCartBtn').count(),1,'Guest header must expose the cart');
     await page.locator('#guestCategoryFilters [data-guest-category="mobile"]').click();
     assert.equal(await page.locator('.guest-offer-card').count(),15,'Guest category filter must show only matching products');
     assert.equal(await page.locator('#guestOffersPagination:visible').count(),0,'Category with 15 products must not paginate');
@@ -137,15 +141,31 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
     assert.equal(await page.locator('.guest-offer-card').first().locator('.guest-facts span').count(),2,'Guest offer card must show only price and MOQ');
     assert.ok(await page.locator('.guest-offer-card').first().locator('h3').evaluate(el=>getComputedStyle(el).whiteSpace==='nowrap'),'Guest offer title must stay on one line');
     assert.ok(await page.locator('.guest-offer-card').first().locator('p').evaluate(el=>getComputedStyle(el).whiteSpace==='nowrap'),'Guest offer description must stay on one line');
-    await page.locator('.guest-offer-card').first().locator('.guest-offer-body').click();
+    await page.locator('.guest-offer-card').first().locator('.guest-offer-image').click();
+    await page.locator('#modal').waitFor({state:'visible'});
+    assert.equal(await page.locator('#imageViewer:not(.hidden)').count(),0,'Guest list image must open product details, not the full-screen image viewer');
     await geometry(page,'#modal');
+    assert.equal(await page.locator('#guestProductCartForm').count(),1,'Guest product details must allow quantity selection and Add to cart');
     await page.locator('#modal .guest-modal-images img').first().click();
     await page.locator('#imageViewer:not(.hidden)').waitFor();
-    assert.equal(await page.locator('#imageViewerImage').count(),1,'Guest image must open in the full-screen viewer');
+    assert.equal(await page.locator('#imageViewerImage').count(),1,'Only a product-detail image should open the full-screen viewer');
     await page.locator('[data-image-viewer-close]').click();
     await page.locator('#imageViewer').waitFor({state:'hidden'});
-    await page.locator('.modal-close').click();
-    await page.locator('#guestLoginBtn').click();
+    if(label==='chromium-390-ar-client'){
+      await page.locator('#guestProductCartForm button[type="submit"]').click();
+      await page.locator('#modal').waitFor({state:'hidden'});
+      assert.equal(await page.locator('#guestCartCount:not(.hidden)').textContent(),'1','Guest can add a product before signing in');
+      await page.locator('#guestCartBtn').click();
+      await page.locator('#guestCartForm').waitFor();
+      assert.equal(await page.locator('#guestCartForm .cart-line').count(),1,'Guest cart must preserve the selected product');
+      await page.locator('#guestCartForm button[type="submit"]').click();
+      await page.locator('.guest-auth-required').waitFor();
+      assert.ok((await page.locator('.guest-auth-required').textContent()).includes('تسجيل'),'Guest checkout must ask for authentication only at submit');
+      await page.locator('[data-guest-auth-login]').click();
+    }else{
+      await page.locator('.modal-close').click();
+      await page.locator('#guestLoginBtn').click();
+    }
     await geometry(page,'#loginView');
     assert.equal(await page.locator('#loginCustomerRegister,#loginSupplierRegister').count(),2,'Login must expose separate customer and supplier registration buttons');
     await page.locator('#loginCustomerRegister').click();
@@ -156,6 +176,14 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
     await page.locator('#password').fill('fixture-password');
     await page.locator('#loginBtn').click();
     await page.locator('#appView').waitFor({state:'visible'});
+    if(label==='chromium-390-ar-client'){
+      await page.locator('#cartCheckoutForm').waitFor();
+      assert.equal(await page.locator('#cartCheckoutForm .cart-line').count(),1,'Guest cart must carry into the authenticated customer cart');
+      assert.equal(await page.evaluate(()=>localStorage.getItem('m-platform.guest-cart.v1')),null,'Guest cart storage must be cleared after handoff');
+      await page.locator('[data-cart-clear]').click();
+      await page.locator('.cart-empty').waitFor();
+      await page.locator('.modal-close').click();
+    }
     if(role==='admin') await page.locator('[data-admin-root="home"]').waitFor();
     assert.equal(await page.locator('html').getAttribute('dir'),language==='ar'?'rtl':'ltr');
     if(role==='client'){
@@ -214,8 +242,9 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
         await page.locator('.special-request-card').waitFor();
       }else await page.locator('.modal-close').click();
       const firstOffer=page.locator('.public-offer-card').first();
-      await firstOffer.locator('.public-offer-content').click();
+      await firstOffer.locator('.public-offer-media').click();
       await page.locator('#modal').waitFor({state:'visible'});
+      assert.equal(await page.locator('#imageViewer:not(.hidden)').count(),0,'Customer catalog image must open product details, not image viewer');
       assert.ok((await page.locator('#modalBody').textContent()).includes('30'),'Production time must remain in ready-product details');
       assert.equal(await page.locator('#modal .client-order-summary').count(),0,'Catalog product page must never turn into a previous order');
       assert.equal(await page.locator('#modal .tracking-timeline').count(),0,'Catalog product page must not show order tracking');
@@ -363,14 +392,27 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
         assert.equal(await page.locator('#screen [data-public-offer]').count(),45,'Supplier Products must contain public products only');
         assert.equal(await page.locator('#screen [data-action="bulk-public-import"]').count(),1,'Supplier Products must preserve Excel import');
         assert.equal(await page.locator('#screen [data-action="new-public"]').count(),1,'Supplier Products must preserve add-product action');
+        const supplierProduct=page.locator('#screen [data-public-offer]').first();
+        await supplierProduct.locator('img[data-image-viewer]').first().click();
+        await page.locator('#modal').waitFor({state:'visible'});
+        assert.equal(await page.locator('#imageViewer:not(.hidden)').count(),0,'Supplier list image must open product details');
+        await page.locator('#modal img[data-image-viewer]').first().click();
+        await page.locator('#imageViewer:not(.hidden)').waitFor();
+        await page.locator('[data-image-viewer-close]').click();
+        await page.locator('.modal-close').click();
       }
       if(screen==='offers'&&role==='admin'){
         assert.equal(await page.locator('#bottomNav [data-screen="offers"] [data-nav="offers"]').textContent(),language==='ar'?'المنتجات':'Products','Admin catalog navigation must be Products');
         assert.equal(await page.locator('[data-admin-offer-tab]').count(),2,'Admin products must have only Pending review and All products tabs');
         assert.equal(await page.locator('[data-admin-offer-tab="interests"],[data-admin-offer-tab="categories"]').count(),0,'Product screen must not contain orders or categories tabs');
         await page.locator('[data-admin-offer-tab="all"]').click();
-        await page.locator('[data-admin-open="public"]').first().click();
+        const adminProduct=page.locator('[data-admin-open="public"]').first();
+        await adminProduct.locator('img[data-image-viewer]').first().click();
         await page.locator('#adminPublicOfferForm').waitFor();
+        assert.equal(await page.locator('#imageViewer:not(.hidden)').count(),0,'Admin list image must open product details');
+        await page.locator('#adminPublicOfferForm img[data-image-viewer]').first().click();
+        await page.locator('#imageViewer:not(.hidden)').waitFor();
+        await page.locator('[data-image-viewer-close]').click();
         await geometry(page,'#modal');
         assert.equal(await page.locator('#adminPublicOfferForm input[name="product"]').count(),1,'Admin must be able to edit product name');
         assert.equal(await page.locator('#adminPublicOfferForm input[name="unitPrice"]').count(),1,'Admin must be able to edit product price');
