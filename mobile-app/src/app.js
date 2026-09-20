@@ -128,6 +128,11 @@ function saveCart(){
   const key=cartStorageKey();if(key)try{localStorage.setItem(key,JSON.stringify(cartItems));}catch{}
   updateCartBadge();
 }
+function reconcileCart(){
+  const valid=new Set((platformState?.publicOffers||[]).filter(o=>o.status==='published').map(o=>o.id)),before=cartItems.length;
+  cartItems=cartItems.filter(x=>valid.has(x.offerId));
+  if(cartItems.length!==before)saveCart();else updateCartBadge();
+}
 function updateCartBadge(){
   const btn=$('headerCartBtn'),badge=$('headerCartCount'),client=currentUser?.role==='client';
   if(btn)btn.classList.toggle('hidden',!client);
@@ -236,12 +241,13 @@ async function loadData({render=true}={}){
   ]);
   if(epoch!==session.epoch)return;
   platformState=next;currentUser=next.user;notifications=nextNotifications;lastDataLoadedAt=Date.now();
+  if(currentUser?.role==='client'){loadCart();reconcileCart();}else{cartItems=[];updateCartBadge();}
   updateAdminState(next);updateShell();
   if(render)renderScreen();
 }
 configureAdmin({reload:()=>loadData({render:false})});
 session.onReset(reason=>{
-  currentUser=null;platformState=null;notifications=[];activeScreen='home';activeSub='primary';readyProductsPage=1;readyCategory='all';clientRequestFilter='all';
+  currentUser=null;platformState=null;notifications=[];activeScreen='home';activeSub='primary';readyProductsPage=1;readyCategory='all';readyCountry='all';readySearch='';cartItems=[];clientRequestFilter='all';
   resetAdmin();closeModal();
   for(const url of mediaCache.values())URL.revokeObjectURL(url);
   mediaCache.clear();mediaTasks.clear();lastDataLoadedAt=0;$('screen').replaceChildren();$('headerRole').textContent='';
@@ -285,6 +291,7 @@ function updateShell(){
     $('headerNotificationsBtn')?.classList.add('hidden');
     if(activeScreen==='orders')activeScreen='home';
   }
+  updateCartBadge();
   const unread=notifications.filter(n=>!n.readAt).length,badge=unread>99?'99+':String(unread);
   $('navUnread').textContent=badge;$('headerUnread').textContent=badge;
   $('navUnread').classList.toggle('hidden',role!=='admin'||!unread);
@@ -960,6 +967,7 @@ async function handleAction(target){
   if(target.dataset.action==='logout')return logout();
   if(target.dataset.action==='mark-all'){await request('/api/v1/notifications/read',{method:'POST',auth:true,body:{all:true}});await loadData();return;}
   if(['home','orders','requests','offers','notifications','account'].includes(target.dataset.action)){activeScreen=target.dataset.action;if(activeScreen==='offers')activeSub='primary';if(activeScreen==='requests'&&currentUser?.role==='supplier')activeSub='pending';renderScreen();return;}
+  if(target.dataset.cartOrder)return openCartOrder(target.dataset.cartOrder);
   if(target.dataset.clientOffersRequest)return openClientOffers(target.dataset.clientOffersRequest);
   if(target.dataset.clientOrderFilter){clientRequestFilter=target.dataset.clientOrderFilter;renderRequests();$('screen').scrollTop=0;return;}
   if(target.dataset.request)return openClientRequest(target.dataset.request);
@@ -1027,11 +1035,13 @@ $('forgotPasswordBtn').addEventListener('click',async()=>{
 });
 $('langBtn').addEventListener('click',toggleLanguage);
 $('appLangBtn').addEventListener('click',toggleLanguage);
+$('headerCartBtn')?.addEventListener('click',()=>{if(currentUser?.role==='client')openCart();});
 $('headerNotificationsBtn').addEventListener('click',()=>{if(!currentUser)return;activeScreen='notifications';renderScreen();$('screen').scrollTop=0;});
 onLanguageChange(value=>{lang=value;applyLanguage();applyRegistrationLanguage();});
 $('refreshBtn').addEventListener('click',async()=>{if(busy)return;busy=true;$('refreshBtn').classList.add('spin');try{await loadData();showToast(t('refreshing'));}catch(e){showToast(errorText(e));}finally{busy=false;$('refreshBtn').classList.remove('spin');}});
 $('bottomNav').addEventListener('click',e=>{const b=e.target.closest('button[data-screen]');if(!b)return;activeScreen=b.dataset.screen;if(activeScreen==='offers')activeSub='primary';if(activeScreen==='requests'&&currentUser?.role==='supplier')activeSub='pending';renderScreen();$('screen').scrollTop=0;});
-$('screen').addEventListener('click',e=>{const sub=e.target.closest('[data-sub]');if(sub){activeSub=sub.dataset.sub;renderScreen();return;}const target=e.target.closest('[data-action],[data-category],[data-supply-country],[data-client-order-filter],[data-client-offers-request],[data-request],[data-supplier-request],[data-supplier-order-id],[data-public-offer],[data-edit-quote],[data-quote-request],[data-select-quote],[data-interest],[data-notification],[data-payment-notification],[data-payment-upload],[data-payment-document],[data-copy-value]');if(target)handleAction(target);});
+$('screen').addEventListener('click',e=>{const sub=e.target.closest('[data-sub]');if(sub){activeSub=sub.dataset.sub;renderScreen();return;}const target=e.target.closest('[data-action],[data-category],[data-supply-country],[data-client-order-filter],[data-cart-order],[data-client-offers-request],[data-request],[data-supplier-request],[data-supplier-order-id],[data-public-offer],[data-edit-quote],[data-quote-request],[data-select-quote],[data-interest],[data-notification],[data-payment-notification],[data-payment-upload],[data-payment-document],[data-copy-value]');if(target)handleAction(target);});
+$('screen').addEventListener('input',e=>{const input=e.target.closest('[data-product-search]');if(!input)return;readySearch=input.value;readyProductsPage=1;refreshProductResults();});
 $('modal').addEventListener('click',e=>{if(e.target.closest('[data-close-modal]')){closeModal();return;}const target=e.target.closest('[data-client-offers-request],[data-edit-quote],[data-quote-request],[data-select-quote],[data-interest],[data-supplier-order-status],[data-supplier-order-cannot],[data-payment-upload],[data-payment-document],[data-copy-value]');if(target)handleAction(target);});
 
 App.addListener('appUrlOpen',async event=>{const url=event.url||'';if(!currentUser)return;if(url.includes('/notifications')){activeScreen='notifications';renderScreen();return;}const m=url.match(/\/requests\/([^?]+)/);if(m){if(currentUser.role==='supplier'){activeScreen='requests';activeSub='pending';openSupplierRequest(decodeURIComponent(m[1]));}else openClientRequest(decodeURIComponent(m[1]));}});
