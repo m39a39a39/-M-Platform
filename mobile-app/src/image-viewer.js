@@ -63,7 +63,7 @@ function distance(){
 function bind(){
   document.addEventListener('click',e=>{
     const image=e.target.closest?.('img[data-image-viewer]');
-    if(image){
+    if(image&&image.closest?.('#modal')){
       e.preventDefault();e.stopPropagation();openImageViewer(image);return;
     }
     if(e.target.closest?.('[data-image-viewer-close]')){e.preventDefault();closeImageViewer();return;}
