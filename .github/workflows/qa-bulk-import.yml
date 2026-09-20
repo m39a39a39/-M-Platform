@@ -25,3 +25,19 @@ jobs:
       - name: Mobile build
         working-directory: mobile-app
         run: npm run build
+      - name: Install browser test tools
+        working-directory: mobile-app
+        run: |
+          npm install --no-save --package-lock=false playwright@1.58.2
+          npx playwright install --with-deps chromium webkit
+      - name: Mobile browser regression
+        working-directory: mobile-app
+        run: |
+          npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/mobile-preview.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail http://127.0.0.1:4173 > /dev/null; then break; fi
+            sleep 1
+          done
+          node tests/layout.mjs
+          node tests/accounts-search.mjs
+          node tests/bulk-import-ui.mjs
