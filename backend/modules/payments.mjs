@@ -1,4 +1,4 @@
-import {one,rpc,assert} from '../lib/supabase.mjs';
+import {one,db,rpc,assert} from '../lib/supabase.mjs';
 import {can} from './auth.mjs';
 import {uploadPaymentReceipt} from './media.mjs';
 
@@ -60,10 +60,25 @@ export async function reviewPaymentReceipt(user,body={}){
   data.paymentUpdatedAt=now;
   data.updatedAt=now;
   data.paymentHistory=paymentHistory(data,{at:now,status:data.paymentStatus,note:action==='reupload'?note:''});
-  await rpc('commit_changes',{actor:user.id,changes:[{
+  const changes=[{
     table:cfg.table,id:row.id,version:row.version,ownerId:row.owner_id,
     ...(type==='interest'?{offerId:row.offer_id}:{}),
     data,action:action==='confirm'?'payment_confirmed':'payment_reupload'
-  }]});
+  }];
+  if(action==='confirm'&&type==='request'&&data.orderType==='cart'){
+    const children=await db('interests',`data->>cartOrderId=eq.${encodeURIComponent(row.id)}&data->>deletedAt=is.null`);
+    assert(children.length===Number(data.cartItemCount||0)&&children.length>0,409,'تعذر التحقق من منتجات الطلب / Could not verify cart items');
+    for(const child of children){
+      const childData=structuredClone(child.data||{});
+      childData.paymentStatus='confirmed';
+      childData.paymentConfirmedAt=now;
+      childData.paymentReviewNote='';
+      childData.paymentUpdatedAt=now;
+      childData.updatedAt=now;
+      childData.paymentHistory=paymentHistory(childData,{at:now,status:'confirmed',source:'cart_order'});
+      changes.push({table:'interests',id:child.id,version:child.version,ownerId:child.owner_id,offerId:child.offer_id,data:childData,action:'cart_payment_confirmed'});
+    }
+  }
+  await rpc('commit_changes',{actor:user.id,changes});
   return {ok:true,paymentStatus:data.paymentStatus};
 }
