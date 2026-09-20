@@ -50,7 +50,8 @@ export const APP_CONTRACT=Object.freeze({
     pushRegister:'/api/v1/push/register',
     pushUnregister:'/api/v1/push/unregister',
     upload:'/api/v1/uploads',
-    mutations:'/api/v1/mutations'
+    mutations:'/api/v1/mutations',
+    cartOrders:'/api/v1/cart-orders'
   }
 });
 
