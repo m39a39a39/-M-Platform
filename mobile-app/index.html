@@ -13,7 +13,7 @@
     <section id="guestView" class="hidden guest-wrap">
       <header class="guest-header">
         <div class="brand-mini guest-brand"><span class="brand-mark small">M</span><div><strong>M Platform</strong><small id="guestTagline">اطلب ما تحتاجه، وقارن العروض بثقة.</small></div></div>
-        <button id="guestLangBtn" class="icon-btn" type="button">EN</button>
+        <div class="header-actions guest-header-actions"><button id="guestCartBtn" class="icon-btn header-cart" type="button" aria-label="Cart">🛒<i id="guestCartCount" class="nav-badge hidden"></i></button><button id="guestLangBtn" class="icon-btn" type="button">EN</button></div>
       </header>
 
       <main class="guest-main">
@@ -32,9 +32,12 @@
         </section>
 
         <section id="guestOffersSection" class="guest-offers-section">
-          <div class="section-title guest-section-title"><div><small id="guestOffersKicker">تصفح دون حساب</small><h2 id="guestOffersTitle">العروض العامة</h2></div><button id="guestReloadBtn" class="text-btn" type="button">تحديث</button></div>
+          <div class="section-title guest-section-title"><div><small id="guestOffersKicker">تصفح دون حساب</small><h2 id="guestOffersTitle">المنتجات</h2></div><button id="guestReloadBtn" class="text-btn" type="button">تحديث</button></div>
+          <label class="product-search-bar guest-product-search"><span>⌕</span><input id="guestProductSearch" type="search" inputmode="search" enterkeyhint="search" placeholder="ابحث عن منتج أو SKU" aria-label="البحث عن المنتجات"></label>
           <div id="guestCategoryFilters" class="category-filter-bar hidden" role="tablist"></div>
-          <div id="guestOffers" class="guest-offers-grid"><div class="guest-loading">جارٍ تحميل العروض...</div></div>
+          <div id="guestSupplyCountryFilters" class="supply-country-filter hidden" role="tablist"></div>
+          <section class="special-request-card guest-new-request"><div class="special-request-copy"><div class="special-request-heading"><span class="special-request-icon">＋</span><h2 id="guestRequestTitle">أرسل طلب جديد</h2></div><p id="guestRequestDescription">إذا لم تجد المنتج المناسب، سجّل الدخول وأرسل مواصفاتك.</p></div><button id="guestRequestBtn" class="primary-btn" type="button">+ أرسل طلب جديد</button></section>
+          <div id="guestOffers" class="guest-offers-grid"><div class="guest-loading">جارٍ تحميل المنتجات...</div></div>
           <nav id="guestOffersPagination" class="product-pagination hidden" aria-label="Offers pagination">
             <button id="guestPrevPage" class="pagination-btn" type="button">السابق</button>
             <span id="guestPageInfo" class="pagination-info">1 / 1</span>
