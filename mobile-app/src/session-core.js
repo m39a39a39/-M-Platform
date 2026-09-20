@@ -55,7 +55,7 @@ export function createSession({ storage, fetchImpl = (...args) => fetch(...args)
     let data;
     try { data = await response.json(); } catch { throw new SessionError('server_error', response.status); }
     guard(version);
-    if (!response.ok) throw new SessionError('http', response.status, data.error || `HTTP ${response.status}`);
+    if (!response.ok) { const error=new SessionError('http', response.status, data.error || `HTTP ${response.status}`); error.detail=data.error||''; throw error; }
     return data;
   }
   async function refresh() {
