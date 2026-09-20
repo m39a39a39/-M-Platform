@@ -166,9 +166,9 @@ function findHeader(rows){
   for(const [rowNo,cells] of [...rows].filter(([n])=>n<=10)){
     const matches={};
     for(const [col,value] of cells){
-      const n=norm(value);
-      for(const [field,aliases] of Object.entries(FIELD_ALIASES))if(aliases.includes(n))matches[field]=col;
-      IMAGE_ALIASES.forEach((aliases,i)=>{if(aliases.includes(n))matches['image'+(i+1)]=col;});
+      const n=norm(value),variants=[n,...n.split('/').map(norm)].filter(Boolean);
+      for(const [field,aliases] of Object.entries(FIELD_ALIASES))if(variants.some(v=>aliases.includes(v)))matches[field]=col;
+      IMAGE_ALIASES.forEach((aliases,i)=>{if(variants.some(v=>aliases.includes(v)))matches['image'+(i+1)]=col;});
     }
     const score=Object.keys(matches).length;
     if(!best||score>best.score)best={rowNo,matches,score};
