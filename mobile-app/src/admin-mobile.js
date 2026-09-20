@@ -1,5 +1,6 @@
 import { session } from './session.js';
 import { filesToCompressedSources } from './image-upload.js';
+import { downloadInvoicePdf } from './invoice-pdf.js';
 import { categoryRows, subcategoryRows, supplyCountryRows, taxonomyLabel } from './catalog-taxonomy.js';
 let state=null,revision=0;
 let requestFilter='all',offerTab='pending',timer=null;
@@ -516,12 +517,24 @@ function interestTrackingEditor(x){
   const approve=current==='received'?'<button class="primary-btn admin-send-to-supplier" type="button" data-admin-send-interest-supplier="'+esc(x.id)+'">'+esc(tr('اعتماد وإرسال للمورد','Approve & send to supplier'))+'</button>':'';
   return '<section class="admin-tracking-editor"><h3>'+esc(tr('متابعة طلب المنتج الجاهز','Ready-product order tracking'))+'</h3>'+approve+'<label><span>'+esc(tr('الحالة الحالية','Current status'))+'</span><select data-admin-interest-tracking-status>'+trackingOptions(READY_TRACKING,x,current,canPay)+'</select></label>'+paymentMessageField(x,'interest',current)+'<label><span>'+esc(tr('ملاحظة للعميل (اختياري)','Customer note (optional)'))+'</span><textarea data-admin-interest-tracking-note maxlength="1000">'+esc(x.trackingNote||'')+'</textarea></label><small>'+(x.trackingUpdatedAt?esc(tr('آخر تحديث','Last update'))+': '+esc(date(x.trackingUpdatedAt)):'')+'</small><button class="primary-btn" type="button" data-admin-save-interest-tracking="'+esc(x.id)+'">'+esc(tr('حفظ حالة الطلب','Save order status'))+'</button></section>'+paymentReviewPanel(x,'interest');
 }
+function adminInvoicePanel(item,entityType){
+  const proforma=item?.proformaInvoice,finalInvoice=item?.finalInvoice;
+  if(!proforma&&!finalInvoice)return '';
+  const button=(invoice,kind,label)=>invoice?.number?'<button type="button" class="invoice-document-btn '+(kind==='final'?'paid':'')+'" data-admin-invoice-pdf="'+kind+'" data-admin-invoice-type="'+esc(entityType)+'" data-admin-invoice-id="'+esc(item.id)+'"><span>'+esc(label)+'</span><strong>'+esc(invoice.number)+'</strong>'+(kind==='final'?'<b>PAID</b>':'')+'</button>':'';
+  return '<section class="invoice-documents-card"><div><small>'+esc(tr('الفواتير والمستندات','Invoices & documents'))+'</small><strong>'+esc(tr('مستندات PDF الرسمية','Official PDF documents'))+'</strong></div><div class="invoice-document-actions">'+button(proforma,'proforma','Proforma Invoice')+button(finalInvoice,'final',tr('الفاتورة النهائية','Final Invoice'))+'</div></section>';
+}
+async function openAdminInvoicePdf(target){
+  const entityType=target.dataset.adminInvoiceType,id=target.dataset.adminInvoiceId,kind=target.dataset.adminInvoicePdf;
+  const rows=entityType==='request'?(state?.requests||[]):(state?.interests||[]),item=rows.find(x=>x.id===id);if(!item)return;
+  const invoice=kind==='final'?item.finalInvoice:item.proformaInvoice;if(!invoice)return;
+  target.disabled=true;try{await downloadInvoicePdf(invoice,{orderNo:ref(item)});}catch{toast(tr('تعذر فتح ملف الفاتورة. حاول مجددًا.','Could not open the invoice PDF. Please try again.'));}finally{target.disabled=false;}
+}
 function openInterest(id){
   const x=(state?.interests||[]).find(item=>item.id===id);if(!x)return;
   const offer=(state?.publicOffers||[]).find(o=>o.id===x.offerId),customer=account(x.customerId);
   const pricing=interestPricing(x);
   const orderSummary=pricing?'<section class="admin-selected-quote-card"><div class="admin-selected-quote-head"><div><small>'+esc(tr('طلب العرض العام','Public-offer order'))+'</small><strong>#'+esc(ref(x))+'</strong></div><span class="status-pill status-published">'+esc(tr('الكمية محددة','Quantity selected'))+'</span></div><div class="admin-selected-quote-values"><div><span>'+esc(tr('سعر الوحدة','Unit price'))+'</span><strong>'+esc(formatMoney(pricing.unitPrice,pricing.currency))+'</strong></div><div><span>'+esc(tr('الكمية','Quantity'))+'</span><strong>'+esc(Number(pricing.quantity).toLocaleString())+'</strong></div><div class="total"><span>'+esc(tr('الإجمالي','Total'))+'</span><strong>'+esc(formatMoney(pricing.total,pricing.currency))+'</strong></div></div><small>'+esc(tr('تم تثبيت السعر والعملة وقت تقديم العميل للطلب.','Price and currency were captured when the customer placed the request.'))+'</small></section>':'';
-  const html=(customer?'<section class="admin-owner-box"><strong>'+esc(tr('العميل','Customer'))+'</strong><p>'+esc(customer.company||customer.name||'—')+'</p>'+(can('accounts.read')?'<small>'+esc(customer.name||'')+(customer.phone?' · '+esc(customer.phone):'')+(customer.email?' · '+esc(customer.email):'')+'</small>':'')+'</section>':'')+orderSummary+supplierConfirmationCard(x,'interest')+interestTrackingEditor(x)+(offer?'<section class="admin-source-box"><h3>'+esc(tr('المنتج','Product'))+'</h3><strong>'+esc(title(offer))+'</strong><p>'+esc(desc(offer)||'—')+'</p></section>'+gallery(offer.images||[]):'');
+  const html=(customer?'<section class="admin-owner-box"><strong>'+esc(tr('العميل','Customer'))+'</strong><p>'+esc(customer.company||customer.name||'—')+'</p>'+(can('accounts.read')?'<small>'+esc(customer.name||'')+(customer.phone?' · '+esc(customer.phone):'')+(customer.email?' · '+esc(customer.email):'')+'</small>':'')+'</section>':'')+orderSummary+supplierConfirmationCard(x,'interest')+interestTrackingEditor(x)+adminInvoicePanel(x,'interest')+(offer?'<section class="admin-source-box"><h3>'+esc(tr('المنتج','Product'))+'</h3><strong>'+esc(title(offer))+'</strong><p>'+esc(desc(offer)||'—')+'</p></section>'+gallery(offer.images||[]):'');
   modal(offer?title(offer):tr('طلب منتج جاهز','Ready-product request'),'#'+ref(offer),html);
 }
 async function saveInterestTracking(id){
@@ -635,13 +648,13 @@ function requestQuotesPanel(request){
 function openRecord(kind,id){
   const arr=kind==='request'?state?.requests:kind==='quote'?state?.quotes:state?.publicOffers,x=(arr||[]).find(v=>v.id===id);if(!x)return;
   if(kind==='request'&&x.orderType==='cart'){
-    const html=ownerBox(x)+cartOrderAdminPanel(x)+selectedQuoteCard(x)+supplierConfirmationCard(x,'request')+((can('requests.edit')||can('publish'))?trackingEditor(x):'');
+    const html=ownerBox(x)+cartOrderAdminPanel(x)+selectedQuoteCard(x)+supplierConfirmationCard(x,'request')+((can('requests.edit')||can('publish'))?trackingEditor(x):'')+adminInvoicePanel(x,'request');
     modal('#'+ref(x)+' — '+tr('طلب منتجات','Product order'),status(requestTracking(x)),html);return;
   }
   const pending=kind==='request'?x.status==='review':x.status==='pending',editPerm=kind==='request'?'requests.edit':'offers.edit',editImages=pending&&can(editPerm),editTr=pending&&can('translate'),approve=pending&&can('publish'),linked=kind==='quote'?(state?.requests||[]).find(r=>r.id===x.requestId):null;
   let html=ownerBox(x)+`<section class="admin-source-box"><h3>${esc(tr('المحتوى الأصلي','Original content'))}</h3><strong>${esc(x.product||linked?.product||title(x))}</strong><p>${esc(x.specs||x.notes||'—')}</p>${kind==='request'?`<div class="facts"><span>${esc(tr('الكمية','Quantity'))}: ${esc(x.quantity||'—')}</span><span>${esc(tr('الدولة','Country'))}: ${esc(x.country||'—')}</span><span>${esc(tr('تاريخ الاحتياج','Needed date'))}: ${esc(x.neededDate||'—')}</span></div>${x.repeatedFromRequestId?`<p class="payment-review-note"><b>${esc(tr('طلب مكرر من','Repeated from'))}:</b> #${esc(ref((state?.requests||[]).find(r=>r.id===x.repeatedFromRequestId)||{id:x.repeatedFromRequestId}))}</p>`:''}`:''}${linked?`<div class="facts"><span>${esc(tr('الطلب المرتبط','Linked request'))}: #${esc(ref(linked))}</span></div>`:''}</section>`;
   if(kind==='request')html+=requestQuotesPanel(x);
-  if(kind==='request'&&(can('requests.edit')||can('publish')))html+=selectedQuoteCard(x)+supplierConfirmationCard(x,'request')+trackingEditor(x);
+  if(kind==='request'&&(can('requests.edit')||can('publish')))html+=selectedQuoteCard(x)+supplierConfirmationCard(x,'request')+trackingEditor(x);\n  if(kind==='request')html+=adminInvoicePanel(x,'request');
   if(kind==='public'&&can('offers.edit'))html+=publicOfferEditor(x);
   if(kind!=='public'||!can('offers.edit'))html+=`<section><h3>${esc(tr('الصور','Images'))}</h3>${gallery(x.images||[],editImages)||`<p class="muted">${esc(tr('لا توجد صور.','No images.'))}</p>`}</section><section><h3>${esc(tr('الترجمة','Translation'))}</h3>${translations(x,editTr)}</section>`;
   if(kind==='request'&&pending&&can('publish'))html+=supplierPicker(x);
@@ -762,6 +775,7 @@ if(window.visualViewport){
     },180);
   });
 }
+document.addEventListener('click',e=>{const target=e.target.closest?.('[data-admin-invoice-pdf]');if(target&&isAdmin()){e.preventDefault();openAdminInvoicePdf(target);}});
 document.addEventListener('submit',e=>{
   if(!isAdmin())return;
   if(e.target.matches('#adminTeamForm')){e.preventDefault();submitTeam(e.target);}
