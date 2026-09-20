@@ -170,6 +170,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
       assert.equal(await page.locator('#screen .client-action-card').count(),0,'Client home must leave order and quote updates to navigation badges');
       assert.equal(await page.locator('#screen .public-offer-card').count(),20,'Client home must show at most 20 ready products');
        assert.equal(await page.locator('#screen [data-product-search]').count(),1,'Client home must include product search');
+       assert.ok(parseFloat(await page.locator('#screen [data-product-search]').evaluate(el=>getComputedStyle(el).fontSize))>=16,'Product search input must stay at least 16px to prevent iPhone focus zoom');
        assert.equal(await page.locator('#headerCartBtn:not(.hidden)').count(),1,'Client header must include the cart');
       assert.equal(await page.locator('#navOrdersBadge:not(.hidden)').textContent(),'1','My Orders tab must show unresolved/new order badge');
       assert.equal(await page.locator('#navOffersBadge:not(.hidden)').textContent(),'2','Offers tab must show total unseen published quotes');
@@ -227,6 +228,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
       await secondOffer.locator('.public-offer-content').click();
       await page.locator('#publicInterestForm').waitFor();
       assert.equal(await page.locator('#publicInterestQuantity').getAttribute('min'),'500','Product quantity must enforce supplier MOQ');
+      assert.ok(parseFloat(await page.locator('#publicInterestQuantity').evaluate(el=>getComputedStyle(el).fontSize))>=16,'Product quantity input must stay at least 16px to prevent iPhone focus zoom');
       assert.equal(await page.locator('#publicInterestQuantity').getAttribute('max'),'2000','Product quantity must respect numeric stock');
       await page.locator('#publicInterestQuantity').fill('750');
       assert.ok((await page.locator('#publicInterestTotal').textContent()).includes('9,000')||(await page.locator('#publicInterestTotal').textContent()).includes('9000'),'Line total must update as unit price × quantity');
@@ -246,6 +248,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
       assert.equal(await page.locator('#modal .cart-line').count(),2,'Cart must show both products in one order');
       assert.equal(await page.locator('#modal .cart-table-head span').count(),6,'Cart must use the approved six-column order');
       assert.equal(await page.locator('#modal .cart-line-price').count(),2,'Cart must show a clear unit-price column');
+      assert.ok(parseFloat(await page.locator('#modal [data-cart-qty]').first().evaluate(el=>getComputedStyle(el).fontSize))>=16,'Cart quantity input must stay at least 16px to prevent iPhone focus zoom');
       assert.equal(await page.locator('#modal .cart-summary small').count(),0,'Cart summary must not show the removed explanatory sentence');
       const cartText=await page.locator('#modal .cart-summary').textContent();
       assert.ok(cartText.includes('15000')||cartText.includes('15,000'),'Cart must show one grand total');
