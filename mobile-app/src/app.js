@@ -759,7 +759,18 @@ function openBulkPublicImport(){
       <small>${esc(tr('حتى 500 منتج، 5 صور لكل منتج، وحجم Excel حتى 30 MB.','Up to 500 products, 5 images per product, Excel file up to 30 MB.'))}</small>
       <p class="form-message" id="bulkFileMessage"></p>
     </section>`);
-  $('bulkDownloadTemplate')?.addEventListener('click',downloadBulkProductTemplate);
+  $('bulkDownloadTemplate')?.addEventListener('click',async()=>{
+    const button=$('bulkDownloadTemplate'),message=$('bulkFileMessage');
+    button.disabled=true;
+    try{
+      const result=await downloadBulkProductTemplate();
+      if(result?.method==='share')message.textContent=tr('تم فتح خيارات الحفظ. اختر «حفظ في الملفات».','Save options opened. Choose “Save to Files”.');
+      else if(result?.method==='download')message.textContent=tr('تم تنزيل القالب.','Template downloaded.');
+      else message.textContent='';
+    }catch(error){
+      message.textContent=tr('تعذر فتح القالب. حاول مرة أخرى.','Could not open the template. Please try again.');
+    }finally{button.disabled=false;}
+  });
   $('bulkExcelFile')?.addEventListener('change',e=>handleBulkWorkbookFile(e.target.files?.[0]));
 }
 async function importBulkProducts(){
