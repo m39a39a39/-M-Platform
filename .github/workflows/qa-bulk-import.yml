@@ -1,4 +1,5 @@
 name: QA bulk Excel import
+# verifies feature branch before merge
 on:
   push:
     branches: ['feature/bulk-excel-product-import']
