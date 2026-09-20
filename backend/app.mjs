@@ -8,6 +8,7 @@ import {listNotifications,markNotificationsRead} from './modules/notifications.m
 import {registerPushDevice,unregisterPushDevice} from './modules/push.mjs';
 import {publicAppConfig} from './modules/app-config.mjs';
 import {submitPaymentReceipt,reviewPaymentReceipt} from './modules/payments.mjs';
+import {createCartOrder} from './modules/cart-orders.mjs';
 
 const NATIVE_ORIGINS=new Set(['capacitor://localhost','http://localhost','https://localhost']);
 const nativeOrigin=req=>NATIVE_ORIGINS.has(String(req.headers.origin||''));
@@ -71,6 +72,7 @@ export default async function handler(req,res){
         else if(path==='/api/uploads')result=await upload(user,body);
         else if(path==='/api/payment-receipts')result=await submitPaymentReceipt(user,body);
         else if(path==='/api/payment-review')result=await reviewPaymentReceipt(user,body);
+        else if(path==='/api/cart-orders')result=await createCartOrder(user,body);
         else if(path==='/api/notifications/read')result=await markNotificationsRead(user,body);
         else if(path==='/api/push/register')result=await registerPushDevice(user,body);
         else if(path==='/api/push/unregister')result=await unregisterPushDevice(user,body);
