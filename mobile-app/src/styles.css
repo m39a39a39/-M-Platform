@@ -2368,3 +2368,23 @@ body.image-viewer-open {
   .admin-cart-line{grid-template-columns:54px minmax(0,1fr)}
   .admin-cart-line-image{width:54px;height:54px}
 }
+
+/* Admin bulk product editing */
+.admin-bulk-toolbar{display:grid;gap:10px;padding:12px;margin:10px 0 14px;border:1px solid var(--line);border-radius:16px;background:#fff}
+.admin-bulk-toolbar>label{display:flex;align-items:center;gap:8px;font-weight:800}
+.admin-bulk-actions{display:flex;gap:8px;flex-wrap:wrap}
+.danger-btn.compact{width:auto;padding:9px 12px;min-height:38px}
+.admin-selectable-product{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:start}
+.admin-product-check{padding-top:3px}
+.admin-product-check input{width:20px;height:20px}
+.admin-product-open{border:0;background:transparent;text-align:start;padding:0;color:inherit;width:100%}
+.admin-bulk-table-wrap{overflow:auto;max-height:min(62vh,620px);border:1px solid var(--line);border-radius:14px}
+.admin-bulk-table{border-collapse:separate;border-spacing:0;min-width:1900px;width:100%;background:#fff}
+.admin-bulk-table th,.admin-bulk-table td{padding:8px;border-bottom:1px solid var(--line);border-inline-end:1px solid var(--line);vertical-align:top;min-width:120px}
+.admin-bulk-table th{position:sticky;top:0;z-index:3;background:#f4f7f9;font-size:12px;text-align:start}
+.admin-bulk-table .sticky-col{position:sticky;inset-inline-start:0;z-index:2;background:#fff;min-width:105px}
+.admin-bulk-table thead .sticky-col{z-index:4;background:#f4f7f9}
+.admin-bulk-table input,.admin-bulk-table select,.admin-bulk-table textarea{min-width:120px;padding:9px;border-radius:9px;font-size:13px}
+.admin-bulk-table textarea{min-height:74px;resize:vertical}
+.admin-bulk-table td:nth-child(2),.admin-bulk-table td:nth-child(3),.admin-bulk-table td:nth-last-child(-n+4){min-width:200px}
+.admin-bulk-table small{display:block;color:var(--muted);margin-top:4px}

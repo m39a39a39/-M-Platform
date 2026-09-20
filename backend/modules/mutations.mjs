@@ -429,6 +429,46 @@ export async function saveSettings(user,body){
   }
   await rpc('commit_changes',{actor:user.id,changes:[{table:'settings',id:'site',version:row.version,data,action:'settings'}]});return {ok:true};
 }
+export async function bulkUpdatePublicOffers(user,body={}){
+  assert(user?.role==='admin',403,'غير مسموح / Not allowed');
+  const items=Array.isArray(body.items)?body.items:[];
+  assert(items.length>0&&items.length<=200,400,'اختر من 1 إلى 200 منتج / Select 1 to 200 products');
+  const now=new Date().toISOString(),commit=[];
+  for(const item of items){
+    const id=String(item?.id||''),patch=item?.patch||{},row=await one('public_offers',id);
+    assert(row&&open(row),404,'منتج غير متاح / Product unavailable');
+    assert(Number(item.version)===row.version,409,'تغيّرت بيانات أحد المنتجات؛ حدّث الصفحة / A product changed; refresh and try again');
+    const data=structuredClone(row.data||{}),keys=Object.keys(patch);
+    const editable=new Set(['product','specs','unitPrice','moq','stock','categoryId','subcategoryId','country']);
+    if(item.delete){
+      assert(can(user,'trash'),403);
+      data.deletedAt=now;
+      data.moderationHistory=[...(data.moderationHistory||[]),{action:'delete',reason:'Bulk product delete',at:now,actorId:user.id}].slice(-200);
+    }else{
+      for(const key of keys){
+        if(editable.has(key)){assert(can(user,'offers.edit'),403);data[key]=patch[key];}
+        else if(key==='translation'){
+          assert(can(user,'translate'),403);
+          assert(patch.translation&&['titleAr','titleEn','descriptionAr','descriptionEn'].every(k=>typeof patch.translation[k]==='string'&&patch.translation[k].trim()&&patch.translation[k].length<=10000&&!contact(patch.translation[k])),400,'أكمل النصوص المترجمة / Complete translated text');
+          data.translation=Object.fromEntries(['titleAr','titleEn','descriptionAr','descriptionEn'].map(k=>[k,patch.translation[k].trim()]));
+          data.reviewedAt=now;
+        }else if(key==='status'){
+          assert(can(user,'publish'),403);assert(['pending','published'].includes(patch.status),400,'حالة غير صالحة / Invalid status');
+          if(patch.status==='published'&&data.status!=='published')data.publishedAt=now;
+          data.status=patch.status;
+        }else assert(false,400,'حقل غير قابل للتعديل الجماعي / Field cannot be bulk edited');
+      }
+      validateContent('publicOffers',data);
+      await assertProductTaxonomy(data,{required:data.status==='published',activeOnly:data.status==='published'});
+      if(data.status==='published'&&keys.some(k=>k==='translation'||k==='status'||editable.has(k)))assert(body.redactionConfirmed===true,400,'أكد مراجعة النصوص والصور قبل الحفظ / Confirm content review before saving');
+    }
+    data.updatedAt=now;
+    data.history=[...(data.history||[]),{at:now,status:data.status,action:item.delete?'bulk_delete':'bulk_update'}].slice(-200);
+    commit.push({table:'public_offers',id:row.id,version:row.version,ownerId:row.owner_id,data,action:item.delete?'delete':'bulk_update'});
+  }
+  await rpc('commit_changes',{actor:user.id,changes:commit});
+  return {ok:true,count:commit.length};
+}
 export async function updateAccount(user,body){
   assert(can(user,'accounts.manage'),403,'غير مسموح / Not allowed');
   const id=String(body.id||'');

@@ -3,13 +3,14 @@ import { filesToCompressedSources } from './image-upload.js';
 import { categoryRows, subcategoryRows, supplyCountryRows, taxonomyLabel } from './catalog-taxonomy.js';
 let state=null,revision=0;
 let requestFilter='all',offerTab='pending',timer=null;
+let selectedProducts=new Set();
 const searches=new Map(),mediaCache=new Map(),mediaTasks=new Map();
 const MEDIA_CONCURRENCY=6;
 let reloadWorkspace=async()=>{};
 export function configureAdmin({reload}) { reloadWorkspace=reload; }
 export function resetAdmin() {
   clearTimeout(timer); state=null; revision++;
-  requestFilter='all'; offerTab='pending'; searches.clear();
+  requestFilter='all'; offerTab='pending'; searches.clear(); selectedProducts.clear();
   for(const url of mediaCache.values()) URL.revokeObjectURL(url);
   mediaCache.clear();mediaTasks.clear();
 }
@@ -237,12 +238,62 @@ function categoryPanel(){
 function offerTabs(){
   return `<div class="segmented admin-segmented"><button class="${offerTab==='pending'?'active':''}" data-admin-offer-tab="pending">${esc(tr('بانتظار المراجعة','Pending review'))}</button><button class="${offerTab==='all'?'active':''}" data-admin-offer-tab="all">${esc(tr('جميع المنتجات','All products'))}</button></div>`;
 }
+function productSelectionRow(x){
+  const owner=ownerOf(x),checked=selectedProducts.has(x.id);
+  return `<article class="list-card admin-record-card admin-selectable-product"><label class="admin-product-check"><input type="checkbox" data-admin-product-select="${esc(x.id)}" ${checked?'checked':''}><span></span></label><button type="button" class="admin-product-open" data-admin-open="public" data-admin-id="${esc(x.id)}"><div class="list-card-main"><div class="list-card-title"><small>#${esc(ref(x))} · ${esc(x.sku||'')}</small><h3>${esc(title(x))}</h3></div>${badge(x.status)}</div><div class="meta-line">${esc(formatMoney(x.unitPrice,x.currency))} · MOQ ${esc(x.moq||'—')} · ${esc(owner?.company||owner?.name||'')}</div></button></article>`;
+}
+function bulkToolbar(rows){
+  const count=selectedProducts.size,all=rows.length&&rows.every(x=>selectedProducts.has(x.id));
+  return `<section class="admin-bulk-toolbar"><label><input type="checkbox" data-admin-product-select-all ${all?'checked':''}><span>${esc(tr('تحديد الكل','Select all'))}</span></label><strong>${esc(tr(`المحدد: ${count}`,`Selected: ${count}`))}</strong><div class="admin-bulk-actions"><button type="button" class="primary-small" data-admin-bulk-edit ${count?'':'disabled'}>${esc(tr('تعديل جماعي','Bulk edit'))}</button><button type="button" class="secondary-btn compact" data-admin-bulk-action="publish" ${count?'':'disabled'}>${esc(tr('نشر','Publish'))}</button><button type="button" class="secondary-btn compact" data-admin-bulk-action="hide" ${count?'':'disabled'}>${esc(tr('إخفاء','Hide'))}</button><button type="button" class="secondary-btn compact" data-admin-bulk-action="category" ${count?'':'disabled'}>${esc(tr('تغيير التصنيف','Change category'))}</button><button type="button" class="secondary-btn compact" data-admin-bulk-action="country" ${count?'':'disabled'}>${esc(tr('تغيير الدولة','Change country'))}</button><button type="button" class="secondary-btn compact" data-admin-bulk-action="translation" ${count?'':'disabled'}>${esc(tr('الترجمة','Translations'))}</button><button type="button" class="danger-btn compact" data-admin-bulk-action="delete" ${count?'':'disabled'}>${esc(tr('حذف','Delete'))}</button></div></section>`;
+}
 function offers(){
   if(!['pending','all'].includes(offerTab))offerTab='pending';
   let rows=(state?.publicOffers||[]).filter(x=>!x.deletedAt&&matches(x,'public')).map(x=>({...x,__kind:'public'}));
   rows.sort((a,b)=>(a.status==='pending'?0:1)-(b.status==='pending'?0:1)||String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
   if(offerTab==='pending')rows=rows.filter(x=>x.status==='pending');
-  setRoot('offers',page(tr('المنتجات','Products'),tr('مراجعة وإدارة المنتجات التي يضيفها الموردون.','Review and manage supplier products.'))+search(tr('ابحث برقم المنتج أو SKU أو الاسم أو المورد','Search product number, SKU, name, or supplier'))+offerTabs()+`<div class="list-stack" data-admin-results>${rows.map(x=>row(x,'public')).join('')||empty()}</div>`);
+  const visibleIds=new Set(rows.map(x=>x.id));for(const id of [...selectedProducts])if(!(state?.publicOffers||[]).some(x=>x.id===id&&!x.deletedAt))selectedProducts.delete(id);
+  setRoot('offers',page(tr('المنتجات','Products'),tr('مراجعة وإدارة المنتجات التي يضيفها الموردون.','Review and manage supplier products.'))+search(tr('ابحث برقم المنتج أو SKU أو الاسم أو المورد','Search product number, SKU, name, or supplier'))+offerTabs()+bulkToolbar(rows)+`<div class="list-stack" data-admin-results>${rows.map(productSelectionRow).join('')||empty()}</div>`);
+}
+const selectedProductRows=()=>[...selectedProducts].map(id=>(state?.publicOffers||[]).find(x=>x.id===id&&!x.deletedAt)).filter(Boolean);
+function bulkCategoryOptionRows(selected){return activeCategories().map(x=>`<option value="${esc(x.id)}" ${selected===x.id?'selected':''}>${esc(taxonomyLabel(x,lang()))}</option>`).join('');}
+function bulkSubcategoryOptionRows(selected,parentId){return activeSubcategories(parentId).map(x=>`<option value="${esc(x.id)}" ${selected===x.id?'selected':''}>${esc(taxonomyLabel(x,lang()))}</option>`).join('');}
+function bulkCountryOptionRows(selected){return activeSupplyCountries().map(x=>`<option value="${esc(x.id)}" ${selected===x.id?'selected':''}>${esc(taxonomyLabel(x,lang()))}</option>`).join('');}
+function bulkProductEditorRow(x){
+  const t=x.translation||{};
+  return `<tr data-bulk-product-row="${esc(x.id)}"><td class="sticky-col"><strong>#${esc(ref(x))}</strong><small>${esc(x.sku||'')}</small></td><td><input data-bulk-edit="product" value="${esc(x.product||'')}" maxlength="300"></td><td><textarea data-bulk-edit="specs" maxlength="10000">${esc(x.specs||'')}</textarea></td><td><input data-bulk-edit="unitPrice" type="number" step="0.01" min="0.01" value="${esc(x.unitPrice||'')}"></td><td><input data-bulk-edit="moq" type="number" min="1" value="${esc(x.moq||'')}"></td><td><input data-bulk-edit="stock" type="number" min="0" value="${esc(x.stock||'')}"></td><td><select data-bulk-edit="categoryId"><option value="">—</option>${bulkCategoryOptionRows(x.categoryId)}</select></td><td><select data-bulk-edit="subcategoryId"><option value="">—</option>${bulkSubcategoryOptionRows(x.subcategoryId,x.categoryId)}</select></td><td><select data-bulk-edit="country"><option value="">—</option>${bulkCountryOptionRows(x.country)}</select></td><td><select data-bulk-edit="status"><option value="published" ${x.status==='published'?'selected':''}>${esc(tr('منشور','Published'))}</option><option value="pending" ${x.status==='pending'?'selected':''}>${esc(tr('مخفي / قيد المراجعة','Hidden / pending'))}</option></select></td><td><input data-bulk-edit="titleAr" value="${esc(t.titleAr||'')}"></td><td><input data-bulk-edit="titleEn" value="${esc(t.titleEn||'')}"></td><td><textarea data-bulk-edit="descriptionAr">${esc(t.descriptionAr||'')}</textarea></td><td><textarea data-bulk-edit="descriptionEn">${esc(t.descriptionEn||'')}</textarea></td></tr>`;
+}
+function syncBulkProductSubcategory(row){
+  const cat=row.querySelector('[data-bulk-edit="categoryId"]')?.value||'',sub=row.querySelector('[data-bulk-edit="subcategoryId"]');if(!sub)return;
+  const current=sub.value;sub.innerHTML='<option value="">—</option>'+bulkSubcategoryOptionRows(current,cat);
+  if(current&&![...sub.options].some(o=>o.value===current))sub.value='';
+}
+function openBulkProductEditor(mode='all'){
+  const rows=selectedProductRows();if(!rows.length)return;
+  const translationOnly=mode==='translation';
+  const headers=translationOnly?[tr('المنتج','Product'),tr('الاسم AR','Name AR'),tr('الاسم EN','Name EN'),tr('الوصف AR','Description AR'),tr('الوصف EN','Description EN')]:[tr('المنتج','Product'),tr('الاسم الأصلي','Original name'),tr('الوصف الأصلي','Original description'),tr('السعر','Price'),'MOQ',tr('المخزون','Stock'),tr('الرئيسي','Main'),tr('الفرعي','Sub'),tr('دولة التوريد','Supply country'),tr('النشر','Status'),tr('الاسم AR','Name AR'),tr('الاسم EN','Name EN'),tr('الوصف AR','Description AR'),tr('الوصف EN','Description EN')];
+  const body=translationOnly?rows.map(x=>{const t=x.translation||{};return `<tr data-bulk-product-row="${esc(x.id)}"><td class="sticky-col"><strong>#${esc(ref(x))}</strong><small>${esc(x.sku||'')}</small></td><td><input data-bulk-edit="titleAr" value="${esc(t.titleAr||'')}"></td><td><input data-bulk-edit="titleEn" value="${esc(t.titleEn||'')}"></td><td><textarea data-bulk-edit="descriptionAr">${esc(t.descriptionAr||'')}</textarea></td><td><textarea data-bulk-edit="descriptionEn">${esc(t.descriptionEn||'')}</textarea></td></tr>`}).join(''):rows.map(bulkProductEditorRow).join('');
+  modal(translationOnly?tr('تحديث الترجمة جماعيًا','Bulk translation update'):tr('تعديل المنتجات جماعيًا','Bulk edit products'),tr(`${rows.length} منتجات محددة`,`${rows.length} products selected`),`<form id="adminBulkProductsForm" class="form-stack" data-mode="${translationOnly?'translation':'all'}"><div class="admin-bulk-table-wrap"><table class="admin-bulk-table"><thead><tr>${headers.map(x=>`<th>${esc(x)}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div><label class="admin-category-toggle-label"><input type="checkbox" name="reviewed" required><span>${esc(tr('راجعت النصوص والتعديلات وأؤكد جاهزيتها للنشر.','I reviewed the content and confirm it is ready to publish.'))}</span></label><p class="form-message" data-admin-bulk-message></p><button class="primary-btn" type="submit">${esc(tr('حفظ جميع التعديلات','Save all changes'))}</button></form>`);
+}
+async function submitBulkProducts(form){
+  const message=form.querySelector('[data-admin-bulk-message]'),items=[];
+  for(const trEl of form.querySelectorAll('[data-bulk-product-row]')){
+    const original=(state?.publicOffers||[]).find(x=>x.id===trEl.dataset.bulkProductRow);if(!original)continue;
+    const v=name=>trEl.querySelector(`[data-bulk-edit="${name}"]`)?.value;
+    const translation={titleAr:v('titleAr')??original.translation?.titleAr??'',titleEn:v('titleEn')??original.translation?.titleEn??'',descriptionAr:v('descriptionAr')??original.translation?.descriptionAr??'',descriptionEn:v('descriptionEn')??original.translation?.descriptionEn??''};
+    const patch=form.dataset.mode==='translation'?{translation}:{product:v('product'),specs:v('specs'),unitPrice:v('unitPrice'),moq:v('moq'),stock:v('stock'),categoryId:v('categoryId'),subcategoryId:v('subcategoryId'),country:v('country'),status:v('status'),translation};
+    items.push({id:original.id,version:original.version,patch});
+  }
+  try{message.textContent=tr('جارٍ حفظ جميع المنتجات...','Saving all products...');await api('/api/v1/bulk-public-offers',{method:'POST',body:{items,redactionConfirmed:!!form.reviewed.checked}});selectedProducts.clear();await reload();closeModal();schedule();toast(tr('تم حفظ جميع التعديلات.','All changes saved.'));}catch(e){message.textContent=e.message;}
+}
+async function runBulkProductAction(action,value=''){
+  const rows=selectedProductRows();if(!rows.length)return;
+  if(action==='delete'&&!confirm(tr('حذف المنتجات المحددة؟','Delete selected products?')))return;
+  const patch=action==='publish'?{status:'published'}:action==='hide'?{status:'pending'}:action==='category'?{categoryId:value,subcategoryId:''}:action==='country'?{country:value}:{};
+  try{await api('/api/v1/bulk-public-offers',{method:'POST',body:{items:rows.map(x=>({id:x.id,version:x.version,...(action==='delete'?{delete:true}:{patch})})),redactionConfirmed:action!=='hide'}});selectedProducts.clear();await reload();schedule();toast(tr('تم تنفيذ الإجراء الجماعي.','Bulk action completed.'));}catch(e){toast(e.message);}
+}
+function bulkAssignDialog(kind){
+  const isCategory=kind==='category',rows=isCategory?activeCategories():activeSupplyCountries();
+  modal(isCategory?tr('تغيير التصنيف','Change category'):tr('تغيير دولة التوريد','Change supply country'),tr('إجراء جماعي','Bulk action'),`<form id="adminBulkAssignForm" class="form-stack" data-kind="${kind}"><label><span>${esc(isCategory?tr('التصنيف الرئيسي','Main category'):tr('دولة التوريد','Supply country'))}</span><select name="value" required><option value="">—</option>${rows.map(x=>`<option value="${esc(x.id)}">${esc(taxonomyLabel(x,lang()))}</option>`).join('')}</select></label><button class="primary-btn" type="submit">${esc(tr('تطبيق على المحدد','Apply to selected'))}</button></form>`);
 }
 function bankAccountPanel(){
   if(!can('settings'))return '';
@@ -315,6 +366,11 @@ function categorySelector(x){
   const rows=activeCategories(),current=x?.categoryId||'';
   if(!rows.length)return`<section class="admin-category-select-box"><strong>${esc(tr('التصنيف','Category'))}</strong><p>${esc(tr('أضف تصنيفًا من الحساب > التصنيفات أولًا.','Add a category from Account > Categories first.'))}</p></section>`;
   return `<section class="admin-category-select-box"><label><span>${esc(tr('التصنيف','Category'))}</span><select data-admin-category-select><option value="">—</option>${rows.map(cat=>`<option value="${esc(cat.id)}" ${current===cat.id?'selected':''}>${esc(tr(cat.nameAr,cat.nameEn))}</option>`).join('')}</select></label></section>`;
+}
+function syncPublicProductSubcategory(form){
+  const cat=form?.categoryId?.value||'',sub=form?.subcategoryId;if(!sub)return;
+  const current=sub.value;sub.innerHTML='<option value="">—</option>'+activeSubcategories(cat).map(x=>`<option value="${esc(x.id)}" ${x.id===current?'selected':''}>${esc(taxonomyLabel(x,lang()))}</option>`).join('');
+  if(current&&![...sub.options].some(o=>o.value===current))sub.value='';
 }
 function publicTranslationFields(x){
   const t=x.translation||{},editable=can('translate'),disabled=editable?'':'disabled';
@@ -504,7 +560,10 @@ async function submitCategory(form){
 }
 async function moveCategory(id,direction){const rows=categories(),i=rows.findIndex(cat=>cat.id===id),j=i+Number(direction);if(i<0||j<0||j>=rows.length)return;[rows[i],rows[j]]=[rows[j],rows[i]];await saveCategories(rows);}
 async function toggleCategory(id){const rows=categories(),cat=rows.find(x=>x.id===id);if(!cat)return;cat.active=cat.active===false;await saveCategories(rows);}
-async function deleteCategory(id){await saveCategories(categories().filter(cat=>cat.id!==id));}
+async function deleteCategory(id){
+  if(subcategories().some(x=>x.parentId===id)||(state?.publicOffers||[]).some(x=>x.categoryId===id&&!x.deletedAt)){toast(tr('غيّر تصنيف المنتجات واحذف التصنيفات الفرعية المرتبطة أولًا.','Reassign products and remove linked subcategories first.'));return;}
+  await saveCategories(categories().filter(cat=>cat.id!==id));
+}
 async function saveTracking(id){
   const x=(state?.requests||[]).find(item=>item.id===id);if(!x)return;
   const trackingStatus=document.querySelector('[data-admin-tracking-status]')?.value,trackingNote=document.querySelector('[data-admin-tracking-note]')?.value||'';
@@ -598,6 +657,8 @@ document.addEventListener('click',e=>{
   const active=e.target.closest('[data-admin-request-active]');if(active){requestFilter='active';schedule();return;}
   const quoteReview=e.target.closest('[data-admin-request-quotes]');if(quoteReview){requestFilter='quotes_pending';schedule();return;}
   const ot=e.target.closest('[data-admin-offer-tab]');if(ot){offerTab=ot.dataset.adminOfferTab;schedule();return;}
+  const bulkEdit=e.target.closest('[data-admin-bulk-edit]');if(bulkEdit){openBulkProductEditor();return;}
+  const ba=e.target.closest('[data-admin-bulk-action]');if(ba){const action=ba.dataset.adminBulkAction;if(action==='translation')openBulkProductEditor('translation');else if(['category','country'].includes(action))bulkAssignDialog(action);else runBulkProductAction(action);return;}
   const tn=e.target.closest('[data-admin-team-new]');if(tn){teamDialog();return;}
   const te=e.target.closest('[data-admin-team-edit]');if(te){teamDialog(te.dataset.adminTeamEdit);return;}
   const tt=e.target.closest('[data-admin-team-toggle]');if(tt){teamToggleDialog(tt.dataset.adminTeamToggle);return;}
@@ -645,6 +706,10 @@ document.addEventListener('compositionend',e=>{
 });
 document.addEventListener('change',e=>{
   if(!isAdmin())return;
+  if(e.target.matches('[data-admin-product-select]')){if(e.target.checked)selectedProducts.add(e.target.dataset.adminProductSelect);else selectedProducts.delete(e.target.dataset.adminProductSelect);schedule();return;}
+  if(e.target.matches('[data-admin-product-select-all]')){const checked=e.target.checked;document.querySelectorAll('[data-admin-product-select]').forEach(box=>{box.checked=checked;if(checked)selectedProducts.add(box.dataset.adminProductSelect);else selectedProducts.delete(box.dataset.adminProductSelect);});schedule();return;}
+  if(e.target.matches('#adminPublicOfferForm [name="categoryId"]')){syncPublicProductSubcategory(e.target.form);return;}
+  if(e.target.matches('[data-bulk-edit="categoryId"]')){syncBulkProductSubcategory(e.target.closest('[data-bulk-product-row]'));return;}
   if(e.target.matches('[data-admin-request-filter]')){requestFilter=e.target.value;schedule();return;}
   if(e.target.matches('[data-admin-tracking-status],[data-admin-interest-tracking-status]')){
     const field=e.target.closest('.admin-tracking-editor')?.querySelector('.admin-payment-message-field');
@@ -662,4 +727,6 @@ document.addEventListener('submit',e=>{
   else if(e.target.matches('#adminSubcategoryForm')){e.preventDefault();submitSubcategory(e.target);}
   else if(e.target.matches('#adminSupplyCountryForm')){e.preventDefault();submitSupplyCountry(e.target);}
   else if(e.target.matches('#adminPublicOfferForm')){e.preventDefault();savePublicOffer(e.target);}
+  else if(e.target.matches('#adminBulkProductsForm')){e.preventDefault();submitBulkProducts(e.target);}
+  else if(e.target.matches('#adminBulkAssignForm')){e.preventDefault();const form=e.target;runBulkProductAction(form.dataset.kind,form.value.value).then(()=>closeModal());}
 });
