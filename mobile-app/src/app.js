@@ -7,6 +7,7 @@ import { filesToCompressedSources } from './image-upload.js';
 import { parseBulkProductWorkbook, validateBulkProductRows, normalizeSupplyCountry, downloadBulkProductTemplate } from './bulk-excel.js';
 import { categoryRows, subcategoryRows, supplyCountryRows, taxonomyLabel } from './catalog-taxonomy.js';
 import './image-viewer.js';
+import { downloadInvoicePdf } from './invoice-pdf.js';
 
 let currentUser=null;
 let platformState=null;
@@ -29,9 +30,11 @@ let bulkImportFileName='';
 let busy=false;
 let lastDataLoadedAt=0;
 const PAGE_SIZE=20;
-const MEDIA_CONCURRENCY=6;
+const MEDIA_CONCURRENCY=10;
+const PUBLIC_MEDIA_CACHE='m-platform-public-media-v1';
 const mediaCache=new Map();
 const mediaTasks=new Map();
+const publicMediaSources=new Set();
 
 const copy={
   ar:{tagline:'اطلب ما تحتاجه، وقارن العروض بثقة.',secure:'دخول آمن',loginTitle:'تسجيل الدخول',loginSubtitle:'استخدم نفس حسابك الموجود على المنصة.',email:'البريد الإلكتروني',password:'كلمة المرور',forgotPassword:'نسيت كلمة المرور؟',login:'تسجيل الدخول',loading:'جارٍ تسجيل الدخول...',failed:'تعذر تسجيل الدخول. تحقق من البريد وكلمة المرور.',home:'الرئيسية',requests:'الطلبات',invites:'الدعوات',offers:'العروض',notifications:'الإشعارات',account:'الحساب',client:'عميل',supplier:'مورد',admin:'إدارة',refreshing:'جارٍ التحديث...',empty:'لا توجد بيانات حاليًا.',details:'التفاصيل',status:'الحالة',quantity:'الكمية',country:'الدولة',neededDate:'تاريخ الاحتياج',receivedQuotes:'العروض المستلمة',newRequest:'طلب جديد',publicOffers:'العروض العامة',requestedOffers:'العروض التي طلبتها',submittedOffers:'العروض المقدمة',myPublicOffers:'منتجاتي',interestRequests:'طلبات الاهتمام',newPublicOffer:'منتج جديد',submitQuote:'تقديم عرض سعر',editQuote:'تعديل العرض',selectQuote:'اختيار العرض',selected:'تم اختيار العرض',requestOffer:'طلب هذا العرض',requested:'تم الطلب',price:'السعر',moq:'الحد الأدنى',leadTime:'مدة الإنتاج',sampleCost:'تكلفة العينة',stock:'المخزون',validUntil:'صالح حتى',specifications:'المواصفات',product:'المنتج',notes:'ملاحظات',currency:'العملة',images:'الصور',submit:'إرسال',save:'حفظ',logout:'تسجيل الخروج',profile:'بيانات الحساب',newQuotes:'عروض جديدة',underReview:'قيد المراجعة',activeRequests:'طلبات نشطة',published:'منشور',pending:'قيد المراجعة',completed:'مكتمل',sent:'تم الإرسال للموردين',review:'قيد المراجعة',coordinating:'قيد التنسيق',accepted:'مقبول',cancelled:'ملغي',markAllRead:'تحديد الكل كمقروء',noNotifications:'لا توجد إشعارات.',unread:'جديد',uploading:'جارٍ رفع الصور...',saving:'جارٍ الحفظ...',created:'تم الإرسال بنجاح.',chooseImages:'اختر حتى 5 صور. يمكن اختيار صور كبيرة وسيتم ضغطها تلقائيًا قبل الرفع.',sessionNote:'يمكنك تسجيل الخروج لإنهاء جلستك على هذا الجهاز.',readyProducts:'منتجات جاهزة للطلب',readyProductsSubtitle:'اختر من المنتجات المتاحة واطلب ما يناسبك مباشرة.',customRequestTitle:'لم تجد ما تحتاجه؟',customRequestDescription:'أرسل طلبًا خاصًا بالمواصفات والكمية، وسنبحث لك عن المورد المناسب.',sendCustomRequest:'إرسال طلب خاص',customRequests:'الطلبات الخاصة',readyProductRequests:'طلبات المنتجات الجاهزة',totalRequests:'إجمالي الطلبات',previous:'السابق',next:'التالي',page:'صفحة',companyDescription:'منصة تساعدك في طلب المنتجات، مقارنة العروض، ومتابعة التوريد بسهولة.',contactUs:'تواصل معنا',copyright:'© 2026 MIG COMPANY — جميع الحقوق محفوظة',allCategories:'الكل',category:'التصنيف',tracking:'متابعة الطلب',lastUpdate:'آخر تحديث',trackingNote:'ملاحظة',adminMobile:'واجهة الإدارة الكاملة ستضاف في مرحلة منفصلة. يمكنك حاليًا مشاهدة ملخص البيانات والإشعارات.'},
@@ -266,7 +269,9 @@ function productResultsHtml(){
   const pageOffers=offers.slice((readyProductsPage-1)*PAGE_SIZE,readyProductsPage*PAGE_SIZE);
   return {grid:pageOffers.map(publicOfferCard).join('')||empty(),pagination:productPagination(readyProductsPage,totalPages)};
 }
-function refreshProductResults(){
+function productFiltersHtml(){return categoryFilters()+subcategoryFilters()+supplyCountryFilters();}
+function refreshProductResults({filters=false}={}){
+  if(filters){const wrapper=$('readyProductFilters');if(wrapper)wrapper.innerHTML=productFiltersHtml();}
   const result=productResultsHtml(),grid=$('readyProductsGrid'),pager=$('readyProductsPagination');
   if(grid)grid.innerHTML=result.grid;if(pager)pager.innerHTML=result.pagination;
   if(grid)hydrateImages(grid);
@@ -311,6 +316,21 @@ function paymentPanel(item,entityType){
   const uploadText=status==='reupload_requested'?tr('إعادة رفع إيصال الدفع','Upload receipt again'):tr('إرفاق إيصال الدفع','Upload payment receipt');
   return `<section class="payment-card"><div class="payment-card-head"><div><small>${esc(tr('الدفع','Payment'))}</small><strong>${esc(paymentLabel(status||'awaiting_receipt'))}</strong></div></div><p>${esc(message)}</p>${bankTransferCard(item)}${item?.paymentReviewNote?`<p class="payment-review-note"><b>${esc(tr('ملاحظة الإدارة','Admin note'))}:</b> ${esc(item.paymentReviewNote)}</p>`:''}${receiptHtml}${canUpload?`<button class="primary-btn full" type="button" data-payment-upload data-entity-type="${entityType}" data-entity-id="${esc(item.id)}">${esc(uploadText)}</button>`:''}</section>`;
 }
+function invoicePanel(item,entityType){
+  const proforma=item?.proformaInvoice,finalInvoice=item?.finalInvoice;
+  if(!proforma&&!finalInvoice)return '';
+  const button=(invoice,kind,label)=>invoice?.number?`<button type="button" class="invoice-document-btn ${kind==='final'?'paid':''}" data-invoice-pdf="${kind}" data-invoice-type="${entityType}" data-invoice-id="${esc(item.id)}"><span>${esc(label)}</span><strong>${esc(invoice.number)}</strong>${kind==='final'?'<b>PAID</b>':''}</button>`:'';
+  return `<section class="invoice-documents-card"><div><small>${esc(tr('الفواتير','Invoices'))}</small><strong>${esc(tr('مستندات PDF الرسمية','Official PDF documents'))}</strong></div><div class="invoice-document-actions">${button(proforma,'proforma','Proforma Invoice')}${button(finalInvoice,'final',tr('الفاتورة النهائية','Final Invoice'))}</div></section>`;
+}
+async function openInvoicePdf(target){
+  const entityType=target.dataset.invoiceType,id=target.dataset.invoiceId,kind=target.dataset.invoicePdf;
+  const rows=entityType==='request'?(platformState?.requests||[]):(platformState?.interests||[]),item=rows.find(x=>x.id===id);
+  const invoice=kind==='final'?item?.finalInvoice:item?.proformaInvoice;if(!invoice)return;
+  target.disabled=true;
+  try{await downloadInvoicePdf(invoice,{orderNo:ref(item)});}catch{showToast(tr('تعذر فتح ملف الفاتورة. حاول مجددًا.','Could not open the invoice PDF. Please try again.'));}
+  finally{target.disabled=false;}
+}
+
 function titleOf(item){const x=item?.translation||{};return (lang==='ar'?(x.titleAr||x.titleEn):(x.titleEn||x.titleAr))||item?.product||item?.title||`#${ref(item)}`;}
 function descriptionOf(item){const x=item?.translation||{};return (lang==='ar'?(x.descriptionAr||x.descriptionEn):(x.descriptionEn||x.descriptionAr))||item?.specs||item?.notes||'';}
 function quoteTime(q){return Date.parse(q?.publishedAt||q?.updatedAt||q?.createdAt||0)||0;}
@@ -330,6 +350,7 @@ async function loadData({render=true}={}){
   ]);
   if(epoch!==session.epoch)return;
   platformState=next;currentUser=next.user;notifications=nextNotifications;lastDataLoadedAt=Date.now();
+  syncPublicMediaSources();setTimeout(()=>warmPublicMedia(),30);
   if(currentUser?.role==='client'){loadCart();mergeGuestCart();reconcileCart();loadClientOrderSeen();}else{cartItems=[];clientOrderSeen={};updateCartBadge();updateClientNavBadges();}
   updateAdminState(next);updateShell();
   if(render)renderScreen();
@@ -339,7 +360,7 @@ session.onReset(reason=>{
   currentUser=null;platformState=null;notifications=[];activeScreen='home';activeSub='primary';readyProductsPage=1;readyCategory='all';readySubcategory='all';readyCountry='all';readySearch='';cartItems=[];clientOrderSeen={};clientRequestFilter='all';
   resetAdmin();closeModal();
   for(const url of mediaCache.values())URL.revokeObjectURL(url);
-  mediaCache.clear();mediaTasks.clear();lastDataLoadedAt=0;$('screen').replaceChildren();$('headerRole').textContent='';
+  mediaCache.clear();mediaTasks.clear();publicMediaSources.clear();lastDataLoadedAt=0;$('screen').replaceChildren();$('headerRole').textContent='';
   $('navUnread').classList.add('hidden');$('toast').classList.add('hidden');
   document.querySelectorAll('#bottomNav button').forEach(b=>b.classList.toggle('active',b.dataset.screen==='home'));
   if(reason==='logout')showView('bootView');
@@ -412,15 +433,37 @@ async function copyText(value){
 function openModal(title,kicker,html){$('modalTitle').textContent=title;$('modalKicker').textContent=kicker||'';$('modalBody').innerHTML=html;$('modal').classList.remove('hidden');hydrateImages($('modalBody'));}
 function closeModal(){$('modal').classList.add('hidden');$('modalBody').innerHTML='';}
 
-function gallery(images=[]){if(!images.length)return '';return `<div class="media-grid" data-viewer-gallery>${images.map(src=>`<div class="media-placeholder"><img alt="" data-media="${esc(src)}" data-image-viewer /></div>`).join('')}</div>`;}
+function mediaImage(src,attrs=''){
+  const cached=mediaCache.get(src);
+  return `<img alt="" data-media="${esc(src)}"${cached?` src="${esc(cached)}" data-loaded="1"`:''} ${attrs} />`;
+}
+function gallery(images=[]){if(!images.length)return '';return `<div class="media-grid" data-viewer-gallery>${images.map(src=>`<div class="media-placeholder">${mediaImage(src,'data-image-viewer')}</div>`).join('')}</div>`;}
+const cacheRequest=src=>new Request('https://m-platform-cache.invalid/media/'+encodeURIComponent(src));
+async function cachedPublicBlob(src){
+  if(!publicMediaSources.has(src)||!('caches' in globalThis))return null;
+  try{const store=await caches.open(PUBLIC_MEDIA_CACHE),hit=await store.match(cacheRequest(src));return hit?await hit.blob():null;}catch{return null;}
+}
+async function persistPublicBlob(src,blob){
+  if(!publicMediaSources.has(src)||!('caches' in globalThis))return;
+  try{const store=await caches.open(PUBLIC_MEDIA_CACHE);await store.put(cacheRequest(src),new Response(blob,{headers:{'Content-Type':blob.type||'image/jpeg','Cache-Control':'public, max-age=604800'}}));}catch{}
+}
+function syncPublicMediaSources(){
+  publicMediaSources.clear();
+  for(const offer of platformState?.publicOffers||[])if(offer.status==='published')for(const src of offer.images||[])if(src)publicMediaSources.add(src);
+}
 async function mediaUrl(src){
   if(mediaCache.has(src))return mediaCache.get(src);
   if(mediaTasks.has(src))return mediaTasks.get(src);
   const epoch=session.epoch;
   const task=(async()=>{
-    const path=src.replace(/^\/api\/media\//,'/api/v1/media/');
-    const response=await rawFetch(path,{auth:true});if(!response.ok)return '';
-    const blob=await response.blob();if(epoch!==session.epoch)return '';
+    let blob=await cachedPublicBlob(src);
+    if(!blob){
+      const path=src.replace(/^\/api\/media\//,'/api/v1/media/');
+      const response=await rawFetch(path,{auth:true});if(!response.ok)return '';
+      blob=await response.blob();
+      if(publicMediaSources.has(src))persistPublicBlob(src,blob);
+    }
+    if(epoch!==session.epoch)return '';
     const url=URL.createObjectURL(blob);mediaCache.set(src,url);return url;
   })().catch(()=> '').finally(()=>mediaTasks.delete(src));
   mediaTasks.set(src,task);
@@ -438,6 +481,12 @@ async function hydrateImages(root=document){
   };
   await Promise.all(Array.from({length:Math.min(MEDIA_CONCURRENCY,images.length)},worker));
 }
+function warmPublicMedia(limit=48){
+  const sources=[];
+  for(const offer of platformState?.publicOffers||[]){const src=(offer.images||[])[0];if(offer.status==='published'&&src&&!sources.includes(src))sources.push(src);if(sources.length>=limit)break;}
+  let cursor=0;const worker=async()=>{while(cursor<sources.length)await mediaUrl(sources[cursor++]);};
+  Promise.all(Array.from({length:Math.min(4,sources.length)},worker)).catch(()=>{});
+}
 
 function statCard(value,label,action=''){return `<button class="stat-card" ${action?`data-action="${action}"`:''}><strong>${esc(value)}</strong><span>${esc(label)}</span></button>`;}
 function pageHeader(title,subtitle='',action=''){return `<div class="page-head"><div><h1>${esc(title)}</h1>${subtitle?`<p>${esc(subtitle)}</p>`:''}</div>${action}</div>`;}
@@ -445,7 +494,7 @@ function empty(){return `<div class="empty-state"><span>◇</span><p>${esc(t('em
 function itemCard(item,{subtitle='',meta='',badge='',action='',images=false}={}){return `<article class="list-card" ${action}><div class="list-card-main"><div class="list-card-title"><small>#${esc(ref(item))}</small><h3>${esc(titleOf(item))}</h3></div>${badge}</div>${subtitle?`<p>${esc(subtitle)}</p>`:''}${meta?`<div class="meta-line">${meta}</div>`:''}${images?gallery(item.images):''}<div class="chevron">›</div></article>`;}
 function publicOfferCard(item){
   const image=(item.images||[])[0];
-  return `<article class="public-offer-card" data-public-offer="${esc(item.id)}"><div class="public-offer-media" data-viewer-gallery>${image?`<img alt="" data-media="${esc(image)}" data-image-viewer />`:'<div class="public-offer-placeholder">M</div>'}</div><div class="public-offer-content"><div class="public-offer-origin">${esc(supplyCountryLabel(item.country))}</div><h3>${esc(titleOf(item))}</h3><p>${esc(descriptionOf(item)||'—')}</p><div class="public-offer-facts"><span><b>${esc(t('price'))}</b><strong>${money(item.unitPrice,item.currency)}</strong></span><span><b>${esc(t('moq'))}</b><strong>${esc(item.moq||'—')}</strong></span></div></div></article>`;
+  return `<article class="public-offer-card" data-public-offer="${esc(item.id)}"><div class="public-offer-media" data-viewer-gallery>${image?mediaImage(image,'data-image-viewer'):'<div class="public-offer-placeholder">M</div>'}</div><div class="public-offer-content"><div class="public-offer-origin">${esc(supplyCountryLabel(item.country))}</div><h3>${esc(titleOf(item))}</h3><p>${esc(descriptionOf(item)||'—')}</p><div class="public-offer-facts"><span><b>${esc(t('price'))}</b><strong>${money(item.unitPrice,item.currency)}</strong></span><span><b>${esc(t('moq'))}</b><strong>${esc(item.moq||'—')}</strong></span></div></div></article>`;
 }
 function supplierPublicOfferPreview(item){
   const image=(item.images||[])[0];
@@ -588,7 +637,7 @@ function renderHome(){
     const products=productResultsHtml();
     $('screen').innerHTML=
       `<section class="special-request-card client-new-request"><div class="special-request-copy"><div class="special-request-heading"><span class="special-request-icon">＋</span><h2>${esc(tr('أرسل طلب جديد','Send a new request'))}</h2></div><p>${esc(tr('إذا لم تجد المنتج المناسب، أرسل مواصفاتك وسنطلب عروضًا لك.','If you cannot find the right product, send your specifications and we will source quotes for you.'))}</p></div><button class="primary-btn" data-action="new-request">+ ${esc(tr('أرسل طلب جديد','Send new request'))}</button></section>`+
-      `<section class="ready-products-section"><div class="section-title ready-products-title"><div><h2>${esc(tr('المنتجات','Products'))}</h2><p>${esc(tr('ابحث واختر الكمية، ثم اجمع المنتجات في طلب واحد.','Search, choose quantities, and combine products into one order.'))}</p></div></div>${productSearchBar()}${categoryFilters()}${subcategoryFilters()}${supplyCountryFilters()}<div id="readyProductsGrid" class="public-offers-grid">${products.grid}</div><div id="readyProductsPagination">${products.pagination}</div></section>`+
+      `<section class="ready-products-section"><div class="section-title ready-products-title"><div><h2>${esc(tr('المنتجات','Products'))}</h2><p>${esc(tr('ابحث واختر الكمية، ثم اجمع المنتجات في طلب واحد.','Search, choose quantities, and combine products into one order.'))}</p></div></div>${productSearchBar()}<div id="readyProductFilters">${productFiltersHtml()}</div><div id="readyProductsGrid" class="public-offers-grid">${products.grid}</div><div id="readyProductsPagination">${products.pagination}</div></section>`+
       companyFooterCard();
   }else if(role==='supplier'){
     const quotes=platformState.quotes||[],answered=new Set(quotes.map(q=>q.requestId)),invites=(platformState.requests||[]).filter(r=>!answered.has(r.id));
@@ -706,14 +755,14 @@ async function openClientRequest(requestId){
   const compareButton=quotes.length?`<button type="button" class="secondary-btn full client-view-quotes" data-client-offers-request="${esc(r.id)}">${esc(r.selectedQuoteId?tr('عرض جميع العروض','View all quotes'):tr('عرض ومقارنة العروض','View & compare quotes'))}</button>`:'';
   const summary=`<section class="client-order-summary"><div class="client-order-summary-title"><small>#${esc(ref(r))} · ${esc(tr('طلب خاص','Custom request'))}</small><strong>${esc(titleOf(r))}</strong></div><div class="client-order-summary-facts"><span>${esc(tr('الكمية','Quantity'))}: ${esc(r.quantity||'—')}</span><span>${esc(tr('الدولة','Country'))}: ${esc(r.country||'—')}</span><span>${esc(t('neededDate'))}: ${esc(r.neededDate||'—')}</span></div></section>`;
   const statusCard=`<section class="client-current-status"><small>${esc(tr('الحالة الحالية','Current status'))}</small><strong>${esc(trackingLabel(status))}</strong>${r.trackingUpdatedAt?`<span>${esc(tr('آخر تحديث','Last update'))}: ${esc(date(r.trackingUpdatedAt))}</span>`:''}</section>`;
-  openModal(titleOf(r),`#${ref(r)}`,`${summary}${actionPanel}${statusCard}${selectedPanel}${compareButton}${paymentPanel(r,'request')}${trackingTimeline(r)}<section class="client-detail-content"><h3>${esc(t('specifications'))}</h3><p class="long-copy">${esc(descriptionOf(r)||'—')}</p>${gallery(r.images)}</section><button type="button" class="secondary-btn full repeat-request-btn" data-repeat-request="${esc(r.id)}">${esc(tr('تكرار الطلب','Repeat request'))}</button>`);
+  openModal(titleOf(r),`#${ref(r)}`,`${summary}${actionPanel}${statusCard}${selectedPanel}${compareButton}${paymentPanel(r,'request')}${invoicePanel(r,'request')}${trackingTimeline(r)}<section class="client-detail-content"><h3>${esc(t('specifications'))}</h3><p class="long-copy">${esc(descriptionOf(r)||'—')}</p>${gallery(r.images)}</section><button type="button" class="secondary-btn full repeat-request-btn" data-repeat-request="${esc(r.id)}">${esc(tr('تكرار الطلب','Repeat request'))}</button>`);
 }
 function clientReadyActionPanel(interest,offer){
   const order=clientOrders().find(o=>o.type==='ready'&&o.id===interest.id),action=order?clientOrderNeedsAction(order):null;
   if(!action)return '';
   return `<section class="client-detail-action ${esc(action.tone||'action')}"><div><small>${esc(tr('الإجراء المطلوب','Action required'))}</small><strong>${esc(action.label)}</strong></div></section>`;
 }
-async function snapshotTitle(item={}){
+function snapshotTitle(item={}){
   const x=item.translation||{};return (lang==='ar'?(x.titleAr||x.titleEn):(x.titleEn||x.titleAr))||item.product||tr('منتج','Product');
 }
 function openReadyOrder(interestId){
@@ -725,7 +774,7 @@ function openReadyOrder(interestId){
   const summary=`<section class="client-order-summary"><div class="client-order-summary-title"><small>#${esc(ref(interest))} · ${esc(tr('منتج جاهز','Ready product'))}</small><strong>${esc(title)}</strong></div><div class="client-order-summary-facts"><span>${esc(tr('الكمية','Quantity'))}: ${esc(interest.quantity||'—')}</span><span>${esc(tr('سعر الوحدة','Unit price'))}: ${money(unitPrice,currency)}</span><span>${esc(tr('الإجمالي','Total'))}: ${money(total,currency)}</span></div></section>`;
   const statusCard=`<section class="client-current-status"><small>${esc(tr('الحالة الحالية','Current status'))}</small><strong>${esc(trackingLabel(status))}</strong>${interest.trackingUpdatedAt?`<span>${esc(tr('آخر تحديث','Last update'))}: ${esc(date(interest.trackingUpdatedAt))}</span>`:''}</section>`;
   const productInfo=o?`<section class="client-detail-content"><h3>${esc(t('specifications'))}</h3><p class="long-copy">${esc(descriptionOf(o)||'—')}</p><div class="facts"><span>MOQ ${esc(o.moq||'—')}</span><span>${esc(t('stock'))}: ${esc(o.stock||'—')}</span><span>${esc(t('leadTime'))}: ${esc(o.leadTime||'—')}</span></div>${gallery(o.images)}</section>`:'';
-  openModal(title,`#${ref(interest)}`,`${summary}${clientReadyActionPanel(interest,o)}${statusCard}${paymentPanel(interest,'interest')}${trackingTimeline(interest,{flow:READY_TRACKING_FLOW,statusResolver:readyTrackingStatus})}${productInfo}`);
+  openModal(title,`#${ref(interest)}`,`${summary}${clientReadyActionPanel(interest,o)}${statusCard}${paymentPanel(interest,'interest')}${invoicePanel(interest,'interest')}${trackingTimeline(interest,{flow:READY_TRACKING_FLOW,statusResolver:readyTrackingStatus})}${productInfo}`);
 }
 function openPublicOffer(offerId){
   const o=(platformState.publicOffers||[]).find(x=>x.id===offerId);if(!o)return;
@@ -841,7 +890,7 @@ function openCartOrder(orderId){
     return `<article class="cart-order-line"><div class="cart-order-line-image">${image?`<img alt="" data-media="${esc(image)}">`:'<div>M</div>'}</div><div><strong>${esc(snapshotTitle(line))}</strong><small>${esc(tr('الكمية','Quantity'))}: ${esc(line.quantity||'—')} · ${money(line.unitPrice,line.currency)}</small><b>${money(line.total,line.currency)}</b><span class="status-pill status-${esc(status)}">${esc(trackingLabel(status))}</span></div></article>`;
   }).join('');
   const summary=`<section class="client-order-summary cart-order-summary"><div class="client-order-summary-title"><small>#${esc(ref(r))} · ${esc(tr('طلب منتجات','Product order'))}</small><strong>${esc(tr(`${r.cartItemCount||snapshots.length} منتجات`,`${r.cartItemCount||snapshots.length} products`))}</strong></div><div class="client-order-summary-facts"><span>${esc(tr('الإجمالي','Total'))}: ${money(r.cartTotal,r.currency)}</span><span>${esc(tr('الحالة','Status'))}: ${esc(trackingLabel(requestTrackingStatus(r)))}</span></div></section>`;
-  openModal(tr('تفاصيل طلب المنتجات','Product order details'),`#${ref(r)}`,`${summary}<section class="cart-order-items"><h3>${esc(tr('المنتجات','Products'))}</h3>${lines||empty()}</section>${paymentPanel(r,'request')}${trackingTimeline(r,{flow:READY_TRACKING_FLOW,statusResolver:requestTrackingStatus})}`);
+  openModal(tr('تفاصيل طلب المنتجات','Product order details'),`#${ref(r)}`,`${summary}<section class="cart-order-items"><h3>${esc(tr('المنتجات','Products'))}</h3>${lines||empty()}</section>${paymentPanel(r,'request')}${invoicePanel(r,'request')}${trackingTimeline(r,{flow:READY_TRACKING_FLOW,statusResolver:requestTrackingStatus})}`);
 }
 function openSupplierRequest(requestId){
   const r=(platformState.requests||[]).find(x=>x.id===requestId);if(!r)return;
@@ -1092,11 +1141,11 @@ async function submitQuote(e){e.preventDefault();if(busy)return;busy=true;const 
 async function submitPublic(e){e.preventDefault();if(busy)return;busy=true;const f=e.currentTarget,m=$('publicFormMessage');try{m.textContent=t('uploading');const images=await uploadSources(await filesToSources($('publicFiles')));if(!images.length)throw new Error(tr('أضف صورة واحدة على الأقل.','Add at least one image.'));m.textContent=t('saving');await mutate('publicOffers',id(),0,{sku:f.sku.value.trim(),product:f.product.value.trim(),specs:f.specs.value.trim(),country:f.country.value,unitPrice:f.unitPrice.value,currency:f.currency.value,moq:f.moq.value,stock:f.stock.value.trim(),leadTime:f.leadTime.value,validUntil:f.validUntil.value,categoryId:f.categoryId?.value||'',subcategoryId:f.subcategoryId?.value||'',images});await loadData({render:false});closeModal();activeScreen='offers';activeSub='primary';renderScreen();showToast(t('created'));}catch(error){m.textContent=error.message;}finally{busy=false;}}
 
 async function handleAction(target){
-  if(target.dataset.category){readyCategory=target.dataset.category;readySubcategory='all';readyProductsPage=1;renderHome();$('screen').scrollTop=0;return;}
-  if(target.dataset.subcategory){readySubcategory=target.dataset.subcategory;readyProductsPage=1;renderHome();$('screen').scrollTop=0;return;}
-  if(target.dataset.supplyCountry){readyCountry=target.dataset.supplyCountry;readyProductsPage=1;renderHome();$('screen').scrollTop=0;return;}
-  if(target.dataset.action==='ready-products-prev'){if(readyProductsPage>1){readyProductsPage--;renderHome();$('screen').scrollTop=0;}return;}
-  if(target.dataset.action==='ready-products-next'){const total=Math.max(1,Math.ceil(filteredReadyOffers().length/PAGE_SIZE));if(readyProductsPage<total){readyProductsPage++;renderHome();$('screen').scrollTop=0;}return;}
+  if(target.dataset.category){readyCategory=target.dataset.category;readySubcategory='all';readyProductsPage=1;refreshProductResults({filters:true});return;}
+  if(target.dataset.subcategory){readySubcategory=target.dataset.subcategory;readyProductsPage=1;refreshProductResults({filters:true});return;}
+  if(target.dataset.supplyCountry){readyCountry=target.dataset.supplyCountry;readyProductsPage=1;refreshProductResults({filters:true});return;}
+  if(target.dataset.action==='ready-products-prev'){if(readyProductsPage>1){readyProductsPage--;refreshProductResults();$('screen').scrollTop=0;}return;}
+  if(target.dataset.action==='ready-products-next'){const total=Math.max(1,Math.ceil(filteredReadyOffers().length/PAGE_SIZE));if(readyProductsPage<total){readyProductsPage++;refreshProductResults();$('screen').scrollTop=0;}return;}
   if(target.dataset.action==='new-request')return openNewRequest();
   if(target.dataset.repeatRequest){const source=(platformState.requests||[]).find(x=>x.id===target.dataset.repeatRequest);if(source)return openNewRequest(source);}
   if(target.dataset.action==='new-public')return openNewPublic();
@@ -1122,6 +1171,7 @@ async function handleAction(target){
   if(target.dataset.copyValue!==undefined)return copyText(target.dataset.copyValue);
   if(target.dataset.paymentUpload)return openPaymentReceiptForm(target.dataset.entityType,target.dataset.entityId);
   if(target.dataset.paymentDocument)return openPaymentDocument(target.dataset.paymentDocument);
+  if(target.dataset.invoicePdf)return openInvoicePdf(target);
   if(target.dataset.paymentNotification){
     const n=notifications.find(x=>String(x.id)===String(target.dataset.paymentNotification));if(!n)return;
     if(!n.readAt)await request('/api/v1/notifications/read',{method:'POST',auth:true,body:{id:Number(n.id)}}).catch(()=>{});
@@ -1183,9 +1233,9 @@ $('headerNotificationsBtn').addEventListener('click',()=>{if(!currentUser)return
 onLanguageChange(value=>{lang=value;applyLanguage();applyRegistrationLanguage();});
 $('refreshBtn').addEventListener('click',async()=>{if(busy)return;busy=true;$('refreshBtn').classList.add('spin');try{await loadData();showToast(t('refreshing'));}catch(e){showToast(errorText(e));}finally{busy=false;$('refreshBtn').classList.remove('spin');}});
 $('bottomNav').addEventListener('click',e=>{const b=e.target.closest('button[data-screen]');if(!b)return;activeScreen=b.dataset.screen;if(activeScreen==='offers')activeSub='primary';if(activeScreen==='requests'&&currentUser?.role==='supplier')activeSub='pending';renderScreen();$('screen').scrollTop=0;});
-$('screen').addEventListener('click',e=>{const sub=e.target.closest('[data-sub]');if(sub){activeSub=sub.dataset.sub;renderScreen();return;}const target=e.target.closest('[data-action],[data-category],[data-subcategory],[data-supply-country],[data-client-order-filter],[data-cart-order],[data-ready-order],[data-client-offers-request],[data-request],[data-supplier-request],[data-supplier-order-id],[data-public-offer],[data-edit-quote],[data-quote-request],[data-select-quote],[data-interest],[data-notification],[data-payment-notification],[data-payment-upload],[data-payment-document],[data-copy-value]');if(target)handleAction(target);});
+$('screen').addEventListener('click',e=>{const sub=e.target.closest('[data-sub]');if(sub){activeSub=sub.dataset.sub;renderScreen();return;}const target=e.target.closest('[data-action],[data-category],[data-subcategory],[data-supply-country],[data-client-order-filter],[data-cart-order],[data-ready-order],[data-client-offers-request],[data-request],[data-supplier-request],[data-supplier-order-id],[data-public-offer],[data-edit-quote],[data-quote-request],[data-select-quote],[data-interest],[data-notification],[data-payment-notification],[data-payment-upload],[data-payment-document],[data-invoice-pdf],[data-copy-value]');if(target)handleAction(target);});
 $('screen').addEventListener('input',e=>{const input=e.target.closest('[data-product-search]');if(!input)return;readySearch=input.value;readyProductsPage=1;refreshProductResults();});
-$('modal').addEventListener('click',e=>{if(e.target.closest('[data-close-modal]')){closeModal();return;}const target=e.target.closest('[data-ready-order],[data-client-offers-request],[data-edit-quote],[data-quote-request],[data-select-quote],[data-interest],[data-supplier-order-status],[data-supplier-order-cannot],[data-payment-upload],[data-payment-document],[data-copy-value]');if(target)handleAction(target);});
+$('modal').addEventListener('click',e=>{if(e.target.closest('[data-close-modal]')){closeModal();return;}const target=e.target.closest('[data-ready-order],[data-client-offers-request],[data-edit-quote],[data-quote-request],[data-select-quote],[data-interest],[data-supplier-order-status],[data-supplier-order-cannot],[data-payment-upload],[data-payment-document],[data-invoice-pdf],[data-copy-value]');if(target)handleAction(target);});
 
 App.addListener('appUrlOpen',async event=>{const url=event.url||'';if(!currentUser)return;if(url.includes('/notifications')){activeScreen='notifications';renderScreen();return;}const m=url.match(/\/requests\/([^?]+)/);if(m){if(currentUser.role==='supplier'){activeScreen='requests';activeSub='pending';openSupplierRequest(decodeURIComponent(m[1]));}else openClientRequest(decodeURIComponent(m[1]));}});
 
