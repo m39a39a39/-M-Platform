@@ -2152,3 +2152,123 @@ body.image-viewer-open {
   .supplier-public-cta-actions{width:100%}
   .supplier-public-cta-actions>*{flex:1}
 }
+
+
+/* Customer product search and multi-product cart */
+.product-search-bar{
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr);
+  align-items:center;
+  gap:8px;
+  margin:0 0 12px;
+  padding:0 12px;
+  min-height:50px;
+  border:1px solid var(--line);
+  border-radius:15px;
+  background:#fff;
+}
+.product-search-bar>span{font-size:18px;color:var(--muted)}
+.product-search-bar input{
+  width:100%;
+  min-width:0;
+  border:0;
+  outline:0;
+  background:transparent;
+  color:var(--navy);
+  font:inherit;
+  font-size:14px;
+  padding:12px 0;
+}
+.header-cart{position:relative}
+.cart-checkout-form,.cart-lines,.cart-order-items{display:grid;gap:12px}
+.cart-line{
+  display:grid;
+  grid-template-columns:68px minmax(0,1fr);
+  gap:11px;
+  align-items:start;
+  padding:11px;
+  border:1px solid var(--line);
+  border-radius:16px;
+  background:#fff;
+}
+.cart-line-image,.cart-order-line-image{
+  width:68px;height:68px;border-radius:13px;overflow:hidden;background:#edf2f4;
+}
+.cart-line-image img,.cart-order-line-image img{width:100%;height:100%;object-fit:cover;display:block}
+.cart-line-image>div,.cart-order-line-image>div{width:100%;height:100%;display:grid;place-items:center;font-weight:900}
+.cart-line-body{min-width:0}
+.cart-line-title{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.cart-line-title strong{min-width:0;font-size:14px;line-height:1.4}
+.danger-text{border:0;background:transparent;color:var(--danger);font-weight:800;padding:4px;min-height:32px}
+.cart-line-body>small{display:block;color:var(--muted);font-size:11px;margin-top:3px}
+.cart-line-controls{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  gap:8px;
+  align-items:end;
+  margin-top:10px;
+}
+.cart-line-controls label{display:grid;gap:4px}
+.cart-line-controls span{display:block;color:var(--muted);font-size:11px}
+.cart-line-controls input{
+  width:100%;
+  min-width:0;
+  min-height:42px;
+  border:1px solid var(--line);
+  border-radius:11px;
+  padding:8px 10px;
+  font:inherit;
+  background:#fff;
+}
+.cart-line-controls>div{
+  min-width:0;
+  padding:8px 9px;
+  border-radius:11px;
+  background:#f4f8fa;
+}
+.cart-line-controls strong{display:block;margin-top:3px;font-size:13px;overflow-wrap:anywhere}
+.cart-summary{
+  display:grid;
+  gap:8px;
+  padding:14px;
+  border:1px solid var(--line);
+  border-radius:16px;
+  background:#f7fafb;
+}
+.cart-summary>div{display:flex;justify-content:space-between;gap:12px;align-items:center}
+.cart-summary span{color:var(--muted);font-size:13px}
+.cart-summary strong{font-size:16px}
+.cart-grand-total{padding-top:10px;border-top:1px solid var(--line)}
+.cart-grand-total strong{font-size:21px;color:var(--navy)}
+.cart-summary small{color:var(--muted);line-height:1.6}
+.cart-actions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:8px}
+.cart-actions .secondary-btn,.cart-actions .primary-btn{width:100%}
+.cart-order-items>h3{margin:0}
+.cart-order-line{
+  display:grid;
+  grid-template-columns:60px minmax(0,1fr);
+  gap:10px;
+  align-items:center;
+  padding:10px;
+  border:1px solid var(--line);
+  border-radius:14px;
+  background:#fff;
+}
+.cart-order-line-image{width:60px;height:60px}
+.cart-order-line>div:last-child{display:grid;gap:4px;min-width:0}
+.cart-order-line strong{font-size:14px}
+.cart-order-line small{color:var(--muted);font-size:11px}
+.cart-order-line b{font-size:13px}
+.cart-order-line .status-pill{justify-self:start}
+.cart-empty{margin:6px 0}
+.client-action-needed.compact{margin-bottom:14px}
+
+@media(max-width:420px){
+  .app-header .brand-mini strong{font-size:14px}
+  .header-actions{gap:4px}
+  .header-actions .icon-btn{width:42px;height:42px;border-radius:13px}
+  .cart-line{grid-template-columns:58px minmax(0,1fr)}
+  .cart-line-image{width:58px;height:58px}
+  .cart-line-controls{grid-template-columns:minmax(0,1fr)}
+  .cart-actions{grid-template-columns:minmax(0,1fr)}
+}
