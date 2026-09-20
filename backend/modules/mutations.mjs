@@ -104,7 +104,7 @@ export async function mutate(user,body){
   assert(Number(version)===(original?.version||0),409,'تغيّرت البيانات؛ حدّث الصفحة / Refresh after conflict');
   const now=new Date().toISOString();
   let data=structuredClone(original?.data||{}),ownerId=original?.owner_id||user.id;
-  let linkedProductionRequest=null,linkedInspectionRequest=null;
+  let linkedProductionRequest=null,linkedInspectionRequest=null,linkedCartRequest=null;
   const changes=Object.keys(patch),isAdmin=user.role==='admin';
   if(!original){
     assert(collection==='requests'?user.role==='client':collection==='interests'?user.role==='client':user.role==='supplier');
@@ -198,6 +198,7 @@ export async function mutate(user,body){
     }else if(collection==='interests'&&user.role==='supplier'){
       const offer=await one('public_offers',original.offer_id);
       assert(offer&&offer.owner_id===user.id&&open(offer),403,'غير مصرح بهذا الطلب / Unauthorized order');
+      if(original.data.cartOrderId)linkedCartRequest=await one('requests',original.data.cartOrderId);
       assert((original.data.trackingStatus||'received')!=='received'&&!['completed','cancelled'].includes(original.data.trackingStatus),409,'الطلب غير جاهز للتنفيذ / Order is not ready for supplier action');
       assert(changes.length&&changes.every(k=>['supplierOrderStatus','supplierOrderNote'].includes(k)),400,'يمكن تحديث حالة التنفيذ فقط / Only fulfillment status can be updated');
       if(patch.supplierOrderStatus==='production')assert(original.data.paymentStatus==='confirmed',409,'لا يمكن بدء الإنتاج قبل تأكيد الدفع / Production cannot start before payment is confirmed');
@@ -268,12 +269,19 @@ export async function mutate(user,body){
       assert(data.paymentBankAccount?.id&&data.paymentAmount&&data.paymentCurrency,400,'أكمل الحساب البنكي والمبلغ والعملة / Complete bank account, amount, and currency');
       assert(String(data.paymentBankAccount.currency||'').toUpperCase()===String(data.paymentCurrency||'').toUpperCase(),400,'عملة الحساب البنكي يجب أن تطابق عملة الدفع / Bank account currency must match payment currency');
       if(collection==='requests'){
-        assert(data.selectedQuoteId,409,'يجب أن يختار العميل عرضًا قبل الدفع / Customer must select a quote before payment');
-        const selectedQuote=await one('quotes',data.selectedQuoteId);
-        assert(selectedQuote&&selectedQuote.request_id===id&&open(selectedQuote)&&selectedQuote.data.status==='published',409,'العرض المختار غير متاح / Selected quote unavailable');
-        if(enteringPayment)assert(['confirmed','production','ready_for_inspection'].includes(selectedQuote.data.supplierOrderStatus),409,'يجب أن يؤكد المورد تنفيذ الطلب قبل الانتقال للدفع / Supplier must confirm fulfillment before payment');
-        const quoteCurrency=String(selectedQuote.data.currency||'').toUpperCase();
-        assert(quoteCurrency&&data.paymentCurrency===quoteCurrency,400,'عملة الدفع يجب أن تطابق عملة العرض المختار / Payment currency must match selected quote currency');
+        if(data.orderType==='cart'){
+          const children=await db('interests',`data->>cartOrderId=eq.${encodeURIComponent(id)}&data->>deletedAt=is.null`);
+          assert(children.length===Number(data.cartItemCount||0)&&children.length>0,409,'تعذر التحقق من منتجات الطلب / Could not verify cart items');
+          if(enteringPayment)assert(children.every(child=>['confirmed','production','ready_for_inspection'].includes(child.data?.supplierOrderStatus)),409,'يجب أن يؤكد جميع الموردين التنفيذ قبل الانتقال للدفع / All suppliers must confirm fulfillment before payment');
+          assert(String(data.currency||'').toUpperCase()===String(data.paymentCurrency||'').toUpperCase(),400,'عملة الدفع يجب أن تطابق عملة الطلب / Payment currency must match order currency');
+        }else{
+          assert(data.selectedQuoteId,409,'يجب أن يختار العميل عرضًا قبل الدفع / Customer must select a quote before payment');
+          const selectedQuote=await one('quotes',data.selectedQuoteId);
+          assert(selectedQuote&&selectedQuote.request_id===id&&open(selectedQuote)&&selectedQuote.data.status==='published',409,'العرض المختار غير متاح / Selected quote unavailable');
+          if(enteringPayment)assert(['confirmed','production','ready_for_inspection'].includes(selectedQuote.data.supplierOrderStatus),409,'يجب أن يؤكد المورد تنفيذ الطلب قبل الانتقال للدفع / Supplier must confirm fulfillment before payment');
+          const quoteCurrency=String(selectedQuote.data.currency||'').toUpperCase();
+          assert(quoteCurrency&&data.paymentCurrency===quoteCurrency,400,'عملة الدفع يجب أن تطابق عملة العرض المختار / Payment currency must match selected quote currency');
+        }
       }else if(collection==='interests'){
         if(enteringPayment)assert(['confirmed','production','ready_for_inspection'].includes(data.supplierOrderStatus),409,'يجب أن يؤكد المورد تنفيذ الطلب قبل الانتقال للدفع / Supplier must confirm fulfillment before payment');
         if(data.currency)assert(data.paymentCurrency===String(data.currency).toUpperCase(),400,'عملة الدفع يجب أن تطابق عملة العرض العام / Payment currency must match public-offer currency');
@@ -286,7 +294,8 @@ export async function mutate(user,body){
         data.paymentHistory=[...(Array.isArray(data.paymentHistory)?data.paymentHistory:[]),{at:now,status:'awaiting_receipt'}].slice(-100);
       }
     }
-    if(collection==='requests'&&data.status==='sent'&&original.data.status!=='sent')advanceTracking(data,'sourcing',now);
+    if(collection==='requests'&&data.orderType==='cart'&&changes.includes('trackingStatus')&&patch.trackingStatus==='supplier_confirmation')data.status='sent';
+    if(collection==='requests'&&data.status==='sent'&&original.data.status!=='sent'&&data.orderType!=='cart')advanceTracking(data,'sourcing',now);
     if(collection==='requests'&&data.status==='completed'&&original.data.status!=='completed')setTracking(data,'completed',now,'');
     if(collection==='publicOffers'&&changes.includes('categoryId'))await assertCategory(data.categoryId,{required:data.status==='published'});
     if(collection!=='interests'){
@@ -303,6 +312,18 @@ export async function mutate(user,body){
   data.updatedAt=now;
   data.history=[...(original?.data.history||[]),{at:now,status:data.selectedQuoteId&&!original?.data.selectedQuoteId?'selected':data.status}].slice(-200);
   const commitBatch=[{table,id,version:Number(version),ownerId,requestId:original?.request_id||patch.requestId,offerId:original?.offer_id||patch.offerId,data,action:original?'update':'create'}];
+  if(collection==='requests'&&isAdmin&&data.orderType==='cart'&&changes.includes('trackingStatus')&&patch.trackingStatus==='supplier_confirmation'){
+    const children=await db('interests',`data->>cartOrderId=eq.${encodeURIComponent(id)}&data->>deletedAt=is.null`);
+    assert(children.length===Number(data.cartItemCount||0)&&children.length>0,409,'تعذر العثور على جميع منتجات الطلب / Could not find all cart items');
+    for(const child of children){
+      const childData=structuredClone(child.data||{});
+      if((childData.trackingStatus||'received')==='received'){
+        setTracking(childData,'supplier_confirmation',now,'');
+        childData.status='active';childData.updatedAt=now;
+        commitBatch.push({table:'interests',id:child.id,version:child.version,ownerId:child.owner_id,offerId:child.offer_id,data:childData,action:'cart_send_supplier'});
+      }
+    }
+  }
   if(collection==='quotes'&&!isAdmin&&linkedProductionRequest){
     const requestData=structuredClone(linkedProductionRequest.data);
     if(advanceTracking(requestData,'production',now)){
@@ -315,6 +336,22 @@ export async function mutate(user,body){
     if(advanceTracking(requestData,'quality_check',now)){
       requestData.updatedAt=now;
       commitBatch.push({table:'requests',id:linkedInspectionRequest.id,version:linkedInspectionRequest.version,ownerId:linkedInspectionRequest.owner_id,data:requestData,action:'tracking'});
+    }
+  }
+  if(collection==='interests'&&!isAdmin&&linkedCartRequest&&open(linkedCartRequest)){
+    const requestData=structuredClone(linkedCartRequest.data||{}),siblings=await db('interests',`data->>cartOrderId=eq.${encodeURIComponent(linkedCartRequest.id)}&data->>deletedAt=is.null`);
+    const statuses=siblings.map(row=>row.id===id?(data.supplierOrderStatus||'pending_confirmation'):(row.data?.supplierOrderStatus||'pending_confirmation'));
+    let changed=false;
+    if(data.supplierOrderStatus==='cannot_fulfill'){
+      setTracking(requestData,'on_hold',now,'Supplier unable to fulfill one cart item');changed=true;
+    }else if(statuses.length&&statuses.every(s=>s==='ready_for_inspection')){
+      changed=advanceTracking(requestData,'quality_check',now);
+    }else if(statuses.some(s=>s==='production'||s==='ready_for_inspection')){
+      changed=advanceTracking(requestData,'production',now);
+    }
+    if(changed){
+      requestData.updatedAt=now;
+      commitBatch.push({table:'requests',id:linkedCartRequest.id,version:linkedCartRequest.version,ownerId:linkedCartRequest.owner_id,data:requestData,action:'cart_tracking'});
     }
   }
   if(collection==='quotes'&&isAdmin&&data.status==='published'&&original?.data.status!=='published'&&original?.request_id){
