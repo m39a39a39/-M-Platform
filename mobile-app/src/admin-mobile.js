@@ -274,12 +274,22 @@ function syncBulkProductSubcategory(row){
   const current=sub.value;sub.innerHTML='<option value="">—</option>'+bulkSubcategoryOptionRows(current,cat);
   if(current&&![...sub.options].some(o=>o.value===current))sub.value='';
 }
+function normalizeBulkEditorViewport(){
+  const viewport=document.querySelector('meta[name="viewport"]');
+  if(viewport){const value='width=device-width, initial-scale=1, viewport-fit=cover';if(viewport.getAttribute('content')!==value)viewport.setAttribute('content',value);}
+  document.documentElement.style.removeProperty('zoom');document.body.style.removeProperty('zoom');
+}
+function friendlyBulkError(error){
+  const raw=String(error?.detail||error?.message||'').trim();
+  if(!raw||/^not found$/i.test(raw)||/^http\s*404$/i.test(raw))return tr('تعذر حفظ التعديلات لأن بيانات المنتجات لم تعد متزامنة. تم تحديث البيانات؛ راجع التعديلات وحاول مرة أخرى.','The product data changed while editing. The data was refreshed; review the changes and try again.');
+  return raw;
+}
 function openBulkProductEditor(mode='all'){
   const rows=selectedProductRows();if(!rows.length)return;
   const translationOnly=mode==='translation';
   const headers=translationOnly?[tr('المنتج','Product'),tr('الاسم AR','Name AR'),tr('الاسم EN','Name EN'),tr('الوصف AR','Description AR'),tr('الوصف EN','Description EN')]:[tr('المنتج','Product'),tr('الاسم الأصلي','Original name'),tr('الوصف الأصلي','Original description'),tr('السعر','Price'),'MOQ',tr('المخزون','Stock'),tr('الرئيسي','Main'),tr('الفرعي','Sub'),tr('دولة التوريد','Supply country'),tr('النشر','Status'),tr('الاسم AR','Name AR'),tr('الاسم EN','Name EN'),tr('الوصف AR','Description AR'),tr('الوصف EN','Description EN')];
   const body=translationOnly?rows.map(x=>{const t=x.translation||{};return `<tr data-bulk-product-row="${esc(x.id)}"><td class="sticky-col"><strong>#${esc(ref(x))}</strong><small>${esc(x.sku||'')}</small></td><td><input data-bulk-edit="titleAr" value="${esc(t.titleAr||'')}"></td><td><input data-bulk-edit="titleEn" value="${esc(t.titleEn||'')}"></td><td><textarea data-bulk-edit="descriptionAr">${esc(t.descriptionAr||'')}</textarea></td><td><textarea data-bulk-edit="descriptionEn">${esc(t.descriptionEn||'')}</textarea></td></tr>`}).join(''):rows.map(bulkProductEditorRow).join('');
-  modal(translationOnly?tr('تحديث الترجمة جماعيًا','Bulk translation update'):tr('تعديل المنتجات جماعيًا','Bulk edit products'),tr(`${rows.length} منتجات محددة`,`${rows.length} products selected`),`<form id="adminBulkProductsForm" class="form-stack" data-mode="${translationOnly?'translation':'all'}"><div class="admin-bulk-table-wrap"><table class="admin-bulk-table"><thead><tr>${headers.map(x=>`<th>${esc(x)}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div><label class="admin-category-toggle-label"><input type="checkbox" name="reviewed" required><span>${esc(tr('راجعت النصوص والتعديلات وأؤكد جاهزيتها للنشر.','I reviewed the content and confirm it is ready to publish.'))}</span></label><p class="form-message" data-admin-bulk-message></p><button class="primary-btn" type="submit">${esc(tr('حفظ جميع التعديلات','Save all changes'))}</button></form>`);
+  modal(translationOnly?tr('تحديث الترجمة جماعيًا','Bulk translation update'):tr('تعديل المنتجات جماعيًا','Bulk edit products'),tr(`${rows.length} منتجات محددة`,`${rows.length} products selected`),`<form id="adminBulkProductsForm" class="form-stack admin-bulk-products-form" data-mode="${translationOnly?'translation':'all'}"><div class="admin-bulk-table-wrap"><table class="admin-bulk-table"><thead><tr>${headers.map(x=>`<th>${esc(x)}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div><label class="admin-category-toggle-label"><input type="checkbox" name="reviewed" required><span>${esc(tr('راجعت النصوص والتعديلات وأؤكد جاهزيتها للنشر.','I reviewed the content and confirm it is ready to publish.'))}</span></label><p class="form-message" data-admin-bulk-message></p><button class="primary-btn" type="submit">${esc(tr('حفظ جميع التعديلات','Save all changes'))}</button></form>`);
 }
 async function submitBulkProducts(form){
   const message=form.querySelector('[data-admin-bulk-message]'),items=[],same=(a,b)=>String(a??'')===String(b??'');
@@ -299,7 +309,14 @@ async function submitBulkProducts(form){
     if(Object.keys(patch).length)items.push({id:original.id,version:original.version,patch});
   }
   if(!items.length){message.textContent=tr('لا توجد تغييرات للحفظ.','There are no changes to save.');return;}
-  try{message.textContent=tr('جارٍ حفظ جميع المنتجات...','Saving all products...');await api('/api/v1/bulk-public-offers',{method:'POST',body:{items,redactionConfirmed:!!form.reviewed.checked}});selectedProducts.clear();await reload();closeModal();schedule();toast(tr('تم حفظ جميع التعديلات.','All changes saved.'));}catch(e){message.textContent=e.message;}
+  try{
+    message.textContent=tr('جارٍ حفظ جميع المنتجات...','Saving all products...');
+    await api('/api/v1/bulk-public-offers',{method:'POST',body:{items,redactionConfirmed:!!form.reviewed.checked}});
+    selectedProducts.clear();await reload();closeModal();schedule();toast(tr('تم حفظ جميع التعديلات.','All changes saved.'));
+  }catch(e){
+    if(Number(e?.status)===404){try{await reload();}catch{}}
+    message.textContent=friendlyBulkError(e);
+  }
 }
 async function runBulkProductAction(action,value=''){
   const rows=selectedProductRows();if(!rows.length)return false;
@@ -732,6 +749,19 @@ document.addEventListener('change',e=>{
     if(field)field.classList.toggle('hidden',e.target.value!=='payment_confirmation');
   }
 });
+document.addEventListener('focusout',e=>{
+  if(!e.target.closest?.('#adminBulkProductsForm'))return;
+  setTimeout(()=>{if(!document.activeElement?.closest?.('#adminBulkProductsForm'))normalizeBulkEditorViewport();},180);
+});
+if(window.visualViewport){
+  let bulkKeyboardTimer;
+  window.visualViewport.addEventListener('resize',()=>{
+    if(!document.getElementById('adminBulkProductsForm'))return;
+    clearTimeout(bulkKeyboardTimer);bulkKeyboardTimer=setTimeout(()=>{
+      if(!document.activeElement?.matches?.('#adminBulkProductsForm input,#adminBulkProductsForm textarea,#adminBulkProductsForm select'))normalizeBulkEditorViewport();
+    },180);
+  });
+}
 document.addEventListener('submit',e=>{
   if(!isAdmin())return;
   if(e.target.matches('#adminTeamForm')){e.preventDefault();submitTeam(e.target);}
