@@ -1043,6 +1043,16 @@ input:focus,textarea:focus,select:focus {
 .guest-modal-login {
   width: 100%;
 }
+.guest-header-actions{display:flex;align-items:center;gap:6px}
+.guest-new-request{margin:4px 0 14px}
+.guest-auth-required{display:grid;gap:16px}
+.guest-auth-required p{margin:0;color:var(--muted);line-height:1.75}
+.guest-auth-required-actions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
+.guest-auth-required-actions button{width:100%}
+.guest-product-search input,.guest-modal-images+*{min-width:0}
+@media(max-width:420px){
+  .guest-auth-required-actions{grid-template-columns:minmax(0,1fr)}
+}
 
 html[dir="ltr"] .guest-header,html[dir="ltr"] .guest-hero,html[dir="ltr"] .guest-offer-body {
   text-align: left;
