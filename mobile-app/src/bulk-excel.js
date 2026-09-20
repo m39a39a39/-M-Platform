@@ -227,7 +227,7 @@ function zipStoredFiles(files){
 }
 const xesc=v=>String(v).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
 const lettersFromIndex=i=>{let s='',n=i+1;while(n){n--;s=String.fromCharCode(65+n%26)+s;n=Math.floor(n/26);}return s;};
-export function downloadBulkProductTemplate(){
+export function buildBulkProductTemplate(){
   const headers=['SKU','Image 1 / الصورة 1','Image 2 / الصورة 2','Image 3 / الصورة 3','Image 4 / الصورة 4','Image 5 / الصورة 5','Product Name / اسم المنتج','Description / الوصف','Price / السعر','Currency / العملة','MOQ / الحد الأدنى','Stock / المخزون','Production Days / مدة الإنتاج','Category / التصنيف','Supply Country / بلد التوريد','Valid Until / صالح حتى'];
   const cells=headers.map((h,i)=>\`<c r="${lettersFromIndex(i)}1" t="inlineStr"><is><t>${xesc(h)}</t></is></c>\`).join('');
   const sheet=\`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1">${cells}</row></sheetData></worksheet>\`;
@@ -238,7 +238,10 @@ export function downloadBulkProductTemplate(){
     'xl/_rels/workbook.xml.rels':'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>',
     'xl/worksheets/sheet1.xml':sheet
   };
-  const blob=new Blob([zipStoredFiles(files)],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  return zipStoredFiles(files);
+}
+export function downloadBulkProductTemplate(){
+  const blob=new Blob([buildBulkProductTemplate()],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
   const url=URL.createObjectURL(blob),a=document.createElement('a');
   a.href=url;a.download='M-Platform-products-template.xlsx';document.body.appendChild(a);a.click();a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
