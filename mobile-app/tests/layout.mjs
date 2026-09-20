@@ -15,11 +15,19 @@ const bankAccounts=[{id:'bank-usd',label:'MIG USD',beneficiary:'MIG COMPANY',ban
 requests[0]={...requests[0],status:'sent',trackingStatus:'payment_confirmation',trackingNote:'',selectedQuoteId:'q0',paymentStatus:'awaiting_receipt',paymentMessage:'يرجى تحويل الدفعة الأولى ثم إرفاق إيصال الدفع.',paymentBankAccountId:'bank-usd',paymentBankAccount:bankAccounts[0],paymentAmount:5250,paymentCurrency:'USD',paymentRequestedAt:'2026-09-18'};
 requests[2]={...requests[2],status:'sent',trackingStatus:'supplier_confirmation',selectedQuoteId:'q2',selectedForSupplier:true};
 const categories=[{id:'mobile',nameAr:'إكسسوارات الجوال',nameEn:'Mobile accessories',active:true,order:0},{id:'electronics',nameAr:'إلكترونيات',nameEn:'Electronics',active:true,order:1},{id:'home',nameAr:'المنزل',nameEn:'Home',active:true,order:2}];
-const publicOffers = Array.from({ length: 45 }, (_, i) => ({ id: `p${i}`, displayNo: 10101+i, product: titleAr, translation, specs: titleEn, images: images.slice(0,(i%5)+1), status:'published', supplierId:'supplier', categoryId:categories[i%3].id, currency:'USD', unitPrice:12, moq:500, stock:'2000', leadTime:30 }));
+const publicOffers = Array.from({ length: 45 }, (_, i) => ({ id: `p${i}`, displayNo: 10101+i, product: titleAr, translation, specs: titleEn, images: images.slice(0,(i%5)+1), status:'published', supplierId:'supplier', sku:`SKU-${i}`, categoryId:categories[i%3].id, currency:'USD', unitPrice:12, moq:500, stock:'2000', leadTime:30 }));
 const quotes = requests.slice(0,4).map((r,i)=>({id:`q${i}`,requestId:r.id,supplierId:'supplier',status:i%2?'pending':'published',unitPrice:10,moq:500,leadTime:20,currency:'USD',images,translation,createdAt:'2026-09-17'}));
 const accounts = ['client','supplier','admin'].map(role=>({id:role,role,name: role==='admin'?'مدير المنصة':titleAr,company:titleEn,email:`${role}@example.test`,isOwner:role==='admin'}));
 const interests = [{id:'i1',displayNo:11001,offerId:'p0',status:'active',trackingStatus:'payment_confirmation',trackingUpdatedAt:'2026-09-18',trackingNote:'بانتظار تأكيد الدفع',quantity:600,unitPrice:12,currency:'USD',moq:500,total:7200,supplierOrderStatus:'confirmed',supplierOrderNote:'',paymentStatus:'receipt_submitted',paymentMessage:'يرجى دفع قيمة المنتج وإرسال الإيصال.',paymentReceipt:{src:images[0],mime:'image/jpeg',submittedAt:'2026-09-18'},createdAt:'2026-09-17',customerId:'client',version:1}];
 const adminPendingInterest={id:'i2',displayNo:11002,offerId:'p1',status:'active',trackingStatus:'received',quantity:700,unitPrice:12,currency:'USD',moq:500,total:8400,supplierOrderStatus:'pending_confirmation',supplierOrderNote:'',createdAt:'2026-09-19',customerId:'client',version:1};
+const cartRequest={id:'cart1',displayNo:12001,orderType:'cart',product:'Product order',translation:{titleAr:'طلب منتجات',titleEn:'Product order'},status:'review',trackingStatus:'received',cartItemCount:2,cartTotal:15000,currency:'USD',createdAt:'2026-09-19',updatedAt:'2026-09-19',customerId:'client',version:1,cartItems:[
+  {line:1,interestId:'ci1',offerId:'p1',sku:'SKU-1',product:'Cart product 1',translation:{titleAr:'منتج سلة 1',titleEn:'Cart product 1'},images:[images[0]],quantity:750,unitPrice:12,currency:'USD',total:9000},
+  {line:2,interestId:'ci2',offerId:'p2',sku:'SKU-2',product:'Cart product 2',translation:{titleAr:'منتج سلة 2',titleEn:'Cart product 2'},images:[images[1]],quantity:500,unitPrice:12,currency:'USD',total:6000}
+]};
+const cartInterests=[
+  {id:'ci1',offerId:'p1',cartOrderId:'cart1',cartLine:1,status:'active',trackingStatus:'received',quantity:750,unitPrice:12,currency:'USD',moq:500,total:9000,supplierOrderStatus:'pending_confirmation',createdAt:'2026-09-19',customerId:'client',version:1},
+  {id:'ci2',offerId:'p2',cartOrderId:'cart1',cartLine:2,status:'active',trackingStatus:'received',quantity:500,unitPrice:12,currency:'USD',moq:500,total:6000,supplierOrderStatus:'pending_confirmation',createdAt:'2026-09-19',customerId:'client',version:1}
+];
 const notes = Array.from({length:20},(_,i)=>({id:i+1,titleAr,titleEn,bodyAr:titleAr,bodyEn:titleEn,createdAt:'2026-09-17'}));
 const clientPaymentNote={id:9001,event:'payment_required_request',entityId:'r0',titleAr:'بانتظار تأكيد الدفع',titleEn:'Awaiting payment confirmation',bodyAr:'يرجى تحويل الدفعة الأولى ثم إرفاق إيصال الدفع.',bodyEn:'Please upload the payment receipt.',action:'upload_receipt',target:{screen:'customerPayment',entityType:'request',entityId:'r0'},createdAt:'2026-09-19'};
 const adminPaymentNote={id:9002,event:'payment_receipt_submitted_interest',entityId:'i1',titleAr:'إيصال دفع جديد',titleEn:'New payment receipt',bodyAr:'تم رفع إيصال دفع جديد لطلب منتج جاهز.',bodyEn:'A new receipt was uploaded.',target:{screen:'adminPayment',entityType:'interest',entityId:'i1'},createdAt:'2026-09-19'};
@@ -62,6 +70,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
   let paymentReceiptSubmission=null;
   let paymentReviewSubmission=null;
   let supplierOrderMutation=null;
+   let cartOrderSubmission=null;
   const uploadedSources=[];
   page.on('pageerror',e=>errors.push(e.message));
   await page.addInitScript(lang=>localStorage.setItem('CapacitorStorage.language',lang),language);
@@ -73,11 +82,12 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
     }
     let body={};
     if(path.endsWith('/auth/login')) body={user:accounts.find(a=>a.role===role),tokens:{accessToken:'fixture',refreshToken:'fixture'}};
-    else if(path.endsWith('/state')) { stateCalls++; const roleQuotes=role==='admin'?quotes.map(q=>q.id==='q2'?{...q,supplierOrderStatus:'confirmed'}:q):quotes;const roleInterests=role==='admin'?[...interests,adminPendingInterest]:interests;body={user:accounts.find(a=>a.role===role),requests,quotes:roleQuotes,publicOffers,accounts,interests:roleInterests,settings:{categories,...(role==='admin'?{bankAccounts}:{}),_version:1}}; }
+    else if(path.endsWith('/state')) { stateCalls++; const roleQuotes=role==='admin'?quotes.map(q=>q.id==='q2'?{...q,supplierOrderStatus:'confirmed'}:q):quotes;const roleRequests=role==='supplier'?requests:[...requests,cartRequest];const roleInterests=role==='admin'?[...interests,adminPendingInterest,...cartInterests]:role==='client'?[...interests,...cartInterests]:interests;body={user:accounts.find(a=>a.role===role),requests:roleRequests,quotes:roleQuotes,publicOffers,accounts,interests:roleInterests,settings:{categories,...(role==='admin'?{bankAccounts}:{}),_version:1}}; }
     else if(path.endsWith('/notifications')) body=role==='client'?[clientPaymentNote,...notes.slice(1)]:role==='admin'?[adminPaymentNote,...notes.slice(1)]:notes;
     else if(path.endsWith('/notifications/read')) body={ok:true};
     else if(path.endsWith('/payment-receipts')) {paymentReceiptSubmission=route.request().postDataJSON();body={ok:true,paymentStatus:'receipt_submitted'};}
     else if(path.endsWith('/payment-review')) {paymentReviewSubmission=route.request().postDataJSON();body={ok:true,paymentStatus:paymentReviewSubmission.action==='confirm'?'confirmed':'reupload_requested'};}
+    else if(path.endsWith('/cart-orders')) {cartOrderSubmission=route.request().postDataJSON();body={ok:true,orderId:'cart-new',displayNo:12002,currency:'USD',cartTotal:15000,itemCount:2};}
     else if(path.endsWith('/app-config')) body={apiVersion:1};
     else if(path.endsWith('/uploads')) {
       const upload=route.request().postDataJSON();
@@ -156,9 +166,15 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
       assert.equal(await page.locator('#bottomNav').evaluate(el=>getComputedStyle(el).gridTemplateColumns.split(' ').length),4,'Client navigation must use four equal columns');
       assert.ok(await page.locator('#screen').evaluate(el=>el.firstElementChild?.classList.contains('special-request-card')),'New request card must be first on client home');
       assert.equal(await page.locator('#screen .client-action-needed').count(),1,'Client home must include Needs your action');
-      assert.equal(await page.locator('#screen .client-home-stats .stat-card').count(),3,'Client home must show only three useful stats');
+      assert.equal(await page.locator('#screen .client-home-stats .stat-card').count(),0,'Client home must not duplicate order and quote statistics');
       assert.equal(await page.locator('#screen .client-action-card').count()>0,true,'Client home must surface actionable items');
       assert.equal(await page.locator('#screen .public-offer-card').count(),20,'Client home must show at most 20 ready products');
+       assert.equal(await page.locator('#screen [data-product-search]').count(),1,'Client home must include product search');
+       assert.equal(await page.locator('#headerCartBtn:not(.hidden)').count(),1,'Client header must include the cart');
+       await page.locator('#screen [data-product-search]').fill('SKU-44');
+       assert.equal(await page.locator('#screen .public-offer-card').count(),1,'Product search must filter by SKU');
+       await page.locator('#screen [data-product-search]').fill('');
+       assert.equal(await page.locator('#screen .public-offer-card').count(),20,'Clearing product search must restore results');
       assert.equal(await page.locator('#screen .category-filter-bar button').count(),4,'Client must show All plus three category buttons');
       await page.locator('#screen [data-category="mobile"]').click();
       assert.equal(await page.locator('#screen .public-offer-card').count(),15,'Client category filter must show matching products only');
@@ -210,18 +226,32 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
       const secondOffer=page.locator('.public-offer-card').nth(1);
       await secondOffer.locator('.public-offer-content').click();
       await page.locator('#publicInterestForm').waitFor();
-      assert.equal(await page.locator('#publicInterestQuantity').getAttribute('min'),'500','Public offer quantity must enforce supplier MOQ');
-      assert.equal(await page.locator('#publicInterestQuantity').getAttribute('max'),'2000','Public offer quantity must respect numeric stock');
-      assert.equal(await page.locator('#publicInterestQuantity').inputValue(),'500','Requested quantity must default to MOQ');
-      await page.locator('#publicInterestQuantity').fill('499');
-      assert.equal(await page.locator('#publicInterestQuantity').evaluate(el=>el.checkValidity()),false,'Quantity below MOQ must be invalid');
+      assert.equal(await page.locator('#publicInterestQuantity').getAttribute('min'),'500','Product quantity must enforce supplier MOQ');
+      assert.equal(await page.locator('#publicInterestQuantity').getAttribute('max'),'2000','Product quantity must respect numeric stock');
       await page.locator('#publicInterestQuantity').fill('750');
-      assert.ok((await page.locator('#publicInterestTotal').textContent()).includes('9,000')||(await page.locator('#publicInterestTotal').textContent()).includes('9000'),'Total must update as unit price × quantity');
+      assert.ok((await page.locator('#publicInterestTotal').textContent()).includes('9,000')||(await page.locator('#publicInterestTotal').textContent()).includes('9000'),'Line total must update as unit price × quantity');
       await page.locator('#publicInterestForm button[type="submit"]').click();
       await page.locator('#modal').waitFor({state:'hidden'});
-      assert.equal(interestMutation?.collection,'interests','Public offer request must create an interest/order record');
-      assert.equal(Number(interestMutation?.patch?.quantity),750,'Public offer request must store the customer quantity');
-      interestMutation=null;
+      assert.equal(await page.locator('#headerCartCount:not(.hidden)').textContent(),'1','Adding a product must update cart count');
+
+      const thirdOffer=page.locator('.public-offer-card').nth(2);
+      await thirdOffer.locator('.public-offer-content').click();
+      await page.locator('#publicInterestForm').waitFor();
+      await page.locator('#publicInterestForm button[type="submit"]').click();
+      await page.locator('#modal').waitFor({state:'hidden'});
+      assert.equal(await page.locator('#headerCartCount:not(.hidden)').textContent(),'2','Cart must combine multiple products');
+
+      await page.locator('#headerCartBtn').click();
+      await page.locator('#cartCheckoutForm').waitFor();
+      assert.equal(await page.locator('#modal .cart-line').count(),2,'Cart must show both products in one order');
+      const cartText=await page.locator('#modal .cart-summary').textContent();
+      assert.ok(cartText.includes('15000')||cartText.includes('15,000'),'Cart must show one grand total');
+      await page.locator('#cartCheckoutForm button[type="submit"]').click();
+      await page.locator('#modal').waitFor({state:'hidden'});
+      assert.equal(cartOrderSubmission?.items?.length,2,'Checkout must submit one order with two products');
+      assert.equal(cartOrderSubmission?.items?.[0]?.quantity,750,'Checkout must preserve selected product quantity');
+      assert.equal(await page.locator('#headerCartCount:not(.hidden)').count(),0,'Successful checkout must clear cart badge');
+      cartOrderSubmission=null;
       await page.locator('#bottomNav [data-screen="home"]').click();
     }
     if(role==='supplier'){
@@ -363,6 +393,15 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
           assert.equal(await page.locator('[data-admin-request-all]').count(),1,'Admin orders must include All orders quick filter');
           assert.equal(await page.locator('[data-admin-request-quotes]').count(),1,'Admin orders must preserve pending quote review access');
           assert.ok(await page.locator('[data-admin-interest]').count()>=2,'Admin orders must include ready-product orders');
+           assert.equal(await page.locator('[data-admin-interest="ci1"],[data-admin-interest="ci2"]').count(),0,'Cart child items must not appear as separate admin orders');
+           await page.locator('[data-admin-open="request"][data-admin-id="cart1"] .list-card-title').click();
+           await page.locator('#modal .admin-cart-order-panel').waitFor();
+           assert.equal(await page.locator('#modal .admin-cart-line').count(),2,'Admin cart order must show two child products inside one order');
+           assert.equal(await page.locator('#modal [data-admin-send-cart-suppliers]').count(),1,'Admin must be able to approve and send all cart items to suppliers');
+           await page.locator('#modal [data-admin-send-cart-suppliers]').click();
+           await page.locator('#modal').waitFor({state:'hidden'});
+           assert.equal(requestTrackingMutation?.patch?.trackingStatus,'supplier_confirmation','Cart approval must send product lines to suppliers');
+           requestTrackingMutation=null;
           await page.locator('[data-admin-request-quotes]').click();
           assert.ok(await page.locator('[data-admin-open="request"]').count()>0,'Quotes-to-review filter must resolve to their RFQ orders');
           await page.locator('[data-admin-request-all]').click();
@@ -407,8 +446,9 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
         }
         if(role==='client'){
           assert.equal(await page.locator('#screen .client-order-filters button').count(),3,'My orders must include All, Active, and Completed filters');
-          assert.equal(await page.locator('#screen .client-order-card').count(),101,'My orders must combine custom and ready-product orders');
-          assert.equal(await page.locator('#screen [data-request]').count(),100,'Custom requests must remain accessible inside My orders');
+          assert.equal(await page.locator('#screen .client-order-card').count(),102,'My orders must combine RFQs, one cart order, and legacy ready-product orders');
+          assert.equal(await page.locator('#screen [data-request]').count(),100,'RFQ requests must remain accessible inside My orders');
+           assert.equal(await page.locator('#screen [data-cart-order]').count(),1,'Cart products must appear as one customer order');
           assert.equal(await page.locator('#screen [data-public-offer]').count(),1,'Ready-product orders must remain accessible inside My orders');
           await page.locator('#screen [data-client-order-filter="active"]').click();
           assert.ok(await page.locator('#screen .client-order-card').count()>0,'Active filter must show active orders');
