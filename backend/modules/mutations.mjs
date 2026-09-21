@@ -150,11 +150,11 @@ function cartInviteFor(data,supplierId){
 function cartLine(data,interestId){
   return (Array.isArray(data?.cartItems)?data.cartItems:[]).find(x=>x?.interestId===interestId)||null;
 }
-function cartTermsMatch(childData,quoteData,offerData={}){
+export function cartTermsMatch(childData,quoteData){
   if(String(quoteData?.currency||'').toUpperCase()!==String(childData?.currency||'').toUpperCase())return false;
   if(Number(quoteData?.unitPrice)!==Number(childData?.unitPrice))return false;
   if(Number(quoteData?.moq)!==Number(childData?.moq))return false;
-  const oldLead=String(childData?.offerSnapshot?.leadTime??offerData?.leadTime??'').trim();
+  const oldLead=String(childData?.offerSnapshot?.leadTime??'').trim();
   return !oldLead||String(quoteData?.leadTime??'').trim()===oldLead;
 }
 function applyCartQuoteToParent(data,interestId,quoteData){
@@ -229,6 +229,9 @@ export async function mutate(user,body){
         assert(invite?.interestId,409,'دعوة التسعير البديل غير متاحة / Replacement pricing invitation unavailable');
         const child=await one('interests',invite.interestId);
         assert(child&&child.data?.cartOrderId===r.id&&child.data?.supplierOrderStatus==='cannot_fulfill',409,'المنتج لم يعد يحتاج موردًا بديلًا / Item no longer needs a replacement supplier');
+        const requiredCurrency=String(child.data?.currency||'').toUpperCase();
+        assert(String(data.currency||'').toUpperCase()===requiredCurrency,409,'عملة العرض البديل يجب أن تطابق عملة المنتج / Replacement quote currency must match the item currency');
+        assert(Number(data.moq)<=Number(child.data?.quantity),409,'الحد الأدنى للمورد أعلى من كمية الطلب / Supplier MOQ exceeds the requested quantity');
         data.replacementInterestId=invite.interestId;
       }
       const existing=await db('quotes',`request_id=eq.${encodeURIComponent(patch.requestId)}&owner_id=eq.${encodeURIComponent(user.id)}&data->>deletedAt=is.null&limit=1`);
@@ -265,7 +268,7 @@ export async function mutate(user,body){
     }
   }else if(!isAdmin){
     if(collection==='requests'&&user.role==='client'&&original.owner_id===user.id){
-      assert(changes.length===1&&['selectedQuoteId','lastSeenQuoteAt','approveReplacementQuoteId','approveCartReplacementQuoteId'].includes(changes[0]));
+      assert(changes.length===1&&['selectedQuoteId','lastSeenQuoteAt','approveReplacementQuoteId','rejectReplacementQuoteId','approveCartReplacementQuoteId','rejectCartReplacementQuoteId'].includes(changes[0]));
       if(changes[0]==='approveCartReplacementQuoteId'){
         const pending=data.pendingCartReplacement,quoteId=String(patch.approveCartReplacementQuoteId||'');
         assert(data.orderType==='cart'&&pending?.quoteId===quoteId&&pending?.interestId,409,'العرض البديل غير متاح / Replacement quote unavailable');
@@ -279,11 +282,22 @@ export async function mutate(user,body){
         const previousProforma=data.proformaInvoice?structuredClone(data.proformaInvoice):null;
         if(previousProforma)data.invoiceHistory=[...(Array.isArray(data.invoiceHistory)?data.invoiceHistory:[]),{type:'proforma_replaced',at:now,invoice:previousProforma}].slice(-50);
         delete data.proformaInvoice;delete data.finalInvoice;data.paymentStatus=null;delete data.paymentReceipt;delete data.paymentReceiptSubmittedAt;delete data.paymentConfirmedAt;
-        data.proformaInvoice=await issueCartProforma(user,{...data,proformaInvoice:null},id,now);
+        data.proformaInvoice=await issueCartProforma(user,{...data,proformaInvoice:null},id,now,{fxSnapshot:previousProforma?.fxSnapshot,currencyLabel:previousProforma?.currencyLabel});
         settleCartInvites(data,child.id,q.owner_id,now);delete data.pendingCartReplacement;
         setTracking(data,'supplier_confirmation',now,'');
         data.supplierAssignmentHistory=[...(Array.isArray(data.supplierAssignmentHistory)?data.supplierAssignmentHistory:[]),{approvedCartReplacementQuoteId:q.id,interestId:child.id,approvedAt:now,approvedBy:'customer'}].slice(-100);
         cartReplacementCommit={child,quote:q,previousSupplierId};
+      }else if(changes[0]==='rejectCartReplacementQuoteId'){
+        const pending=data.pendingCartReplacement,quoteId=String(patch.rejectCartReplacementQuoteId||'');
+        assert(data.orderType==='cart'&&pending?.quoteId===quoteId&&pending?.interestId,409,'العرض البديل غير متاح / Replacement quote unavailable');
+        const q=await one('quotes',quoteId);
+        assert(q&&q.request_id===id&&q.data.status==='published',409,'العرض البديل غير متاح / Replacement quote unavailable');
+        data.cartReplacementRejectedQuoteIds=[...new Set([...(Array.isArray(data.cartReplacementRejectedQuoteIds)?data.cartReplacementRejectedQuoteIds:[]),q.id])].slice(-100);
+        data.cartReplacementInvites=(Array.isArray(data.cartReplacementInvites)?data.cartReplacementInvites:[]).map(x=>x?.interestId===pending.interestId&&x?.supplierId===q.owner_id?{...x,status:'cancelled',cancelReason:'customer_rejected',resolvedAt:now}:x);
+        if(Array.isArray(data.supplierIds))data.supplierIds=data.supplierIds.filter(supplierId=>supplierId!==q.owner_id);
+        data.supplierAssignmentHistory=[...(Array.isArray(data.supplierAssignmentHistory)?data.supplierAssignmentHistory:[]),{rejectedCartReplacementQuoteId:q.id,interestId:pending.interestId,rejectedAt:now,rejectedBy:'customer'}].slice(-100);
+        delete data.pendingCartReplacement;
+        setTracking(data,'supplier_confirmation',now,'رفض العميل العرض البديل؛ يلزم اختيار مورد آخر / Customer rejected the replacement quote; choose another supplier');
       }else if(changes[0]==='approveReplacementQuoteId'){
         const q=await one('quotes',String(patch.approveReplacementQuoteId||''));
         assert(data.pendingReplacementQuoteId&&q?.id===data.pendingReplacementQuoteId&&q.request_id===id&&q.data.status==='published'&&open(q)&&active(await one('profiles',q.owner_id)),409,'العرض البديل غير متاح / Replacement quote unavailable');
@@ -291,9 +305,17 @@ export async function mutate(user,body){
         data.selectedQuoteId=q.id;delete data.pendingReplacementQuoteId;
         if(previousProforma)data.invoiceHistory=[...(Array.isArray(data.invoiceHistory)?data.invoiceHistory:[]),{type:'proforma_replaced',at:now,invoice:previousProforma}].slice(-50);
         delete data.proformaInvoice;delete data.finalInvoice;data.paymentStatus=null;delete data.paymentReceipt;delete data.paymentReceiptSubmittedAt;delete data.paymentConfirmedAt;
-        data.proformaInvoice=await issueQuoteProforma(user,{...original,data:{...data,proformaInvoice:null}},q,now);
+        data.proformaInvoice=await issueQuoteProforma(user,{...original,data:{...data,proformaInvoice:null}},q,now,{fxSnapshot:previousProforma?.fxSnapshot,currencyLabel:previousProforma?.currencyLabel});
         setTracking(data,'supplier_confirmation',now,'');
         data.supplierAssignmentHistory=[...(Array.isArray(data.supplierAssignmentHistory)?data.supplierAssignmentHistory:[]),{approvedReplacementQuoteId:q.id,approvedAt:now,approvedBy:'customer'}].slice(-100);
+      }else if(changes[0]==='rejectReplacementQuoteId'){
+        const quoteId=String(patch.rejectReplacementQuoteId||''),q=await one('quotes',quoteId);
+        assert(data.pendingReplacementQuoteId===quoteId&&q?.request_id===id&&q.data.status==='published',409,'العرض البديل غير متاح / Replacement quote unavailable');
+        data.replacementRejectedQuoteIds=[...new Set([...(Array.isArray(data.replacementRejectedQuoteIds)?data.replacementRejectedQuoteIds:[]),q.id])].slice(-100);
+        if(Array.isArray(data.supplierIds))data.supplierIds=data.supplierIds.filter(supplierId=>supplierId!==q.owner_id);
+        data.supplierAssignmentHistory=[...(Array.isArray(data.supplierAssignmentHistory)?data.supplierAssignmentHistory:[]),{rejectedReplacementQuoteId:q.id,rejectedAt:now,rejectedBy:'customer'}].slice(-100);
+        delete data.pendingReplacementQuoteId;
+        setTracking(data,'supplier_confirmation',now,'رفض العميل العرض البديل؛ يلزم اختيار مورد آخر / Customer rejected the replacement quote; choose another supplier');
       }else if(changes[0]==='selectedQuoteId'){
         const r=await assertOpenRequest(id),q=await one('quotes',patch.selectedQuoteId);
         assert(!r.data.selectedQuoteId&&r.data.status==='sent'&&open(q)&&q.request_id===id&&q.data.status==='published'&&active(await one('profiles',q.owner_id)),409,'العرض غير متاح أو سبق اختيار عرض / Quote unavailable or already selected');
@@ -401,7 +423,7 @@ export async function mutate(user,body){
         const quoteId=String(patch[key].quoteId||''),interestId=String(patch[key].interestId||'');
         const q=await one('quotes',quoteId),child=await one('interests',interestId);
         assert(child&&child.data?.cartOrderId===id&&child.data?.supplierOrderStatus==='cannot_fulfill',409,'المنتج لم يعد يحتاج موردًا بديلًا / Item no longer needs a replacement supplier');
-        assert(q&&q.request_id===id&&q.data.status==='published'&&open(q)&&active(await one('profiles',q.owner_id)),400,'العرض البديل غير متاح / Replacement quote unavailable');
+        assert(q&&q.request_id===id&&q.data.status==='published'&&open(q)&&active(await one('profiles',q.owner_id))&&!(Array.isArray(data.cartReplacementRejectedQuoteIds)&&data.cartReplacementRejectedQuoteIds.includes(q.id)),400,'العرض البديل غير متاح / Replacement quote unavailable');
         if(q.data.replacementInterestId)assert(q.data.replacementInterestId===interestId,409,'هذا العرض يخص منتجًا آخر / Quote belongs to another item');
         else{
           const declined=await db('interests',`data->>cartOrderId=eq.${encodeURIComponent(id)}&data->>supplierOrderStatus=eq.cannot_fulfill&data->>deletedAt=is.null`);
@@ -411,7 +433,7 @@ export async function mutate(user,body){
         assert(Number(q.data.moq)<=Number(child.data.quantity),409,'الحد الأدنى للمورد أعلى من كمية الطلب / Supplier MOQ exceeds the requested quantity');
         const offer=await one('public_offers',child.offer_id),previousSupplierId=child.data.assignedSupplierId||offer?.owner_id||'';
         assert(q.owner_id!==previousSupplierId,400,'اختر عرض مورد آخر / Choose a different supplier quote');
-        const same=cartTermsMatch(child.data,q.data,offer?.data||{});
+        const same=cartTermsMatch(child.data,q.data);
         data.supplierAssignmentHistory=[...(Array.isArray(data.supplierAssignmentHistory)?data.supplierAssignmentHistory:[]),{
           rejectedSupplierId:previousSupplierId,rejectionReason:child.data.supplierOrderNote||'',rejectedAt:child.data.supplierOrderUpdatedAt||now,
           newSupplierId:q.owner_id,newQuoteId:q.id,interestId,reassignedAt:now,termsChanged:!same
@@ -429,7 +451,7 @@ export async function mutate(user,body){
         assert(can(user,'publish')||can(user,'requests.edit'),403,'غير مصرح / Unauthorized');
         const oldQuote=data.selectedQuoteId?await one('quotes',data.selectedQuoteId):null;
         assert(oldQuote?.data?.supplierOrderStatus==='cannot_fulfill',409,'المورد المختار لم يرفض التنفيذ / Selected supplier has not declined');
-        const q=await one('quotes',String(patch[key]||''));assert(q&&q.request_id===id&&q.id!==data.selectedQuoteId&&q.data.status==='published'&&open(q)&&active(await one('profiles',q.owner_id)),400,'العرض البديل غير متاح / Replacement quote unavailable');
+        const q=await one('quotes',String(patch[key]||''));assert(q&&q.request_id===id&&q.id!==data.selectedQuoteId&&q.data.status==='published'&&open(q)&&active(await one('profiles',q.owner_id))&&!(Array.isArray(data.replacementRejectedQuoteIds)&&data.replacementRejectedQuoteIds.includes(q.id)),400,'العرض البديل غير متاح / Replacement quote unavailable');
         const fields=['unitPrice','currency','moq','leadTime','sampleCost'],same=fields.every(f=>String(q.data?.[f]??'')===String(oldQuote.data?.[f]??''));
         data.supplierAssignmentHistory=[...(Array.isArray(data.supplierAssignmentHistory)?data.supplierAssignmentHistory:[]),{rejectedSupplierId:oldQuote.owner_id,rejectedQuoteId:oldQuote.id,rejectionReason:oldQuote.data.supplierOrderNote||'',rejectedAt:oldQuote.data.supplierOrderUpdatedAt||now,newSupplierId:q.owner_id,newQuoteId:q.id,reassignedAt:now,termsChanged:!same}].slice(-100);
         if(same){data.selectedQuoteId=q.id;setTracking(data,'supplier_confirmation',now,'');}
