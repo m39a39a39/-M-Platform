@@ -3,8 +3,19 @@ import { SecureStoragePlugin } from 'capacitor-secure-storage-plugin';
 import { createSession } from './session-core.js';
 
 const key = 'm-platform.session.v1';
-// Never use the plugin's unencrypted web/localStorage fallback for credentials.
+// On the web, keep credentials only for the current browser tab so refreshes do not sign the user out.
 let webSession = null;
+function webRead(){
+  if(typeof sessionStorage==='undefined')return webSession;
+  try{
+    const raw=sessionStorage.getItem(key);return raw?JSON.parse(raw):null;
+  }catch{return null;}
+}
+function webWrite(value){
+  webSession=value;
+  if(typeof sessionStorage==='undefined')return;
+  if(value)sessionStorage.setItem(key,JSON.stringify(value));else sessionStorage.removeItem(key);
+}
 
 async function nativeGet() {
   try {
@@ -34,19 +45,19 @@ async function nativeGet() {
 
 const storage = {
   async get() {
-    if (!Capacitor.isNativePlatform()) return webSession;
+    if (!Capacitor.isNativePlatform()) return webRead();
     return nativeGet();
   },
   async set(value) {
     if (!Capacitor.isNativePlatform()) {
-      webSession = value;
+      webWrite(value);
       return;
     }
     const result = await SecureStoragePlugin.set({ key, value: JSON.stringify(value) });
     if (result?.value === false) throw new Error('Secure storage write failed');
   },
   async remove() {
-    webSession = null;
+    webWrite(null);
     if (!Capacitor.isNativePlatform()) return;
     try {
       const result = await SecureStoragePlugin.remove({ key });
