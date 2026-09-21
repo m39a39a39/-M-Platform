@@ -252,7 +252,7 @@ export async function mutate(user,body){
       data.reviewedAt=null;
     }else if(collection==='interests'&&user.role==='supplier'){
       const offer=await one('public_offers',original.offer_id);
-      assert(offer&&offer.owner_id===user.id&&open(offer),403,'غير مصرح بهذا الطلب / Unauthorized order');
+      assert(offer&&open(offer)&&(original.data.assignedSupplierId?original.data.assignedSupplierId===user.id:offer.owner_id===user.id),403,'غير مصرح بهذا الطلب / Unauthorized order');
       if(original.data.cartOrderId)linkedCartRequest=await one('requests',original.data.cartOrderId);
       assert((original.data.trackingStatus||'received')!=='received'&&!['completed','cancelled'].includes(original.data.trackingStatus),409,'الطلب غير جاهز للتنفيذ / Order is not ready for supplier action');
       assert(changes.length&&changes.every(k=>['supplierOrderStatus','supplierOrderNote'].includes(k)),400,'يمكن تحديث حالة التنفيذ فقط / Only fulfillment status can be updated');
