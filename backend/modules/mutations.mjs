@@ -284,6 +284,25 @@ export async function mutate(user,body){
             if(collection==='quotes'&&patch[key]==='published')data.publishedAt=now;
           }
         }else {assert(collection==='requests'&&Array.isArray(patch[key])&&patch[key].length>0&&patch[key].length<=100,400);for(const supplierId of patch[key]){assert(/^[a-f0-9-]{36}$/.test(supplierId),400);const p=await one('profiles',supplierId);assert(active(p)&&p.role==='supplier',400);}data[key]=patch[key];}
+      }else if(collection==='interests'&&key==='assignedSupplierId'){
+        assert(can(user,'publish')||can(user,'offers.edit'),403,'غير مصرح / Unauthorized');
+        assert(data.supplierOrderStatus==='cannot_fulfill',409,'يمكن تغيير المورد فقط بعد تعذر التنفيذ / Supplier can only be changed after unable to fulfill');
+        const supplierId=String(patch[key]||'');assert(/^[a-f0-9-]{36}$/.test(supplierId),400,'مورد غير صالح / Invalid supplier');
+        const supplier=await one('profiles',supplierId);assert(active(supplier)&&supplier.role==='supplier',400,'المورد غير متاح / Supplier unavailable');
+        const offer=await one('public_offers',original.offer_id),previousSupplierId=data.assignedSupplierId||offer?.owner_id||'';
+        assert(supplierId!==previousSupplierId,400,'اختر موردًا آخر / Choose another supplier');
+        data.supplierAssignmentHistory=[...(Array.isArray(data.supplierAssignmentHistory)?data.supplierAssignmentHistory:[]),{rejectedSupplierId:previousSupplierId,rejectionReason:data.supplierOrderNote||'',rejectedAt:data.supplierOrderUpdatedAt||now,newSupplierId:supplierId,reassignedAt:now}].slice(-100);
+        data.assignedSupplierId=supplierId;data.supplierOrderStatus='pending_confirmation';data.supplierOrderNote='';data.supplierOrderUpdatedAt=now;
+        setTracking(data,'supplier_confirmation',now,'');
+      }else if(collection==='requests'&&key==='replacementQuoteId'){
+        assert(can(user,'publish')||can(user,'requests.edit'),403,'غير مصرح / Unauthorized');
+        const oldQuote=data.selectedQuoteId?await one('quotes',data.selectedQuoteId):null;
+        assert(oldQuote?.data?.supplierOrderStatus==='cannot_fulfill',409,'المورد المختار لم يرفض التنفيذ / Selected supplier has not declined');
+        const q=await one('quotes',String(patch[key]||''));assert(q&&q.request_id===id&&q.id!==data.selectedQuoteId&&q.data.status==='published'&&open(q)&&active(await one('profiles',q.owner_id)),400,'العرض البديل غير متاح / Replacement quote unavailable');
+        const fields=['unitPrice','currency','moq','leadTime','sampleCost'],same=fields.every(f=>String(q.data?.[f]??'')===String(oldQuote.data?.[f]??''));
+        data.supplierAssignmentHistory=[...(Array.isArray(data.supplierAssignmentHistory)?data.supplierAssignmentHistory:[]),{rejectedSupplierId:oldQuote.owner_id,rejectedQuoteId:oldQuote.id,rejectionReason:oldQuote.data.supplierOrderNote||'',rejectedAt:oldQuote.data.supplierOrderUpdatedAt||now,newSupplierId:q.owner_id,newQuoteId:q.id,reassignedAt:now,termsChanged:!same}].slice(-100);
+        if(same){data.selectedQuoteId=q.id;setTracking(data,'supplier_confirmation',now,'');}
+        else{data.pendingReplacementQuoteId=q.id;setTracking(data,'customer_action',now,'تغيرت شروط العرض البديل وتحتاج موافقة العميل / Replacement quote terms changed and require customer approval');}
       }else if(key==='reviewedAt'){
         assert(can(user,editPermission)||can(user,'translate')||can(user,'publish'));data.reviewedAt=now;
       }else if((collection==='requests'||collection==='interests')&&key==='trackingStatus'){
