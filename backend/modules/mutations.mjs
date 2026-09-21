@@ -212,7 +212,7 @@ export async function mutate(user,body){
       assert(changes.length===1&&['selectedQuoteId','lastSeenQuoteAt','approveReplacementQuoteId'].includes(changes[0]));
       if(changes[0]==='approveReplacementQuoteId'){
         const q=await one('quotes',String(patch.approveReplacementQuoteId||''));
-        assert(data.pendingReplacementQuoteId&&q?.id===data.pendingReplacementQuoteId&&q.request_id===id&&q.data.status==='published'&&open(q),409,'العرض البديل غير متاح / Replacement quote unavailable');
+        assert(data.pendingReplacementQuoteId&&q?.id===data.pendingReplacementQuoteId&&q.request_id===id&&q.data.status==='published'&&open(q)&&active(await one('profiles',q.owner_id)),409,'العرض البديل غير متاح / Replacement quote unavailable');
         const previousProforma=data.proformaInvoice?structuredClone(data.proformaInvoice):null;
         data.selectedQuoteId=q.id;delete data.pendingReplacementQuoteId;
         if(previousProforma)data.invoiceHistory=[...(Array.isArray(data.invoiceHistory)?data.invoiceHistory:[]),{type:'proforma_replaced',at:now,invoice:previousProforma}].slice(-50);
@@ -268,7 +268,7 @@ export async function mutate(user,body){
       assert(changes.length&&changes.every(k=>['supplierOrderStatus','supplierOrderNote'].includes(k)),400,'يمكن تحديث حالة التنفيذ فقط / Only fulfillment status can be updated');
       if(patch.supplierOrderStatus==='production')assert(original.data.paymentStatus==='confirmed',409,'لا يمكن بدء الإنتاج قبل تأكيد الدفع / Production cannot start before payment is confirmed');
       updateSupplierOrder(data,patch,now);
-      if(patch.supplierOrderStatus==='cannot_fulfill')setTracking(data,'on_hold',now,data.supplierOrderNote||'');
+      if(patch.supplierOrderStatus==='cannot_fulfill')setTracking(data,'supplier_confirmation',now,data.supplierOrderNote||'');
       else if(patch.supplierOrderStatus==='production')advanceTracking(data,'production',now);
       else if(patch.supplierOrderStatus==='ready_for_inspection')advanceTracking(data,'quality_check',now);
     }else assert(false,403,'غير مصرح بهذا التعديل / Unauthorized change');
@@ -304,6 +304,7 @@ export async function mutate(user,body){
         data.supplierAssignmentHistory=[...(Array.isArray(data.supplierAssignmentHistory)?data.supplierAssignmentHistory:[]),{rejectedSupplierId:previousSupplierId,rejectionReason:data.supplierOrderNote||'',rejectedAt:data.supplierOrderUpdatedAt||now,newSupplierId:supplierId,reassignedAt:now}].slice(-100);
         data.assignedSupplierId=supplierId;data.supplierOrderStatus='pending_confirmation';data.supplierOrderNote='';data.supplierOrderUpdatedAt=now;
         setTracking(data,'supplier_confirmation',now,'');
+        if(data.cartOrderId)linkedCartRequest=await one('requests',data.cartOrderId);
       }else if(collection==='requests'&&key==='replacementQuoteId'){
         assert(can(user,'publish')||can(user,'requests.edit'),403,'غير مصرح / Unauthorized');
         const oldQuote=data.selectedQuoteId?await one('quotes',data.selectedQuoteId):null;
@@ -415,7 +416,7 @@ export async function mutate(user,body){
   if(collection==='quotes'&&!isAdmin&&linkedSupplierRequest){
     const requestData=structuredClone(linkedSupplierRequest.data);
     let changed=false;
-    if(data.supplierOrderStatus==='cannot_fulfill'){setTracking(requestData,'on_hold',now,data.supplierOrderNote||'');changed=true;}
+    if(data.supplierOrderStatus==='cannot_fulfill'){setTracking(requestData,'supplier_confirmation',now,data.supplierOrderNote||'');changed=true;}
     else if(data.supplierOrderStatus==='production')changed=advanceTracking(requestData,'production',now);
     else if(data.supplierOrderStatus==='ready_for_inspection')changed=advanceTracking(requestData,'quality_check',now);
     if(changed){
@@ -423,12 +424,18 @@ export async function mutate(user,body){
       commitBatch.push({table:'requests',id:linkedSupplierRequest.id,version:linkedSupplierRequest.version,ownerId:linkedSupplierRequest.owner_id,data:requestData,action:'tracking'});
     }
   }
+  if(collection==='interests'&&isAdmin&&changes.includes('assignedSupplierId')&&linkedCartRequest&&open(linkedCartRequest)){
+    const requestData=structuredClone(linkedCartRequest.data||{});
+    setTracking(requestData,'supplier_confirmation',now,'');
+    requestData.updatedAt=now;
+    commitBatch.push({table:'requests',id:linkedCartRequest.id,version:linkedCartRequest.version,ownerId:linkedCartRequest.owner_id,data:requestData,action:'cart_supplier_reassigned'});
+  }
   if(collection==='interests'&&!isAdmin&&linkedCartRequest&&open(linkedCartRequest)){
     const requestData=structuredClone(linkedCartRequest.data||{}),siblings=await db('interests',`data->>cartOrderId=eq.${encodeURIComponent(linkedCartRequest.id)}&data->>deletedAt=is.null`);
     const statuses=siblings.map(row=>row.id===id?(data.supplierOrderStatus||'pending_confirmation'):(row.data?.supplierOrderStatus||'pending_confirmation'));
     let changed=false;
     if(data.supplierOrderStatus==='cannot_fulfill'){
-      setTracking(requestData,'on_hold',now,'Supplier unable to fulfill one cart item');changed=true;
+      setTracking(requestData,'supplier_confirmation',now,'Supplier unable to fulfill one cart item; replacement required');changed=true;
     }else if(statuses.length&&statuses.every(s=>s==='ready_for_inspection')){
       changed=advanceTracking(requestData,'quality_check',now);
     }else if(statuses.some(s=>s==='production'||s==='ready_for_inspection')){
