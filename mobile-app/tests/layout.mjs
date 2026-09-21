@@ -34,6 +34,10 @@ const clientPaymentNote={id:9001,event:'payment_required_request',entityId:'r0',
 const adminPaymentNote={id:9002,event:'payment_receipt_submitted_interest',entityId:'i1',titleAr:'إيصال دفع جديد',titleEn:'New payment receipt',bodyAr:'تم رفع إيصال دفع جديد لطلب منتج جاهز.',bodyEn:'A new receipt was uploaded.',target:{screen:'adminPayment',entityType:'interest',entityId:'i1'},createdAt:'2026-09-19'};
 const results = [];
 let failures = 0;
+const normalizeNumberText=value=>String(value??'')
+  .replace(/[٠-٩]/g,d=>String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+  .replace(/[٬,،\s]/g,'')
+  .replace(/٫/g,'.');
 
 async function geometry(page, scope = '#appView', squares = true) {
   const data = await page.evaluate(({scope,squares}) => {
@@ -263,7 +267,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
       assert.ok(parseFloat(await page.locator('#publicInterestQuantity').evaluate(el=>getComputedStyle(el).fontSize))>=16,'Product quantity input must stay at least 16px to prevent iPhone focus zoom');
       assert.equal(await page.locator('#publicInterestQuantity').getAttribute('max'),'2000','Product quantity must respect numeric stock');
       await page.locator('#publicInterestQuantity').fill('750');
-      assert.ok((await page.locator('#publicInterestTotal').textContent()).includes('9,000')||(await page.locator('#publicInterestTotal').textContent()).includes('9000'),'Line total must update as unit price × quantity');
+      assert.ok(normalizeNumberText(await page.locator('#publicInterestTotal').textContent()).includes('9000'),'Line total must update as unit price × quantity');
       await page.locator('#publicInterestForm button[type="submit"]').click();
       await page.locator('#modal').waitFor({state:'hidden'});
       assert.equal(await page.locator('#headerCartCount:not(.hidden)').textContent(),'1','Adding a product must update cart count');
@@ -283,7 +287,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
       assert.ok(parseFloat(await page.locator('#modal [data-cart-qty]').first().evaluate(el=>getComputedStyle(el).fontSize))>=16,'Cart quantity input must stay at least 16px to prevent iPhone focus zoom');
       assert.equal(await page.locator('#modal .cart-summary small').count(),0,'Cart summary must not show the removed explanatory sentence');
       const cartText=await page.locator('#modal .cart-summary').textContent();
-      assert.ok(cartText.includes('15000')||cartText.includes('15,000'),'Cart must show one grand total');
+      assert.ok(normalizeNumberText(cartText).includes('15000'),'Cart must show one grand total');
       await page.locator('#cartCheckoutForm button[type="submit"]').click();
       await page.locator('#modal').waitFor({state:'hidden'});
       assert.equal(cartOrderSubmission?.items?.length,2,'Checkout must submit one order with two products');
@@ -315,7 +319,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
       await selectedQuoteOrder.click();
       await page.locator('#modal').waitFor({state:'visible'});
       assert.equal(await page.locator('#modal .supplier-order-summary').count(),1,'Supplier order details must show price and order summary');
-      assert.equal((await page.locator('#modal').textContent()).includes('10000'),true,'Selected quote order must show calculated total');
+      assert.equal(normalizeNumberText(await page.locator('#modal').textContent()).includes('10000'),true,'Selected quote order must show calculated total');
       assert.equal(await page.locator('#modal .payment-card,#modal .admin-payment-review').count(),0,'Supplier order must never expose customer payment data');
       await page.locator('#modal [data-supplier-order-status="confirmed"]').click();
       await page.locator('#modal').waitFor({state:'hidden'});
@@ -327,7 +331,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
       await page.locator('#modal').waitFor({state:'visible'});
       const publicSummary=await page.locator('#modal .supplier-order-summary').textContent();
       assert.ok(publicSummary.includes('600'),'Supplier public-offer order must show the customer requested quantity');
-      assert.ok(publicSummary.includes('7200'),'Supplier public-offer order must show the frozen order total');
+      assert.ok(normalizeNumberText(publicSummary).includes('7200'),'Supplier public-offer order must show the frozen order total');
       await page.locator('.modal-close').click();
 
       await page.locator('#headerNotificationsBtn').click();
@@ -546,7 +550,7 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
           assert.equal(await page.locator('#modal .payment-card').count(),1,'Payment stage must show payment instructions to the customer');
           assert.equal(await page.locator('#modal [data-payment-upload]').count(),1,'Awaiting payment must allow the customer to upload a receipt');
           assert.equal(await page.locator('#modal .payment-bank-card').count(),1,'Payment stage must show the selected bank account to the customer');
-          assert.ok((await page.locator('#modal .payment-bank-card').textContent()).includes('5250'),'Payment card must show the requested amount');
+          assert.ok(normalizeNumberText(await page.locator('#modal .payment-bank-card').textContent()).includes('5250'),'Payment card must show the requested amount');
           await page.evaluate(()=>{document.execCommand=cmd=>cmd==='copy';});
           await page.locator('#modal .payment-bank-card .copy-btn').first().click();
           await page.locator('#toast:not(.hidden)').waitFor();
