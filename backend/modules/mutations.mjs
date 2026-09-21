@@ -418,6 +418,7 @@ export async function mutate(user,body){
         assert(supplierId!==previousSupplierId,400,'اختر موردًا آخر / Choose another supplier');
         const invites=Array.isArray(data.cartReplacementInvites)?data.cartReplacementInvites:[];
         assert(!invites.some(x=>x?.interestId===interestId&&x?.supplierId===supplierId&&!['cancelled','selected'].includes(x.status)),409,'تمت دعوة هذا المورد بالفعل / Supplier already invited');
+        assert(!invites.some(x=>x?.interestId!==interestId&&x?.supplierId===supplierId&&!['cancelled','selected'].includes(x.status)),409,'لدى هذا المورد طلب تسعير بديل آخر في نفس الطلب؛ أكمل الأول ثم أعد الدعوة / This supplier already has another replacement pricing invitation in this order');
         data.cartReplacementInvites=[...invites,{interestId,supplierId,status:'invited',invitedAt:now}].slice(-100);
         data.supplierIds=[...new Set([...(Array.isArray(data.supplierIds)?data.supplierIds:[]),supplierId])];
         data.status='sent';setTracking(data,'supplier_confirmation',now,'');
