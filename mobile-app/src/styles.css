@@ -2074,6 +2074,9 @@ body.image-viewer-open {
 .client-current-status strong{font-size:18px}.client-current-status span{color:var(--muted,#64748b);font-size:12px}
 .client-detail-action{grid-template-columns:minmax(0,1fr) auto;align-items:center}.client-detail-action.payment{border-inline-start:4px solid #d97706}.client-detail-action.quote{border-inline-start:4px solid #3b82f6}
 .client-detail-action strong{display:block;margin-top:3px}
+.client-detail-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;align-items:center}
+.client-detail-actions .secondary-btn,.client-detail-actions .primary-small{width:auto;min-width:132px}
+@media(max-width:520px){.client-detail-action{grid-template-columns:1fr}.client-detail-actions{display:grid;grid-template-columns:1fr}.client-detail-actions .secondary-btn,.client-detail-actions .primary-small{width:100%;min-width:0}}
 .client-detail-section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
 .client-selected-values,.client-quote-price-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 .client-selected-values>div,.client-quote-price-row>div{padding:10px;border-radius:12px;background:var(--soft,#f5f7f9)}
