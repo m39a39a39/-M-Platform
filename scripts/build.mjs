@@ -1,5 +1,6 @@
-import { mkdir, copyFile, readdir, appendFile, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, copyFile, readdir, appendFile, readFile, writeFile, rm } from 'node:fs/promises';
 const groups = {'customer-web':['customer.html','register-customer.html'], 'supplier-web':['supplier.html','register-supplier.html'], 'admin-dashboard':['admin.html'], 'shared/pages':['index.html','offers.html','login.html','reset-password.html']};
+await rm('dist',{recursive:true,force:true});
 await mkdir('dist/assets/js', {recursive:true});
 await mkdir('dist/assets/css', {recursive:true});
 for (const [dir, files] of Object.entries(groups)) for (const f of files) await copyFile(`${dir}/${f}`,`dist/${f}`);
