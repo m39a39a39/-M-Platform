@@ -1,7 +1,7 @@
 import {one,db,rpc,assert,sb} from '../lib/supabase.mjs';
 import {can} from './auth.mjs';
 import {tables,assertOpenRequest,active,open} from './records.mjs';
-import {issueQuoteProforma,issueInterestProforma} from './invoices.mjs';
+import {issueQuoteProforma,issueInterestProforma,issueCartProforma} from './invoices.mjs';
 const contact=v=>/(?:https?:\/\/|www\.|wa\.me|@[a-z0-9]|[\w.+-]+@[\w.-]+\.[a-z]{2,}|(?:\+|00)\d[\d\s()-]{7,})/i.test(String(v));
 const contentFields={requests:['product','specs','quantity','country','neededDate','images'],quotes:['unitPrice','currency','moq','leadTime','sampleCost','notes','images'],publicOffers:['sku','product','specs','country','unitPrice','currency','moq','stock','leadTime','validUntil','images','categoryId','subcategoryId']};
 const DEFAULT_SUPPLY_COUNTRIES=[{id:'China',nameAr:'الصين',nameEn:'China',active:true,order:0},{id:'United Arab Emirates',nameAr:'الإمارات',nameEn:'UAE',active:true,order:1}];
@@ -143,6 +143,53 @@ export function validateContent(kind,d){
   if(d.categoryId!==undefined)assert(typeof d.categoryId==='string'&&d.categoryId.length<=80,400,'تصنيف غير صالح / Invalid category');
   if(d.subcategoryId!==undefined)assert(typeof d.subcategoryId==='string'&&d.subcategoryId.length<=80,400,'تصنيف فرعي غير صالح / Invalid subcategory');
 }
+function cartInviteFor(data,supplierId){
+  const rows=Array.isArray(data?.cartReplacementInvites)?data.cartReplacementInvites:[];
+  return [...rows].reverse().find(x=>x&&x.supplierId===supplierId&&!['selected','cancelled'].includes(x.status));
+}
+function cartLine(data,interestId){
+  return (Array.isArray(data?.cartItems)?data.cartItems:[]).find(x=>x?.interestId===interestId)||null;
+}
+function cartTermsMatch(childData,quoteData,offerData={}){
+  if(String(quoteData?.currency||'').toUpperCase()!==String(childData?.currency||'').toUpperCase())return false;
+  if(Number(quoteData?.unitPrice)!==Number(childData?.unitPrice))return false;
+  if(Number(quoteData?.moq)!==Number(childData?.moq))return false;
+  const oldLead=String(childData?.offerSnapshot?.leadTime??offerData?.leadTime??'').trim();
+  return !oldLead||String(quoteData?.leadTime??'').trim()===oldLead;
+}
+function applyCartQuoteToParent(data,interestId,quoteData){
+  const items=Array.isArray(data.cartItems)?structuredClone(data.cartItems):[],index=items.findIndex(x=>x?.interestId===interestId);
+  assert(index>=0,409,'تعذر العثور على المنتج داخل الطلب / Cart item not found');
+  const quantity=Number(items[index].quantity),unitPrice=Number(quoteData.unitPrice);
+  assert(Number.isFinite(quantity)&&quantity>0&&Number.isFinite(unitPrice)&&unitPrice>0,409,'بيانات العرض البديل غير صالحة / Invalid replacement quote');
+  items[index]={...items[index],unitPrice,currency:String(quoteData.currency||'').toUpperCase(),moq:Number(quoteData.moq),leadTime:quoteData.leadTime,total:quantity*unitPrice};
+  data.cartItems=items;data.cartTotal=items.reduce((sum,x)=>sum+Number(x.total||0),0);
+}
+function settleCartInvites(data,interestId,selectedSupplierId,now){
+  const rows=Array.isArray(data.cartReplacementInvites)?data.cartReplacementInvites:[];
+  const affected=new Set();
+  data.cartReplacementInvites=rows.map(x=>{
+    if(!x||x.interestId!==interestId)return x;
+    affected.add(x.supplierId);
+    return {...x,status:x.supplierId===selectedSupplierId?'selected':'cancelled',resolvedAt:now};
+  });
+  if(Array.isArray(data.supplierIds)){
+    affected.add(selectedSupplierId);
+    data.supplierIds=data.supplierIds.filter(id=>!affected.has(id));
+  }
+}
+function cartReplacementChildData(child,quote,previousSupplierId,now){
+  const next=structuredClone(child.data||{}),quantity=Number(next.quantity),unitPrice=Number(quote.data.unitPrice);
+  next.supplierAssignmentHistory=[...(Array.isArray(next.supplierAssignmentHistory)?next.supplierAssignmentHistory:[]),{
+    rejectedSupplierId:previousSupplierId,rejectionReason:next.supplierOrderNote||'',rejectedAt:next.supplierOrderUpdatedAt||now,
+    newSupplierId:quote.owner_id,newQuoteId:quote.id,reassignedAt:now,termsChanged:true
+  }].slice(-100);
+  next.assignedSupplierId=quote.owner_id;next.replacementQuoteId=quote.id;next.supplierOrderStatus='pending_confirmation';
+  next.supplierOrderNote='';next.supplierOrderUpdatedAt=now;next.unitPrice=unitPrice;next.currency=String(quote.data.currency||'').toUpperCase();
+  next.moq=Number(quote.data.moq);next.total=quantity*unitPrice;next.replacementLeadTime=quote.data.leadTime||'';
+  setTracking(next,'supplier_confirmation',now,'');next.updatedAt=now;
+  return next;
+}
 export async function checkImages(images,user,old=[]){
   assert(Array.isArray(images)&&images.length<=5,400,'الحد الأقصى خمس صور / Maximum five images');
   for(const src of images){
@@ -158,7 +205,7 @@ export async function mutate(user,body){
   assert(Number(version)===(original?.version||0),409,'تغيّرت البيانات؛ حدّث الصفحة / Refresh after conflict');
   const now=new Date().toISOString();
   let data=structuredClone(original?.data||{}),ownerId=original?.owner_id||user.id;
-  let linkedSupplierRequest=null,linkedCartRequest=null;
+  let linkedSupplierRequest=null,linkedCartRequest=null,cartReplacementCommit=null;
   const changes=Object.keys(patch),isAdmin=user.role==='admin';
   if(!original){
     assert(collection==='requests'?user.role==='client':collection==='interests'?user.role==='client':user.role==='supplier');
@@ -176,6 +223,13 @@ export async function mutate(user,body){
       const r=await assertOpenRequest(patch.requestId),selected=r.data.selectedQuoteId?await one('quotes',r.data.selectedQuoteId):null;
       const replacementOpen=!r.data.selectedQuoteId||selected?.data?.supplierOrderStatus==='cannot_fulfill';
       assert(r.data.status==='sent'&&replacementOpen&&r.data.supplierIds?.includes(user.id),409,'طلب العرض غير متاح / RFQ unavailable');
+      if(r.data.orderType==='cart'){
+        const invite=cartInviteFor(r.data,user.id);
+        assert(invite?.interestId,409,'دعوة التسعير البديل غير متاحة / Replacement pricing invitation unavailable');
+        const child=await one('interests',invite.interestId);
+        assert(child&&child.data?.cartOrderId===r.id&&child.data?.supplierOrderStatus==='cannot_fulfill',409,'المنتج لم يعد يحتاج موردًا بديلًا / Item no longer needs a replacement supplier');
+        data.replacementInterestId=invite.interestId;
+      }
       const existing=await db('quotes',`request_id=eq.${encodeURIComponent(patch.requestId)}&owner_id=eq.${encodeURIComponent(user.id)}&data->>deletedAt=is.null&limit=1`);
       assert(!existing.length,409,'سبق أن قدمت عرضًا على هذا الطلب / You already submitted an offer for this request');
     }else if(collection==='interests'){
@@ -210,8 +264,25 @@ export async function mutate(user,body){
     }
   }else if(!isAdmin){
     if(collection==='requests'&&user.role==='client'&&original.owner_id===user.id){
-      assert(changes.length===1&&['selectedQuoteId','lastSeenQuoteAt','approveReplacementQuoteId'].includes(changes[0]));
-      if(changes[0]==='approveReplacementQuoteId'){
+      assert(changes.length===1&&['selectedQuoteId','lastSeenQuoteAt','approveReplacementQuoteId','approveCartReplacementQuoteId'].includes(changes[0]));
+      if(changes[0]==='approveCartReplacementQuoteId'){
+        const pending=data.pendingCartReplacement,quoteId=String(patch.approveCartReplacementQuoteId||'');
+        assert(data.orderType==='cart'&&pending?.quoteId===quoteId&&pending?.interestId,409,'العرض البديل غير متاح / Replacement quote unavailable');
+        const q=await one('quotes',quoteId),child=await one('interests',pending.interestId);
+        assert(q&&q.request_id===id&&q.data.status==='published'&&open(q)&&active(await one('profiles',q.owner_id)),409,'العرض البديل غير متاح / Replacement quote unavailable');
+        assert(child&&child.owner_id===user.id&&child.data?.cartOrderId===id&&child.data?.supplierOrderStatus==='cannot_fulfill',409,'المنتج لم يعد يحتاج موردًا بديلًا / Item no longer needs a replacement supplier');
+        assert(String(q.data.currency||'').toUpperCase()===String(child.data.currency||'').toUpperCase(),409,'عملة العرض البديل يجب أن تطابق عملة المنتج / Replacement quote currency must match the item currency');
+        const offer=await one('public_offers',child.offer_id),previousSupplierId=child.data.assignedSupplierId||offer?.owner_id||'';
+        applyCartQuoteToParent(data,child.id,q.data);
+        const previousProforma=data.proformaInvoice?structuredClone(data.proformaInvoice):null;
+        if(previousProforma)data.invoiceHistory=[...(Array.isArray(data.invoiceHistory)?data.invoiceHistory:[]),{type:'proforma_replaced',at:now,invoice:previousProforma}].slice(-50);
+        delete data.proformaInvoice;delete data.finalInvoice;data.paymentStatus=null;delete data.paymentReceipt;delete data.paymentReceiptSubmittedAt;delete data.paymentConfirmedAt;
+        data.proformaInvoice=await issueCartProforma(user,{...data,proformaInvoice:null},id,now);
+        settleCartInvites(data,child.id,q.owner_id,now);delete data.pendingCartReplacement;
+        setTracking(data,'supplier_confirmation',now,'');
+        data.supplierAssignmentHistory=[...(Array.isArray(data.supplierAssignmentHistory)?data.supplierAssignmentHistory:[]),{approvedCartReplacementQuoteId:q.id,interestId:child.id,approvedAt:now,approvedBy:'customer'}].slice(-100);
+        cartReplacementCommit={child,quote:q,previousSupplierId};
+      }else if(changes[0]==='approveReplacementQuoteId'){
         const q=await one('quotes',String(patch.approveReplacementQuoteId||''));
         assert(data.pendingReplacementQuoteId&&q?.id===data.pendingReplacementQuoteId&&q.request_id===id&&q.data.status==='published'&&open(q)&&active(await one('profiles',q.owner_id)),409,'العرض البديل غير متاح / Replacement quote unavailable');
         const previousProforma=data.proformaInvoice?structuredClone(data.proformaInvoice):null;
@@ -308,6 +379,49 @@ export async function mutate(user,body){
         data.assignedSupplierId=supplierId;data.supplierOrderStatus='pending_confirmation';data.supplierOrderNote='';data.supplierOrderUpdatedAt=now;
         setTracking(data,'supplier_confirmation',now,'');
         if(data.cartOrderId)linkedCartRequest=await one('requests',data.cartOrderId);
+      }else if(collection==='requests'&&key==='cartReplacementInvite'){
+        assert(can(user,'publish')||can(user,'requests.edit'),403,'غير مصرح / Unauthorized');
+        assert(data.orderType==='cart'&&patch[key]&&typeof patch[key]==='object',400,'بيانات الدعوة غير صالحة / Invalid invitation');
+        const interestId=String(patch[key].interestId||''),supplierId=String(patch[key].supplierId||'');
+        const child=await one('interests',interestId),supplier=await one('profiles',supplierId);
+        assert(child&&child.data?.cartOrderId===id&&child.data?.supplierOrderStatus==='cannot_fulfill',409,'المنتج لم يعد يحتاج موردًا بديلًا / Item no longer needs a replacement supplier');
+        assert(active(supplier)&&supplier.role==='supplier',400,'المورد غير متاح / Supplier unavailable');
+        const offer=await one('public_offers',child.offer_id),previousSupplierId=child.data.assignedSupplierId||offer?.owner_id||'';
+        assert(supplierId!==previousSupplierId,400,'اختر موردًا آخر / Choose another supplier');
+        const invites=Array.isArray(data.cartReplacementInvites)?data.cartReplacementInvites:[];
+        assert(!invites.some(x=>x?.interestId===interestId&&x?.supplierId===supplierId&&!['cancelled','selected'].includes(x.status)),409,'تمت دعوة هذا المورد بالفعل / Supplier already invited');
+        data.cartReplacementInvites=[...invites,{interestId,supplierId,status:'invited',invitedAt:now}].slice(-100);
+        data.supplierIds=[...new Set([...(Array.isArray(data.supplierIds)?data.supplierIds:[]),supplierId])];
+        data.status='sent';setTracking(data,'supplier_confirmation',now,'');
+      }else if(collection==='requests'&&key==='cartReplacementQuoteId'){
+        assert(can(user,'publish')||can(user,'requests.edit'),403,'غير مصرح / Unauthorized');
+        assert(data.orderType==='cart'&&patch[key]&&typeof patch[key]==='object',400,'بيانات العرض البديل غير صالحة / Invalid replacement quote');
+        const quoteId=String(patch[key].quoteId||''),interestId=String(patch[key].interestId||'');
+        const q=await one('quotes',quoteId),child=await one('interests',interestId);
+        assert(child&&child.data?.cartOrderId===id&&child.data?.supplierOrderStatus==='cannot_fulfill',409,'المنتج لم يعد يحتاج موردًا بديلًا / Item no longer needs a replacement supplier');
+        assert(q&&q.request_id===id&&q.data.status==='published'&&open(q)&&active(await one('profiles',q.owner_id)),400,'العرض البديل غير متاح / Replacement quote unavailable');
+        if(q.data.replacementInterestId)assert(q.data.replacementInterestId===interestId,409,'هذا العرض يخص منتجًا آخر / Quote belongs to another item');
+        else{
+          const declined=await db('interests',`data->>cartOrderId=eq.${encodeURIComponent(id)}&data->>supplierOrderStatus=eq.cannot_fulfill&data->>deletedAt=is.null`);
+          assert(declined.length===1&&declined[0].id===interestId,409,'تعذر تحديد المنتج الخاص بالعرض القديم / Could not match legacy quote to item');
+        }
+        assert(String(q.data.currency||'').toUpperCase()===String(child.data.currency||'').toUpperCase(),409,'عملة العرض البديل يجب أن تطابق عملة المنتج / Replacement quote currency must match the item currency');
+        const offer=await one('public_offers',child.offer_id),previousSupplierId=child.data.assignedSupplierId||offer?.owner_id||'';
+        assert(q.owner_id!==previousSupplierId,400,'اختر عرض مورد آخر / Choose a different supplier quote');
+        const same=cartTermsMatch(child.data,q.data,offer?.data||{});
+        data.supplierAssignmentHistory=[...(Array.isArray(data.supplierAssignmentHistory)?data.supplierAssignmentHistory:[]),{
+          rejectedSupplierId:previousSupplierId,rejectionReason:child.data.supplierOrderNote||'',rejectedAt:child.data.supplierOrderUpdatedAt||now,
+          newSupplierId:q.owner_id,newQuoteId:q.id,interestId,reassignedAt:now,termsChanged:!same
+        }].slice(-100);
+        if(same){
+          applyCartQuoteToParent(data,interestId,q.data);settleCartInvites(data,interestId,q.owner_id,now);delete data.pendingCartReplacement;
+          setTracking(data,'supplier_confirmation',now,'');cartReplacementCommit={child,quote:q,previousSupplierId};
+        }else{
+          const quantity=Number(child.data.quantity),oldUnitPrice=Number(child.data.unitPrice),newUnitPrice=Number(q.data.unitPrice);
+          data.pendingCartReplacement={interestId,quoteId:q.id,supplierId:q.owner_id,oldUnitPrice,newUnitPrice,currency:String(q.data.currency||'').toUpperCase(),quantity,oldTotal:quantity*oldUnitPrice,newTotal:quantity*newUnitPrice,difference:quantity*(newUnitPrice-oldUnitPrice),moq:q.data.moq,leadTime:q.data.leadTime,createdAt:now};
+          data.cartReplacementInvites=(Array.isArray(data.cartReplacementInvites)?data.cartReplacementInvites:[]).map(x=>x?.interestId===interestId&&x?.supplierId===q.owner_id?{...x,status:'customer_approval',quoteId:q.id,updatedAt:now}:x);
+          setTracking(data,'customer_action',now,'تغير سعر أو شروط المورد البديل وتحتاج موافقة العميل / Replacement supplier price or terms changed and require customer approval');
+        }
       }else if(collection==='requests'&&key==='replacementQuoteId'){
         assert(can(user,'publish')||can(user,'requests.edit'),403,'غير مصرح / Unauthorized');
         const oldQuote=data.selectedQuoteId?await one('quotes',data.selectedQuoteId):null;
@@ -404,6 +518,11 @@ export async function mutate(user,body){
   data.updatedAt=now;
   data.history=[...(original?.data.history||[]),{at:now,status:data.selectedQuoteId&&!original?.data.selectedQuoteId?'selected':data.status}].slice(-200);
   const commitBatch=[{table,id,version:Number(version),ownerId,requestId:original?.request_id||patch.requestId,offerId:original?.offer_id||patch.offerId,data,action:original?'update':'create'}];
+  if(cartReplacementCommit){
+    const {child,quote,previousSupplierId}=cartReplacementCommit;
+    const childData=cartReplacementChildData(child,quote,previousSupplierId,now);
+    commitBatch.push({table:'interests',id:child.id,version:child.version,ownerId:child.owner_id,offerId:child.offer_id,data:childData,action:'cart_supplier_reassigned'});
+  }
   if(collection==='requests'&&isAdmin&&data.orderType==='cart'&&changes.includes('trackingStatus')&&patch.trackingStatus==='supplier_confirmation'){
     const children=await db('interests',`data->>cartOrderId=eq.${encodeURIComponent(id)}&data->>deletedAt=is.null`);
     assert(children.length===Number(data.cartItemCount||0)&&children.length>0,409,'تعذر العثور على جميع منتجات الطلب / Could not find all cart items');
