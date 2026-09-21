@@ -3,7 +3,7 @@ const MAX_ROWS=500;
 const MAX_WORKBOOK_BYTES=30*1024*1024;
 const MAX_IMAGE_BYTES=5*1024*1024;
 const ALLOWED_CURRENCIES=new Set(['USD','SAR','AED','CNY','EUR']);
-import {resolveTaxonomyId} from './catalog-taxonomy.js';
+import {DEFAULT_SUPPLY_COUNTRIES,resolveTaxonomyId} from './catalog-taxonomy.js';
 const FIELD_ALIASES={
   sku:['sku','رمز المنتج','كود المنتج'],
   product:['product name','product','name','اسم المنتج','المنتج','اسم'],
@@ -259,7 +259,17 @@ function excelDate(value){
   const d=new Date(s);return Number.isNaN(d.getTime())?s:d.toISOString().slice(0,10);
 }
 function taxonomyId(value,rows){return resolveTaxonomyId(value,rows);}
-export function normalizeSupplyCountry(value,rows=[]){return taxonomyId(value,rows);}
+const LEGACY_COUNTRY_ALIASES=new Map([
+  ['china','China'],['cn','China'],['中国','China'],['الصين','China'],
+  ['united arab emirates','United Arab Emirates'],['uae','United Arab Emirates'],['ae','United Arab Emirates'],
+  ['الإمارات','United Arab Emirates'],['الامارات','United Arab Emirates'],['الإمارات العربية المتحدة','United Arab Emirates'],['الامارات العربية المتحدة','United Arab Emirates']
+]);
+export function normalizeSupplyCountry(value,rows=DEFAULT_SUPPLY_COUNTRIES){
+  const source=Array.isArray(rows)&&rows.length?rows:DEFAULT_SUPPLY_COUNTRIES;
+  const direct=taxonomyId(value,source);if(direct)return direct;
+  const alias=LEGACY_COUNTRY_ALIASES.get(norm(value));
+  return alias?taxonomyId(alias,source):'';
+}
 
 function crc32(bytes){
   let crc=0xffffffff;
