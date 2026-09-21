@@ -2,7 +2,11 @@ import {db,assert} from '../lib/supabase.mjs';
 
 const COPY={
   invited:{titleAr:'طلب جديد',titleEn:'New request',bodyAr:'تمت دعوتك لتقديم عرض سعر على طلب جديد.',bodyEn:'You were invited to submit a quote for a new request.'},
-  quote_published:{titleAr:'عرض جديد',titleEn:'New offer',bodyAr:'وصل عرض جديد لطلبك.',bodyEn:'A new offer is available for your request.'}
+  quote_published:{titleAr:'عرض جديد',titleEn:'New offer',bodyAr:'وصل عرض جديد لطلبك.',bodyEn:'A new offer is available for your request.'},
+  supplier_selected:{titleAr:'تم اختيار عرضك',titleEn:'Your quote was selected',bodyAr:'تم اختيار عرضك. يرجى تأكيد إمكانية تنفيذ الطلب.',bodyEn:'Your quote was selected. Please confirm that you can fulfill the order.'},
+  supplier_assigned:{titleAr:'تم إسناد طلب جديد إليك',titleEn:'New order assigned',bodyAr:'تم إسناد طلب جديد إليك. يرجى تأكيد إمكانية التنفيذ.',bodyEn:'A new order was assigned to you. Please confirm that you can fulfill it.'},
+  supplier_payment_confirmed_request:{titleAr:'تم تأكيد الدفع',titleEn:'Payment confirmed',bodyAr:'تم تأكيد دفع الطلب. يمكنك بدء الإنتاج.',bodyEn:'Payment has been confirmed. You can start production.'},
+  supplier_payment_confirmed_interest:{titleAr:'تم تأكيد الدفع',titleEn:'Payment confirmed',bodyAr:'تم تأكيد دفع طلب المنتج. يمكنك بدء التنفيذ.',bodyEn:'Payment has been confirmed for the product order. You can start fulfillment.'}
 };
 const inIds=ids=>ids.map(id=>`"${String(id).replaceAll('"','')}"`).join(';').replaceAll(';',',');
 const paymentKind=event=>event.endsWith('_interest')?'interest':event.endsWith('_request')?'request':null;
@@ -66,6 +70,12 @@ export function notificationPayload(row,quoteRequestId,paymentContext){
   }else if(row.event==='quote_published'&&quoteRequestId){
     target={screen:'customerRequest',requestId:quoteRequestId,quoteId:row.entity_id};
     deepLink=`mplatform://customer/requests/${encodeURIComponent(quoteRequestId)}?quote=${encodeURIComponent(row.entity_id)}`;
+  }else if(row.event==='supplier_selected'||row.event==='supplier_payment_confirmed_request'){
+    target={screen:'supplierRequest',requestId:row.entity_id};
+    deepLink=`mplatform://supplier/requests/${encodeURIComponent(row.entity_id)}`;
+  }else if(row.event==='supplier_assigned'||row.event==='supplier_payment_confirmed_interest'){
+    target={screen:'supplierOrder',entityType:'interest',entityId:row.entity_id};
+    deepLink=`mplatform://supplier/orders/interest/${encodeURIComponent(row.entity_id)}`;
   }else if(custom?.target){
     deepLink=`mplatform://payment/${custom.target.entityType}/${encodeURIComponent(row.entity_id)}`;
   }
