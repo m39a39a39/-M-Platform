@@ -125,9 +125,10 @@ export async function issueFinalInvoice(customer,data,orderId='',now=new Date().
       currency:base.currency||'SAR',currencyLabel:base.currencyLabel||'SAR – Saudi Riyal'
     };
   }
+  const sourceCurrency=data?.paymentCurrency||data?.currency||'SAR',fx=await currencySnapshot(customer,sourceCurrency);
   return buildInvoiceSnapshot({
     kind:'final',number,issuedAt:now,paidAt:now,customer,orderId,
-    sourceCurrency:data?.paymentCurrency||data?.currency,
-    items:fallbackItems(data)
+    sourceCurrency,currency:fx.currency,currencyLabel:fx.currencyLabel,fxSnapshot:fx,
+    items:convertItems(fallbackItems(data),fx.rate)
   });
 }
