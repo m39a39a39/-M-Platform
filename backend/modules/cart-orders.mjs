@@ -56,6 +56,7 @@ export async function createCartOrder(user,body={}){
       currency:x.currency,
       moq:x.moq,
       stock:String(d.stock||''),
+      leadTime:String(d.leadTime||''),
       categoryId:String(d.categoryId||'')
     };
     return {interestId,offerId:x.offer.id,quantity:x.quantity,unitPrice:x.unitPrice,currency:x.currency,moq:x.moq,total:x.total,snapshot};
