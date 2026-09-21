@@ -1,46 +1,56 @@
 # API contract
 
-Base: `/api`. JSON writes; browser requests use same-origin cookies. Native apps can supply a verified Supabase access token as `Authorization: Bearer ...`.
+Base web path: `/api/*`  
+Native mobile alias: `/api/v1/*`
 
-All responses containing account data are `private, no-store`. Do not cache auth or personalized API responses in a CDN.
+Browser requests use same-origin cookies. Native requests use a verified Supabase access token in `Authorization: Bearer ...` together with `X-M-Client: native|ios|android`.
+
+Personalized responses are `private, no-store`.
+
+## Main endpoints
 
 | Method / path | Purpose |
 |---|---|
-| GET /health | Checks presence of configuration, not database connectivity |
-| POST /auth/register | `{email,password,role,name,company,phone,country,category}`; role client or supplier |
-| POST /auth/login | `{email,password}`; sets HttpOnly cookies; returns profile |
-| POST /auth/logout | Ends browser session |
-| GET /state | Role-scoped snapshot; anonymous visitors get approved public offers only |
-| POST /uploads | `{source: "data:image/jpeg;base64,..."}`; returns private media URL |
-| GET /media/:uuid | Checks ownership or visibility of a linked approved record before returning bytes |
-| POST /mutations | `{collection,id,version,patch,redactionConfirmed?}`; permitted fields depend on actor and action |
-| POST /moderation | `{kind,id,action,reason}`; kind account/request/quote/public |
-| POST /settings | `{version,data}`; settings permission required |
-| POST /team | `{id? ,email?,permissions,action}`; action save/block/unblock; account must exist |
-| GET /notifications | Latest 50 notifications belonging to the signed-in user |
+| GET /health | Basic configuration health check |
+| GET /app-config | Public API/app contract metadata |
+| POST /auth/register | Register client or supplier |
+| POST /auth/login | Login |
+| POST /auth/refresh | Native token refresh |
+| POST /auth/logout | Logout |
+| POST /auth/recover | Request password recovery email |
+| POST /auth/reset | Set a new password using a valid recovery token |
+| GET /state | Role-scoped snapshot |
+| POST /uploads | Upload image data |
+| GET /media/:uuid | Authorized media response |
+| POST /mutations | Versioned record mutation |
+| POST /bulk-public-offers | Bulk product import/update |
+| POST /cart-orders | Create a multi-product ready-order cart |
+| POST /moderation | Admin moderation |
+| POST /accounts/update | Admin account update/block controls |
+| POST /profile/currency | Save customer preferred display currency |
+| POST /settings | Admin settings, categories, currencies, rates, bank accounts |
+| POST /team | Admin team management |
+| POST /payment-receipts | Customer payment receipt upload |
+| POST /payment-review | Admin receipt review |
+| GET /notifications | Latest notifications for current user |
+| POST /notifications/read | Mark one/all notifications read |
+| POST /push/register | Register a native Push device |
+| POST /push/unregister | Disable a native Push device |
 
-Collections: `requests`, `quotes`, `publicOffers`, `interests`. Creates use a new unique id and version 0. Updates supply the last returned version. IDs are safe alphanumeric strings with hyphens, max 80 characters. JSON patch is a field map, not RFC 6902. Identity, timestamps and history are server-controlled.
+Push registration/outbox infrastructure is present, but external APNs/FCM delivery is not considered complete until a native device-registration flow and an outbox sender/provider are deployed.
 
-Example request creation:
+## Core collections
 
-```json
-{
-  "collection":"requests",
-  "id":"M-a-random-unique-id",
-  "version":0,
-  "patch":{
-    "product":"USB-C cable",
-    "specs":"60W, 1 metre, black",
-    "quantity":"2000",
-    "country":"SA",
-    "neededDate":"2026-12-01",
-    "images":["/api/media/RETURNED-UUID"]
-  }
-}
-```
+`requests`, `quotes`, `publicOffers`, `interests`.
 
-Upload images first. Five images per record; each image up to 1 MiB. JPEG/PNG/WebP only. Browser uploads are resized and converted to JPEG before transport. The API checks MIME and file signatures; comprehensive image scanning is not implemented.
+Writes use optimistic versions. Updates send the last returned `version`; conflicts return an error instead of silently overwriting newer data.
 
-Permissions: `requests.read`, `requests.edit`, `offers.read`, `offers.edit`, `translate`, `publish`, `accounts.read`, `moderate`, `trash`, `settings`, `team`. Owner status is SQL-bootstrapped and cannot be assigned by this API.
+## Security notes
 
-`GET /state` is a compatibility aggregation endpoint, not the final large-scale list/search API. No claim of load testing or production readiness is made. See architecture and delivery status.
+- Role and permissions are read from the authenticated profile on the server, never trusted from browser input.
+- Supplier projections hide customer identity and competing supplier data.
+- Customer projections hide supplier identity.
+- Payment bank data is only projected to the customer/admin paths that require it.
+- Service-role credentials remain server-side.
+- Five images per ordinary record; JPEG/PNG/WebP only after validation/compression.
+- `GET /state` remains a compatibility snapshot endpoint and should be replaced with paginated server-side queries before very large scale.
