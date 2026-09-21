@@ -1278,7 +1278,7 @@ $('langBtn').addEventListener('click',toggleLanguage);
 $('appLangBtn').addEventListener('click',toggleLanguage);
 $('headerCartBtn')?.addEventListener('click',()=>{if(currentUser?.role==='client')openCart();});
 $('headerNotificationsBtn').addEventListener('click',()=>{if(!currentUser)return;activeScreen='notifications';renderScreen();$('screen').scrollTop=0;});
-onLanguageChange(value=>{lang=value;applyLanguage();applyRegistrationLanguage();});
+onLanguageChange(value=>{lang=value;applyLanguage();applyRegistrationLanguage();applyResetLanguage();});
 $('refreshBtn').addEventListener('click',async()=>{if(busy)return;busy=true;$('refreshBtn').classList.add('spin');try{await loadData();showToast(t('refreshing'));}catch(e){showToast(errorText(e));}finally{busy=false;$('refreshBtn').classList.remove('spin');}});
 $('bottomNav').addEventListener('click',e=>{const b=e.target.closest('button[data-screen]');if(!b)return;activeScreen=b.dataset.screen;if(activeScreen==='offers')activeSub='primary';if(activeScreen==='requests'&&currentUser?.role==='supplier')activeSub='pending';renderScreen();$('screen').scrollTop=0;});
 $('screen').addEventListener('click',e=>{const sub=e.target.closest('[data-sub]');if(sub){activeSub=sub.dataset.sub;renderScreen();return;}const target=e.target.closest('[data-action],[data-save-client-currency],[data-category],[data-subcategory],[data-supply-country],[data-client-order-filter],[data-cart-order],[data-ready-order],[data-client-offers-request],[data-request],[data-supplier-request],[data-supplier-order-id],[data-public-offer],[data-edit-quote],[data-quote-request],[data-select-quote],[data-approve-cart-replacement],[data-reject-cart-replacement],[data-interest],[data-notification],[data-payment-notification],[data-payment-upload],[data-payment-document],[data-invoice-pdf],[data-copy-value]');if(target)handleAction(target);});
@@ -1288,6 +1288,26 @@ $('modal').addEventListener('click',e=>{if(e.target.closest('[data-close-modal]'
 App.addListener('appUrlOpen',async event=>{const url=event.url||'';if(!currentUser)return;if(url.includes('/notifications')){activeScreen='notifications';renderScreen();return;}const supplierOrder=url.match(/\/supplier\/orders\/interest\/([^?]+)/);if(supplierOrder&&currentUser.role==='supplier'){activeScreen='orders';renderScreen();openSupplierOrder('public',decodeURIComponent(supplierOrder[1]));return;}const cartOrder=url.match(/\/customer\/cart-orders\/([^?]+)/);if(cartOrder&&currentUser.role==='client'){activeScreen='requests';renderScreen();openCartOrder(decodeURIComponent(cartOrder[1]));return;}const m=url.match(/\/requests\/([^?]+)/);if(m){if(currentUser.role==='supplier'){activeScreen='requests';activeSub='pending';openSupplierRequest(decodeURIComponent(m[1]));}else openClientRequest(decodeURIComponent(m[1]));}});
 
 
+function recoveryAccessToken(){
+  try{
+    const hash=new URLSearchParams(String(location.hash||'').replace(/^#/,''));
+    const query=new URLSearchParams(String(location.search||''));
+    const type=hash.get('type')||query.get('type')||'';
+    const token=hash.get('access_token')||query.get('access_token')||'';
+    return type==='recovery'&&token.length>=20?token:'';
+  }catch{return '';}
+}
+function applyResetLanguage(){
+  const ar=lang==='ar';
+  $('resetSubtitle').textContent=ar?'استعادة الحساب':'Account recovery';
+  $('resetTitle').textContent=ar?'كلمة مرور جديدة':'Set a new password';
+  $('resetIntro').textContent=ar?'اكتب كلمة مرور جديدة لحسابك. يجب أن تكون 8 أحرف على الأقل.':'Enter a new password for your account. It must be at least 8 characters.';
+  $('resetPasswordLabel').textContent=ar?'كلمة المرور الجديدة':'New password';
+  $('resetConfirmLabel').textContent=ar?'تأكيد كلمة المرور':'Confirm password';
+  $('resetPasswordBtn').textContent=ar?'حفظ كلمة المرور الجديدة':'Save new password';
+  $('resetLoginBtn').textContent=ar?'العودة إلى تسجيل الدخول':'Back to sign in';
+  $('resetLangBtn').textContent=ar?'EN':'AR';
+}
 const authCopy={
  ar:{register:'إنشاء الحساب',registerClient:'إنشاء حساب عميل',registerSupplier:'إنشاء حساب مورد',client:'عميل',supplier:'مورد',name:'الاسم',company:'اسم الشركة',email:'البريد الإلكتروني',phone:'رقم التواصل مع رمز الدولة (للإدارة فقط)',country:'الدولة',category:'فئة المنتجات',password:'كلمة المرور (8 أحرف على الأقل)',confirmPassword:'تأكيد كلمة المرور',already:'لدي حساب بالفعل',back:'العودة للرئيسية',retry:'إعادة المحاولة',logout:'تسجيل الخروج',loading:'جارٍ التحقق من الجلسة...',registerIntro:'أنشئ حسابك للمتابعة داخل التطبيق.'},
  en:{register:'Create account',registerClient:'Create customer account',registerSupplier:'Create supplier account',client:'Customer',supplier:'Supplier',name:'Name',company:'Company',email:'Email address',phone:'Phone with country code (admin only)',country:'Country',category:'Product category',password:'Password (at least 8 characters)',confirmPassword:'Confirm password',already:'I already have an account',back:'Back to home',retry:'Try again',logout:'Sign out',loading:'Checking your session...',registerIntro:'Create your account to continue in the app.'}
@@ -1329,6 +1349,27 @@ $('registerForm').addEventListener('submit',async e=>{
  }catch(error){if(error.code!=='session_changed'){if(stage==='data'&&session.active)recovery(error);else message.textContent=errorText(error,stage);}}
  finally{busy=false;$('registerBtn').disabled=false;}
 });
+$('resetLangBtn').addEventListener('click',toggleLanguage);
+$('resetLoginBtn').addEventListener('click',()=>{
+  history.replaceState(null,'',location.pathname==='/'?'/':'/');
+  $('resetPasswordForm').reset();$('resetMessage').textContent='';$('resetLoginBtn').classList.add('hidden');$('resetPasswordForm').classList.remove('hidden');
+  showView('loginView');
+});
+$('resetPasswordForm').addEventListener('submit',async e=>{
+  e.preventDefault();if(busy)return;
+  const token=recoveryAccessToken(),password=$('resetPassword').value,confirm=$('resetConfirmPassword').value,message=$('resetMessage'),button=$('resetPasswordBtn');
+  if(!token){message.textContent=tr('رابط الاستعادة غير صالح أو منتهي.','Recovery link is invalid or expired.');return;}
+  if(password!==confirm){message.textContent=tr('كلمتا المرور غير متطابقتين.','Passwords do not match.');return;}
+  if(password.length<8){message.textContent=tr('كلمة المرور يجب أن تكون 8 أحرف على الأقل.','Password must be at least 8 characters.');return;}
+  busy=true;button.disabled=true;message.textContent=tr('جارٍ حفظ كلمة المرور...','Saving new password...');
+  try{
+    await request('/api/v1/auth/reset',{method:'POST',auth:false,body:{accessToken:token,password}});
+    history.replaceState(null,'','/');
+    e.currentTarget.reset();message.textContent=tr('تم تغيير كلمة المرور بنجاح. يمكنك تسجيل الدخول الآن.','Password changed successfully. You can sign in now.');
+    $('resetLoginBtn').classList.remove('hidden');button.classList.add('hidden');
+  }catch(error){message.textContent=errorText(error,'auth');}
+  finally{busy=false;button.disabled=false;}
+});
 async function resumeSession(){
  if(busy)return;busy=true;
  try{
@@ -1343,4 +1384,4 @@ App.addListener('appStateChange',({isActive})=>{
     loadData().catch(error=>{if(currentUser)showToast(errorText(error));});
   }
 });
-(async function boot(){await languageReady;lang=getLanguage();applyLanguage();setRegisterRole('client');await resumeSession();})();
+(async function boot(){await languageReady;lang=getLanguage();applyLanguage();setRegisterRole('client');applyResetLanguage();if(recoveryAccessToken()){showView('resetView');return;}await resumeSession();})();
