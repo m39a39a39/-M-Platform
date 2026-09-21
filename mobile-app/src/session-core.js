@@ -1,4 +1,4 @@
-const browserOrigin=typeof location!=='undefined'&&/^https?:$/.test(location.protocol)&&location.hostname!=='localhost'?location.origin:'';
+const browserOrigin=typeof location!=='undefined'&&/^https?:$/.test(location.protocol)&&!['localhost','127.0.0.1','::1','[::1]'].includes(location.hostname)?location.origin:'';
 export const API = String(import.meta.env?.VITE_API_ORIGIN||browserOrigin||'https://m-platform-tan.vercel.app').replace(/\/$/,'');
 export class SessionError extends Error {
   constructor(code, status = 0, message = code) { super(message); this.code = code; this.status = status; }
