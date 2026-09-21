@@ -231,7 +231,10 @@ export async function mutate(user,body){
         assert(Number(data.moq)<=Number(child.data?.quantity),409,'الحد الأدنى للمورد أعلى من كمية الطلب / Supplier MOQ exceeds the requested quantity');
         data.replacementInterestId=invite.interestId;
       }
-      const existing=await db('quotes',`request_id=eq.${encodeURIComponent(patch.requestId)}&owner_id=eq.${encodeURIComponent(user.id)}&data->>deletedAt=is.null&limit=1`);
+      const existingQuery=r.data.orderType==='cart'&&data.replacementInterestId
+        ?`request_id=eq.${encodeURIComponent(patch.requestId)}&owner_id=eq.${encodeURIComponent(user.id)}&data->>replacementInterestId=eq.${encodeURIComponent(data.replacementInterestId)}&data->>deletedAt=is.null&limit=1`
+        :`request_id=eq.${encodeURIComponent(patch.requestId)}&owner_id=eq.${encodeURIComponent(user.id)}&data->>deletedAt=is.null&limit=1`;
+      const existing=await db('quotes',existingQuery);
       assert(!existing.length,409,'سبق أن قدمت عرضًا على هذا الطلب / You already submitted an offer for this request');
     }else if(collection==='interests'){
       const offer=await one('public_offers',patch.offerId);
@@ -337,6 +340,10 @@ export async function mutate(user,body){
         const selected=r.data.selectedQuoteId?await one('quotes',r.data.selectedQuoteId):null;
         const replacementOpen=!r.data.selectedQuoteId||(selected?.data?.supplierOrderStatus==='cannot_fulfill'&&r.data.selectedQuoteId!==original.id);
         assert(r.data.status==='sent'&&replacementOpen&&r.data.supplierIds?.includes(user.id),409,'لا يمكن تعديل العرض بعد إغلاق الطلب أو اختيار عرض / Offer cannot be edited after request closure or selection');
+        if(r.data.orderType==='cart'){
+          const invite=cartInviteFor(r.data,user.id);
+          assert(invite?.interestId&&original.data?.replacementInterestId===invite.interestId,409,'هذا العرض يخص دعوة تسعير سابقة / This quote belongs to an earlier pricing invitation');
+        }
         assert(['pending','published'].includes(data.status),409,'العرض غير قابل للتعديل / Offer is not editable');
         for(const key of changes)data[key]=patch[key];
         validateContent('quotes',data);
