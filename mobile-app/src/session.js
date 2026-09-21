@@ -8,13 +8,13 @@ let webSession = null;
 function webRead(){
   if(typeof sessionStorage==='undefined')return webSession;
   try{
-    const raw=sessionStorage.getItem(key);return raw?JSON.parse(raw):null;
-  }catch{return null;}
+    const raw=sessionStorage.getItem(key);return raw?JSON.parse(raw):webSession;
+  }catch{return webSession;}
 }
 function webWrite(value){
   webSession=value;
   if(typeof sessionStorage==='undefined')return;
-  if(value)sessionStorage.setItem(key,JSON.stringify(value));else sessionStorage.removeItem(key);
+  try{if(value)sessionStorage.setItem(key,JSON.stringify(value));else sessionStorage.removeItem(key);}catch{}
 }
 
 async function nativeGet() {
