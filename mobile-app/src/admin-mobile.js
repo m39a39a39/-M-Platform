@@ -112,6 +112,17 @@ function supplierConfirmationCard(x,kind){
   const row=labels[info.status]||labels.pending_confirmation;
   return '<section class="admin-supplier-confirmation '+esc(row[1])+'"><div class="admin-supplier-confirmation-head"><div><small>'+esc(tr('تأكيد المورد','Supplier confirmation'))+'</small><strong>'+esc(row[0])+'</strong></div><span>'+esc(info.confirmed?'✓':info.status==='cannot_fulfill'?'✕':'…')+'</span></div>'+(info.note?'<p><b>'+esc(tr('ملاحظة المورد','Supplier note'))+':</b> '+esc(info.note)+'</p>':'')+'<small>'+esc(info.confirmed?tr('يمكن الآن الانتقال إلى تأكيد الطلب والدفع.','The order can now move to payment confirmation.'):info.status==='cannot_fulfill'?tr('لا يمكن الانتقال للدفع. راجع سبب تعذر التنفيذ.','Payment cannot start. Review the supplier reason.'):tr('تأكيد الطلب والدفع سيبقى غير متاح حتى يؤكد المورد التنفيذ.','Payment confirmation remains unavailable until the supplier confirms fulfillment.'))+'</small></section>';
 }
+function replacementSupplierPanel(x,kind){
+  const info=supplierExecutionInfo(x,kind);if(info.status!=='cannot_fulfill'||!(can('publish')||can(kind==='request'?'requests.edit':'offers.edit')))return '';
+  if(kind==='interest'){
+    const suppliers=(state?.accounts||[]).filter(a=>a.role==='supplier'&&!a.blockedAt&&!a.deletedAt&&a.id!==x.assignedSupplierId);
+    return '<section class="admin-supplier-confirmation blocked"><div class="admin-supplier-confirmation-head"><div><small>'+esc(tr('يحتاج مورد بديل','Replacement supplier required'))+'</small><strong>'+esc(tr('الطلب لم يُلغَ ويمكن إعادة إسناده','The order remains active and can be reassigned'))+'</strong></div></div><form id="adminReplacementSupplierForm" data-interest-id="'+esc(x.id)+'" class="form-stack"><label><span>'+esc(tr('المورد البديل','Replacement supplier'))+'</span><select name="supplierId" required><option value="">—</option>'+suppliers.map(s=>'<option value="'+esc(s.id)+'">'+esc(s.company||s.name||s.email||('#'+String(s.id).slice(0,8)))+'</option>').join('')+'</select></label><button class="primary-btn" type="submit">'+esc(tr('تحويل نفس الطلب للمورد','Reassign same order'))+'</button></form></section>';
+  }
+  const alternatives=(state?.quotes||[]).filter(q=>q.requestId===x.id&&q.status==='published'&&q.id!==x.selectedQuoteId&&q.supplierOrderStatus!=='cannot_fulfill');
+  return '<section class="admin-supplier-confirmation blocked"><div class="admin-supplier-confirmation-head"><div><small>'+esc(tr('يحتاج مورد بديل','Replacement supplier required'))+'</small><strong>'+esc(tr('اختر عرضًا بديلًا لنفس الطلب','Choose a replacement quote for the same order'))+'</strong></div></div>'+(alternatives.length?'<form id="adminReplacementQuoteForm" data-request-id="'+esc(x.id)+'" class="form-stack"><label><span>'+esc(tr('العرض البديل','Replacement quote'))+'</span><select name="quoteId" required><option value="">—</option>'+alternatives.map(q=>'<option value="'+esc(q.id)+'">#'+esc(ref(q))+' · '+esc(formatMoney(q.unitPrice,q.currency))+' · '+esc(q.leadTime||'—')+'</option>').join('')+'</select></label><small>'+esc(tr('إذا اختلف السعر أو المواصفات أو مدة التنفيذ، سيتوقف الطلب تلقائيًا لطلب موافقة العميل.','If price, specifications, or lead time differ, the order will pause automatically for customer approval.'))+'</small><button class="primary-btn" type="submit">'+esc(tr('إعادة إسناد الطلب','Reassign order'))+'</button></form>':'<p>'+esc(tr('لا يوجد عرض بديل منشور حاليًا. أعد إرسال طلب العرض إلى مورد جديد من قائمة الموردين.','No published replacement quote is available. Send the RFQ to another supplier from the supplier list.'))+'</p>')+'</section>';
+}
+async function submitReplacementSupplier(form){const x=(state?.interests||[]).find(v=>v.id===form.dataset.interestId);if(!x)return;try{await mutate('interests',x,{assignedSupplierId:form.supplierId.value});closeModal();schedule();toast(tr('تم تحويل نفس الطلب إلى المورد البديل.','The same order was reassigned to the replacement supplier.'));}catch(e){toast(e.message);}}
+async function submitReplacementQuote(form){const x=(state?.requests||[]).find(v=>v.id===form.dataset.requestId);if(!x)return;try{await mutate('requests',x,{replacementQuoteId:form.quoteId.value});closeModal();schedule();toast(tr('تمت معالجة إعادة الإسناد مع الحفاظ على نفس الطلب.','Reassignment was processed while keeping the same order.'));}catch(e){toast(e.message);}}
 const TRACKING_EXCEPTION_KEYS=new Set(['customer_action','on_hold','cancelled']);
 function trackingOptions(rows,item,current,canPay,{rfq=false}={}){
   const linear=rows.map(x=>x[0]).filter(key=>!TRACKING_EXCEPTION_KEYS.has(key)),allowed=new Set([current]);
@@ -547,7 +558,7 @@ function openInterest(id){
   const offer=(state?.publicOffers||[]).find(o=>o.id===x.offerId),customer=account(x.customerId);
   const pricing=interestPricing(x);
   const orderSummary=pricing?'<section class="admin-selected-quote-card"><div class="admin-selected-quote-head"><div><small>'+esc(tr('طلب العرض العام','Public-offer order'))+'</small><strong>#'+esc(ref(x))+'</strong></div><span class="status-pill status-published">'+esc(tr('الكمية محددة','Quantity selected'))+'</span></div><div class="admin-selected-quote-values"><div><span>'+esc(tr('سعر الوحدة','Unit price'))+'</span><strong>'+esc(formatMoney(pricing.unitPrice,pricing.currency))+'</strong></div><div><span>'+esc(tr('الكمية','Quantity'))+'</span><strong>'+esc(Number(pricing.quantity).toLocaleString())+'</strong></div><div class="total"><span>'+esc(tr('الإجمالي','Total'))+'</span><strong>'+esc(formatMoney(pricing.total,pricing.currency))+'</strong></div></div><small>'+esc(tr('تم تثبيت السعر والعملة وقت تقديم العميل للطلب.','Price and currency were captured when the customer placed the request.'))+'</small></section>':'';
-  const html=(customer?'<section class="admin-owner-box"><strong>'+esc(tr('العميل','Customer'))+'</strong><p>'+esc(customer.company||customer.name||'—')+'</p>'+(can('accounts.read')?'<small>'+esc(customer.name||'')+(customer.phone?' · '+esc(customer.phone):'')+(customer.email?' · '+esc(customer.email):'')+'</small>':'')+'</section>':'')+orderSummary+supplierConfirmationCard(x,'interest')+interestTrackingEditor(x)+adminInvoicePanel(x,'interest')+(offer?'<section class="admin-source-box"><h3>'+esc(tr('المنتج','Product'))+'</h3><strong>'+esc(title(offer))+'</strong><p>'+esc(desc(offer)||'—')+'</p></section>'+gallery(offer.images||[]):'');
+  const html=(customer?'<section class="admin-owner-box"><strong>'+esc(tr('العميل','Customer'))+'</strong><p>'+esc(customer.company||customer.name||'—')+'</p>'+(can('accounts.read')?'<small>'+esc(customer.name||'')+(customer.phone?' · '+esc(customer.phone):'')+(customer.email?' · '+esc(customer.email):'')+'</small>':'')+'</section>':'')+orderSummary+supplierConfirmationCard(x,'interest')+replacementSupplierPanel(x,'interest')+interestTrackingEditor(x)+adminInvoicePanel(x,'interest')+(offer?'<section class="admin-source-box"><h3>'+esc(tr('المنتج','Product'))+'</h3><strong>'+esc(title(offer))+'</strong><p>'+esc(desc(offer)||'—')+'</p></section>'+gallery(offer.images||[]):'');
   modal(offer?title(offer):tr('طلب منتج جاهز','Ready-product request'),'#'+ref(offer),html);
 }
 async function saveInterestTracking(id){
@@ -661,7 +672,7 @@ function requestQuotesPanel(request){
 function openRecord(kind,id){
   const arr=kind==='request'?state?.requests:kind==='quote'?state?.quotes:state?.publicOffers,x=(arr||[]).find(v=>v.id===id);if(!x)return;
   if(kind==='request'&&x.orderType==='cart'){
-    const html=ownerBox(x)+cartOrderAdminPanel(x)+selectedQuoteCard(x)+supplierConfirmationCard(x,'request')+((can('requests.edit')||can('publish'))?trackingEditor(x):'')+adminInvoicePanel(x,'request');
+    const html=ownerBox(x)+cartOrderAdminPanel(x)+selectedQuoteCard(x)+supplierConfirmationCard(x,'request')+replacementSupplierPanel(x,'request')+((can('requests.edit')||can('publish'))?trackingEditor(x):'')+adminInvoicePanel(x,'request');
     modal('#'+ref(x)+' — '+tr('طلب منتجات','Product order'),status(requestTracking(x)),html);return;
   }
   const pending=kind==='request'?x.status==='review':x.status==='pending',editPerm=kind==='request'?'requests.edit':'offers.edit',editImages=pending&&can(editPerm),editTr=pending&&can('translate'),approve=pending&&can('publish'),linked=kind==='quote'?(state?.requests||[]).find(r=>r.id===x.requestId):null;
@@ -795,7 +806,9 @@ if(window.visualViewport){
 document.addEventListener('click',e=>{const target=e.target.closest?.('[data-admin-invoice-pdf]');if(target&&isAdmin()){e.preventDefault();openAdminInvoicePdf(target);}});
 document.addEventListener('submit',e=>{
   if(!isAdmin())return;
-  if(e.target.matches('#adminTeamForm')){e.preventDefault();submitTeam(e.target);}
+  if(e.target.matches('#adminReplacementSupplierForm')){e.preventDefault();submitReplacementSupplier(e.target);}
+  else if(e.target.matches('#adminReplacementQuoteForm')){e.preventDefault();submitReplacementQuote(e.target);}
+  else if(e.target.matches('#adminTeamForm')){e.preventDefault();submitTeam(e.target);}
   else if(e.target.matches('#adminTeamStatusForm')){e.preventDefault();submitTeamStatus(e.target);}
   else if(e.target.matches('#adminCurrencyForm')){e.preventDefault();submitCurrency(e.target);}
   else if(e.target.matches('#adminBankAccountForm')){e.preventDefault();submitBankAccount(e.target);}
