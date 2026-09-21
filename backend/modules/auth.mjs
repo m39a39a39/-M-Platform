@@ -7,9 +7,12 @@ export async function updateOwnCurrency(user,body={}){
   const settings=await one('settings','site'),currencies=Array.isArray(settings?.data?.currencies)?settings.data.currencies:[{code:'SAR',nameAr:'الريال السعودي',nameEn:'Saudi Riyal',rate:1,active:true}];
   const code=String(body.currency||'SAR').trim().toUpperCase(),chosen=currencies.find(x=>x.code===code&&x.active!==false);
   assert(chosen,400,'العملة غير متاحة / Currency unavailable');
-  const current=await one('profiles',user.id),data={...(current.data||{}),preferredCurrency:code};
-  await sb(`/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}`,{method:'PATCH',body:{data}});
-  return {ok:true,currency:code};
+  const current=await one('profiles',user.id);assert(current,404,'الحساب غير متاح / Account unavailable');
+  const data={...(current.data||{}),preferredCurrency:code};
+  const rows=await sb(`/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}`,{method:'PATCH',body:{data},headers:{Prefer:'return=representation'}});
+  const updated=Array.isArray(rows)?rows[0]:null;
+  assert(updated?.data?.preferredCurrency===code,502,'تعذر حفظ العملة / Could not save currency');
+  return {ok:true,currency:code,user:profile(updated)};
 }
 const NATIVE_ORIGINS=new Set(['capacitor://localhost','http://localhost','https://localhost']);
 export const isNativeClient=req=>{
