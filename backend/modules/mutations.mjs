@@ -185,6 +185,7 @@ function cartReplacementChildData(child,quote,previousSupplierId,now){
     newSupplierId:quote.owner_id,newQuoteId:quote.id,reassignedAt:now,termsChanged:true
   }].slice(-100);
   next.assignedSupplierId=quote.owner_id;next.replacementQuoteId=quote.id;next.supplierOrderStatus='pending_confirmation';
+  next.replacementQuoteSnapshot={unitPrice, currency:String(quote.data.currency||'').toUpperCase(), moq:Number(quote.data.moq), leadTime:String(quote.data.leadTime||''), sampleCost:String(quote.data.sampleCost||''), selectedAt:now};
   next.supplierOrderNote='';next.supplierOrderUpdatedAt=now;next.unitPrice=unitPrice;next.currency=String(quote.data.currency||'').toUpperCase();
   next.moq=Number(quote.data.moq);next.total=quantity*unitPrice;next.replacementLeadTime=quote.data.leadTime||'';
   setTracking(next,'supplier_confirmation',now,'');next.updatedAt=now;
@@ -272,6 +273,7 @@ export async function mutate(user,body){
         assert(q&&q.request_id===id&&q.data.status==='published'&&open(q)&&active(await one('profiles',q.owner_id)),409,'العرض البديل غير متاح / Replacement quote unavailable');
         assert(child&&child.owner_id===user.id&&child.data?.cartOrderId===id&&child.data?.supplierOrderStatus==='cannot_fulfill',409,'المنتج لم يعد يحتاج موردًا بديلًا / Item no longer needs a replacement supplier');
         assert(String(q.data.currency||'').toUpperCase()===String(child.data.currency||'').toUpperCase(),409,'عملة العرض البديل يجب أن تطابق عملة المنتج / Replacement quote currency must match the item currency');
+        assert(Number(q.data.moq)<=Number(child.data.quantity),409,'الحد الأدنى للمورد أعلى من كمية الطلب / Supplier MOQ exceeds the requested quantity');
         const offer=await one('public_offers',child.offer_id),previousSupplierId=child.data.assignedSupplierId||offer?.owner_id||'';
         applyCartQuoteToParent(data,child.id,q.data);
         const previousProforma=data.proformaInvoice?structuredClone(data.proformaInvoice):null;
@@ -406,6 +408,7 @@ export async function mutate(user,body){
           assert(declined.length===1&&declined[0].id===interestId,409,'تعذر تحديد المنتج الخاص بالعرض القديم / Could not match legacy quote to item');
         }
         assert(String(q.data.currency||'').toUpperCase()===String(child.data.currency||'').toUpperCase(),409,'عملة العرض البديل يجب أن تطابق عملة المنتج / Replacement quote currency must match the item currency');
+        assert(Number(q.data.moq)<=Number(child.data.quantity),409,'الحد الأدنى للمورد أعلى من كمية الطلب / Supplier MOQ exceeds the requested quantity');
         const offer=await one('public_offers',child.offer_id),previousSupplierId=child.data.assignedSupplierId||offer?.owner_id||'';
         assert(q.owner_id!==previousSupplierId,400,'اختر عرض مورد آخر / Choose a different supplier quote');
         const same=cartTermsMatch(child.data,q.data,offer?.data||{});
