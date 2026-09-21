@@ -1,7 +1,7 @@
 // Backend validation regression tests.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {can} from '../backend/modules/auth.mjs';
+import {can,isNativeClient} from '../backend/modules/auth.mjs';
 import {anonymous,ownRecord,supplierInterest} from '../backend/modules/records.mjs';
 import {validateContent,normalizeCategories,normalizeSubcategories,normalizeSupplyCountries,TRACKING_STATUSES,READY_TRACKING_STATUSES,requiresRedaction,allowedAdminTrackingTransition,TRACKING_FLOW,READY_TRACKING_FLOW,cartTermsMatch} from '../backend/modules/mutations.mjs';
 import {decodeImage,decodePaymentReceipt} from '../backend/modules/media.mjs';
@@ -12,6 +12,27 @@ test('client cannot grant itself admin permission',()=>{
  assert.equal(can({role:'client',is_owner:true,permissions:['team']},'team'),false);
  assert.equal(can({role:'admin',permissions:['translate']},'accounts.read'),false);
  assert.equal(can({role:'admin',permissions:['translate']},'translate'),true);
+});
+test('unified browser bearer login is limited to the configured first-party origin',()=>{
+ const keys=['SUPABASE_URL','SUPABASE_ANON_KEY','SUPABASE_SERVICE_ROLE_KEY','APP_ORIGIN'];
+ const previous=Object.fromEntries(keys.map(key=>[key,process.env[key]]));
+ Object.assign(process.env,{
+   SUPABASE_URL:'https://example.supabase.co',
+   SUPABASE_ANON_KEY:'anon',
+   SUPABASE_SERVICE_ROLE_KEY:'service',
+   APP_ORIGIN:'https://m-platform-tan.vercel.app'
+ });
+ try{
+   assert.equal(isNativeClient({headers:{'x-m-client':'native',origin:'https://m-platform-tan.vercel.app'}}),true);
+   assert.equal(isNativeClient({headers:{'x-m-client':'native',origin:'capacitor://localhost'}}),true);
+   assert.equal(isNativeClient({headers:{'x-m-client':'native',origin:'https://evil.example'}}),false);
+   assert.equal(isNativeClient({headers:{origin:'https://m-platform-tan.vercel.app'}}),false);
+ }finally{
+   for(const key of keys){
+     if(previous[key]===undefined)delete process.env[key];
+     else process.env[key]=previous[key];
+   }
+ }
 });
 test('supplier projection hides customer identity, source content and other invites',()=>{
  const r={id:'M-1',owner_id:'private-customer',version:1,data:{product:'private-name',specs:'private-phone',supplierIds:['one','two'],moderationHistory:[{actorId:'admin'}],translation:{titleEn:'Approved'},status:'sent',images:[],paymentMessage:'secret payment instructions',paymentReceipt:{src:'/api/media/secret-receipt'}}};
