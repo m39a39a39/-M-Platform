@@ -52,6 +52,7 @@ const subcategories=()=>subcategoryRows(state?.settings,{activeOnly:false});
 const activeSubcategories=(parentId='')=>subcategoryRows(state?.settings,{parentId});
 const supplyCountries=()=>supplyCountryRows(state?.settings,{activeOnly:false});
 const activeSupplyCountries=()=>supplyCountryRows(state?.settings);
+const currencies=()=>{const rows=Array.isArray(state?.settings?.currencies)?state.settings.currencies:[{code:'SAR',nameAr:'الريال السعودي',nameEn:'Saudi Riyal',rate:1,active:true,order:0}];return [...rows].sort((a,b)=>(a.order||0)-(b.order||0));};
 const bankAccounts=()=>{const rows=Array.isArray(state?.settings?.bankAccounts)?state.settings.bankAccounts:[];return [...rows].sort((a,b)=>(a.order||0)-(b.order||0));};
 const activeBankAccounts=()=>bankAccounts().filter(x=>x.active!==false);
 const selectedQuoteForRequest=x=>x?.selectedQuoteId?(state?.quotes||[]).find(q=>q.id===x.selectedQuoteId&&q.requestId===x.id):null;
@@ -329,6 +330,18 @@ function bulkAssignDialog(kind){
   const isCategory=kind==='category',rows=isCategory?activeCategories():activeSupplyCountries();
   modal(isCategory?tr('تغيير التصنيف','Change category'):tr('تغيير دولة التوريد','Change supply country'),tr('إجراء جماعي','Bulk action'),`<form id="adminBulkAssignForm" class="form-stack" data-kind="${kind}"><label><span>${esc(isCategory?tr('التصنيف الرئيسي','Main category'):tr('دولة التوريد','Supply country'))}</span><select name="value" required><option value="">—</option>${rows.map(x=>`<option value="${esc(x.id)}">${esc(taxonomyLabel(x,lang()))}</option>`).join('')}</select></label><button class="primary-btn" type="submit">${esc(tr('تطبيق على المحدد','Apply to selected'))}</button></form>`);
 }
+function currencyPanel(){
+  if(!can('settings'))return '';
+  const rows=currencies();
+  return `<section class="section-block admin-bank-panel"><div class="section-title"><div><h2>${esc(tr('العملات وأسعار الصرف','Currencies & exchange rates'))}</h2><p>${esc(tr('SAR هي العملة الأساسية. أدخل سعر كل عملة مقابل ريال سعودي واحد.','SAR is the base currency. Enter each currency value per 1 SAR.'))}</p></div><button class="primary-small" type="button" data-admin-currency-new>+ ${esc(tr('إضافة عملة','Add currency'))}</button></div><div class="admin-bank-list">${rows.map(x=>`<article class="admin-bank-row"><div><strong>${esc(x.code)} · ${esc(lang()==='ar'?x.nameAr:x.nameEn)}</strong><small>${x.code==='SAR'?esc(tr('العملة الأساسية','Base currency')):esc('1 SAR = '+x.rate+' '+x.code)}</small><span class="status-pill ${x.active!==false?'status-published':'status-cancelled'}">${esc(x.active!==false?tr('نشطة','Active'):tr('متوقفة','Inactive'))}</span></div><div class="admin-category-actions"><button type="button" data-admin-currency-edit="${esc(x.code)}">${esc(tr('تعديل','Edit'))}</button>${x.code==='SAR'?'':`<button type="button" data-admin-currency-toggle="${esc(x.code)}">${esc(x.active!==false?tr('إيقاف','Disable'):tr('تفعيل','Enable'))}</button>`}</div></article>`).join('')}</div></section>`;
+}
+function currencyDialog(code=''){
+  const x=currencies().find(v=>v.code===code),isSar=x?.code==='SAR';
+  modal(x?tr('تعديل العملة','Edit currency'):tr('إضافة عملة','Add currency'),tr('العملات وأسعار الصرف','Currencies & exchange rates'),`<form id="adminCurrencyForm" class="form-stack" data-code="${esc(x?.code||'')}"><label><span>${esc(tr('رمز العملة','Currency code'))}</span><input name="code" required maxlength="3" value="${esc(x?.code||'')}" ${x?'readonly':''}></label><label><span>${esc(tr('الاسم بالعربية','Arabic name'))}</span><input name="nameAr" required maxlength="80" value="${esc(x?.nameAr||'')}"></label><label><span>${esc(tr('الاسم بالإنجليزية','English name'))}</span><input name="nameEn" required maxlength="80" value="${esc(x?.nameEn||'')}"></label><label><span>${esc(tr('سعر الصرف مقابل 1 SAR','Exchange rate per 1 SAR'))}</span><input name="rate" type="number" min="0.000001" step="any" required value="${esc(isSar?1:(x?.rate||''))}" ${isSar?'readonly':''}></label><label class="admin-category-toggle-label"><input type="checkbox" name="active" ${x?.active===false?'':'checked'} ${isSar?'disabled':''}><span>${esc(tr('العملة نشطة','Currency active'))}</span></label><button class="primary-btn" type="submit">${esc(tr('حفظ','Save'))}</button></form>`);
+}
+async function saveCurrencies(rows){try{await api('/api/v1/settings',{method:'POST',body:{version:Number(state.settings?._version||0),data:{currencies:rows}}});await reload();schedule();toast(tr('تم حفظ العملات وأسعار الصرف.','Currencies and exchange rates saved.'));return true;}catch(e){toast(e.message);return false;}}
+async function submitCurrency(form){const old=form.dataset.code,code=form.code.value.trim().toUpperCase(),rows=currencies(),next={code,nameAr:form.nameAr.value.trim(),nameEn:form.nameEn.value.trim(),rate:code==='SAR'?1:Number(form.rate.value),active:code==='SAR'?true:form.active.checked},i=rows.findIndex(x=>x.code===(old||code));if(i>=0)rows[i]={...rows[i],...next};else rows.push(next);if(await saveCurrencies(rows))closeModal();}
+async function toggleCurrency(code){const rows=currencies(),x=rows.find(v=>v.code===code);if(!x||code==='SAR')return;x.active=x.active===false;await saveCurrencies(rows);}
 function bankAccountPanel(){
   if(!can('settings'))return '';
   const rows=bankAccounts();
@@ -387,7 +400,7 @@ async function submitTeamStatus(form){
     await reload();closeModal();schedule();toast(form.dataset.action==='block'?tr('تم إيقاف المدير.','Manager disabled.'):tr('تمت إعادة تفعيل المدير.','Manager reactivated.'));
   }catch(e){toast(e.message);}
 }
-function accounts(){const u=me(),rows=(state?.accounts||[]).filter(a=>['client','supplier'].includes(a.role)&&!a.deletedAt&&matches(a,'account'));setRoot('account',page(tr('الحساب والإعدادات','Account & settings'),tr('بيانات الإدارة والحسابات وإعدادات المنتجات.','Admin profile, accounts, and product settings.'))+`<section class="profile-card admin-profile"><div class="avatar">${esc((u?.name||u?.email||'M').charAt(0).toUpperCase())}</div><h2>${esc(u?.name||tr('الإدارة','Admin'))}</h2><p>${esc(tr('حساب إدارة','Admin account'))}</p><button class="danger-btn" data-action="logout">${esc(tr('تسجيل الخروج','Sign out'))}</button></section>`+teamPanel()+bankAccountPanel()+`<section class="section-block admin-directory"><div class="section-title"><h2>${esc(tr('العملاء والموردون','Customers & suppliers'))}</h2></div>${search(tr('ابحث بالاسم أو الشركة','Search name or company'))}<div class="list-stack" data-admin-results>${rows.slice(0,100).map(a=>`<button class="admin-account-row" data-admin-account="${esc(a.id)}"><div><strong>${esc(a.company||a.name||'#'+String(a.id).slice(0,8))}</strong><small>${esc(a.role==='client'?tr('عميل','Customer'):tr('مورد','Supplier'))} · ${esc(a.blockedAt?tr('متوقف','Disabled'):tr('نشط','Active'))}</small></div><span>›</span></button>`).join('')||empty()}</div></section>`+categoryPanel()+subcategoryPanel()+supplyCountryPanel());}
+function accounts(){const u=me(),rows=(state?.accounts||[]).filter(a=>['client','supplier'].includes(a.role)&&!a.deletedAt&&matches(a,'account'));setRoot('account',page(tr('الحساب والإعدادات','Account & settings'),tr('بيانات الإدارة والحسابات وإعدادات المنتجات.','Admin profile, accounts, and product settings.'))+`<section class="profile-card admin-profile"><div class="avatar">${esc((u?.name||u?.email||'M').charAt(0).toUpperCase())}</div><h2>${esc(u?.name||tr('الإدارة','Admin'))}</h2><p>${esc(tr('حساب إدارة','Admin account'))}</p><button class="danger-btn" data-action="logout">${esc(tr('تسجيل الخروج','Sign out'))}</button></section>`+teamPanel()+currencyPanel()+bankAccountPanel()+`<section class="section-block admin-directory"><div class="section-title"><h2>${esc(tr('العملاء والموردون','Customers & suppliers'))}</h2></div>${search(tr('ابحث بالاسم أو الشركة','Search name or company'))}<div class="list-stack" data-admin-results>${rows.slice(0,100).map(a=>`<button class="admin-account-row" data-admin-account="${esc(a.id)}"><div><strong>${esc(a.company||a.name||'#'+String(a.id).slice(0,8))}</strong><small>${esc(a.role==='client'?tr('عميل','Customer'):tr('مورد','Supplier'))} · ${esc(a.blockedAt?tr('متوقف','Disabled'):tr('نشط','Active'))}</small></div><span>›</span></button>`).join('')||empty()}</div></section>`+categoryPanel()+subcategoryPanel()+supplyCountryPanel());}
 export function renderAdminScreen(v=activeView()){if(!isAdmin()||v==='notifications')return false;if(v==='home')home();else if(v==='requests')requests();else if(v==='offers')offers();else if(v==='account')accounts();return true;}
 function render(){if(!document.getElementById('appView')?.classList.contains('hidden'))renderAdminScreen();}
 
@@ -709,6 +722,9 @@ document.addEventListener('click',e=>{
   const tn=e.target.closest('[data-admin-team-new]');if(tn){teamDialog();return;}
   const te=e.target.closest('[data-admin-team-edit]');if(te){teamDialog(te.dataset.adminTeamEdit);return;}
   const tt=e.target.closest('[data-admin-team-toggle]');if(tt){teamToggleDialog(tt.dataset.adminTeamToggle);return;}
+  const cun=e.target.closest('[data-admin-currency-new]');if(cun){currencyDialog();return;}
+  const cue=e.target.closest('[data-admin-currency-edit]');if(cue){currencyDialog(cue.dataset.adminCurrencyEdit);return;}
+  const cut=e.target.closest('[data-admin-currency-toggle]');if(cut){toggleCurrency(cut.dataset.adminCurrencyToggle);return;}
   const bn=e.target.closest('[data-admin-bank-new]');if(bn){bankAccountDialog();return;}
   const be=e.target.closest('[data-admin-bank-edit]');if(be){bankAccountDialog(be.dataset.adminBankEdit);return;}
   const bt=e.target.closest('[data-admin-bank-toggle]');if(bt){toggleBankAccount(bt.dataset.adminBankToggle);return;}
@@ -781,6 +797,7 @@ document.addEventListener('submit',e=>{
   if(!isAdmin())return;
   if(e.target.matches('#adminTeamForm')){e.preventDefault();submitTeam(e.target);}
   else if(e.target.matches('#adminTeamStatusForm')){e.preventDefault();submitTeamStatus(e.target);}
+  else if(e.target.matches('#adminCurrencyForm')){e.preventDefault();submitCurrency(e.target);}
   else if(e.target.matches('#adminBankAccountForm')){e.preventDefault();submitBankAccount(e.target);}
   else if(e.target.matches('#adminAccountEditForm')){e.preventDefault();submitAccountEdit(e.target);}
   else if(e.target.matches('#adminAccountStatusForm')){e.preventDefault();submitAccountStatus(e.target);}
