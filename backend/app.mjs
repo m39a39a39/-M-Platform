@@ -1,5 +1,5 @@
 import {config,HttpError,assert} from './lib/supabase.mjs';
-import {identify,authRoute,isNativeClient} from './modules/auth.mjs';
+import {identify,authRoute,isNativeClient,updateOwnCurrency} from './modules/auth.mjs';
 import {snapshot} from './modules/records.mjs';
 import {mutate,moderate,saveSettings,updateAccount,bulkUpdatePublicOffers} from './modules/mutations.mjs';
 import {upload,media} from './modules/media.mjs';
@@ -68,6 +68,7 @@ export default async function handler(req,res){
         else if(path==='/api/bulk-public-offers')result=await bulkUpdatePublicOffers(user,body);
         else if(path==='/api/moderation')result=await moderate(user,body);
         else if(path==='/api/accounts/update')result=await updateAccount(user,body);
+        else if(path==='/api/profile/currency')result=await updateOwnCurrency(user,body);
         else if(path==='/api/settings')result=await saveSettings(user,body);
         else if(path==='/api/team')result=await team(user,body);
         else if(path==='/api/uploads')result=await upload(user,body);
