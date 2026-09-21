@@ -112,8 +112,35 @@ function supplierConfirmationCard(x,kind){
   const row=labels[info.status]||labels.pending_confirmation;
   return '<section class="admin-supplier-confirmation '+esc(row[1])+'"><div class="admin-supplier-confirmation-head"><div><small>'+esc(tr('تأكيد المورد','Supplier confirmation'))+'</small><strong>'+esc(row[0])+'</strong></div><span>'+esc(info.confirmed?'✓':info.status==='cannot_fulfill'?'✕':'…')+'</span></div>'+(info.note?'<p><b>'+esc(tr('ملاحظة المورد','Supplier note'))+':</b> '+esc(info.note)+'</p>':'')+'<small>'+esc(info.confirmed?tr('يمكن الآن الانتقال إلى تأكيد الطلب والدفع.','The order can now move to payment confirmation.'):info.status==='cannot_fulfill'?tr('لا يمكن الانتقال للدفع. راجع سبب تعذر التنفيذ.','Payment cannot start. Review the supplier reason.'):tr('تأكيد الطلب والدفع سيبقى غير متاح حتى يؤكد المورد التنفيذ.','Payment confirmation remains unavailable until the supplier confirms fulfillment.'))+'</small></section>';
 }
+function cartReplacementDiffLabel(child,q){
+  const oldPrice=Number(child?.unitPrice),newPrice=Number(q?.unitPrice),quantity=Number(child?.quantity);
+  if(String(child?.currency||'').toUpperCase()!==String(q?.currency||'').toUpperCase())return tr('عملة مختلفة','Different currency');
+  if(!Number.isFinite(oldPrice)||!Number.isFinite(newPrice))return '';
+  const diff=(newPrice-oldPrice)*(Number.isFinite(quantity)&&quantity>0?quantity:1);
+  if(Math.abs(diff)<0.000001)return tr('نفس السعر','Same price');
+  return diff>0?tr('أعلى بـ ','Higher by ')+formatMoney(diff,q.currency):tr('أقل بـ ','Lower by ')+formatMoney(Math.abs(diff),q.currency);
+}
+function cartReplacementSupplierPanel(x){
+  const declined=(state?.interests||[]).filter(i=>i.cartOrderId===x.id&&i.supplierOrderStatus==='cannot_fulfill');
+  if(!declined.length)return '';
+  const lines=Array.isArray(x.cartItems)?x.cartItems:[],quotes=state?.quotes||[],offers=state?.publicOffers||[],invites=Array.isArray(x.cartReplacementInvites)?x.cartReplacementInvites:[];
+  return declined.map(child=>{
+    const line=lines.find(v=>v.interestId===child.id)||{},offer=offers.find(o=>o.id===child.offerId),oldSupplier=child.assignedSupplierId||offer?.supplierId||'';
+    const candidates=quotes.filter(q=>q.requestId===x.id&&q.status==='published'&&q.supplierOrderStatus!=='cannot_fulfill'&&(q.replacementInterestId===child.id||(!q.replacementInterestId&&declined.length===1)));
+    const invited=new Set([...(Array.isArray(x.supplierIds)?x.supplierIds:[]),...invites.filter(v=>v?.interestId===child.id&&!['selected','cancelled'].includes(v.status)).map(v=>v.supplierId)]);
+    const newSuppliers=can('publish')?(state?.accounts||[]).filter(a=>a.role==='supplier'&&!a.blockedAt&&!a.deletedAt&&a.id!==oldSupplier&&!invited.has(a.id)):[];
+    const quoteAction=candidates.length?
+      '<form data-cart-replacement-quote-form data-request-id="'+esc(x.id)+'" data-interest-id="'+esc(child.id)+'" class="form-stack"><label><span>'+esc(tr('العرض البديل','Replacement quote'))+'</span><select name="quoteId" required><option value="">—</option>'+candidates.map(q=>'<option value="'+esc(q.id)+'">#'+esc(ref(q))+' · '+esc(formatMoney(q.unitPrice,q.currency))+' · '+esc(cartReplacementDiffLabel(child,q))+'</option>').join('')+'</select></label><small>'+esc(tr('سيُقارن السعر والشروط بالطلب الأصلي. إذا اختلفت، سيطلب النظام موافقة العميل قبل تحويل الطلب للمورد الجديد.','Price and terms are compared with the original item. If they changed, customer approval is required before reassignment.'))+'</small><button class="primary-btn" type="submit">'+esc(tr('اعتماد العرض البديل','Approve replacement quote'))+'</button></form>':
+      '<p>'+esc(tr('لم يصل عرض بديل منشور لهذا المنتج بعد. ادعُ موردًا جديدًا من الأسفل.','No published replacement quote has arrived for this item yet. Invite a new supplier below.'))+'</p>';
+    const inviteAction=newSuppliers.length?
+      '<form data-cart-replacement-invite-form data-request-id="'+esc(x.id)+'" data-interest-id="'+esc(child.id)+'" class="form-stack"><label><span>'+esc(tr('دعوة مورد جديد للتسعير','Invite supplier for pricing'))+'</span><select name="supplierId" required><option value="">—</option>'+newSuppliers.map(s=>'<option value="'+esc(s.id)+'">'+esc(s.company||s.name||s.email||('#'+String(s.id).slice(0,8)))+'</option>').join('')+'</select></label><small>'+esc(tr('سيشاهد المورد هذا المنتج والكمية فقط ويقدم سعره وشروطه، بدون رؤية سعر المورد السابق.','The supplier sees this item and quantity only, and submits their own price and terms without seeing the previous supplier price.'))+'</small><button class="secondary-btn" type="submit">'+esc(tr('إرسال طلب تسعير للمورد','Send pricing request'))+'</button></form>':
+      '<p class="muted">'+esc(tr('لا يوجد مورد جديد متاح للدعوة حاليًا.','No additional supplier is available to invite right now.'))+'</p>';
+    return '<section class="admin-supplier-confirmation blocked"><div class="admin-supplier-confirmation-head"><div><small>'+esc(tr('يحتاج مورد بديل','Replacement supplier required'))+'</small><strong>'+esc(title(line)||tr('منتج من الطلب','Order item'))+'</strong></div></div><div class="facts"><span>'+esc(tr('السعر الأصلي','Original price'))+': '+esc(formatMoney(child.unitPrice,line.currency||child.currency))+'</span><span>'+esc(tr('الكمية','Quantity'))+': '+esc(child.quantity||line.quantity||'—')+'</span></div>'+quoteAction+inviteAction+'</section>';
+  }).join('');
+}
 function replacementSupplierPanel(x,kind){
   const info=supplierExecutionInfo(x,kind);if(info.status!=='cannot_fulfill'||!(can('publish')||can(kind==='request'?'requests.edit':'offers.edit')))return '';
+  if(kind==='request'&&x.orderType==='cart')return cartReplacementSupplierPanel(x);
   if(kind==='interest'){
     const suppliers=(state?.accounts||[]).filter(a=>a.role==='supplier'&&!a.blockedAt&&!a.deletedAt&&a.id!==x.assignedSupplierId);
     return '<section class="admin-supplier-confirmation blocked"><div class="admin-supplier-confirmation-head"><div><small>'+esc(tr('يحتاج مورد بديل','Replacement supplier required'))+'</small><strong>'+esc(tr('الطلب لم يُلغَ ويمكن إعادة إسناده','The order remains active and can be reassigned'))+'</strong></div></div><form id="adminReplacementSupplierForm" data-interest-id="'+esc(x.id)+'" class="form-stack"><label><span>'+esc(tr('المورد البديل','Replacement supplier'))+'</span><select name="supplierId" required><option value="">—</option>'+suppliers.map(s=>'<option value="'+esc(s.id)+'">'+esc(s.company||s.name||s.email||('#'+String(s.id).slice(0,8)))+'</option>').join('')+'</select></label><button class="primary-btn" type="submit">'+esc(tr('تحويل نفس الطلب للمورد','Reassign same order'))+'</button></form></section>';
@@ -124,6 +151,21 @@ function replacementSupplierPanel(x,kind){
   const quoteAction=alternatives.length?'<form id="adminReplacementQuoteForm" data-request-id="'+esc(x.id)+'" class="form-stack"><label><span>'+esc(tr('العرض البديل','Replacement quote'))+'</span><select name="quoteId" required><option value="">—</option>'+alternatives.map(q=>'<option value="'+esc(q.id)+'">#'+esc(ref(q))+' · '+esc(formatMoney(q.unitPrice,q.currency))+' · '+esc(q.leadTime||'—')+'</option>').join('')+'</select></label><small>'+esc(tr('إذا اختلف السعر أو المواصفات أو مدة التنفيذ، سيُطلب من العميل اعتماد الشروط الجديدة.','If price, specifications, or lead time differ, the customer will be asked to approve the new terms.'))+'</small><button class="primary-btn" type="submit">'+esc(tr('إعادة إسناد الطلب','Reassign order'))+'</button></form>':'<p>'+esc(tr('لا يوجد عرض بديل منشور حاليًا. يمكنك دعوة مورد جديد لنفس الطلب من الأسفل.','No published replacement quote is available. You can invite a new supplier to the same request below.'))+'</p>';
   const inviteAction=newSuppliers.length?'<form id="adminReplacementInviteForm" data-request-id="'+esc(x.id)+'" class="form-stack"><label><span>'+esc(tr('دعوة مورد جديد','Invite a new supplier'))+'</span><select name="supplierId" required><option value="">—</option>'+newSuppliers.map(s=>'<option value="'+esc(s.id)+'">'+esc(s.company||s.name||s.email||('#'+String(s.id).slice(0,8)))+'</option>').join('')+'</select></label><small>'+esc(tr('سيصل للمورد نفس طلب عرض السعر، وبعد أن يقدم عرضه ويُنشر يمكنك اختياره هنا كمورد بديل.','The supplier will receive the same RFQ. After submitting and publishing a quote, you can select it here as the replacement.'))+'</small><button class="secondary-btn" type="submit">'+esc(tr('إرسال الطلب للمورد','Send request to supplier'))+'</button></form>':(can('publish')?'<p class="muted">'+esc(tr('لا يوجد مورد جديد غير مدعو لهذا الطلب.','There is no additional supplier available to invite.'))+'</p>':'');
   return '<section class="admin-supplier-confirmation blocked"><div class="admin-supplier-confirmation-head"><div><small>'+esc(tr('يحتاج مورد بديل','Replacement supplier required'))+'</small><strong>'+esc(tr('اختر عرضًا بديلًا أو ادعُ موردًا جديدًا','Choose a replacement quote or invite a new supplier'))+'</strong></div></div>'+quoteAction+inviteAction+'</section>';
+}
+async function submitCartReplacementQuote(form){
+  const x=(state?.requests||[]).find(v=>v.id===form.dataset.requestId);if(!x)return;
+  const quoteId=String(form.quoteId.value||''),interestId=String(form.dataset.interestId||'');if(!quoteId||!interestId)return;
+  try{
+    await mutate('requests',x,{cartReplacementQuoteId:{quoteId,interestId}});
+    const updated=(state?.requests||[]).find(v=>v.id===x.id);
+    closeModal();schedule();
+    toast(updated?.pendingCartReplacement?tr('تم إرسال السعر والشروط الجديدة للعميل للموافقة.','New price and terms were sent to the customer for approval.'):tr('تم اعتماد المورد البديل وأصبح الطلب بانتظار تأكيده.','Replacement supplier approved; the order is awaiting supplier confirmation.'));
+  }catch(e){toast(e.message);}
+}
+async function submitCartReplacementInvite(form){
+  const x=(state?.requests||[]).find(v=>v.id===form.dataset.requestId);if(!x)return;
+  const supplierId=String(form.supplierId.value||''),interestId=String(form.dataset.interestId||'');if(!supplierId||!interestId)return;
+  try{await mutate('requests',x,{cartReplacementInvite:{interestId,supplierId}});closeModal();schedule();toast(tr('تم إرسال طلب التسعير للمورد الجديد.','Pricing request sent to the new supplier.'));}catch(e){toast(e.message);}
 }
 async function submitReplacementSupplier(form){const x=(state?.interests||[]).find(v=>v.id===form.dataset.interestId);if(!x)return;try{await mutate('interests',x,{assignedSupplierId:form.supplierId.value});closeModal();schedule();toast(tr('تم تحويل نفس الطلب إلى المورد البديل.','The same order was reassigned to the replacement supplier.'));}catch(e){toast(e.message);}}
 async function submitReplacementQuote(form){const x=(state?.requests||[]).find(v=>v.id===form.dataset.requestId);if(!x)return;try{await mutate('requests',x,{replacementQuoteId:form.quoteId.value});closeModal();schedule();toast(tr('تمت معالجة إعادة الإسناد مع الحفاظ على نفس الطلب.','Reassignment was processed while keeping the same order.'));}catch(e){toast(e.message);}}
@@ -811,7 +853,9 @@ if(window.visualViewport){
 document.addEventListener('click',e=>{const target=e.target.closest?.('[data-admin-invoice-pdf]');if(target&&isAdmin()){e.preventDefault();openAdminInvoicePdf(target);}});
 document.addEventListener('submit',e=>{
   if(!isAdmin())return;
-  if(e.target.matches('#adminReplacementSupplierForm')){e.preventDefault();submitReplacementSupplier(e.target);}
+  if(e.target.matches('[data-cart-replacement-quote-form]')){e.preventDefault();submitCartReplacementQuote(e.target);}
+  else if(e.target.matches('[data-cart-replacement-invite-form]')){e.preventDefault();submitCartReplacementInvite(e.target);}
+  else if(e.target.matches('#adminReplacementSupplierForm')){e.preventDefault();submitReplacementSupplier(e.target);}
   else if(e.target.matches('#adminReplacementQuoteForm')){e.preventDefault();submitReplacementQuote(e.target);}
   else if(e.target.matches('#adminReplacementInviteForm')){e.preventDefault();submitReplacementInvite(e.target);}
   else if(e.target.matches('#adminTeamForm')){e.preventDefault();submitTeam(e.target);}
