@@ -31,6 +31,7 @@ function projectCartReplacementRequest(row,item,supplierId){
   item.orderType='cart_replacement';item.replacementInterestId=invite.interestId;
   item.translation=line.translation||{};item.images=Array.isArray(line.images)?line.images:[];
   item.country=String(line.country||'');item.quantity=line.quantity||'';
+  item.replacementCurrency=String(line.currency||'').toUpperCase();
   item.replacementForCart=true;
   return item;
 }
