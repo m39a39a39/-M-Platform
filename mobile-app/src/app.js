@@ -710,7 +710,7 @@ function renderNotifications(){
 }
 function renderAccount(){
   const u=currentUser,languageControl=u.role==='client'?`<div class="account-setting-row"><div><small>${esc(tr('اللغة','Language'))}</small><strong>${esc(lang==='ar'?tr('العربية','Arabic'):tr('الإنجليزية','English'))}</strong></div><button type="button" class="secondary-btn" data-action="toggle-language">${esc(lang==='ar'?'English':'العربية')}</button></div>`:'';
-  const currencyControl=u.role==='client'?`<div class="account-setting-row"><div><small>${esc(tr('العملة','Currency'))}</small><strong>${esc(preferredCurrency())}</strong></div><select data-client-currency aria-label="${esc(tr('العملة','Currency'))}">${activeCurrencies().map(x=>`<option value="${esc(x.code)}" ${x.code===preferredCurrency()?'selected':''}>${esc(x.code+' — '+(lang==='ar'?x.nameAr:x.nameEn))}</option>`).join('')}</select></div>`:'';
+  const currencyControl=u.role==='client'?`<div class="account-setting-row account-currency-setting"><div><small>${esc(tr('العملة','Currency'))}</small><strong>${esc(preferredCurrency())}</strong></div><div><select data-client-currency aria-label="${esc(tr('العملة','Currency'))}">${activeCurrencies().map(x=>`<option value="${esc(x.code)}" ${x.code===preferredCurrency()?'selected':''}>${esc(x.code+' — '+(lang==='ar'?x.nameAr:x.nameEn))}</option>`).join('')}</select><button type="button" class="secondary-btn" data-save-client-currency>${esc(tr('حفظ العملة','Save currency'))}</button></div></div>`:'';
   $('screen').innerHTML=pageHeader(t('account'))+`<section class="profile-card"><div class="avatar">${esc((u.name||u.company||u.email||'M').charAt(0).toUpperCase())}</div><h2>${esc(u.name||u.company||'M Platform')}</h2><p>${esc(t(u.role))}</p><dl><div><dt>${esc(t('email'))}</dt><dd>${esc(u.email||'—')}</dd></div>${u.company?`<div><dt>${tr('الشركة','Company')}</dt><dd>${esc(u.company)}</dd></div>`:''}${u.country?`<div><dt>${esc(t('country'))}</dt><dd>${esc(u.country)}</dd></div>`:''}</dl>${languageControl}${currencyControl}<p class="session-note">${esc(t('sessionNote'))}</p><button class="danger-btn" data-action="logout">${esc(t('logout'))}</button></section>`;
 }
 function renderAdminCollection(kind){const rows=kind==='requests'?(platformState.requests||[]):[...(platformState.quotes||[]),...(platformState.publicOffers||[])];$('screen').innerHTML=pageHeader(kind==='requests'?t('requests'):t('offers'),t('adminMobile'))+`<div class="list-stack">${rows.slice(0,50).map(x=>itemCard(x,{subtitle:descriptionOf(x),badge:cardBadge(x.status),meta:`#${ref(x)} · ${date(x.createdAt)}`})).join('')||empty()}</div>`;}
@@ -1166,6 +1166,16 @@ async function handleAction(target){
   if(target.dataset.action==='bulk-public-import')return openBulkPublicImport();
   if(target.dataset.action==='view-public-offers'){activeScreen='offers';activeSub='primary';renderScreen();$('screen').scrollTop=0;return;}
   if(target.dataset.action==='toggle-language')return toggleLanguage();
+  if(target.hasAttribute('data-save-client-currency')){
+    const select=$('screen')?.querySelector('[data-client-currency]'),currency=String(select?.value||'').toUpperCase();if(!currency)return;
+    target.disabled=true;
+    try{
+      const result=await request('/api/v1/profile/currency',{method:'POST',auth:true,body:{currency}});
+      if(result?.user)currentUser={...currentUser,...result.user};else currentUser={...currentUser,preferredCurrency:currency};
+      await loadData({render:false});renderAccount();showToast(tr('تم تغيير العملة بنجاح.','Currency changed successfully.'));
+    }catch(error){showToast(error.message||tr('تعذر حفظ العملة.','Could not save currency.'));target.disabled=false;}
+    return;
+  }
   if(target.matches?.('[data-client-currency]'))return;
   if(target.dataset.action==='logout')return logout();
   if(target.dataset.action==='mark-all'){await request('/api/v1/notifications/read',{method:'POST',auth:true,body:{all:true}});await loadData();return;}
@@ -1249,7 +1259,7 @@ $('headerNotificationsBtn').addEventListener('click',()=>{if(!currentUser)return
 onLanguageChange(value=>{lang=value;applyLanguage();applyRegistrationLanguage();});
 $('refreshBtn').addEventListener('click',async()=>{if(busy)return;busy=true;$('refreshBtn').classList.add('spin');try{await loadData();showToast(t('refreshing'));}catch(e){showToast(errorText(e));}finally{busy=false;$('refreshBtn').classList.remove('spin');}});
 $('bottomNav').addEventListener('click',e=>{const b=e.target.closest('button[data-screen]');if(!b)return;activeScreen=b.dataset.screen;if(activeScreen==='offers')activeSub='primary';if(activeScreen==='requests'&&currentUser?.role==='supplier')activeSub='pending';renderScreen();$('screen').scrollTop=0;});
-$('screen').addEventListener('click',e=>{const sub=e.target.closest('[data-sub]');if(sub){activeSub=sub.dataset.sub;renderScreen();return;}const target=e.target.closest('[data-action],[data-category],[data-subcategory],[data-supply-country],[data-client-order-filter],[data-cart-order],[data-ready-order],[data-client-offers-request],[data-request],[data-supplier-request],[data-supplier-order-id],[data-public-offer],[data-edit-quote],[data-quote-request],[data-select-quote],[data-interest],[data-notification],[data-payment-notification],[data-payment-upload],[data-payment-document],[data-invoice-pdf],[data-copy-value]');if(target)handleAction(target);});
+$('screen').addEventListener('click',e=>{const sub=e.target.closest('[data-sub]');if(sub){activeSub=sub.dataset.sub;renderScreen();return;}const target=e.target.closest('[data-action],[data-save-client-currency],[data-category],[data-subcategory],[data-supply-country],[data-client-order-filter],[data-cart-order],[data-ready-order],[data-client-offers-request],[data-request],[data-supplier-request],[data-supplier-order-id],[data-public-offer],[data-edit-quote],[data-quote-request],[data-select-quote],[data-interest],[data-notification],[data-payment-notification],[data-payment-upload],[data-payment-document],[data-invoice-pdf],[data-copy-value]');if(target)handleAction(target);});
 $('screen').addEventListener('input',e=>{const input=e.target.closest('[data-product-search]');if(!input)return;readySearch=input.value;readyProductsPage=1;refreshProductResults();});
 $('modal').addEventListener('click',e=>{if(e.target.closest('[data-close-modal]')){closeModal();return;}const target=e.target.closest('[data-ready-order],[data-client-offers-request],[data-edit-quote],[data-quote-request],[data-select-quote],[data-interest],[data-supplier-order-status],[data-supplier-order-cannot],[data-payment-upload],[data-payment-document],[data-invoice-pdf],[data-copy-value]');if(target)handleAction(target);});
 
