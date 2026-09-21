@@ -746,6 +746,10 @@ function selectedQuotePanel(r){
   return `<section class="client-selected-quote"><div class="client-detail-section-head"><div><small>${esc(tr('العرض المختار','Selected quote'))}</small><strong>#${esc(ref(q))}</strong></div><span class="status-pill status-published">${esc(tr('مختار','Selected'))}</span></div><div class="client-selected-values"><div><span>${esc(tr('سعر الوحدة','Unit price'))}</span><strong>${money(q.unitPrice,q.currency)}</strong></div><div><span>${esc(tr('الكمية','Quantity'))}</span><strong>${esc(r.quantity||'—')}</strong></div><div class="total"><span>${esc(tr('الإجمالي','Total'))}</span><strong>${total!==null?money(total,q.currency):'—'}</strong></div></div></section>`;
 }
 function clientRequestActionPanel(r){
+  if(r.pendingReplacementQuoteId){
+    const q=(platformState?.quotes||[]).find(x=>x.id===r.pendingReplacementQuoteId&&x.status==='published');
+    if(q)return `<section class="client-detail-action action"><div><small>${esc(tr('موافقتك مطلوبة','Your approval is required'))}</small><strong>${esc(tr('المورد السابق تعذر عليه التنفيذ ويوجد عرض بديل بشروط مختلفة.','The previous supplier could not fulfill the order and a replacement quote has different terms.'))}</strong><p>${esc(tr('السعر','Price'))}: ${money(q.unitPrice,q.currency)} · MOQ ${esc(q.moq||'—')} · ${esc(tr('مدة الإنتاج','Production time'))}: ${esc(q.leadTime||'—')}</p></div><button type="button" class="primary-small" data-approve-replacement-quote="${esc(q.id)}" data-request-id="${esc(r.id)}">${esc(tr('الموافقة على العرض البديل','Approve replacement quote'))}</button></section>`;
+  }
   const order=clientOrders().find(o=>o.type==='custom'&&o.id===r.id),action=order?clientOrderNeedsAction(order):null;
   if(!action)return '';
   return `<section class="client-detail-action ${esc(action.tone||'action')}"><div><small>${esc(tr('الإجراء المطلوب','Action required'))}</small><strong>${esc(action.label)}</strong></div>${action.key==='new_quotes'||action.key==='choose_quote'?`<button type="button" class="primary-small" data-client-offers-request="${esc(r.id)}">${esc(tr('عرض العروض','View quotes'))}</button>`:''}</section>`;
@@ -1178,6 +1182,7 @@ async function handleAction(target){
   if(target.dataset.quoteRequest)return openQuoteForm(target.dataset.quoteRequest);
   if(target.dataset.supplierOrderStatus)return updateSupplierOrderStatus(target.dataset.supplierOrderType,target.dataset.supplierOrderId,target.dataset.supplierOrderStatus);
   if(target.hasAttribute('data-supplier-order-cannot'))return openSupplierCannotFulfill(target.dataset.supplierOrderType,target.dataset.supplierOrderId);
+  if(target.dataset.approveReplacementQuote){const r=(platformState.requests||[]).find(x=>x.id===target.dataset.requestId);if(!r)return;target.disabled=true;try{await mutate('requests',r.id,r.version,{approveReplacementQuoteId:target.dataset.approveReplacementQuote});await loadData({render:false});closeModal();renderScreen();showToast(tr('تم اعتماد العرض البديل.','Replacement quote approved.'));}catch(error){showToast(error.message);}return;}
   if(target.dataset.selectQuote){const r=(platformState.requests||[]).find(x=>x.id===target.dataset.requestId);if(!r)return;target.disabled=true;try{await mutate('requests',r.id,r.version,{selectedQuoteId:target.dataset.selectQuote});await loadData({render:false});closeModal();renderScreen();showToast(t('selected'));}catch(error){showToast(error.message);}return;}
   if(target.dataset.copyValue!==undefined)return copyText(target.dataset.copyValue);
   if(target.hasAttribute('data-payment-upload'))return openPaymentReceiptForm(target.dataset.entityType,target.dataset.entityId);
