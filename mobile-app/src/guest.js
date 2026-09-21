@@ -2,7 +2,8 @@ import { languageReady, getLanguage, onLanguageChange, toggleLanguage } from './
 import { showView } from './views.js';
 import { categoryRows, subcategoryRows, supplyCountryRows, taxonomyLabel } from './catalog-taxonomy.js';
 
-const API=String(import.meta.env?.VITE_API_ORIGIN||'https://m-platform-tan.vercel.app').replace(/\/$/,'');
+const browserOrigin=typeof location!=='undefined'&&/^https?:$/.test(location.protocol)&&location.hostname!=='localhost'?location.origin:'';
+const API=String(import.meta.env?.VITE_API_ORIGIN||browserOrigin||'https://m-platform-tan.vercel.app').replace(/\/$/,'');
 const $=id=>document.getElementById(id);
 const mediaCache=new Map();
 const GUEST_CART_KEY='m-platform.guest-cart.v1';
