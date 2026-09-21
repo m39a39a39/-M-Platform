@@ -6,7 +6,8 @@ const COPY={
   supplier_selected:{titleAr:'تم اختيار عرضك',titleEn:'Your quote was selected',bodyAr:'تم اختيار عرضك. يرجى تأكيد إمكانية تنفيذ الطلب.',bodyEn:'Your quote was selected. Please confirm that you can fulfill the order.'},
   supplier_assigned:{titleAr:'تم إسناد طلب جديد إليك',titleEn:'New order assigned',bodyAr:'تم إسناد طلب جديد إليك. يرجى تأكيد إمكانية التنفيذ.',bodyEn:'A new order was assigned to you. Please confirm that you can fulfill it.'},
   supplier_payment_confirmed_request:{titleAr:'تم تأكيد الدفع',titleEn:'Payment confirmed',bodyAr:'تم تأكيد دفع الطلب. يمكنك بدء الإنتاج.',bodyEn:'Payment has been confirmed. You can start production.'},
-  supplier_payment_confirmed_interest:{titleAr:'تم تأكيد الدفع',titleEn:'Payment confirmed',bodyAr:'تم تأكيد دفع طلب المنتج. يمكنك بدء التنفيذ.',bodyEn:'Payment has been confirmed for the product order. You can start fulfillment.'}
+  supplier_payment_confirmed_interest:{titleAr:'تم تأكيد الدفع',titleEn:'Payment confirmed',bodyAr:'تم تأكيد دفع طلب المنتج. يمكنك بدء التنفيذ.',bodyEn:'Payment has been confirmed for the product order. You can start fulfillment.'},
+  cart_replacement_approval:{titleAr:'موافقتك مطلوبة',titleEn:'Your approval is required',bodyAr:'وصل سعر بديل لأحد منتجات طلبك. راجع السعر والشروط الجديدة للموافقة.',bodyEn:'A replacement price is available for an item in your order. Review the new price and terms to approve it.'}
 };
 const inIds=ids=>ids.map(id=>`"${String(id).replaceAll('"','')}"`).join(';').replaceAll(';',',');
 const paymentKind=event=>event.endsWith('_interest')?'interest':event.endsWith('_request')?'request':null;
@@ -76,6 +77,9 @@ export function notificationPayload(row,quoteRequestId,paymentContext){
   }else if(row.event==='supplier_assigned'||row.event==='supplier_payment_confirmed_interest'){
     target={screen:'supplierOrder',entityType:'interest',entityId:row.entity_id};
     deepLink=`mplatform://supplier/orders/interest/${encodeURIComponent(row.entity_id)}`;
+  }else if(row.event==='cart_replacement_approval'){
+    target={screen:'customerCartOrder',requestId:row.entity_id};
+    deepLink=`mplatform://customer/cart-orders/${encodeURIComponent(row.entity_id)}`;
   }else if(custom?.target){
     deepLink=`mplatform://payment/${custom.target.entityType}/${encodeURIComponent(row.entity_id)}`;
   }
