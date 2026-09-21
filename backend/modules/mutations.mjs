@@ -84,6 +84,18 @@ export function normalizeSupplyCountries(input){
     ids.add(id);return {id,nameAr,nameEn,active:raw.active!==false,order:index};
   });
 }
+export function normalizeCurrencies(input){
+  assert(Array.isArray(input)&&input.length>0&&input.length<=50,400,'عملات غير صالحة / Invalid currencies');
+  const seen=new Set(),rows=input.map((raw,index)=>{
+    assert(raw&&typeof raw==='object'&&!Array.isArray(raw),400);
+    const code=String(raw.code||'').trim().toUpperCase(),nameAr=String(raw.nameAr||'').trim(),nameEn=String(raw.nameEn||'').trim(),rate=Number(raw.rate);
+    assert(/^[A-Z]{3}$/.test(code)&&!seen.has(code)&&nameAr&&nameEn&&nameAr.length<=80&&nameEn.length<=80,400,'بيانات العملة غير صالحة / Invalid currency data');
+    assert(Number.isFinite(rate)&&rate>0&&rate<=1e9,400,'سعر الصرف غير صالح / Invalid exchange rate');
+    seen.add(code);return {code,nameAr,nameEn,rate:code==='SAR'?1:rate,active:code==='SAR'?true:raw.active!==false,order:index};
+  });
+  assert(seen.has('SAR'),400,'يجب أن تبقى SAR العملة الأساسية / SAR must remain the base currency');
+  return rows;
+}
 export function normalizeBankAccounts(input){
   assert(Array.isArray(input)&&input.length<=30,400,'حسابات بنكية غير صالحة / Invalid bank accounts');
   const ids=new Set();
@@ -426,6 +438,7 @@ export async function saveSettings(user,body){
       data.supplyCountries=next;continue;
     }
     if(k==='bankAccounts'){data.bankAccounts=normalizeBankAccounts(v);continue;}
+    if(k==='currencies'){data.currencies=normalizeCurrencies(v);continue;}
     assert(['logo','logoText',...prefixes.flatMap(k=>[k+'Ar',k+'En'])].includes(k)&&typeof v==='string'&&v.length<=10000,400);
     if(k==='logo'&&v)await checkImages([v],user,row.data.logo?[row.data.logo]:[]);
     data[k]=v;
