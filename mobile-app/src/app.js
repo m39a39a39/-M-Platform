@@ -546,9 +546,10 @@ function supplierOrders(){
     return {type:'quote',id:q.id,version:q.version,request:r,quote:q,item:r,title:titleOf(r),images:r.images||[],source:tr('عرض مقدم','Submitted quote'),status:q.supplierOrderStatus||'pending_confirmation',note:q.supplierOrderNote||'',paymentConfirmed:!!r.paymentConfirmed,updatedAt:q.supplierOrderUpdatedAt||q.updatedAt||q.createdAt||r.createdAt,quantity:r.quantity||'',unitPrice:q.unitPrice,currency:q.currency,total,country:r.country||''};
   }).filter(Boolean);
   const ready=interests.map(i=>{
-    const o=offers.find(x=>x.id===i.offerId);if(!o)return null;
+    const ownedOffer=offers.find(x=>x.id===i.offerId),snapshot=i.offerSnapshot||{};
+    const o=ownedOffer||{id:i.offerId,product:snapshot.product||'',translation:snapshot.translation||{},images:snapshot.images||[],country:snapshot.country||'',categoryId:snapshot.categoryId||'',sku:snapshot.sku||'',unitPrice:i.unitPrice,currency:i.currency,moq:i.moq,leadTime:i.leadTime||''};
     const quantity=Number(i.quantity),unitPrice=Number(i.unitPrice||o.unitPrice),total=Number(i.total);
-    return {type:'public',id:i.id,version:i.version,interest:i,offer:o,item:o,title:titleOf(o),images:o.images||[],source:tr('منتج عام','Public product'),status:i.supplierOrderStatus||'pending_confirmation',note:i.supplierOrderNote||'',paymentConfirmed:!!i.paymentConfirmed,updatedAt:i.supplierOrderUpdatedAt||i.createdAt,quantity:i.quantity||'',unitPrice:i.unitPrice||o.unitPrice,currency:i.currency||o.currency,total:Number.isFinite(total)&&total>0?total:(Number.isFinite(quantity)&&quantity>0&&Number.isFinite(unitPrice)&&unitPrice>0?quantity*unitPrice:null),country:o.country||'',moq:i.moq||o.moq||''};
+    return {type:'public',id:i.id,version:i.version,interest:i,offer:o,item:o,title:titleOf(o),images:o.images||[],source:i.assignedSupplierId?tr('طلب مُعاد إسناده','Reassigned order'):tr('منتج عام','Public product'),status:i.supplierOrderStatus||'pending_confirmation',note:i.supplierOrderNote||'',paymentConfirmed:!!i.paymentConfirmed,updatedAt:i.supplierOrderUpdatedAt||i.createdAt,quantity:i.quantity||'',unitPrice:i.unitPrice||o.unitPrice,currency:i.currency||o.currency,total:Number.isFinite(total)&&total>0?total:(Number.isFinite(quantity)&&quantity>0&&Number.isFinite(unitPrice)&&unitPrice>0?quantity*unitPrice:null),country:o.country||'',moq:i.moq||o.moq||''};
   }).filter(Boolean);
   return [...custom,...ready].sort((a,b)=>(Date.parse(b.updatedAt||0)||0)-(Date.parse(a.updatedAt||0)||0));
 }
