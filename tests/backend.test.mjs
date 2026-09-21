@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {can} from '../backend/modules/auth.mjs';
 import {anonymous,ownRecord} from '../backend/modules/records.mjs';
-import {validateContent,normalizeCategories,normalizeSubcategories,normalizeSupplyCountries,TRACKING_STATUSES,READY_TRACKING_STATUSES,requiresRedaction,allowedAdminTrackingTransition,TRACKING_FLOW,READY_TRACKING_FLOW} from '../backend/modules/mutations.mjs';
+import {validateContent,normalizeCategories,normalizeSubcategories,normalizeSupplyCountries,TRACKING_STATUSES,READY_TRACKING_STATUSES,requiresRedaction,allowedAdminTrackingTransition,TRACKING_FLOW,READY_TRACKING_FLOW,cartTermsMatch} from '../backend/modules/mutations.mjs';
 import {decodeImage,decodePaymentReceipt} from '../backend/modules/media.mjs';
 import {notificationPayload} from '../backend/modules/notifications.mjs';
 import {buildInvoiceSnapshot,INVOICE_COMPANY} from '../backend/modules/invoices.mjs';
@@ -146,6 +146,21 @@ test('corporate invoice snapshot uses SAR and never contains banking data',()=>{
  assert.equal(invoice.total,200);
  const hasBankKey=value=>!!value&&typeof value==='object'&&Object.entries(value).some(([key,child])=>/bank/i.test(key)||hasBankKey(child));
  assert.equal(hasBankKey(invoice),false);
+});
+
+test('cart replacement comparison uses frozen order terms, not current catalog terms',()=>{
+ const original={currency:'SAR',unitPrice:10,moq:100,offerSnapshot:{leadTime:'5'}};
+ assert.equal(cartTermsMatch(original,{currency:'SAR',unitPrice:10,moq:100,leadTime:5}),true);
+ assert.equal(cartTermsMatch(original,{currency:'SAR',unitPrice:11,moq:100,leadTime:5}),false);
+ assert.equal(cartTermsMatch(original,{currency:'USD',unitPrice:10,moq:100,leadTime:5}),false);
+ assert.equal(cartTermsMatch({currency:'SAR',unitPrice:10,moq:100,offerSnapshot:{}},{currency:'SAR',unitPrice:10,moq:100,leadTime:99}),true);
+});
+
+test('cart replacement approval notification routes to the cart order',()=>{
+ const payload=notificationPayload({id:12,event:'cart_replacement_approval',entity_id:'cart-1',read_at:null,created_at:'2026-09-21'});
+ assert.equal(payload.titleAr,'موافقتك مطلوبة');
+ assert.deepEqual(payload.target,{screen:'customerCartOrder',requestId:'cart-1'});
+ assert.match(payload.deepLink,/customer\/cart-orders\/cart-1/);
 });
 
 test('final invoice snapshot is marked PAID',()=>{
