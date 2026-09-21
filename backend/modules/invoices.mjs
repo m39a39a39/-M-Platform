@@ -27,9 +27,20 @@ const titleOf=value=>{
 };
 const finite=value=>{const n=Number(value);return Number.isFinite(n)?n:0;};
 const DEFAULT_CURRENCIES=[{code:'SAR',nameEn:'Saudi Riyal',rate:1,active:true}];
-async function currencySnapshot(customer,sourceCurrency){
+async function currencySnapshot(customer,sourceCurrency,frozen=null){
+  const source=String(sourceCurrency||'SAR').toUpperCase();
+  if(frozen&&String(frozen.sourceCurrency||'').toUpperCase()===source&&String(frozen.currency||'').trim()&&Number(frozen.rate)>0){
+    return {
+      sourceCurrency:source,
+      currency:String(frozen.currency).toUpperCase(),
+      currencyLabel:String(frozen.currencyLabel||frozen.currency).slice(0,120),
+      sourceRate:Number(frozen.sourceRate)||1,
+      targetRate:Number(frozen.targetRate)||Number(frozen.rate),
+      rate:Number(frozen.rate)
+    };
+  }
   const settings=await one('settings','site'),rows=Array.isArray(settings?.data?.currencies)&&settings.data.currencies.length?settings.data.currencies:DEFAULT_CURRENCIES;
-  const source=String(sourceCurrency||'SAR').toUpperCase(),target=String(profileData(customer)?.preferredCurrency||'SAR').toUpperCase();
+  const target=String(profileData(customer)?.preferredCurrency||'SAR').toUpperCase();
   const src=rows.find(x=>x.code===source),dst=rows.find(x=>x.code===target&&x.active!==false)||rows.find(x=>x.code==='SAR');
   assert(src&&Number(src.rate)>0&&dst&&Number(dst.rate)>0,409,'سعر صرف العملة غير متاح / Currency exchange rate unavailable');
   return {sourceCurrency:source,currency:dst.code,currencyLabel:`${dst.code} – ${dst.nameEn||dst.nameAr||dst.code}`,sourceRate:Number(src.rate),targetRate:Number(dst.rate),rate:Number(dst.rate)/Number(src.rate)};
@@ -74,10 +85,11 @@ export function buildInvoiceSnapshot({kind,number,issuedAt,customer,items,source
     total
   };
 }
-export async function issueQuoteProforma(customer,requestRow,quoteRow,now=new Date().toISOString()){
+export async function issueQuoteProforma(customer,requestRow,quoteRow,now=new Date().toISOString(),options={}){
   if(requestRow?.data?.proformaInvoice)return requestRow.data.proformaInvoice;
   const request=requestRow?.data||{},quote=quoteRow?.data||{};
-  const fx=await currencySnapshot(customer,quote.currency);
+  const frozen=options?.fxSnapshot?{...options.fxSnapshot,currencyLabel:options.currencyLabel||options.fxSnapshot.currencyLabel}:null;
+  const fx=await currencySnapshot(customer,quote.currency,frozen);
   return buildInvoiceSnapshot({
     kind:'proforma',number:await allocate('proforma'),issuedAt:now,customer,
     orderId:requestRow?.id||'',
@@ -95,9 +107,10 @@ export async function issueInterestProforma(customer,data,orderId='',now=new Dat
     items:convertItems([{...product,quantity:data?.quantity,unitPrice:data?.unitPrice,total:data?.total}],fx.rate)
   });
 }
-export async function issueCartProforma(customer,data,orderId='',now=new Date().toISOString()){
+export async function issueCartProforma(customer,data,orderId='',now=new Date().toISOString(),options={}){
   if(data?.proformaInvoice)return data.proformaInvoice;
-  const fx=await currencySnapshot(customer,data?.currency);
+  const frozen=options?.fxSnapshot?{...options.fxSnapshot,currencyLabel:options.currencyLabel||options.fxSnapshot.currencyLabel}:null;
+  const fx=await currencySnapshot(customer,data?.currency,frozen);
   return buildInvoiceSnapshot({
     kind:'proforma',number:await allocate('proforma'),issuedAt:now,customer,orderId,
     sourceCurrency:data?.currency,currency:fx.currency,currencyLabel:fx.currencyLabel,fxSnapshot:fx,
