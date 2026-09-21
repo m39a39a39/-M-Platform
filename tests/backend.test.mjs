@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {can} from '../backend/modules/auth.mjs';
-import {anonymous,ownRecord} from '../backend/modules/records.mjs';
+import {anonymous,ownRecord,supplierInterest} from '../backend/modules/records.mjs';
 import {validateContent,normalizeCategories,normalizeSubcategories,normalizeSupplyCountries,TRACKING_STATUSES,READY_TRACKING_STATUSES,requiresRedaction,allowedAdminTrackingTransition,TRACKING_FLOW,READY_TRACKING_FLOW,cartTermsMatch} from '../backend/modules/mutations.mjs';
 import {decodeImage,decodePaymentReceipt} from '../backend/modules/media.mjs';
 import {notificationPayload} from '../backend/modules/notifications.mjs';
@@ -19,6 +19,18 @@ test('supplier projection hides customer identity, source content and other invi
  assert.deepEqual(result.supplierIds,['one']);
  for(const secret of ['private-customer','private-name','private-phone','two','actorId','secret payment instructions','secret-receipt'])assert.ok(!JSON.stringify(result).includes(secret));
  assert.equal(result.translation.titleEn,'Approved');
+});
+test('reassigned supplier projection uses safe product snapshot without old supplier pricing',()=>{
+ const projected=supplierInterest({
+   id:'I-1',display_no:10025,offer_id:'O-old',version:2,created_at:'2026-09-21',
+   data:{assignedSupplierId:'supplier-new',unitPrice:12,currency:'SAR',moq:100,total:1200,offerSnapshot:{product:'Cable',translation:{titleEn:'Cable',descriptionEn:'60W'},images:['/api/media/x'],country:'China',unitPrice:9,currency:'SAR',moq:50,stock:999,leadTime:3}}
+ });
+ assert.equal(projected.unitPrice,12);
+ assert.equal(projected.offerSnapshot.product,'Cable');
+ assert.equal(projected.offerSnapshot.translation.descriptionEn,'60W');
+ assert.equal(projected.offerSnapshot.unitPrice,undefined);
+ assert.equal(projected.offerSnapshot.moq,undefined);
+ assert.equal(projected.offerSnapshot.stock,undefined);
 });
 test('customer request does not disclose supplier invitation ids',()=>{
  const r=ownRecord({id:'M-1',owner_id:'customer',data:{supplierIds:['secret-supplier'],moderationHistory:[{actorId:'secret-admin'}]}},'requests');
