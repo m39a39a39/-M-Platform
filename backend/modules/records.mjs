@@ -7,8 +7,12 @@ export function unpack(row,kind){return {...row.data,id:row.id,displayNo:row.dis
 export function ownRecord(row,kind){const item=unpack(row,kind);delete item.supplierIds;delete item.moderationHistory;delete item.reviewedAt;return item;}
 function publicSettings(data={}){const safe={...data};delete safe.bankAccounts;return safe;}
 function supplierInterest(row){
-  const d=row.data||{};
-  return {id:row.id,displayNo:row.display_no,offerId:row.offer_id,version:row.version,createdAt:row.created_at,status:d.status,trackingStatus:d.trackingStatus||'received',cartOrderId:d.cartOrderId||'',cartLine:d.cartLine||'',quantity:d.quantity||'',unitPrice:d.unitPrice||'',currency:d.currency||'',moq:d.moq||'',total:d.total||'',paymentConfirmed:d.paymentStatus==='confirmed',supplierOrderStatus:d.supplierOrderStatus||'pending_confirmation',supplierOrderNote:d.supplierOrderNote||'',supplierOrderUpdatedAt:d.supplierOrderUpdatedAt||'',assignedSupplierId:d.assignedSupplierId||'',supplierAssignmentHistory:Array.isArray(d.supplierAssignmentHistory)?d.supplierAssignmentHistory:[]};
+  const d=row.data||{},snapshot=d.offerSnapshot||{};
+  const safeSnapshot={
+    sku:String(snapshot.sku||''),product:String(snapshot.product||''),translation:snapshot.translation||{},
+    images:Array.isArray(snapshot.images)?snapshot.images:[],country:String(snapshot.country||''),categoryId:String(snapshot.categoryId||'')
+  };
+  return {id:row.id,displayNo:row.display_no,offerId:row.offer_id,version:row.version,createdAt:row.created_at,status:d.status,trackingStatus:d.trackingStatus||'received',cartOrderId:d.cartOrderId||'',cartLine:d.cartLine||'',quantity:d.quantity||'',unitPrice:d.unitPrice||'',currency:d.currency||'',moq:d.moq||'',total:d.total||'',leadTime:d.replacementLeadTime||'',offerSnapshot:safeSnapshot,paymentConfirmed:d.paymentStatus==='confirmed',supplierOrderStatus:d.supplierOrderStatus||'pending_confirmation',supplierOrderNote:d.supplierOrderNote||'',supplierOrderUpdatedAt:d.supplierOrderUpdatedAt||'',assignedSupplierId:d.assignedSupplierId||'',supplierAssignmentHistory:Array.isArray(d.supplierAssignmentHistory)?d.supplierAssignmentHistory:[]};
 }
 // Pure projection: never serialize raw source text or counterpart identity.
 export function anonymous(row,kind,user){
