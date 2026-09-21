@@ -1171,8 +1171,10 @@ async function handleAction(target){
     target.disabled=true;
     try{
       const result=await request('/api/v1/profile/currency',{method:'POST',auth:true,body:{currency}});
-      if(result?.user)currentUser={...currentUser,...result.user};else currentUser={...currentUser,preferredCurrency:currency};
-      await loadData({render:false});renderAccount();showToast(tr('تم تغيير العملة بنجاح.','Currency changed successfully.'));
+      if(result?.currency!==currency||result?.user?.preferredCurrency!==currency)throw new Error(tr('تعذر تأكيد حفظ العملة.','Could not verify the saved currency.'));
+      currentUser={...currentUser,...result.user,preferredCurrency:currency};
+      if(platformState)platformState={...platformState,user:{...(platformState.user||{}),...currentUser}};
+      renderAccount();updateShell();showToast(tr('تم تغيير العملة بنجاح.','Currency changed successfully.'));
     }catch(error){showToast(error.message||tr('تعذر حفظ العملة.','Could not save currency.'));target.disabled=false;}
     return;
   }
@@ -1205,7 +1207,7 @@ async function handleAction(target){
     if(n.target?.entityType&&n.target?.entityId)return openPaymentReceiptForm(n.target.entityType,n.target.entityId);
     return;
   }
-  if(target.dataset.notification){const n=notifications.find(x=>String(x.id)===String(target.dataset.notification));if(!n)return;if(!n.readAt)await request('/api/v1/notifications/read',{method:'POST',auth:true,body:{id:Number(n.id)}}).catch(()=>{});await loadData({render:false});if(n.target?.screen==='supplierRequest')return openSupplierRequest(n.target.requestId);if(n.target?.screen==='supplierOrder'&&n.target?.entityType==='interest')return openSupplierOrder('interest',n.target.entityId);if(n.target?.screen==='customerRequest')return openClientRequest(n.target.requestId);if(n.target?.screen==='customerPayment'){if(n.target.entityType==='request')return openClientRequest(n.target.entityId);const interest=(platformState.interests||[]).find(i=>i.id===n.target.entityId);if(interest)return openReadyOrder(interest.id);}if(n.target?.screen==='adminPayment')return openAdminPayment(n.target.entityType,n.target.entityId);renderScreen();return;}
+  if(target.dataset.notification){const n=notifications.find(x=>String(x.id)===String(target.dataset.notification));if(!n)return;if(!n.readAt)await request('/api/v1/notifications/read',{method:'POST',auth:true,body:{id:Number(n.id)}}).catch(()=>{});await loadData({render:false});if(n.target?.screen==='supplierRequest')return openSupplierRequest(n.target.requestId);if(n.target?.screen==='supplierOrder'&&n.target?.entityType==='interest')return openSupplierOrder('public',n.target.entityId);if(n.target?.screen==='customerRequest')return openClientRequest(n.target.requestId);if(n.target?.screen==='customerPayment'){if(n.target.entityType==='request')return openClientRequest(n.target.entityId);const interest=(platformState.interests||[]).find(i=>i.id===n.target.entityId);if(interest)return openReadyOrder(interest.id);}if(n.target?.screen==='adminPayment')return openAdminPayment(n.target.entityType,n.target.entityId);renderScreen();return;}
 }
 
 function errorText(error,stage='data'){
@@ -1263,7 +1265,7 @@ $('screen').addEventListener('click',e=>{const sub=e.target.closest('[data-sub]'
 $('screen').addEventListener('input',e=>{const input=e.target.closest('[data-product-search]');if(!input)return;readySearch=input.value;readyProductsPage=1;refreshProductResults();});
 $('modal').addEventListener('click',e=>{if(e.target.closest('[data-close-modal]')){closeModal();return;}const target=e.target.closest('[data-ready-order],[data-client-offers-request],[data-edit-quote],[data-quote-request],[data-select-quote],[data-interest],[data-supplier-order-status],[data-supplier-order-cannot],[data-payment-upload],[data-payment-document],[data-invoice-pdf],[data-copy-value]');if(target)handleAction(target);});
 
-App.addListener('appUrlOpen',async event=>{const url=event.url||'';if(!currentUser)return;if(url.includes('/notifications')){activeScreen='notifications';renderScreen();return;}const m=url.match(/\/requests\/([^?]+)/);if(m){if(currentUser.role==='supplier'){activeScreen='requests';activeSub='pending';openSupplierRequest(decodeURIComponent(m[1]));}else openClientRequest(decodeURIComponent(m[1]));}});
+App.addListener('appUrlOpen',async event=>{const url=event.url||'';if(!currentUser)return;if(url.includes('/notifications')){activeScreen='notifications';renderScreen();return;}const supplierOrder=url.match(/\/supplier\/orders\/interest\/([^?]+)/);if(supplierOrder&&currentUser.role==='supplier'){activeScreen='orders';renderScreen();openSupplierOrder('public',decodeURIComponent(supplierOrder[1]));return;}const m=url.match(/\/requests\/([^?]+)/);if(m){if(currentUser.role==='supplier'){activeScreen='requests';activeSub='pending';openSupplierRequest(decodeURIComponent(m[1]));}else openClientRequest(decodeURIComponent(m[1]));}});
 
 
 const authCopy={
