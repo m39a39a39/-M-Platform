@@ -1,4 +1,5 @@
 import { rm, cp } from 'node:fs/promises';
+// Single web source of truth: production web is built from the same mobile-app UI.
 import { spawn } from 'node:child_process';
 
 const run=(command,args,cwd='.')=>new Promise((resolve,reject)=>{
