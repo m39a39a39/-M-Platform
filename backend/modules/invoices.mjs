@@ -1,5 +1,5 @@
 // Development release marker: cached catalog images + corporate invoices.
-import {rpc,assert} from '../lib/supabase.mjs';
+import {rpc,assert,one} from '../lib/supabase.mjs';
 
 export const INVOICE_COMPANY=Object.freeze({
   nameEn:'GUANGZHOU MIG TRADING CO., LTD.',
@@ -26,6 +26,15 @@ const titleOf=value=>{
   return String(t.titleEn||t.titleAr||value?.product||value?.sku||'Product').slice(0,500);
 };
 const finite=value=>{const n=Number(value);return Number.isFinite(n)?n:0;};
+const DEFAULT_CURRENCIES=[{code:'SAR',nameEn:'Saudi Riyal',rate:1,active:true}];
+async function currencySnapshot(customer,sourceCurrency){
+  const settings=await one('settings','site'),rows=Array.isArray(settings?.data?.currencies)&&settings.data.currencies.length?settings.data.currencies:DEFAULT_CURRENCIES;
+  const source=String(sourceCurrency||'SAR').toUpperCase(),target=String(profileData(customer)?.preferredCurrency||'SAR').toUpperCase();
+  const src=rows.find(x=>x.code===source),dst=rows.find(x=>x.code===target&&x.active!==false)||rows.find(x=>x.code==='SAR');
+  assert(src&&Number(src.rate)>0&&dst&&Number(dst.rate)>0,409,'سعر صرف العملة غير متاح / Currency exchange rate unavailable');
+  return {sourceCurrency:source,currency:dst.code,currencyLabel:`${dst.code} – ${dst.nameEn||dst.nameAr||dst.code}`,sourceRate:Number(src.rate),targetRate:Number(dst.rate),rate:Number(dst.rate)/Number(src.rate)};
+}
+const convertItems=(items,rate)=>(Array.isArray(items)?items:[]).map(x=>({...x,unitPrice:finite(x.unitPrice)*rate,total:(Number.isFinite(Number(x.total))?Number(x.total):finite(x.quantity)*finite(x.unitPrice))*rate}));
 const line=(value={})=>{
   const quantity=Math.max(0,finite(value.quantity));
   const unitPrice=Math.max(0,finite(value.unitPrice));
@@ -43,7 +52,7 @@ async function allocate(kind){
   assert(typeof number==='string'&&pattern.test(number),502,'تعذر إنشاء رقم الفاتورة / Could not allocate invoice number');
   return number;
 }
-export function buildInvoiceSnapshot({kind,number,issuedAt,customer,items,sourceCurrency='',orderId='',paidAt=''}) {
+export function buildInvoiceSnapshot({kind,number,issuedAt,customer,items,sourceCurrency='',currency='SAR',currencyLabel='SAR – Saudi Riyal',fxSnapshot=null,orderId='',paidAt=''}) {
   assert(['proforma','final'].includes(kind),500);
   const rows=(Array.isArray(items)?items:[]).map(line).filter(x=>x.quantity>0);
   assert(rows.length>0,409,'لا توجد بنود للفاتورة / Invoice has no line items');
@@ -53,9 +62,10 @@ export function buildInvoiceSnapshot({kind,number,issuedAt,customer,items,source
     number,
     issuedAt,
     ...(kind==='final'?{status:'PAID',paidAt:paidAt||issuedAt}:{}),
-    currency:'SAR',
-    currencyLabel:'SAR – Saudi Riyal',
+    currency,
+    currencyLabel,
     sourceCurrency:String(sourceCurrency||'').toUpperCase().slice(0,8),
+    ...(fxSnapshot?{fxSnapshot}:{}),
     orderId:String(orderId||'').slice(0,100),
     company:{...INVOICE_COMPANY},
     customer:invoiceCustomer(customer),
@@ -67,28 +77,31 @@ export function buildInvoiceSnapshot({kind,number,issuedAt,customer,items,source
 export async function issueQuoteProforma(customer,requestRow,quoteRow,now=new Date().toISOString()){
   if(requestRow?.data?.proformaInvoice)return requestRow.data.proformaInvoice;
   const request=requestRow?.data||{},quote=quoteRow?.data||{};
+  const fx=await currencySnapshot(customer,quote.currency);
   return buildInvoiceSnapshot({
     kind:'proforma',number:await allocate('proforma'),issuedAt:now,customer,
     orderId:requestRow?.id||'',
-    sourceCurrency:quote.currency,
-    items:[{product:titleOf(request),translation:request.translation,quantity:request.quantity,unitPrice:quote.unitPrice,total:finite(request.quantity)*finite(quote.unitPrice)}]
+    sourceCurrency:quote.currency,currency:fx.currency,currencyLabel:fx.currencyLabel,fxSnapshot:fx,
+    items:convertItems([{product:titleOf(request),translation:request.translation,quantity:request.quantity,unitPrice:quote.unitPrice,total:finite(request.quantity)*finite(quote.unitPrice)}],fx.rate)
   });
 }
 export async function issueInterestProforma(customer,data,orderId='',now=new Date().toISOString()){
   if(data?.proformaInvoice)return data.proformaInvoice;
   const product=data?.offerSnapshot||data||{};
+  const fx=await currencySnapshot(customer,data?.currency);
   return buildInvoiceSnapshot({
     kind:'proforma',number:await allocate('proforma'),issuedAt:now,customer,orderId,
-    sourceCurrency:data?.currency,
-    items:[{...product,quantity:data?.quantity,unitPrice:data?.unitPrice,total:data?.total}]
+    sourceCurrency:data?.currency,currency:fx.currency,currencyLabel:fx.currencyLabel,fxSnapshot:fx,
+    items:convertItems([{...product,quantity:data?.quantity,unitPrice:data?.unitPrice,total:data?.total}],fx.rate)
   });
 }
 export async function issueCartProforma(customer,data,orderId='',now=new Date().toISOString()){
   if(data?.proformaInvoice)return data.proformaInvoice;
+  const fx=await currencySnapshot(customer,data?.currency);
   return buildInvoiceSnapshot({
     kind:'proforma',number:await allocate('proforma'),issuedAt:now,customer,orderId,
-    sourceCurrency:data?.currency,
-    items:(data?.cartItems||[]).map(item=>({...item,product:titleOf(item)}))
+    sourceCurrency:data?.currency,currency:fx.currency,currencyLabel:fx.currencyLabel,fxSnapshot:fx,
+    items:convertItems((data?.cartItems||[]).map(item=>({...item,product:titleOf(item)})),fx.rate)
   });
 }
 function fallbackItems(data={}){
@@ -109,7 +122,7 @@ export async function issueFinalInvoice(customer,data,orderId='',now=new Date().
       orderId:String(base.orderId||orderId||'').slice(0,100),
       company:{...INVOICE_COMPANY},
       customer:invoiceCustomer(base.customer?.name||base.customer?.company?base.customer:customer),
-      currency:'SAR',currencyLabel:'SAR – Saudi Riyal'
+      currency:base.currency||'SAR',currencyLabel:base.currencyLabel||'SAR – Saudi Riyal'
     };
   }
   return buildInvoiceSnapshot({
