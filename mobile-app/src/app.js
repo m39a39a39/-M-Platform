@@ -518,17 +518,6 @@ function publicOfferCard(item){
   const image=(item.images||[])[0];
   return `<article class="public-offer-card" data-public-offer="${esc(item.id)}"><div class="public-offer-media" data-viewer-gallery>${image?mediaImage(image,'data-image-viewer'):'<div class="public-offer-placeholder">M</div>'}</div><div class="public-offer-content"><div class="public-offer-origin">${esc(supplyCountryLabel(item.country))}</div><h3>${esc(titleOf(item))}</h3><p>${esc(descriptionOf(item)||'—')}</p><div class="public-offer-facts"><span><b>${esc(t('price'))}</b><strong>${money(item.unitPrice,item.currency)}</strong></span><span><b>${esc(t('moq'))}</b><strong>${esc(item.moq||'—')}</strong></span></div></div></article>`;
 }
-function supplierPublicOfferPreview(item){
-  const image=(item.images||[])[0];
-  return `<article class="supplier-public-preview" data-public-offer="${esc(item.id)}">
-    <div class="supplier-public-thumb">${image?`<img alt="" data-media="${esc(image)}" />`:'<div class="supplier-public-placeholder">M</div>'}</div>
-    <div class="supplier-public-preview-body">
-      <div class="supplier-public-preview-head"><div><small>#${esc(ref(item))}</small><h3>${esc(titleOf(item))}</h3></div>${cardBadge(item.status)}</div>
-      <p>${money(item.unitPrice,item.currency)} · MOQ ${esc(item.moq||'—')}</p>
-    </div>
-    <span class="chevron">›</span>
-  </article>`;
-}
 const SUPPLIER_ORDER_LABELS={
   pending_confirmation:['بانتظار تأكيد المورد','Awaiting supplier confirmation'],
   confirmed:['تم تأكيد الطلب','Order confirmed'],
@@ -621,13 +610,6 @@ function clientOrderCard(order){
       <div class="client-order-head"><div><small>#${esc(ref(order.refItem))} · ${esc(typeLabel)}</small><h3>${esc(order.title)}</h3></div>${cardBadge(order.status)}</div>
       <div class="client-order-meta"><span>${esc(countLabel)}: ${esc(order.quantity||'—')}</span>${total?`<span>${esc(tr('الإجمالي','Total'))}: ${total}</span>`:''}<span>${esc(tr('آخر تحديث','Last update'))}: ${esc(date(order.updatedAt))}</span></div>
     </div><span class="chevron">›</span>
-  </article>`;
-}
-function clientActionCard(order,action){
-  const image=(order.images||[])[0];
-  return `<article class="client-action-card ${esc(action.tone||'action')}" ${action.action}>
-    <div class="client-action-thumb">${image?`<img alt="" data-media="${esc(image)}">`:'<div>!</div>'}</div>
-    <div><small>#${esc(ref(order.refItem))}</small><strong>${esc(action.label)}</strong><p>${esc(order.title)}</p></div><span class="chevron">›</span>
   </article>`;
 }
 function clientQuoteGroups(){
