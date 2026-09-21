@@ -8,7 +8,7 @@ export function ownRecord(row,kind){const item=unpack(row,kind);delete item.supp
 function publicSettings(data={}){const safe={...data};delete safe.bankAccounts;return safe;}
 function supplierInterest(row){
   const d=row.data||{};
-  return {id:row.id,displayNo:row.display_no,offerId:row.offer_id,version:row.version,createdAt:row.created_at,status:d.status,trackingStatus:d.trackingStatus||'received',cartOrderId:d.cartOrderId||'',cartLine:d.cartLine||'',quantity:d.quantity||'',unitPrice:d.unitPrice||'',currency:d.currency||'',moq:d.moq||'',total:d.total||'',paymentConfirmed:d.paymentStatus==='confirmed',supplierOrderStatus:d.supplierOrderStatus||'pending_confirmation',supplierOrderNote:d.supplierOrderNote||'',supplierOrderUpdatedAt:d.supplierOrderUpdatedAt||''};
+  return {id:row.id,displayNo:row.display_no,offerId:row.offer_id,version:row.version,createdAt:row.created_at,status:d.status,trackingStatus:d.trackingStatus||'received',cartOrderId:d.cartOrderId||'',cartLine:d.cartLine||'',quantity:d.quantity||'',unitPrice:d.unitPrice||'',currency:d.currency||'',moq:d.moq||'',total:d.total||'',paymentConfirmed:d.paymentStatus==='confirmed',supplierOrderStatus:d.supplierOrderStatus||'pending_confirmation',supplierOrderNote:d.supplierOrderNote||'',supplierOrderUpdatedAt:d.supplierOrderUpdatedAt||'',assignedSupplierId:d.assignedSupplierId||'',supplierAssignmentHistory:Array.isArray(d.supplierAssignmentHistory)?d.supplierAssignmentHistory:[]};
 }
 // Pure projection: never serialize raw source text or counterpart identity.
 export function anonymous(row,kind,user){
@@ -64,7 +64,9 @@ export async function snapshot(user){
       rows('public_offers',`owner_id=eq.${user.id}&data->>deletedAt=is.null`)
     ]);
     const ids=publicOffers.map(o=>o.id);
-    if(ids.length)interests=await rows('interests',`offer_id=in.(${inIds(ids)})`);
+    const ownedInterests=ids.length?await rows('interests',`offer_id=in.(${inIds(ids)})`):[];
+    const assignedInterests=await rows('interests',`data->>assignedSupplierId=eq.${user.id}`);
+    interests=[...new Map([...ownedInterests,...assignedInterests].filter(i=>!i.data?.assignedSupplierId||i.data.assignedSupplierId===user.id).map(i=>[i.id,i])).values()];
     interests=interests.filter(i=>{
       const tracking=i.data?.trackingStatus||'received';
       return !['completed','cancelled'].includes(tracking)&&(tracking!=='received'||['coordinating','accepted'].includes(i.data?.status));
