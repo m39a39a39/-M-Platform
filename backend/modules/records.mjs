@@ -21,6 +21,19 @@ export function anonymous(row,kind,user){
   if(row.request_id)result.requestId=row.request_id;
   return result;
 }
+function projectCartReplacementRequest(row,item,supplierId){
+  if(row?.data?.orderType!=='cart')return item;
+  const invites=Array.isArray(row.data.cartReplacementInvites)?row.data.cartReplacementInvites:[];
+  const invite=[...invites].reverse().find(x=>x&&x.supplierId===supplierId&&!['selected','cancelled'].includes(x.status));
+  if(!invite?.interestId)return item;
+  const line=(Array.isArray(row.data.cartItems)?row.data.cartItems:[]).find(x=>x?.interestId===invite.interestId);
+  if(!line)return item;
+  item.orderType='cart_replacement';item.replacementInterestId=invite.interestId;
+  item.translation=line.translation||{};item.images=Array.isArray(line.images)?line.images:[];
+  item.country=String(line.country||'');item.quantity=line.quantity||'';
+  item.replacementForCart=true;
+  return item;
+}
 export async function rows(table,query=''){
   const result=[];
   for(let offset=0;offset<20000;offset+=500){
@@ -93,8 +106,9 @@ export async function snapshot(user){
   publicOffers=publicOffers.filter(o=>o.owner_id===user?.id||ownerActive(o.owner_id));
   const projectedRequests=requests.map(r=>{
     if(r.owner_id===user?.id)return ownRecord(r,'requests');
-    const item=anonymous(r,'requests',user);
+    let item=anonymous(r,'requests',user);
     if(user?.role==='supplier'){
+      item=projectCartReplacementRequest(r,item,user.id);
       const ownSelected=quotes.find(q=>q.id===r.data?.selectedQuoteId&&q.owner_id===user.id);
       item.selectedForSupplier=!!(ownSelected&&ownSelected.data?.supplierOrderStatus!=='cannot_fulfill');
       item.replacementQuoteOpen=!!(r.data?.selectedQuoteId&&selectedSupplierQuotes.find(q=>q.id===r.data.selectedQuoteId)?.data?.supplierOrderStatus==='cannot_fulfill');
