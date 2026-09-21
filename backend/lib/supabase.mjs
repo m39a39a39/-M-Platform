@@ -25,9 +25,12 @@ export async function sb(path,{method='GET',body,token,publicKey=false,headers={
   if(!response){console.error('Supabase request failed',JSON.stringify({path:path.split('?')[0],error:lastError?.name||'network'}));throw new HttpError(502,'تعذر تنفيذ العملية / Service unavailable');}
   const text=await response.text();let result;try{result=text?JSON.parse(text):null;}catch{result=null;}
   if(!response.ok){
-    console.error('Supabase request failed',JSON.stringify({path:path.split('?')[0],status:response.status,code:result?.code||null}));
+    const cleanPath=path.split('?')[0],expectedAuthFailure=cleanPath.startsWith('/auth/')&&response.status<500;
+    (expectedAuthFailure?console.warn:console.error)('Supabase request failed',JSON.stringify({path:cleanPath,status:response.status,code:result?.code||null}));
     const conflict=result?.code==='23505'||result?.message?.includes('Conflict');
-    throw new HttpError(conflict?409:response.status===429?429:path.startsWith('/auth/')?400:502,conflict?'تغيّرت البيانات أو العنصر موجود؛ حدّث الصفحة / Conflict':path.startsWith('/auth/')?'تعذر تسجيل الدخول أو التسجيل؛ تحقق من البريد وكلمة المرور وتأكيد البريد / Authentication failed':'تعذر تنفيذ العملية / Service unavailable');
+    const recovery=cleanPath==='/auth/v1/recover';
+    const authMessage=recovery?'تعذر إرسال رابط الاستعادة الآن؛ تحقق من البريد وحاول لاحقًا / Could not send the recovery link; check the email and try again later':'تعذر تسجيل الدخول أو التسجيل؛ تحقق من البريد وكلمة المرور وتأكيد البريد / Authentication failed';
+    throw new HttpError(conflict?409:response.status===429?429:cleanPath.startsWith('/auth/')?400:502,conflict?'تغيّرت البيانات أو العنصر موجود؛ حدّث الصفحة / Conflict':cleanPath.startsWith('/auth/')?authMessage:'تعذر تنفيذ العملية / Service unavailable');
   }
   return result;
 }
