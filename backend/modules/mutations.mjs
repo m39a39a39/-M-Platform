@@ -213,7 +213,12 @@ export async function mutate(user,body){
       if(changes[0]==='approveReplacementQuoteId'){
         const q=await one('quotes',String(patch.approveReplacementQuoteId||''));
         assert(data.pendingReplacementQuoteId&&q?.id===data.pendingReplacementQuoteId&&q.request_id===id&&q.data.status==='published'&&open(q),409,'العرض البديل غير متاح / Replacement quote unavailable');
-        data.selectedQuoteId=q.id;delete data.pendingReplacementQuoteId;setTracking(data,'supplier_confirmation',now,'');
+        const previousProforma=data.proformaInvoice?structuredClone(data.proformaInvoice):null;
+        data.selectedQuoteId=q.id;delete data.pendingReplacementQuoteId;
+        if(previousProforma)data.invoiceHistory=[...(Array.isArray(data.invoiceHistory)?data.invoiceHistory:[]),{type:'proforma_replaced',at:now,invoice:previousProforma}].slice(-50);
+        delete data.proformaInvoice;delete data.finalInvoice;data.paymentStatus=null;delete data.paymentReceipt;delete data.paymentReceiptSubmittedAt;delete data.paymentConfirmedAt;
+        data.proformaInvoice=await issueQuoteProforma(user,{...original,data:{...data,proformaInvoice:null}},q,now);
+        setTracking(data,'supplier_confirmation',now,'');
         data.supplierAssignmentHistory=[...(Array.isArray(data.supplierAssignmentHistory)?data.supplierAssignmentHistory:[]),{approvedReplacementQuoteId:q.id,approvedAt:now,approvedBy:'customer'}].slice(-100);
       }else if(changes[0]==='selectedQuoteId'){
         const r=await assertOpenRequest(id),q=await one('quotes',patch.selectedQuoteId);
