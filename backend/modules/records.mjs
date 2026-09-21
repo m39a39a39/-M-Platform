@@ -6,7 +6,7 @@ export const open=r=>r&&!r.data.deletedAt&&!r.data.suspendedAt;
 export function unpack(row,kind){return {...row.data,id:row.id,displayNo:row.display_no,version:row.version,createdAt:row.created_at,...(kind==='requests'||kind==='interests'?{customerId:row.owner_id}:{supplierId:row.owner_id}),...(row.request_id?{requestId:row.request_id}:{}),...(row.offer_id?{offerId:row.offer_id}:{})};}
 export function ownRecord(row,kind){const item=unpack(row,kind);delete item.supplierIds;delete item.moderationHistory;delete item.reviewedAt;return item;}
 function publicSettings(data={}){const safe={...data};delete safe.bankAccounts;return safe;}
-function supplierInterest(row){
+export function supplierInterest(row){
   const d=row.data||{},snapshot=d.offerSnapshot||{};
   const safeSnapshot={
     sku:String(snapshot.sku||''),product:String(snapshot.product||''),translation:snapshot.translation||{},
