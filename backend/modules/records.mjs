@@ -31,7 +31,7 @@ export async function rows(table,query=''){
 }
 const inIds=ids=>ids.map(x=>`"${x}"`).join(',');
 export async function snapshot(user){
-  let requests=[],quotes=[],publicOffers=[],interests=[],accounts=[],settings;
+  let requests=[],quotes=[],publicOffers=[],interests=[],accounts=[],settings,selectedSupplierQuotes=[];
   if(user?.role==='admin'){
     const readRequests=can(user,'requests.read')||can(user,'requests.edit')||can(user,'translate')||can(user,'publish')||can(user,'trash')||can(user,'moderate');
     const readOffers=can(user,'offers.read')||can(user,'offers.edit')||can(user,'translate')||can(user,'publish')||can(user,'trash')||can(user,'moderate');
@@ -63,6 +63,8 @@ export async function snapshot(user){
       rows('quotes',`owner_id=eq.${user.id}&data->>deletedAt=is.null`),
       rows('public_offers',`owner_id=eq.${user.id}&data->>deletedAt=is.null`)
     ]);
+    const selectedIds=[...new Set(requests.map(r=>r.data?.selectedQuoteId).filter(Boolean))];
+    selectedSupplierQuotes=selectedIds.length?await rows('quotes',`id=in.(${inIds(selectedIds)})`):[];
     const ids=publicOffers.map(o=>o.id);
     const ownedInterests=ids.length?await rows('interests',`offer_id=in.(${inIds(ids)})`):[];
     const assignedInterests=await rows('interests',`data->>assignedSupplierId=eq.${user.id}`);
@@ -83,8 +85,9 @@ export async function snapshot(user){
   const ownerActive=id=>active(owners.find(p=>p.id===id));
   if(user?.role==='supplier')requests=requests.filter(r=>{
     if(!ownerActive(r.owner_id)||['completed','cancelled'].includes(r.data?.trackingStatus))return false;
-    const selected=r.data?.selectedQuoteId;
-    return !selected||quotes.some(q=>q.id===selected&&q.owner_id===user.id);
+    const selected=r.data?.selectedQuoteId,selectedRow=selectedSupplierQuotes.find(q=>q.id===selected);
+    const replacementOpen=selectedRow?.data?.supplierOrderStatus==='cannot_fulfill';
+    return !selected||replacementOpen||quotes.some(q=>q.id===selected&&q.owner_id===user.id);
   });
   quotes=quotes.filter(q=>q.owner_id===user?.id||ownerActive(q.owner_id)&&open(requests.find(r=>r.id===q.request_id)));
   publicOffers=publicOffers.filter(o=>o.owner_id===user?.id||ownerActive(o.owner_id));
@@ -92,7 +95,9 @@ export async function snapshot(user){
     if(r.owner_id===user?.id)return ownRecord(r,'requests');
     const item=anonymous(r,'requests',user);
     if(user?.role==='supplier'){
-      item.selectedForSupplier=!!(r.data?.selectedQuoteId&&quotes.some(q=>q.id===r.data.selectedQuoteId&&q.owner_id===user.id));
+      const ownSelected=quotes.find(q=>q.id===r.data?.selectedQuoteId&&q.owner_id===user.id);
+      item.selectedForSupplier=!!(ownSelected&&ownSelected.data?.supplierOrderStatus!=='cannot_fulfill');
+      item.replacementQuoteOpen=!!(r.data?.selectedQuoteId&&selectedSupplierQuotes.find(q=>q.id===r.data.selectedQuoteId)?.data?.supplierOrderStatus==='cannot_fulfill');
     }
     return item;
   });
