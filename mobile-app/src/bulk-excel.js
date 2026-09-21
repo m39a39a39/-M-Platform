@@ -340,6 +340,7 @@ export async function downloadBulkProductTemplate(){
 
 
 export function validateBulkProductRows(input,{categories=[],subcategories=[],supplyCountries=[],existingOffers=[]}={}){
+  const managedCountries=Array.isArray(supplyCountries)&&supplyCountries.length?supplyCountries:DEFAULT_SUPPLY_COUNTRIES;
   const rows=input.map(r=>({...r,errors:[],warnings:[],duplicateOfferId:'',duplicateOfferVersion:0}));
   const skuCounts=new Map();
   rows.forEach(r=>skuCounts.set(norm(r.sku),(skuCounts.get(norm(r.sku))||0)+1));
@@ -352,7 +353,7 @@ export function validateBulkProductRows(input,{categories=[],subcategories=[],su
     r.currency=String(r.currency||'').trim().toUpperCase();
     r.categoryId=taxonomyId(r.category||r.categoryId,categories);
     r.subcategoryId=taxonomyId(r.subcategory||r.subcategoryId,subcategories.filter(x=>!r.categoryId||x.parentId===r.categoryId));
-    r.country=normalizeSupplyCountry(r.country,supplyCountries)||String(r.country||'').trim();
+    r.country=normalizeSupplyCountry(r.country,managedCountries)||String(r.country||'').trim();
     r.validUntil=excelDate(r.validUntil);
     if(!/^[A-Za-z0-9._-]{1,80}$/.test(r.sku))errors.push('sku');
     if(skuCounts.get(norm(r.sku))>1)errors.push('duplicate_sku');
@@ -366,7 +367,7 @@ export function validateBulkProductRows(input,{categories=[],subcategories=[],su
     if(!(Number(r.leadTime)>0))errors.push('leadTime');
     if(!r.categoryId)errors.push('category');
     if((r.subcategory||r.subcategoryId)&&!r.subcategoryId)errors.push('subcategory');
-    if(!supplyCountries.some(x=>x.id===r.country))errors.push('country');
+    if(!managedCountries.some(x=>x.id===r.country))errors.push('country');
     if(r.validUntil&&!/^\d{4}-\d{2}-\d{2}$/.test(r.validUntil))errors.push('validUntil');
     r.images=(r.images||[]).filter(Boolean).slice(0,5);
     if(!r.images.length)errors.push('images');
