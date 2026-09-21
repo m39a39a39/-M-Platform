@@ -173,8 +173,9 @@ export async function mutate(user,body){
       assert(source&&source.owner_id===user.id&&open(source),404,'الطلب الأصلي غير متاح / Original request unavailable');
     }
     if(collection==='quotes'){
-      const r=await assertOpenRequest(patch.requestId);
-      assert(r.data.status==='sent'&&!r.data.selectedQuoteId&&r.data.supplierIds?.includes(user.id));
+      const r=await assertOpenRequest(patch.requestId),selected=r.data.selectedQuoteId?await one('quotes',r.data.selectedQuoteId):null;
+      const replacementOpen=!r.data.selectedQuoteId||selected?.data?.supplierOrderStatus==='cannot_fulfill';
+      assert(r.data.status==='sent'&&replacementOpen&&r.data.supplierIds?.includes(user.id),409,'طلب العرض غير متاح / RFQ unavailable');
       const existing=await db('quotes',`request_id=eq.${encodeURIComponent(patch.requestId)}&owner_id=eq.${encodeURIComponent(user.id)}&data->>deletedAt=is.null&limit=1`);
       assert(!existing.length,409,'سبق أن قدمت عرضًا على هذا الطلب / You already submitted an offer for this request');
     }else if(collection==='interests'){
@@ -241,7 +242,9 @@ export async function mutate(user,body){
         linkedSupplierRequest=r;
       }else{
         assert(changes.length&&changes.every(k=>contentFields.quotes.includes(k)),400,'يمكن تعديل بيانات العرض فقط / Only offer fields can be edited');
-        assert(r.data.status==='sent'&&!r.data.selectedQuoteId&&r.data.supplierIds?.includes(user.id),409,'لا يمكن تعديل العرض بعد إغلاق الطلب أو اختيار عرض / Offer cannot be edited after request closure or selection');
+        const selected=r.data.selectedQuoteId?await one('quotes',r.data.selectedQuoteId):null;
+        const replacementOpen=!r.data.selectedQuoteId||(selected?.data?.supplierOrderStatus==='cannot_fulfill'&&r.data.selectedQuoteId!==original.id);
+        assert(r.data.status==='sent'&&replacementOpen&&r.data.supplierIds?.includes(user.id),409,'لا يمكن تعديل العرض بعد إغلاق الطلب أو اختيار عرض / Offer cannot be edited after request closure or selection');
         assert(['pending','published'].includes(data.status),409,'العرض غير قابل للتعديل / Offer is not editable');
         for(const key of changes)data[key]=patch[key];
         validateContent('quotes',data);
