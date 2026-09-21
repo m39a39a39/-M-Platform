@@ -28,11 +28,11 @@ const titleOf=value=>{
 const finite=value=>{const n=Number(value);return Number.isFinite(n)?n:0;};
 const DEFAULT_CURRENCIES=[{code:'SAR',nameEn:'Saudi Riyal',rate:1,active:true}];
 async function currencySnapshot(customer,sourceCurrency,frozen=null){
-  const source=String(sourceCurrency||'SAR').toUpperCase();
-  if(frozen&&String(frozen.sourceCurrency||'').toUpperCase()===source&&String(frozen.currency||'').trim()&&Number(frozen.rate)>0){
+  const source=String(sourceCurrency||'SAR').toUpperCase(),frozenCurrency=String(frozen?.currency||'').toUpperCase();
+  if(frozen&&String(frozen.sourceCurrency||'').toUpperCase()===source&&frozenCurrency&&Number(frozen.rate)>0){
     return {
       sourceCurrency:source,
-      currency:String(frozen.currency).toUpperCase(),
+      currency:frozenCurrency,
       currencyLabel:String(frozen.currencyLabel||frozen.currency).slice(0,120),
       sourceRate:Number(frozen.sourceRate)||1,
       targetRate:Number(frozen.targetRate)||Number(frozen.rate),
@@ -40,8 +40,14 @@ async function currencySnapshot(customer,sourceCurrency,frozen=null){
     };
   }
   const settings=await one('settings','site'),rows=Array.isArray(settings?.data?.currencies)&&settings.data.currencies.length?settings.data.currencies:DEFAULT_CURRENCIES;
+  const src=rows.find(x=>x.code===source);
+  if(frozen&&frozenCurrency){
+    const fallbackTarget=rows.find(x=>x.code===frozenCurrency),targetRate=Number(frozen.targetRate)||Number(fallbackTarget?.rate);
+    assert(src&&Number(src.rate)>0&&targetRate>0,409,'سعر صرف العملة غير متاح / Currency exchange rate unavailable');
+    return {sourceCurrency:source,currency:frozenCurrency,currencyLabel:String(frozen.currencyLabel||frozenCurrency).slice(0,120),sourceRate:Number(src.rate),targetRate,rate:targetRate/Number(src.rate)};
+  }
   const target=String(profileData(customer)?.preferredCurrency||'SAR').toUpperCase();
-  const src=rows.find(x=>x.code===source),dst=rows.find(x=>x.code===target&&x.active!==false)||rows.find(x=>x.code==='SAR');
+  const dst=rows.find(x=>x.code===target&&x.active!==false)||rows.find(x=>x.code==='SAR');
   assert(src&&Number(src.rate)>0&&dst&&Number(dst.rate)>0,409,'سعر صرف العملة غير متاح / Currency exchange rate unavailable');
   return {sourceCurrency:source,currency:dst.code,currencyLabel:`${dst.code} – ${dst.nameEn||dst.nameAr||dst.code}`,sourceRate:Number(src.rate),targetRate:Number(dst.rate),rate:Number(dst.rate)/Number(src.rate)};
 }
