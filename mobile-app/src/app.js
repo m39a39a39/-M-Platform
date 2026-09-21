@@ -47,7 +47,16 @@ const tr=(ar,en)=>lang==='ar'?ar:en;
 const esc=value=>String(value??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 const ref=item=>item?.displayNo||String(item?.id||'').slice(0,8)||'—';
 const date=value=>{if(!value)return '—';const d=new Date(value);return Number.isNaN(d.getTime())?String(value):new Intl.DateTimeFormat(lang==='ar'?'ar':'en',{dateStyle:'medium'}).format(d);};
-const money=(value,currency='')=>value===undefined||value===null||value===''?'—':`${esc(currency)} ${esc(value)}`.trim();
+function activeCurrencies(){const rows=Array.isArray(platformState?.settings?.currencies)?platformState.settings.currencies:[{code:'SAR',nameAr:'الريال السعودي',nameEn:'Saudi Riyal',rate:1,active:true}];return rows.filter(x=>x.active!==false);}
+function preferredCurrency(){const wanted=currentUser?.role==='client'?String(currentUser.preferredCurrency||'SAR').toUpperCase():'',rows=activeCurrencies();return rows.some(x=>x.code===wanted)?wanted:'SAR';}
+function convertedMoney(value,sourceCurrency=''){
+  const n=Number(value),source=String(sourceCurrency||'SAR').toUpperCase();if(!Number.isFinite(n))return null;
+  if(currentUser?.role!=='client')return {value:n,currency:source};
+  const rows=activeCurrencies(),target=preferredCurrency(),src=rows.find(x=>x.code===source),dst=rows.find(x=>x.code===target);
+  if(!src||!dst||!Number(src.rate)||!Number(dst.rate))return {value:n,currency:source};
+  return {value:n/Number(src.rate)*Number(dst.rate),currency:target};
+}
+const money=(value,currency='')=>{if(value===undefined||value===null||value==='')return '—';const x=convertedMoney(value,currency);if(!x)return '—';const digits=Math.abs(x.value)>=100?2:4;return `${esc(x.currency)} ${esc(Number(x.value.toFixed(digits)).toLocaleString(lang==='ar'?'ar':'en',{maximumFractionDigits:digits}))}`;};
 const setMessage=(text,type='')=>{const el=$('message');el.textContent=text||'';el.classList.toggle('success',type==='success');};
 
 const TRACKING_FLOW=[
@@ -701,7 +710,8 @@ function renderNotifications(){
 }
 function renderAccount(){
   const u=currentUser,languageControl=u.role==='client'?`<div class="account-setting-row"><div><small>${esc(tr('اللغة','Language'))}</small><strong>${esc(lang==='ar'?tr('العربية','Arabic'):tr('الإنجليزية','English'))}</strong></div><button type="button" class="secondary-btn" data-action="toggle-language">${esc(lang==='ar'?'English':'العربية')}</button></div>`:'';
-  $('screen').innerHTML=pageHeader(t('account'))+`<section class="profile-card"><div class="avatar">${esc((u.name||u.company||u.email||'M').charAt(0).toUpperCase())}</div><h2>${esc(u.name||u.company||'M Platform')}</h2><p>${esc(t(u.role))}</p><dl><div><dt>${esc(t('email'))}</dt><dd>${esc(u.email||'—')}</dd></div>${u.company?`<div><dt>${tr('الشركة','Company')}</dt><dd>${esc(u.company)}</dd></div>`:''}${u.country?`<div><dt>${esc(t('country'))}</dt><dd>${esc(u.country)}</dd></div>`:''}</dl>${languageControl}<p class="session-note">${esc(t('sessionNote'))}</p><button class="danger-btn" data-action="logout">${esc(t('logout'))}</button></section>`;
+  const currencyControl=u.role==='client'?`<div class="account-setting-row"><div><small>${esc(tr('العملة','Currency'))}</small><strong>${esc(preferredCurrency())}</strong></div><select data-client-currency aria-label="${esc(tr('العملة','Currency'))}">${activeCurrencies().map(x=>`<option value="${esc(x.code)}" ${x.code===preferredCurrency()?'selected':''}>${esc(x.code+' — '+(lang==='ar'?x.nameAr:x.nameEn))}</option>`).join('')}</select></div>`:'';
+  $('screen').innerHTML=pageHeader(t('account'))+`<section class="profile-card"><div class="avatar">${esc((u.name||u.company||u.email||'M').charAt(0).toUpperCase())}</div><h2>${esc(u.name||u.company||'M Platform')}</h2><p>${esc(t(u.role))}</p><dl><div><dt>${esc(t('email'))}</dt><dd>${esc(u.email||'—')}</dd></div>${u.company?`<div><dt>${tr('الشركة','Company')}</dt><dd>${esc(u.company)}</dd></div>`:''}${u.country?`<div><dt>${esc(t('country'))}</dt><dd>${esc(u.country)}</dd></div>`:''}</dl>${languageControl}${currencyControl}<p class="session-note">${esc(t('sessionNote'))}</p><button class="danger-btn" data-action="logout">${esc(t('logout'))}</button></section>`;
 }
 function renderAdminCollection(kind){const rows=kind==='requests'?(platformState.requests||[]):[...(platformState.quotes||[]),...(platformState.publicOffers||[])];$('screen').innerHTML=pageHeader(kind==='requests'?t('requests'):t('offers'),t('adminMobile'))+`<div class="list-stack">${rows.slice(0,50).map(x=>itemCard(x,{subtitle:descriptionOf(x),badge:cardBadge(x.status),meta:`#${ref(x)} · ${date(x.createdAt)}`})).join('')||empty()}</div>`;}
 function renderScreen(){if(!currentUser||!platformState)return;updateShell();if(renderAdminScreen(activeScreen))return;if(activeScreen==='home')renderHome();else if(activeScreen==='orders')renderSupplierOrders();else if(activeScreen==='requests')renderRequests();else if(activeScreen==='offers')renderOffers();else if(activeScreen==='notifications')renderNotifications();else renderAccount();hydrateImages($('screen'));}
@@ -1152,6 +1162,7 @@ async function handleAction(target){
   if(target.dataset.action==='bulk-public-import')return openBulkPublicImport();
   if(target.dataset.action==='view-public-offers'){activeScreen='offers';activeSub='primary';renderScreen();$('screen').scrollTop=0;return;}
   if(target.dataset.action==='toggle-language')return toggleLanguage();
+  if(target.matches?.('[data-client-currency]'))return;
   if(target.dataset.action==='logout')return logout();
   if(target.dataset.action==='mark-all'){await request('/api/v1/notifications/read',{method:'POST',auth:true,body:{all:true}});await loadData();return;}
   if(['home','orders','requests','offers','notifications','account'].includes(target.dataset.action)){activeScreen=target.dataset.action;if(activeScreen==='offers')activeSub='primary';if(activeScreen==='requests'&&currentUser?.role==='supplier')activeSub='pending';renderScreen();return;}
