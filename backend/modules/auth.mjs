@@ -58,7 +58,7 @@ export async function authRoute(action,req,res,body){
   if(action==='recover'){
     const email=String(body.email||'').trim().toLowerCase();
     assert(email.length<255&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email),400,'تحقق من البريد الإلكتروني / Check email address');
-    const redirectTo=config().origin;
+    const redirectTo=config().origin.replace(/\/$/,'')+'/reset-password.html';
     await sb(`/auth/v1/recover?redirect_to=${encodeURIComponent(redirectTo)}`,{method:'POST',publicKey:true,body:{email}});
     return {ok:true};
   }
