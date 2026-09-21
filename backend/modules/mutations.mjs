@@ -178,11 +178,11 @@ function settleCartInvites(data,interestId,selectedSupplierId,now){
     data.supplierIds=data.supplierIds.filter(id=>!affected.has(id));
   }
 }
-function cartReplacementChildData(child,quote,previousSupplierId,now){
+function cartReplacementChildData(child,quote,previousSupplierId,now,termsChanged=true){
   const next=structuredClone(child.data||{}),quantity=Number(next.quantity),unitPrice=Number(quote.data.unitPrice);
   next.supplierAssignmentHistory=[...(Array.isArray(next.supplierAssignmentHistory)?next.supplierAssignmentHistory:[]),{
     rejectedSupplierId:previousSupplierId,rejectionReason:next.supplierOrderNote||'',rejectedAt:next.supplierOrderUpdatedAt||now,
-    newSupplierId:quote.owner_id,newQuoteId:quote.id,reassignedAt:now,termsChanged:true
+    newSupplierId:quote.owner_id,newQuoteId:quote.id,reassignedAt:now,termsChanged:!!termsChanged
   }].slice(-100);
   next.assignedSupplierId=quote.owner_id;next.replacementQuoteId=quote.id;next.supplierOrderStatus='pending_confirmation';
   next.replacementQuoteSnapshot={unitPrice, currency:String(quote.data.currency||'').toUpperCase(), moq:Number(quote.data.moq), leadTime:String(quote.data.leadTime||''), sampleCost:String(quote.data.sampleCost||''), selectedAt:now};
@@ -286,7 +286,7 @@ export async function mutate(user,body){
         settleCartInvites(data,child.id,q.owner_id,now);delete data.pendingCartReplacement;
         setTracking(data,'supplier_confirmation',now,'');
         data.supplierAssignmentHistory=[...(Array.isArray(data.supplierAssignmentHistory)?data.supplierAssignmentHistory:[]),{approvedCartReplacementQuoteId:q.id,interestId:child.id,approvedAt:now,approvedBy:'customer'}].slice(-100);
-        cartReplacementCommit={child,quote:q,previousSupplierId};
+        cartReplacementCommit={child,quote:q,previousSupplierId,termsChanged:true};
       }else if(changes[0]==='rejectCartReplacementQuoteId'){
         const pending=data.pendingCartReplacement,quoteId=String(patch.rejectCartReplacementQuoteId||'');
         assert(data.orderType==='cart'&&pending?.quoteId===quoteId&&pending?.interestId,409,'العرض البديل غير متاح / Replacement quote unavailable');
@@ -440,7 +440,7 @@ export async function mutate(user,body){
         }].slice(-100);
         if(same){
           applyCartQuoteToParent(data,interestId,q.data);settleCartInvites(data,interestId,q.owner_id,now);delete data.pendingCartReplacement;
-          setTracking(data,'supplier_confirmation',now,'');cartReplacementCommit={child,quote:q,previousSupplierId};
+          setTracking(data,'supplier_confirmation',now,'');cartReplacementCommit={child,quote:q,previousSupplierId,termsChanged:false};
         }else{
           const quantity=Number(child.data.quantity),oldUnitPrice=Number(child.data.unitPrice),newUnitPrice=Number(q.data.unitPrice);
           data.pendingCartReplacement={interestId,quoteId:q.id,supplierId:q.owner_id,oldUnitPrice,newUnitPrice,currency:String(q.data.currency||'').toUpperCase(),quantity,oldTotal:quantity*oldUnitPrice,newTotal:quantity*newUnitPrice,difference:quantity*(newUnitPrice-oldUnitPrice),moq:q.data.moq,leadTime:q.data.leadTime,createdAt:now};
@@ -544,8 +544,8 @@ export async function mutate(user,body){
   data.history=[...(original?.data.history||[]),{at:now,status:data.selectedQuoteId&&!original?.data.selectedQuoteId?'selected':data.status}].slice(-200);
   const commitBatch=[{table,id,version:Number(version),ownerId,requestId:original?.request_id||patch.requestId,offerId:original?.offer_id||patch.offerId,data,action:original?'update':'create'}];
   if(cartReplacementCommit){
-    const {child,quote,previousSupplierId}=cartReplacementCommit;
-    const childData=cartReplacementChildData(child,quote,previousSupplierId,now);
+    const {child,quote,previousSupplierId,termsChanged}=cartReplacementCommit;
+    const childData=cartReplacementChildData(child,quote,previousSupplierId,now,termsChanged);
     commitBatch.push({table:'interests',id:child.id,version:child.version,ownerId:child.owner_id,offerId:child.offer_id,data:childData,action:'cart_supplier_reassigned'});
   }
   if(collection==='requests'&&isAdmin&&data.orderType==='cart'&&changes.includes('trackingStatus')&&patch.trackingStatus==='supplier_confirmation'){
