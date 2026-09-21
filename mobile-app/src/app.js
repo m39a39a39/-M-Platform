@@ -640,6 +640,14 @@ function companyFooterCard(){
   return `<section class="company-footer-card"><div class="company-footer-brand"><span class="company-footer-mark">M</span><div><h2>MIG COMPANY</h2><p>${esc(t('companyDescription'))}</p></div></div><div class="company-contact"><strong>${esc(t('contactUs'))}</strong><a href="mailto:aljilany6@gmail.com">aljilany6@gmail.com</a><a href="https://wa.me/8618501770037" target="_blank" rel="noopener noreferrer">+86 185 0177 0037</a></div><small>${esc(t('copyright'))}</small></section>`;
 }
 
+function supplierQuoteForRequest(request,quotes=platformState?.quotes||[]){
+  const rows=quotes.filter(q=>q.requestId===request?.id);
+  if(request?.orderType==='cart_replacement'&&request.replacementInterestId){
+    return rows.find(q=>q.replacementInterestId===request.replacementInterestId)||null;
+  }
+  return rows[0]||null;
+}
+function supplierRequestAnswered(request,quotes=platformState?.quotes||[]){return !!supplierQuoteForRequest(request,quotes);}
 function renderHome(){
   const role=currentUser.role;
   if(role==='client'){
@@ -650,7 +658,7 @@ function renderHome(){
       `<section class="ready-products-section"><div class="section-title ready-products-title"><div><h2>${esc(tr('المنتجات','Products'))}</h2><p>${esc(tr('ابحث واختر الكمية، ثم اجمع المنتجات في طلب واحد.','Search, choose quantities, and combine products into one order.'))}</p></div></div>${productSearchBar()}<div id="readyProductFilters">${productFiltersHtml()}</div><div id="readyProductsGrid" class="public-offers-grid">${products.grid}</div><div id="readyProductsPagination">${products.pagination}</div></section>`+
       companyFooterCard();
   }else if(role==='supplier'){
-    const quotes=platformState.quotes||[],answered=new Set(quotes.map(q=>q.requestId)),invites=(platformState.requests||[]).filter(r=>!answered.has(r.id));
+    const quotes=platformState.quotes||[],invites=(platformState.requests||[]).filter(r=>!supplierRequestAnswered(r,quotes));
     const pub=platformState.publicOffers||[],orders=supplierOrders(),pendingOrders=orders.filter(o=>o.status==='pending_confirmation'),activeOrders=orders.filter(o=>!['ready_for_inspection','cannot_fulfill'].includes(o.status)),publishedPublic=pub.filter(o=>o.status==='published').length,recentOrders=orders.slice(0,3);
     const needed=[...pendingOrders.slice(0,3).map(supplierOrderCard),...invites.slice(0,Math.max(0,3-pendingOrders.length)).map(r=>itemCard(r,{subtitle:descriptionOf(r),meta:`${t('quantity')}: ${r.quantity||'—'} · ${r.country||'—'}`,badge:`<span class="status-pill status-review">${esc(tr('تقديم عرض','Submit quote'))}</span>`,action:`data-supplier-request="${esc(r.id)}"`}))];
     $('screen').innerHTML=pageHeader(`${tr('مرحبًا','Welcome')} ${esc(currentUser.name||currentUser.company||'')}`,tr('ركز على الطلبات التي تحتاج إجراء منك أولًا.','Focus first on the items that need your action.'))+
@@ -679,8 +687,7 @@ function renderRequests(){
     const quotes=(platformState.quotes||[]).slice().sort((a,b)=>(Date.parse(b.updatedAt||b.createdAt||0)||0)-(Date.parse(a.updatedAt||a.createdAt||0)||0));
     const selectedRequestIds=new Set((platformState.requests||[]).filter(r=>r.selectedForSupplier).map(r=>r.id));
     const submitted=quotes.filter(q=>!selectedRequestIds.has(q.requestId));
-    const answered=new Set(quotes.map(q=>q.requestId));
-    const pending=(platformState.requests||[]).filter(r=>!answered.has(r.id));
+    const pending=(platformState.requests||[]).filter(r=>!supplierRequestAnswered(r,quotes));
     const tabs=segment([
       ['pending',tr(`بانتظار عرض (${pending.length})`,`Awaiting quote (${pending.length})`)],
       ['submitted',tr(`العروض المقدمة (${submitted.length})`,`Submitted quotes (${submitted.length})`)]
@@ -688,7 +695,7 @@ function renderRequests(){
     if(activeSub==='pending'){
       $('screen').innerHTML=pageHeader(tr('طلبات الأسعار','Quote requests'),tr('طلبات الأسعار التي أرسلتها الإدارة إليك. بعد تقديم السعر تنتقل تلقائيًا إلى العروض المقدمة.','Quote requests sent to you by admin. After you submit a quote, it moves automatically to Submitted quotes.'))+tabs+`<div class="list-stack">${pending.map(r=>itemCard(r,{subtitle:descriptionOf(r),meta:`${t('quantity')}: ${r.quantity||'—'} · ${r.country||'—'} · ${t('neededDate')}: ${r.neededDate||'—'}`,badge:`<span class="status-pill status-review">${esc(tr('بانتظار عرضك','Awaiting your quote'))}</span>`,action:`data-supplier-request="${esc(r.id)}"`,images:true})).join('')||empty()}</div>`;
     }else{
-      $('screen').innerHTML=pageHeader(tr('طلبات الأسعار','Quote requests'),tr('العروض التي قدمتها على طلبات العملاء، ويمكنك فتح العرض لمراجعته أو تعديله عندما يكون التعديل متاحًا.','Quotes you submitted for customer requests. Open a quote to review or edit it when editing is available.'))+tabs+`<div class="list-stack">${submitted.map(q=>{const r=(platformState.requests||[]).find(x=>x.id===q.requestId);return itemCard(q,{subtitle:q.notes||descriptionOf(r)||descriptionOf(q),meta:`${money(q.unitPrice,q.currency)} · MOQ ${q.moq||'—'} · ${date(q.updatedAt||q.createdAt)}`,badge:cardBadge(q.status),action:`data-edit-quote="${esc(q.id)}"`,images:true});}).join('')||empty()}</div>`;
+      $('screen').innerHTML=pageHeader(tr('طلبات الأسعار','Quote requests'),tr('العروض التي قدمتها على طلبات العملاء، ويمكنك فتح العرض لمراجعته أو تعديله عندما يكون التعديل متاحًا.','Quotes you submitted for customer requests. Open a quote to review or edit it when editing is available.'))+tabs+`<div class="list-stack">${submitted.map(q=>{const r=(platformState.requests||[]).find(x=>x.id===q.requestId),editable=!r?.orderType||r.orderType!=='cart_replacement'||q.replacementInterestId===r.replacementInterestId;return itemCard(q,{subtitle:q.notes||descriptionOf(r)||descriptionOf(q),meta:`${money(q.unitPrice,q.currency)} · MOQ ${q.moq||'—'} · ${date(q.updatedAt||q.createdAt)}`,badge:cardBadge(q.status),action:editable?`data-edit-quote="${esc(q.id)}"`:'',images:true});}).join('')||empty()}</div>`;
     }
   }else renderAdminCollection('requests');
 }
@@ -918,7 +925,7 @@ function openCartOrder(orderId){
 }
 function openSupplierRequest(requestId){
   const r=(platformState.requests||[]).find(x=>x.id===requestId);if(!r)return;
-  const existing=(platformState.quotes||[]).find(q=>q.requestId===r.id);
+  const existing=supplierQuoteForRequest(r);
   openModal(titleOf(r),`#${ref(r)}`,`${gallery(r.images)}<div class="facts"><span>${esc(t('quantity'))}: ${esc(r.quantity||'—')}</span><span>${esc(r.country||'—')}</span><span>${esc(t('neededDate'))}: ${esc(r.neededDate||'—')}</span></div><p class="long-copy">${esc(descriptionOf(r)||'—')}</p>${existing?`<button class="secondary-btn full" data-edit-quote="${esc(existing.id)}">${esc(t('editQuote'))}</button>`:`<button class="primary-btn full" data-quote-request="${esc(r.id)}">${esc(t('submitQuote'))}</button>`}`);
 }
 function supplierOrderActions(order){
