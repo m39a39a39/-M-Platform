@@ -123,6 +123,10 @@ function cartReplacementDiffLabel(child,q){
 function cartReplacementSupplierPanel(x){
   const declined=(state?.interests||[]).filter(i=>i.cartOrderId===x.id&&i.supplierOrderStatus==='cannot_fulfill');
   if(!declined.length)return '';
+  if(x.pendingCartReplacement){
+    const p=x.pendingCartReplacement,line=(Array.isArray(x.cartItems)?x.cartItems:[]).find(v=>v.interestId===p.interestId)||{};
+    return '<section class="admin-supplier-confirmation pending"><div class="admin-supplier-confirmation-head"><div><small>'+esc(tr('بانتظار موافقة العميل','Awaiting customer approval'))+'</small><strong>'+esc(title(line)||tr('منتج من الطلب','Order item'))+'</strong></div><span>…</span></div><p>'+esc(tr('تم إرسال السعر والشروط الجديدة للعميل. بعد موافقته سيُحوّل الطلب تلقائيًا إلى المورد البديل.','The new price and terms were sent to the customer. After approval, the item will be reassigned automatically to the replacement supplier.'))+'</p></section>';
+  }
   const lines=Array.isArray(x.cartItems)?x.cartItems:[],quotes=state?.quotes||[],offers=state?.publicOffers||[],invites=Array.isArray(x.cartReplacementInvites)?x.cartReplacementInvites:[];
   return declined.map(child=>{
     const line=lines.find(v=>v.interestId===child.id)||{},offer=offers.find(o=>o.id===child.offerId),oldSupplier=child.assignedSupplierId||offer?.supplierId||'';
