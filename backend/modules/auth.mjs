@@ -17,8 +17,15 @@ export async function updateOwnCurrency(user,body={}){
 const NATIVE_ORIGINS=new Set(['capacitor://localhost','http://localhost','https://localhost']);
 export const isNativeClient=req=>{
   const marked=['native','ios','android'].includes(String(req.headers['x-m-client']||'').toLowerCase());
-  const origin=String(req.headers.origin||'');
-  return marked&&(!origin||NATIVE_ORIGINS.has(origin));
+  if(!marked)return false;
+  const origin=String(req.headers.origin||'').replace(/\/$/,'');
+  if(!origin||NATIVE_ORIGINS.has(origin))return true;
+  // The maintained browser build intentionally uses the same bearer-token session
+  // contract as Capacitor. Only allow that mode from the configured first-party
+  // web origin; arbitrary third-party origins must never receive refresh tokens.
+  let trustedWebOrigin='';
+  try{trustedWebOrigin=String(config().origin||'').replace(/\/$/,'');}catch{return false;}
+  return !!trustedWebOrigin&&origin===trustedWebOrigin;
 };
 const nativeTokens=result=>result?.access_token?{accessToken:result.access_token,refreshToken:result.refresh_token,expiresIn:result.expires_in,expiresAt:result.expires_at,tokenType:result.token_type||'bearer'}:null;
 export function cookies(req){return Object.fromEntries((req.headers.cookie||'').split(';').filter(x=>x.includes('=')).map(x=>{const i=x.indexOf('=');return [x.slice(0,i).trim(),decodeURIComponent(x.slice(i+1))];}));}
