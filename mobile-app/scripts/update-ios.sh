@@ -24,7 +24,7 @@ curl --fail --location --retry 5 --retry-all-errors --retry-delay 3 \
   --output "$archive"
 tar -xzf "$archive" -C "$source_root" --strip-components=1
 source_app="$source_root/mobile-app"
-for required in package.json package-lock.json index.html src; do
+for required in package.json package-lock.json index.html capacitor.config.ts src; do
   [[ -e "$source_app/$required" ]] || { echo "Missing $required in revision $revision" >&2; exit 1; }
 done
 
@@ -33,19 +33,19 @@ done
 
 backup="web-backup-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$backup"
-cp package.json package-lock.json index.html "$backup/"
+cp package.json package-lock.json index.html capacitor.config.ts "$backup/"
 cp -R src "$backup/src"
 
 restore_previous(){
   rm -rf src
   cp -R "$backup/src" ./src
-  cp "$backup/package.json" "$backup/package-lock.json" "$backup/index.html" ./
+  cp "$backup/package.json" "$backup/package-lock.json" "$backup/index.html" "$backup/capacitor.config.ts" ./
 }
 
 # Copy the complete web source tree. This avoids missing future modules.
 rm -rf src
 cp -R "$source_app/src" ./src
-cp "$source_app/package.json" "$source_app/package-lock.json" "$source_app/index.html" ./
+cp "$source_app/package.json" "$source_app/package-lock.json" "$source_app/index.html" "$source_app/capacitor.config.ts" ./
 
 if ! npm ci || ! npm run build; then
   restore_previous
