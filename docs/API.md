@@ -3,7 +3,7 @@
 Base web path: `/api/*`  
 Native mobile alias: `/api/v1/*`
 
-Browser requests use same-origin cookies. Native requests use a verified Supabase access token in `Authorization: Bearer ...` together with `X-M-Client: native|ios|android`.
+The maintained unified interface uses a verified Supabase access token in `Authorization: Bearer ...` on web and native. Native clients also send `X-M-Client: native|ios|android`; the browser build uses the same `/api/v1/*` contract from the current origin. Legacy same-origin cookie support remains server-side for compatibility only.
 
 Personalized responses are `private, no-store`.
 
