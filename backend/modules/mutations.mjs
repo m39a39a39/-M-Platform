@@ -147,9 +147,6 @@ function cartInviteFor(data,supplierId){
   const rows=Array.isArray(data?.cartReplacementInvites)?data.cartReplacementInvites:[];
   return [...rows].reverse().find(x=>x&&x.supplierId===supplierId&&!['selected','cancelled'].includes(x.status));
 }
-function cartLine(data,interestId){
-  return (Array.isArray(data?.cartItems)?data.cartItems:[]).find(x=>x?.interestId===interestId)||null;
-}
 export function cartTermsMatch(childData,quoteData){
   if(String(quoteData?.currency||'').toUpperCase()!==String(childData?.currency||'').toUpperCase())return false;
   if(Number(quoteData?.unitPrice)!==Number(childData?.unitPrice))return false;
