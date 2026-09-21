@@ -108,6 +108,25 @@
         <button id="registerLoginBtn" class="text-btn full" type="button" data-auth-copy="already">لدي حساب بالفعل</button>
       </section>
     </section>
+    <section id="resetView" class="hidden auth-wrap">
+      <header class="brand-block">
+        <div class="brand-mark">M</div>
+        <div class="brand-copy"><strong>M Platform</strong><p id="resetSubtitle">استعادة الحساب</p></div>
+        <button id="resetLangBtn" class="icon-btn" type="button">EN</button>
+      </header>
+      <section class="card auth-card">
+        <h1 id="resetTitle">كلمة مرور جديدة</h1>
+        <p id="resetIntro" class="muted">اكتب كلمة مرور جديدة لحسابك. يجب أن تكون 8 أحرف على الأقل.</p>
+        <form id="resetPasswordForm" class="form-stack">
+          <label><span id="resetPasswordLabel">كلمة المرور الجديدة</span><input id="resetPassword" type="password" autocomplete="new-password" minlength="8" maxlength="128" required /></label>
+          <label><span id="resetConfirmLabel">تأكيد كلمة المرور</span><input id="resetConfirmPassword" type="password" autocomplete="new-password" minlength="8" maxlength="128" required /></label>
+          <p id="resetMessage" class="message" role="status" aria-live="polite"></p>
+          <button id="resetPasswordBtn" class="primary-btn" type="submit">حفظ كلمة المرور الجديدة</button>
+        </form>
+        <button id="resetLoginBtn" class="text-btn full hidden" type="button">العودة إلى تسجيل الدخول</button>
+      </section>
+    </section>
+
     <section id="sessionView" class="hidden auth-wrap">
       <section class="card form-stack">
         <p id="sessionMessage" class="message" role="status"></p>
