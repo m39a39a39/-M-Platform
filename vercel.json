@@ -17,6 +17,38 @@
     {
       "source": "/api/:path*",
       "destination": "/api?route=:path*"
+    },
+    {
+      "source": "/reset-password.html",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/login.html",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/register-customer.html",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/register-supplier.html",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/customer.html",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/supplier.html",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/admin.html",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/offers.html",
+      "destination": "/index.html"
     }
   ],
   "headers": [
