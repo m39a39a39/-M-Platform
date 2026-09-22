@@ -47,11 +47,14 @@ export async function reviewPaymentReceipt(user,body={}){
   const row=await one(cfg.table,id);assert(row,404);
   assert(Number(body.version)===row.version,409,'تغيّرت البيانات؛ حدّث الصفحة / Refresh after conflict');
   const data=structuredClone(row.data||{});
+  assert(!data.cancelledAt&&data.trackingStatus!=='cancelled',409,'الطلب ملغى');
+  assert(data.orderFlowVersion!==2||data.orderStage===1,409,'الطلب ليس بانتظار الدفع');
   assert(data.paymentStatus==='receipt_submitted'&&data.paymentReceipt?.src,409,'لا يوجد إيصال بانتظار المراجعة / No receipt awaiting review');
   const now=new Date().toISOString(),note=String(body.note||'').trim();
   if(action==='reupload')assert(note&&note.length<=1000,400,'اكتب سبب طلب إعادة رفع الإيصال / Add a re-upload note');
   if(action==='confirm'){
     data.paymentStatus='confirmed';
+    if(data.orderFlowVersion===2){data.orderStage=2;data.trackingStatus='production';data.orderHistory=[...(data.orderHistory||[]),{at:now,stage:2}];data.orderAudit=[...(data.orderAudit||[]),{at:now,action:'receipt_confirmed',actorId:user.id,changes:[]}];}
     data.paymentConfirmedAt=now;
     data.paymentReviewNote='';
     const customer=await one('profiles',row.owner_id);
@@ -74,6 +77,7 @@ export async function reviewPaymentReceipt(user,body={}){
     for(const child of children){
       const childData=structuredClone(child.data||{});
       childData.paymentStatus='confirmed';
+      if(data.orderFlowVersion===2){childData.orderStage=2;childData.trackingStatus='production';}
       childData.paymentConfirmedAt=now;
       childData.paymentReviewNote='';
       childData.paymentUpdatedAt=now;

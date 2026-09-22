@@ -1,3 +1,4 @@
+import {renderStorefront,bindStorefront,productExtras,tierPrice} from './storefront.js';
 import { languageReady, getLanguage, onLanguageChange, toggleLanguage } from './language.js';
 import { showView } from './views.js';
 import { categoryRows, subcategoryRows, supplyCountryRows, taxonomyLabel } from './catalog-taxonomy.js';
@@ -98,7 +99,7 @@ function updateCartBadge(){
 function cartRows(){
   return cartItems.map(item=>{
     const offer=publishedOffers().find(o=>o.id===item.offerId);if(!offer)return null;
-    const quantity=Number(item.quantity),unitPrice=Number(offer.unitPrice);
+    const quantity=Number(item.quantity),unitPrice=tierPrice(offer,quantity);
     return {item,offer,quantity,unitPrice,total:quantity*unitPrice,currency:String(offer.currency||'').toUpperCase()};
   }).filter(Boolean);
 }
@@ -181,7 +182,7 @@ function offerImages(o){
   return `<div class="guest-offer-images"><div class="guest-offer-image"><img alt="" data-media="${esc(src)}" /></div></div>`;
 }
 function offerCard(o){
-  return `<article class="guest-offer-card" data-guest-offer="${esc(o.id)}">${offerImages(o)}<div class="guest-offer-body"><div class="public-offer-origin">${esc(countryLabel(o.country))}</div><h3>${esc(title(o))}</h3><p>${esc(description(o)||'—')}</p><div class="guest-facts"><span><b>${esc(t('price'))}</b>${money(o.unitPrice,o.currency)}</span><span><b>${esc(t('moq'))}</b>${esc(o.moq||'—')}</span></div></div></article>`;
+  return `<article class="guest-offer-card" data-guest-offer="${esc(o.id)}">${offerImages(o)}<div class="guest-offer-body"><div class="public-offer-origin">${esc(countryLabel(o.country))}</div><h3>${esc(title(o))}</h3><p>${esc(description(o)||'—')}</p>${productExtras(o)}<div class="guest-facts"><span><b>${esc(t('price'))}</b>${money(o.unitPrice,o.currency)}</span><span><b>${esc(t('moq'))}</b>${esc(o.moq||'—')}</span></div></div></article>`;
 }
 function renderOffers(){
   renderCategories();renderSubcategories();renderCountries();
@@ -200,6 +201,8 @@ async function load(){
   loadTask=(async()=>{
     try{
       state=await api('/api/v1/state');
+      let storefront=document.getElementById('guest-storefront');if(!storefront){storefront=document.createElement('div');storefront.id='guest-storefront';$('guestOffersSection').before(storefront);}storefront.innerHTML=renderStorefront(state);
+      bindStorefront(storefront,state,{product:openOffer,page:(title,html)=>{$('modalTitle').textContent=title;$('modalBody').innerHTML=html;$('modal').classList.remove('hidden');},category:id=>{category=id;renderOffers();},catalog:()=>$('guestOffersSection').scrollIntoView({behavior:'smooth'})});
       const valid=new Set(publishedOffers().map(o=>o.id));cartItems=cartItems.filter(x=>valid.has(x.offerId));saveCart();
       offersPage=1;renderOffers();
     }catch(error){console.error(error);$('guestOffers').innerHTML=`<div class="guest-empty">${esc(t('error'))}</div>`;}
@@ -220,18 +223,18 @@ function openOffer(id){
   $('modalBody').innerHTML=`${o.images?.length?`<div class="guest-modal-images" data-viewer-gallery>${o.images.map(src=>`<img alt="" data-guest-modal-media="${esc(src)}" data-image-viewer />`).join('')}</div>`:''}
     <div class="quote-price">${money(o.unitPrice,o.currency)}</div>
     <div class="facts"><span>MOQ ${esc(o.moq||'—')}</span>${o.stock!==undefined?`<span>${esc(t('stock'))}: ${esc(o.stock||'—')}</span>`:''}<span>${esc(t('production'))}: ${esc(o.leadTime||'—')} ${esc(t('days'))}</span><span>${esc(t('supplyCountry'))}: ${esc(countryLabel(o.country))}</span></div>
-    <p class="guest-modal-description">${esc(description(o)||'—')}</p>
+    <p class="guest-modal-description">${esc(description(o)||'—')}</p>${productExtras(o)}
     <form id="guestProductCartForm" class="public-interest-form" data-offer-id="${esc(o.id)}">
       <div class="public-interest-head"><div><strong>${esc(t('quantity'))}</strong><small>MOQ: ${esc(o.moq||'—')}</small></div></div>
       <label><span>${esc(t('quantity'))}</span><input id="guestProductQuantity" name="quantity" type="number" min="${esc(moq)}" step="1" value="${esc(initialQty)}"${maxAttr} required></label>
-      <div class="public-interest-total"><span>${esc(t('productTotal'))}</span><strong id="guestProductTotal">${money(initialQty*Number(o.unitPrice||0),o.currency)}</strong></div>
+      <div class="public-interest-total"><span>${esc(t('productTotal'))}</span><strong id="guestProductTotal">${money(initialQty*tierPrice(o,initialQty),o.currency)}</strong></div>
       <p class="form-message" id="guestProductMessage"></p>
       <button class="primary-btn full" type="submit">${esc(existing?t('updateCart'):t('addCart'))}</button>
     </form>`;
   $('modal').classList.remove('hidden');
   hydrateImages($('modalBody'),'data-guest-modal-media');
   const input=$('guestProductQuantity'),total=$('guestProductTotal');
-  input?.addEventListener('input',()=>{const q=Number(input.value);total.textContent=money((Number.isFinite(q)?q:0)*Number(o.unitPrice||0),o.currency);});
+  input?.addEventListener('input',()=>{const q=Number(input.value);total.textContent=money((Number.isFinite(q)?q:0)*tierPrice(o,q),o.currency);});
   $('guestProductCartForm')?.addEventListener('submit',e=>{
     e.preventDefault();
     try{addToCart(o,Number(e.currentTarget.quantity.value));closeModal();showGuestToast(t('added'));}

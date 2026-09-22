@@ -8,6 +8,8 @@ import {listNotifications,markNotificationsRead} from './modules/notifications.m
 import {registerPushDevice,unregisterPushDevice} from './modules/push.mjs';
 import {publicAppConfig} from './modules/app-config.mjs';
 import {submitPaymentReceipt,reviewPaymentReceipt} from './modules/payments.mjs';
+import {manageOrder} from './modules/order-management.mjs';
+import {saveStudio} from './modules/studio.mjs';
 import {createCartOrder} from './modules/cart-orders.mjs';
 
 const NATIVE_ORIGINS=new Set(['capacitor://localhost','http://localhost','https://localhost']);
@@ -69,6 +71,8 @@ export default async function handler(req,res){
         else if(path==='/api/moderation')result=await moderate(user,body);
         else if(path==='/api/accounts/update')result=await updateAccount(user,body);
         else if(path==='/api/profile/currency')result=await updateOwnCurrency(user,body);
+        else if(path==='/api/order-management')result=await manageOrder(user,body);
+        else if(path==='/api/studio')result=await saveStudio(user,body);
         else if(path==='/api/settings')result=await saveSettings(user,body);
         else if(path==='/api/team')result=await team(user,body);
         else if(path==='/api/uploads')result=await upload(user,body);

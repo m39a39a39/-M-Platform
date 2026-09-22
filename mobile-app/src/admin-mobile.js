@@ -222,7 +222,7 @@ function setRoot(view,html){
 }
 function schedule(){clearTimeout(timer);timer=setTimeout(render,120);}
 function badge(s){return`<span class="status-pill status-${esc(s||'')}">${esc(status(s))}</span>`;}
-function page(title,sub=''){return`<div class="page-head admin-page-head"><div><h1>${esc(title)}</h1>${sub?`<p>${esc(sub)}</p>`:''}</div></div>`;}
+function page(title,sub=''){return`<a class="secondary-btn" href="/studio.html">${esc(tr('لوحة المتجر والطلبات الجديدة','Store and new orders studio'))}</a><div class="page-head admin-page-head"><div><h1>${esc(title)}</h1>${sub?`<p>${esc(sub)}</p>`:''}</div></div>`;}
 function empty(){return`<div class="empty-state"><span>◇</span><p>${esc(tr('لا توجد بيانات حاليًا.','No data available.'))}</p></div>`;}
 function search(placeholder){return`<label class="admin-mobile-search"><span>⌕</span><input type="search" inputmode="search" enterkeyhint="search" data-admin-search value="${esc(searchText())}" placeholder="${esc(placeholder)}" aria-label="${esc(placeholder)}"></label>`;}
 function gallery(images=[],select=false){

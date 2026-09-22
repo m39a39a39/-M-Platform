@@ -1,16 +1,17 @@
 import {randomUUID} from 'node:crypto';
 import {one,rpc,assert} from '../lib/supabase.mjs';
 import {active,open} from './records.mjs';
-import {issueCartProforma} from './invoices.mjs';
+import {checkoutDetails} from './order-management.mjs';
+import {priceForQuantity} from './studio.mjs';
 
 const MAX_CART_ITEMS=10;
 const SUPPORTED_CURRENCIES=new Set(['USD','SAR','AED','CNY','EUR']);
 
 const trackingStart=now=>({
-  trackingStatus:'received',
+  trackingStatus:'supplier_confirmation',
   trackingNote:'',
   trackingUpdatedAt:now,
-  trackingHistory:[{at:now,status:'received',note:''}]
+  trackingHistory:[{at:now,status:'supplier_confirmation',note:''}]
 });
 
 export async function createCartOrder(user,body={}){
@@ -18,6 +19,7 @@ export async function createCartOrder(user,body={}){
   const items=Array.isArray(body.items)?body.items:[];
   assert(items.length>0&&items.length<=MAX_CART_ITEMS,400,'يمكن إضافة من 1 إلى 10 منتجات في الطلب الواحد / A cart order can contain 1 to 10 products');
 
+  const delivery=checkoutDetails(body.delivery);
   const seen=new Set(),validated=[];
   for(const raw of items){
     const offerId=String(raw?.offerId||'').trim(),quantity=Number(raw?.quantity);
@@ -29,13 +31,13 @@ export async function createCartOrder(user,body={}){
     assert(offer&&open(offer)&&offer.data.status==='published',409,'أحد المنتجات لم يعد متاحًا / A product is no longer available');
     const supplier=await one('profiles',offer.owner_id);
     assert(active(supplier)&&supplier.role==='supplier',409,'أحد الموردين غير متاح حاليًا / A supplier is currently unavailable');
-    const d=offer.data||{},moq=Number(d.moq),stock=Number(d.stock),unitPrice=Number(d.unitPrice),currency=String(d.currency||'').toUpperCase();
+    const d=offer.data||{},moq=Number(d.moq),stock=Number(d.stock),unitPrice=priceForQuantity(d,quantity),currency=String(d.currency||'').toUpperCase();
     assert(Number.isFinite(unitPrice)&&unitPrice>0&&Number.isFinite(moq)&&quantity>=moq,400,'تحقق من الكمية والحد الأدنى للطلب / Check quantity and MOQ');
     if(Number.isFinite(stock)&&stock>0)assert(quantity<=stock,400,'الكمية المطلوبة أكبر من المخزون المتاح / Requested quantity exceeds available stock');
     assert(SUPPORTED_CURRENCIES.has(currency),400,'عملة المنتج غير مدعومة / Unsupported product currency');
     assert(!d.validUntil||String(d.validUntil)>=new Date().toISOString().slice(0,10),409,'انتهت صلاحية أحد المنتجات / A product offer has expired');
 
-    validated.push({offer,quantity,unitPrice,currency,moq,total:quantity*unitPrice});
+    validated.push({offer,quantity,unitPrice,currency,moq,total:Math.round(quantity*unitPrice*100)/100});
   }
 
   const currencies=[...new Set(validated.map(x=>x.currency))];
@@ -65,6 +67,7 @@ export async function createCartOrder(user,body={}){
   const firstImages=lines.flatMap(x=>x.snapshot.images||[]).slice(0,5);
   const orderData={
     orderType:'cart',
+    orderFlowVersion:2,orderStage:0,delivery,orderHistory:[{at:now,stage:0}],
     product:'Product order',
     specs:'Multi-product ready-order cart',
     translation:{
@@ -87,13 +90,13 @@ export async function createCartOrder(user,body={}){
       total:line.total,
       ...line.snapshot
     })),
-    status:'review',
+    status:'sent',
     createdAt:now,
     updatedAt:now,
     ...trackingStart(now)
   };
 
-  orderData.proformaInvoice=await issueCartProforma(user,orderData,orderId,now);
+
 
   const changes=[{
     table:'requests',id:orderId,version:0,ownerId:user.id,data:orderData,action:'cart_order_create'
@@ -108,6 +111,7 @@ export async function createCartOrder(user,body={}){
       createdAt:now,
       updatedAt:now,
       cartOrderId:orderId,
+      orderFlowVersion:2,orderStage:0,
       cartLine:index+1,
       quantity:line.quantity,
       unitPrice:line.unitPrice,

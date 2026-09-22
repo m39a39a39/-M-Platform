@@ -4,8 +4,8 @@ export const tables={requests:'requests',quotes:'quotes',publicOffers:'public_of
 export const active=p=>p&&!p.blocked_at&&!p.deleted_at;
 export const open=r=>r&&!r.data.deletedAt&&!r.data.suspendedAt;
 export function unpack(row,kind){return {...row.data,id:row.id,displayNo:row.display_no,version:row.version,createdAt:row.created_at,...(kind==='requests'||kind==='interests'?{customerId:row.owner_id}:{supplierId:row.owner_id}),...(row.request_id?{requestId:row.request_id}:{}),...(row.offer_id?{offerId:row.offer_id}:{})};}
-export function ownRecord(row,kind){const item=unpack(row,kind);delete item.supplierIds;delete item.moderationHistory;delete item.reviewedAt;return item;}
-function publicSettings(data={}){const safe={...data};delete safe.bankAccounts;return safe;}
+export function ownRecord(row,kind){const item=unpack(row,kind);delete item.supplierIds;delete item.moderationHistory;delete item.reviewedAt;delete item.internalNotes;delete item.orderAudit;return item;}
+function publicSettings(data={}){const safe={...data};delete safe.bankAccounts;delete safe.studioDraft;return safe;}
 export function supplierInterest(row){
   const d=row.data||{},snapshot=d.offerSnapshot||{};
   const safeSnapshot={
@@ -18,7 +18,7 @@ export function supplierInterest(row){
 export function anonymous(row,kind,user){
   const d=row.data;
   const result={id:row.id,displayNo:row.display_no,version:row.version,createdAt:row.created_at,status:d.status,translation:d.translation||{},images:d.images||[],country:d.country||''};
-  const fields=kind==='requests'?['quantity','neededDate']:['unitPrice','currency','moq','leadTime','sampleCost','stock','validUntil','categoryId'];
+  const fields=kind==='requests'?['quantity','neededDate']:['unitPrice','currency','moq','leadTime','sampleCost','stock','validUntil','categoryId','shortDescription','productNotes','options','technicalSpecs','tiers'];
   for(const key of fields)if(d[key]!==undefined)result[key]=d[key];
   if(kind==='requests'){result.supplierIds=[user.id];result.quoteSelected=!!d.selectedQuoteId;result.paymentConfirmed=d.paymentStatus==='confirmed';}
   if(kind==='quotes')result.publishedAt=d.publishedAt||d.updatedAt||d.reviewedAt||row.created_at;
@@ -59,11 +59,11 @@ export async function snapshot(user){
       readRequests?rows('requests'):[],
       readOffers?rows('quotes'):[],
       readOffers?rows('public_offers'):[],
-      readOffers?rows('interests'):[],
+      (readOffers||readRequests)?rows('interests'):[],
       readAccounts?rows('profiles'):[]
     ]);
     accounts=readAccounts?accounts.map(p=>can(user,'accounts.read')||can(user,'accounts.manage')&&p.role!=='admin'||p.id===user.id||p.role==='admin'&&can(user,'team')?profile(p):{id:p.id,role:p.role,version:p.version,name:`#${p.id.slice(0,8)}`,blockedAt:p.blocked_at,deletedAt:p.deleted_at}):[profile(user)];
-    return {user:profile(user),accounts,requests:requests.map(r=>unpack(r,'requests')),quotes:quotes.map(r=>unpack(r,'quotes')),publicOffers:publicOffers.map(r=>unpack(r,'publicOffers')),interests:interests.map(r=>unpack(r,'interests')),settings:{...settings.data,_version:settings.version}};
+    return {user:profile(user),accounts,requests:requests.map(r=>unpack(r,'requests')),quotes:quotes.map(r=>unpack(r,'quotes')),publicOffers:publicOffers.map(r=>unpack(r,'publicOffers')),interests:interests.map(r=>unpack(r,'interests')),settings:{...(can(user,'settings')?settings.data:Object.fromEntries(Object.entries(settings.data).filter(([k])=>k!=='studioDraft'))),_version:settings.version}};
   }
 
   if(user?.role==='client'){
@@ -108,7 +108,7 @@ export async function snapshot(user){
     return !selected||replacementOpen||quotes.some(q=>q.id===selected&&q.owner_id===user.id);
   });
   quotes=quotes.filter(q=>q.owner_id===user?.id||ownerActive(q.owner_id)&&open(requests.find(r=>r.id===q.request_id)));
-  publicOffers=publicOffers.filter(o=>o.owner_id===user?.id||ownerActive(o.owner_id));
+  publicOffers=publicOffers.filter(o=>o.owner_id===user?.id||ownerActive(o.owner_id)&&open(o));
   const projectedRequests=requests.map(r=>{
     if(r.owner_id===user?.id)return ownRecord(r,'requests');
     let item=anonymous(r,'requests',user);
@@ -124,6 +124,6 @@ export async function snapshot(user){
     requests:projectedRequests,
     quotes:quotes.map(r=>r.owner_id===user?.id?ownRecord(r,'quotes'):anonymous(r,'quotes',user)),
     publicOffers:publicOffers.map(r=>r.owner_id===user?.id?ownRecord(r,'publicOffers'):anonymous(r,'publicOffers',user)),
-    interests:user?.role==='supplier'?interests.map(supplierInterest):interests.map(r=>r.owner_id===user?.id?unpack(r,'interests'):{id:r.id,offerId:r.offer_id,status:r.data.status,createdAt:r.created_at})};
+    interests:user?.role==='supplier'?interests.map(supplierInterest):interests.map(r=>r.owner_id===user?.id?ownRecord(r,'interests'):{id:r.id,offerId:r.offer_id,status:r.data.status,createdAt:r.created_at})};
 }
 export async function assertOpenRequest(id){const r=await one('requests',id);assert(open(r)&&active(await one('profiles',r?.owner_id)),409,'الطلب غير متاح / Request unavailable');return r;}
