@@ -1,6 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {db,one,config,assert} from '../lib/supabase.mjs';
 import {snapshot} from './records.mjs';
+import {storeImages} from './studio.mjs';
 import {can} from './auth.mjs';
 
 const inIds=ids=>ids.map(x=>`"${String(x).replaceAll('"','')}"`).join(',');
@@ -49,7 +50,7 @@ export async function media(user,id,res){
   }
   if(!permitted){
     const s=await snapshot(user);
-    permitted=s.settings.logo===src||['requests','quotes','publicOffers'].some(k=>s[k].some(r=>r.images?.includes(src)))||
+    permitted=s.settings.logo===src||storeImages(s.settings.storefront).includes(src)||(user?.role==='admin'&&storeImages(s.settings.studioDraft).includes(src))||['requests','quotes','publicOffers'].some(k=>s[k].some(r=>r.images?.includes(src)))||
       (user?.role==='admin'&&[...(s.requests||[]),...(s.interests||[])].some(r=>r.paymentReceipt?.src===src));
   }
   assert(permitted,404);

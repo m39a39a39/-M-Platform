@@ -205,6 +205,7 @@ export async function mutate(user,body){
   let data=structuredClone(original?.data||{}),ownerId=original?.owner_id||user.id;
   let linkedSupplierRequest=null,linkedCartRequest=null,cartReplacementCommit=null;
   const changes=Object.keys(patch),isAdmin=user.role==='admin';
+  if(original?.data?.orderFlowVersion===2&&isAdmin&&['requests','interests'].includes(collection))assert(false,409,'استخدم إدارة الطلبات الجديدة لهذا الطلب');
   if(!original){
     assert(collection==='requests'?user.role==='client':collection==='interests'?user.role==='client':user.role==='supplier');
     const allowed=collection==='interests'?['offerId','quantity','status','repeatedFromInterestId']: [...contentFields[collection],...(collection==='quotes'?['requestId']:[]),...(collection==='requests'?['repeatedFromRequestId']:[]),'status'];

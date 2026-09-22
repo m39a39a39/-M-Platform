@@ -1,3 +1,5 @@
+import {Capacitor} from '@capacitor/core';
+import {renderStorefront,bindStorefront,productExtras,orderTimeline,stageLabel,tierPrice} from './storefront.js';
 import { session } from './session.js';
 import { languageReady, getLanguage, onLanguageChange, toggleLanguage } from './language.js';
 import { showView } from './views.js';
@@ -258,7 +260,7 @@ function cartRows(){
   return cartItems.map(item=>{
     const offer=offers.find(o=>o.id===item.offerId&&o.status==='published');
     if(!offer)return null;
-    const quantity=Number(item.quantity),unitPrice=Number(offer.unitPrice),total=quantity*unitPrice;
+    const quantity=Number(item.quantity),unitPrice=tierPrice(offer,quantity),total=Math.round(quantity*unitPrice*100)/100;
     return {item,offer,quantity,unitPrice,total,currency:String(offer.currency||'').toUpperCase()};
   }).filter(Boolean);
 }
@@ -607,7 +609,7 @@ function clientOrderCard(order){
   return `<article class="client-order-card" ${action}>
     <div class="client-order-thumb">${image?`<img alt="" data-media="${esc(image)}">`:'<div>M</div>'}</div>
     <div class="client-order-main">
-      <div class="client-order-head"><div><small>#${esc(ref(order.refItem))} · ${esc(typeLabel)}</small><h3>${esc(order.title)}</h3></div>${cardBadge(order.status)}</div>
+      <div class="client-order-head"><div><small>#${esc(ref(order.refItem))} · ${esc(typeLabel)}</small><h3>${esc(order.title)}</h3></div>${order.item?.orderFlowVersion===2&&!order.item.cancelledAt?`<span class="status-pill">${esc(stageLabel(order.item.orderStage))}</span>`:cardBadge(order.status)}</div>
       <div class="client-order-meta"><span>${esc(countLabel)}: ${esc(order.quantity||'—')}</span>${total?`<span>${esc(tr('الإجمالي','Total'))}: ${total}</span>`:''}<span>${esc(tr('آخر تحديث','Last update'))}: ${esc(date(order.updatedAt))}</span></div>
     </div><span class="chevron">›</span>
   </article>`;
@@ -649,9 +651,10 @@ function renderHome(){
     if(readyCategory!=='all'&&!categories().some(cat=>cat.id===readyCategory))readyCategory='all';
     const products=productResultsHtml();
     $('screen').innerHTML=
-      `<section class="special-request-card client-new-request"><div class="special-request-copy"><div class="special-request-heading"><span class="special-request-icon">＋</span><h2>${esc(tr('أرسل طلب جديد','Send a new request'))}</h2></div><p>${esc(tr('إذا لم تجد المنتج المناسب، أرسل مواصفاتك وسنطلب عروضًا لك.','If you cannot find the right product, send your specifications and we will source quotes for you.'))}</p></div><button class="primary-btn" data-action="new-request">+ ${esc(tr('أرسل طلب جديد','Send new request'))}</button></section>`+
+      `<div id="customer-storefront">${renderStorefront(platformState,Capacitor.isNativePlatform()?'app':'web')}</div>`+`<section class="special-request-card client-new-request"><div class="special-request-copy"><div class="special-request-heading"><span class="special-request-icon">＋</span><h2>${esc(tr('أرسل طلب جديد','Send a new request'))}</h2></div><p>${esc(tr('إذا لم تجد المنتج المناسب، أرسل مواصفاتك وسنطلب عروضًا لك.','If you cannot find the right product, send your specifications and we will source quotes for you.'))}</p></div><button class="primary-btn" data-action="new-request">+ ${esc(tr('أرسل طلب جديد','Send new request'))}</button></section>`+
       `<section class="ready-products-section"><div class="section-title ready-products-title"><div><h2>${esc(tr('المنتجات','Products'))}</h2><p>${esc(tr('ابحث واختر الكمية، ثم اجمع المنتجات في طلب واحد.','Search, choose quantities, and combine products into one order.'))}</p></div></div>${productSearchBar()}<div id="readyProductFilters">${productFiltersHtml()}</div><div id="readyProductsGrid" class="public-offers-grid">${products.grid}</div><div id="readyProductsPagination">${products.pagination}</div></section>`+
       companyFooterCard();
+    bindStorefront($('customer-storefront'),platformState,{product:openPublicOffer,page:(title,html)=>openModal(title,'',html),category:id=>{readyCategory=id;renderHome();},catalog:()=>document.querySelector('.ready-products-section')?.scrollIntoView({behavior:'smooth'})});
   }else if(role==='supplier'){
     const quotes=platformState.quotes||[],invites=(platformState.requests||[]).filter(r=>!supplierRequestAnswered(r,quotes));
     const pub=platformState.publicOffers||[],orders=supplierOrders(),pendingOrders=orders.filter(o=>o.status==='pending_confirmation'),activeOrders=orders.filter(o=>!['ready_for_inspection','cannot_fulfill'].includes(o.status)),publishedPublic=pub.filter(o=>o.status==='published').length,recentOrders=orders.slice(0,3);
@@ -809,15 +812,15 @@ function openPublicOffer(offerId){
   const requestForm=currentUser.role==='client'?`<form id="publicInterestForm" class="public-interest-form" data-offer-id="${esc(o.id)}">
     <div class="public-interest-head"><div><strong>${esc(tr('حدد الكمية المطلوبة','Choose requested quantity'))}</strong><small>${esc(tr('الحد الأدنى للطلب','Minimum order'))}: ${esc(o.moq||'—')}</small></div></div>
     <label><span>${esc(tr('الكمية','Quantity'))}</span><input id="publicInterestQuantity" name="quantity" type="number" min="${esc(moq)}" step="1" value="${esc(initialQty)}"${maxAttr} required></label>
-    <div class="public-interest-total"><span>${esc(tr('إجمالي هذا المنتج','This product total'))}</span><strong id="publicInterestTotal">${money(initialQty*Number(o.unitPrice||0),o.currency)}</strong></div>
+    <div class="public-interest-total"><span>${esc(tr('إجمالي هذا المنتج','This product total'))}</span><strong id="publicInterestTotal">${money(initialQty*tierPrice(o,initialQty),o.currency)}</strong></div>
     ${Number.isFinite(stock)&&stock>0?`<small>${esc(tr('المخزون المتاح','Available stock'))}: ${esc(stock)}</small>`:''}
     <p class="form-message" id="publicInterestMessage"></p>
     <button class="primary-btn full" type="submit">${esc(cartItem?tr('تحديث الكمية في السلة','Update quantity in cart'):tr('إضافة إلى السلة','Add to cart'))}</button>
   </form>`:'';
-  openModal(titleOf(o),`#${ref(o)}`,`${gallery(o.images)}<div class="quote-price">${money(o.unitPrice,o.currency)}</div><div class="facts"><span>MOQ ${esc(o.moq||'—')}</span><span>${esc(t('stock'))}: ${esc(o.stock||'—')}</span><span>${esc(t('leadTime'))}: ${esc(o.leadTime||'—')}</span><span>${esc(tr('بلد التوريد','Supply country'))}: ${esc(supplyCountryLabel(o.country))}</span><span>${esc(t('validUntil'))}: ${esc(o.validUntil||'—')}</span></div><p class="long-copy">${esc(descriptionOf(o)||'—')}</p>${requestForm}`);
+  openModal(titleOf(o),`#${ref(o)}`,`${gallery(o.images)}<div class="quote-price">${money(o.unitPrice,o.currency)}</div><div class="facts"><span>MOQ ${esc(o.moq||'—')}</span><span>${esc(t('stock'))}: ${esc(o.stock||'—')}</span><span>${esc(t('leadTime'))}: ${esc(o.leadTime||'—')}</span><span>${esc(tr('بلد التوريد','Supply country'))}: ${esc(supplyCountryLabel(o.country))}</span><span>${esc(t('validUntil'))}: ${esc(o.validUntil||'—')}</span></div><p class="long-copy">${esc(descriptionOf(o)||'—')}</p>${productExtras(o)}${requestForm}`);
   if(currentUser.role==='client'){
     const form=$('publicInterestForm'),input=$('publicInterestQuantity'),total=$('publicInterestTotal');
-    input?.addEventListener('input',()=>{const q=Number(input.value);total.textContent=money((Number.isFinite(q)?q:0)*Number(o.unitPrice||0),o.currency);});
+    input?.addEventListener('input',()=>{const q=Number(input.value);total.textContent=money((Number.isFinite(q)?q:0)*tierPrice(o,q),o.currency);});
     form?.addEventListener('submit',submitPublicInterest);
   }
 }
@@ -859,10 +862,11 @@ function openCart(){
     </div>
     <section class="cart-summary"><div><span>${esc(tr('عدد المنتجات','Products'))}</span><strong>${rows.length}</strong></div><div class="cart-grand-total"><span>${esc(tr('الإجمالي الكلي','Grand total'))}</span><strong>${money(total,currency)}</strong></div></section>
     <p class="form-message" id="cartMessage"></p>
-    <div class="cart-actions"><button type="button" class="secondary-btn" data-cart-clear>${esc(tr('إفراغ السلة','Clear cart'))}</button><button class="primary-btn" type="submit">${esc(tr('إرسال الطلب','Submit order'))}</button></div>
+    <div class="cart-actions"><button type="button" class="secondary-btn" data-cart-clear>${esc(tr('إفراغ السلة','Clear cart'))}</button><button class="primary-btn" type="submit">${esc(tr('متابعة الطلب','Review order'))}</button><button type="button" id="cartContinueShopping" class="secondary-btn">${esc(tr('إضافة منتجات أخرى','Continue shopping'))}</button></div>
   </form>`;
   openModal(tr('سلة الطلب','Order cart'),tr(`${rows.length} منتجات · ${currency}`,`${rows.length} products · ${currency}`),html);
-  $('cartCheckoutForm')?.addEventListener('submit',submitCartOrder);
+  $('cartCheckoutForm')?.addEventListener('submit',e=>{e.preventDefault();reviewCart();});
+  $('cartContinueShopping')?.addEventListener('click',closeModal);
   $('modalBody').querySelectorAll('[data-cart-qty]').forEach(input=>input.addEventListener('change',()=>{
     if(!setCartQuantity(input.dataset.cartQty,Number(input.value))){showToast(tr('تحقق من الكمية والحد الأدنى والمخزون.','Check quantity, MOQ, and stock.'));openCart();return;}
     openCart();
@@ -872,26 +876,13 @@ function openCart(){
   }));
   $('modalBody').querySelector('[data-cart-clear]')?.addEventListener('click',()=>{cartItems=[];saveCart();openCart();});
 }
-async function createCartOrderRequest(items){
-  try{
-    return await request('/api/v1/cart-orders',{method:'POST',auth:true,body:{items}});
-  }catch(error){
-    if(Number(error?.status)!==404)throw error;
-    const token=session.accessToken;
-    if(!token)throw error;
-    const response=await fetch('https://retpewhbjpdgbfekynjt.supabase.co/functions/v1/cart-orders-dev',{
-      method:'POST',
-      headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json','X-M-Client':'native'},
-      body:JSON.stringify({items})
-    });
-    let data={};
-    try{data=await response.json();}catch{}
-    if(!response.ok){
-      const fallback=new Error(data?.error||tr('تعذر إنشاء الطلب.','Could not create order.'));
-      fallback.status=response.status;throw fallback;
-    }
-    return data;
-  }
+async function createCartOrderRequest(items,delivery){
+  return request('/api/v1/cart-orders',{method:'POST',auth:true,body:{items,delivery}});
+}
+function reviewCart(){
+  const rows=cartRows();if(!rows.length)return openCart();const total=rows.reduce((n,r)=>n+r.total,0);
+  openModal(tr('مراجعة وإرسال الطلب','Review and submit order'),' ',`<form id="orderReviewForm" class="checkout-review"><ul>${rows.map(r=>`<li>${esc(titleOf(r.offer))} — ${r.quantity} × ${money(r.unitPrice,r.currency)} = ${money(r.total,r.currency)}</li>`).join('')}</ul><h3>${money(total,rows[0].currency)}</h3><p>${esc(tr('الأسعار مبدئية. يتم اعتماد الإجمالي بعد التحقق من توفر المنتجات، ثم نطلب الدفع.','Prices are preliminary. Payment is requested only after availability and the final total are confirmed.'))}</p>${[['name',tr('اسم العميل','Customer name'),currentUser.name||''],['phone',tr('رقم التواصل','Phone'),currentUser.phone||''],['country',tr('دولة التسليم','Delivery country'),currentUser.country||''],['address',tr('عنوان التسليم','Delivery address'),'']].map(([k,label,v])=>`<label>${esc(label)}<input name="${k}" value="${esc(v)}" required maxlength="${k==='address'?1000:100}"></label>`).join('')}<label>${esc(tr('ملاحظات الطلب','Order notes'))}<textarea name="notes" maxlength="2000"></textarea></label><p id="cartMessage" class="form-message" role="alert"></p><button type="submit" class="primary-btn full">${esc(tr('إرسال الطلب للتحقق من التوفر','Submit order for availability check'))}</button><button type="button" id="backToCart" class="secondary-btn full">${esc(tr('العودة إلى السلة','Back to cart'))}</button></form>`);
+  $('orderReviewForm').addEventListener('submit',submitCartOrder);$('backToCart').addEventListener('click',openCart);
 }
 async function submitCartOrder(e){
   e.preventDefault();if(busy)return;busy=true;
@@ -900,7 +891,8 @@ async function submitCartOrder(e){
     const rows=cartRows();if(!rows.length)throw new Error(tr('السلة فارغة.','Cart is empty.'));
     button.disabled=true;if(message)message.textContent=tr('جارٍ إنشاء الطلب...','Creating order...');
     const items=rows.map(row=>({offerId:row.offer.id,quantity:row.quantity}));
-    const result=await createCartOrderRequest(items);
+    const fd=new FormData(e.currentTarget),delivery=Object.fromEntries(['name','phone','country','address','notes'].map(k=>[k,String(fd.get(k)||'').trim()]));
+    const result=await createCartOrderRequest(items,delivery);
     cartItems=[];saveCart();await loadData({render:false});closeModal();activeScreen='requests';renderScreen();
     showToast(tr(`تم إنشاء الطلب #${result.displayNo||''} بنجاح.`,`Order #${result.displayNo||''} created successfully.`));
   }catch(error){if(message)message.textContent=error.message||tr('تعذر إنشاء الطلب.','Could not create order.');if(button)button.disabled=false;}
@@ -912,11 +904,11 @@ function openCartOrder(orderId){
   const children=(platformState.interests||[]).filter(i=>i.cartOrderId===r.id),snapshots=Array.isArray(r.cartItems)?r.cartItems:[];
   const lines=snapshots.map(line=>{
     const child=children.find(i=>i.id===line.interestId),status=child?readyTrackingStatus(child):'received',image=(line.images||[])[0];
-    return `<article class="cart-order-line"><div class="cart-order-line-image">${image?`<img alt="" data-media="${esc(image)}">`:'<div>M</div>'}</div><div><strong>${esc(snapshotTitle(line))}</strong><small>${esc(tr('الكمية','Quantity'))}: ${esc(line.quantity||'—')} · ${frozenOrderMoney(r,line.unitPrice,line.currency)}</small><b>${frozenOrderMoney(r,line.total,line.currency)}</b><span class="status-pill status-${esc(status)}">${esc(trackingLabel(status))}</span></div></article>`;
+    return `<article class="cart-order-line"><div class="cart-order-line-image">${image?`<img alt="" data-media="${esc(image)}">`:'<div>M</div>'}</div><div><strong>${esc(snapshotTitle(line))}</strong><small>${esc(tr('الكمية','Quantity'))}: ${esc(line.quantity||'—')} · ${frozenOrderMoney(r,line.unitPrice,line.currency)}</small><b>${frozenOrderMoney(r,line.total,line.currency)}</b><span class="status-pill status-${esc(status)}">${esc(r.orderFlowVersion===2&&!r.cancelledAt?stageLabel(r.orderStage):trackingLabel(status))}</span></div></article>`;
   }).join('');
-  const summary=`<section class="client-order-summary cart-order-summary"><div class="client-order-summary-title"><small>#${esc(ref(r))} · ${esc(tr('طلب منتجات','Product order'))}</small><strong>${esc(tr(`${r.cartItemCount||snapshots.length} منتجات`,`${r.cartItemCount||snapshots.length} products`))}</strong></div><div class="client-order-summary-facts"><span>${esc(tr('الإجمالي','Total'))}: ${frozenOrderMoney(r,r.cartTotal,r.currency)}</span><span>${esc(tr('الحالة','Status'))}: ${esc(trackingLabel(requestTrackingStatus(r)))}</span></div></section>`;
+  const summary=`<section class="client-order-summary cart-order-summary"><div class="client-order-summary-title"><small>#${esc(ref(r))} · ${esc(tr('طلب منتجات','Product order'))}</small><strong>${esc(tr(`${r.cartItemCount||snapshots.length} منتجات`,`${r.cartItemCount||snapshots.length} products`))}</strong></div><div class="client-order-summary-facts"><span>${esc(tr('الإجمالي','Total'))}: ${frozenOrderMoney(r,r.cartTotal,r.currency)}</span><span>${esc(tr('الحالة','Status'))}: ${esc(r.orderFlowVersion===2&&!r.cancelledAt?stageLabel(r.orderStage):trackingLabel(requestTrackingStatus(r)))}</span></div></section>`;
   const replacementPanel=clientCartReplacementPanel(r);
-  openModal(tr('تفاصيل طلب المنتجات','Product order details'),`#${ref(r)}`,`${summary}${replacementPanel}<section class="cart-order-items"><h3>${esc(tr('المنتجات','Products'))}</h3>${lines||empty()}</section>${paymentPanel(r,'request')}${invoicePanel(r,'request')}${trackingTimeline(r,{flow:READY_TRACKING_FLOW,statusResolver:requestTrackingStatus})}`);
+  openModal(tr('تفاصيل طلب المنتجات','Product order details'),`#${ref(r)}`,`${summary}${replacementPanel}<section class="cart-order-items"><h3>${esc(tr('المنتجات','Products'))}</h3>${lines||empty()}</section>${paymentPanel(r,'request')}${invoicePanel(r,'request')}${r.orderFlowVersion===2?orderTimeline(r):trackingTimeline(r,{flow:READY_TRACKING_FLOW,statusResolver:requestTrackingStatus})}`);
 }
 function openSupplierRequest(requestId){
   const r=(platformState.requests||[]).find(x=>x.id===requestId);if(!r)return;

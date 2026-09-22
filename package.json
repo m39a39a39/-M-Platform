@@ -9,7 +9,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "dev": "node --env-file-if-exists=.env backend/local.mjs",
-    "test": "node --test tests/backend.test.mjs",
+    "test": "node --test tests/*.test.mjs",
     "check": "node scripts/check.mjs"
   }
 }
