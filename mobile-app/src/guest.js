@@ -1,4 +1,4 @@
-import {renderStorefront,bindStorefront,productExtras,tierPrice} from './storefront.js';
+import {renderStorefront,bindStorefront,productExtras,tierPrice,homeConfig,storeProductCard} from './storefront.js';
 import { languageReady, getLanguage, onLanguageChange, toggleLanguage } from './language.js';
 import { showView } from './views.js';
 import { categoryRows, subcategoryRows, supplyCountryRows, taxonomyLabel } from './catalog-taxonomy.js';
@@ -94,6 +94,7 @@ function saveCart(){
 }
 function updateCartBadge(){
   const count=cartItems.length,badge=$('guestCartCount');
+  document.querySelectorAll('#guest-storefront [data-store-cart-count]').forEach(el=>el.textContent=String(count));
   if(badge){badge.textContent=count>99?'99+':String(count);badge.classList.toggle('hidden',!count);}
 }
 function cartRows(){
@@ -181,9 +182,7 @@ function offerImages(o){
   if(!src)return '<div class="guest-offer-images"><div class="guest-offer-image guest-offer-placeholder">M</div></div>';
   return `<div class="guest-offer-images"><div class="guest-offer-image"><img alt="" data-media="${esc(src)}" /></div></div>`;
 }
-function offerCard(o){
-  return `<article class="guest-offer-card" data-guest-offer="${esc(o.id)}">${offerImages(o)}<div class="guest-offer-body"><div class="public-offer-origin">${esc(countryLabel(o.country))}</div><h3>${esc(title(o))}</h3><p>${esc(description(o)||'—')}</p>${productExtras(o)}<div class="guest-facts"><span><b>${esc(t('price'))}</b>${money(o.unitPrice,o.currency)}</span><span><b>${esc(t('moq'))}</b>${esc(o.moq||'—')}</span></div></div></article>`;
-}
+function offerCard(o){return storeProductCard(o,homeConfig(state?.settings),money);}
 function renderOffers(){
   renderCategories();renderSubcategories();renderCountries();
   const offers=filteredOffers(),totalPages=Math.max(1,Math.ceil(offers.length/PAGE_SIZE));
@@ -193,7 +192,17 @@ function renderOffers(){
   $('guestPageInfo').textContent=`${t('page')} ${offersPage} / ${totalPages}`;
   $('guestPrevPage').disabled=offersPage<=1;$('guestNextPage').disabled=offersPage>=totalPages;
   $('guestOffersPagination').classList.toggle('hidden',offers.length<=PAGE_SIZE);
-  hydrateImages();
+  mountGuestStore();hydrateImages();
+}
+function mountGuestStore(){
+  if(!state)return;const h=homeConfig(state.settings),catalog=$('guestOffersSection');
+  let host=$('guest-storefront');if(!host){host=document.createElement('div');host.id='guest-storefront';document.querySelector('.guest-main').prepend(host);}
+  // Preserve the existing catalog node and its search/pagination listeners.
+  catalog.remove();host.innerHTML=renderStorefront(state,'web',{catalog:'',cartCount:cartItems.length});host.querySelector('[data-store-catalog-slot]').replaceChildren(catalog);
+  document.querySelector('.guest-header').hidden=true;document.querySelector('.guest-hero').hidden=true;$('guestCompanyCard').hidden=true;
+  catalog.hidden=!h.showCatalog;document.querySelector('.guest-product-search').hidden=!h.showSearch;
+  $('guestCategoryFilters').hidden=!h.showCategories;$('guestSubcategoryFilters').hidden=!h.showCategories;$('guestSupplyCountryFilters').hidden=!h.showCountries;
+  bindStorefront(host,state,{product:openOffer,add:id=>{try{const p=publishedOffers().find(p=>p.id===id);addToCart(p,(Number(p.moq)||1)+(cartItems.find(x=>x.offerId===id)?.quantity||0));showGuestToast(lang==='ar'?'تمت الإضافة إلى السلة':'Added to cart');}catch(e){showGuestToast(e.message);}},page:(title,html)=>{$('modalTitle').textContent=title;$('modalKicker').textContent='';$('modalBody').innerHTML=html;$('modal').classList.remove('hidden');},category:id=>{category=id;renderOffers();},catalog:()=>$('guestOffersSection').scrollIntoView({behavior:'smooth'}),action:action=>{if(action==='cart')openGuestCart();if(action==='login')showLogin();if(action==='request')requireCustomerAuth('new-request');if(action==='register-client')$('guestCustomerRegister').click();if(action==='register-supplier')$('guestSupplierRegister').click();if(action==='language')$('guestLangBtn').click();if(action==='home')host.scrollIntoView({behavior:'smooth'});}});
 }
 async function load(){
   if(loadTask)return loadTask;
@@ -201,8 +210,6 @@ async function load(){
   loadTask=(async()=>{
     try{
       state=await api('/api/v1/state');
-      let storefront=document.getElementById('guest-storefront');if(!storefront){storefront=document.createElement('div');storefront.id='guest-storefront';$('guestOffersSection').before(storefront);}storefront.innerHTML=renderStorefront(state);
-      bindStorefront(storefront,state,{product:openOffer,page:(title,html)=>{$('modalTitle').textContent=title;$('modalBody').innerHTML=html;$('modal').classList.remove('hidden');},category:id=>{category=id;renderOffers();},catalog:()=>$('guestOffersSection').scrollIntoView({behavior:'smooth'})});
       const valid=new Set(publishedOffers().map(o=>o.id));cartItems=cartItems.filter(x=>valid.has(x.offerId));saveCart();
       offersPage=1;renderOffers();
     }catch(error){console.error(error);$('guestOffers').innerHTML=`<div class="guest-empty">${esc(t('error'))}</div>`;}
@@ -222,8 +229,8 @@ function openOffer(id){
   $('modalKicker').textContent=`#${ref(o)}`;$('modalTitle').textContent=title(o);
   $('modalBody').innerHTML=`${o.images?.length?`<div class="guest-modal-images" data-viewer-gallery>${o.images.map(src=>`<img alt="" data-guest-modal-media="${esc(src)}" data-image-viewer />`).join('')}</div>`:''}
     <div class="quote-price">${money(o.unitPrice,o.currency)}</div>
-    <div class="facts"><span>MOQ ${esc(o.moq||'—')}</span>${o.stock!==undefined?`<span>${esc(t('stock'))}: ${esc(o.stock||'—')}</span>`:''}<span>${esc(t('production'))}: ${esc(o.leadTime||'—')} ${esc(t('days'))}</span><span>${esc(t('supplyCountry'))}: ${esc(countryLabel(o.country))}</span></div>
-    <p class="guest-modal-description">${esc(description(o)||'—')}</p>${productExtras(o)}
+    <div class="facts"><span>MOQ ${esc(o.moq||'—')}</span>${homeConfig(state.settings).showStock&&o.stock!==undefined?`<span>${esc(t('stock'))}: ${esc(o.stock||'—')}</span>`:''}<span>${esc(t('production'))}: ${esc(o.leadTime||'—')} ${esc(t('days'))}</span><span>${esc(t('supplyCountry'))}: ${esc(countryLabel(o.country))}</span></div>
+    <p class="guest-modal-description">${esc(description(o)||'—')}</p>${productExtras(o,homeConfig(state.settings))}
     <form id="guestProductCartForm" class="public-interest-form" data-offer-id="${esc(o.id)}">
       <div class="public-interest-head"><div><strong>${esc(t('quantity'))}</strong><small>MOQ: ${esc(o.moq||'—')}</small></div></div>
       <label><span>${esc(t('quantity'))}</span><input id="guestProductQuantity" name="quantity" type="number" min="${esc(moq)}" step="1" value="${esc(initialQty)}"${maxAttr} required></label>
@@ -231,6 +238,8 @@ function openOffer(id){
       <p class="form-message" id="guestProductMessage"></p>
       <button class="primary-btn full" type="submit">${esc(existing?t('updateCart'):t('addCart'))}</button>
     </form>`;
+  if(!homeConfig(state.settings).showCart)$('guestProductCartForm').hidden=true;
+  if(!homeConfig(state.settings).showPrices)$('modalBody').querySelector('.quote-price')?.remove();
   $('modal').classList.remove('hidden');
   hydrateImages($('modalBody'),'data-guest-modal-media');
   const input=$('guestProductQuantity'),total=$('guestProductTotal');

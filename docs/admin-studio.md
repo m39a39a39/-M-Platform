@@ -17,3 +17,13 @@
 Run `npm test`, `npm run check`, and `npm --prefix mobile-app test`; build with `npm run build`. The database already provides the service-only `commit_changes` and `allocate_invoice_number` RPCs, so this change requires no schema migration or new public database grants. Browser tests use isolated in-memory fixtures; production business records must not be altered for smoke testing.
 
 Web changes deploy through the existing GitHub/Vercel integration. Installed mobile applications receive UI changes in their next native build; the native generation workflow remains in place.
+
+## Unified storefront and operations
+
+`/studio.html` is now the admin entry point; `/admin.html` rewrites to it and admin login redirects there. The Operations area embeds the existing account, supplier quote, invoice, product moderation, taxonomy, currency, and banking tools using the same session and API permissions. Version 2 order links route to the nine-stage editor.
+
+Homepage content uses `shared/home-config.mjs`, persisted as `settings.storefront.home`. The editor exposes Arabic/English copy, contact details and fourteen visibility switches. Changes stay in the draft until reviewed and published; switches govern presentation, while checkout always displays payable totals. Guest/client storefronts and admin previews share the renderer. Preview carts are local simulations and cannot submit orders.
+
+Legacy operation saves refresh a clean editor. Unsaved design drafts remain intact and retain their original settings version, so concurrent settings changes cause a conflict instead of silently overwriting data. Reload before republishing a conflicted draft.
+
+Validation: 27 backend tests, 15 mobile/session tests, Vite production build, and local browser checks for guest quick-add/cart totals, embedded account details, homepage text/visibility publication, and the preview cart. No production test orders were created.
