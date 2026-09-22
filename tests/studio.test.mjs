@@ -65,3 +65,10 @@ test('studio requires permission and settings version; draft is private and publ
  const publicState=await snapshot(null);assert.equal(publicState.settings.studioDraft,undefined);assert.equal(publicState.settings.bankAccounts,undefined);
  await saveStudio(admin,{action:'publish',version:2,store,products:[]});assert.equal(db.state.settings[0].data.studioDraft,undefined);assert.equal(db.state.settings[0].data.storefront.theme.name,'M');
 }));
+
+test('homepage visibility and bilingual content survive normalization with strict validation',()=>{
+ const base={theme:{name:'M',tagline:'',announcement:'',logo:'',color:'#123456',round:8},sections:[],banners:[],pages:[],links:[],collections:[]};
+ const home={showCart:true,showRequest:false,showSearch:false,welcomeTitle:'عنوان خاص',welcomeTitleEn:'Custom title',email:'store@example.test',phone:'+966 12345678',privateKey:'discard'};
+ const output=normalizeStore({...base,home});assert.equal(output.home.showRequest,false);assert.equal(output.home.showSearch,false);assert.equal(output.home.welcomeTitle,'عنوان خاص');assert.equal(output.home.welcomeTitleEn,'Custom title');assert.equal(output.home.privateKey,undefined);assert.equal(output.home.showCatalog,true);
+ for(const bad of [{showCart:'false'},{phone:'javascript:alert(1)'},{email:'<bad>'},{welcomeTitle:'x'.repeat(2001)}])assert.throws(()=>normalizeStore({...base,home:bad}));
+});

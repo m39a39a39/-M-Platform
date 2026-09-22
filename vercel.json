@@ -44,7 +44,7 @@
     },
     {
       "source": "/admin.html",
-      "destination": "/index.html"
+      "destination": "/studio.html"
     },
     {
       "source": "/offers.html",

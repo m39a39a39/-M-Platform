@@ -1,3 +1,4 @@
+import {normalizeHome} from '../../shared/home-config.mjs';
 import {one,db,rpc,assert} from '../lib/supabase.mjs';
 import {can} from './auth.mjs';
 import {active} from './records.mjs';
@@ -16,6 +17,7 @@ export function normalizeStore(input){
   out.pages=list(input.pages,30).map(p=>({id:id(p.id),title:text(p.title,120),content:text(p.content,10000),active:!!p.active}));
   out.links=list(input.links,30).map(l=>({id:id(l.id),title:text(l.title,100),target:id(l.target)}));
   out.collections=list(input.collections,100).map(c=>({id:id(c.id),name:text(c.name,100),description:text(c.description||'',1000),active:!!c.active,productIds:list(c.productIds,500).map(id)}));
+  try{out.home=normalizeHome(input.home||{});}catch(error){assert(false,400,error.message);}
   return out;
 }
 export const storeImages=s=>[s?.theme?.logo,...(s?.sections||[]).map(x=>x.image),...(s?.banners||[]).map(x=>x.image)].filter(Boolean);

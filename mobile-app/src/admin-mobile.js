@@ -7,8 +7,8 @@ let requestFilter='all',offerTab='pending',timer=null;
 let selectedProducts=new Set();
 const searches=new Map(),mediaCache=new Map(),mediaTasks=new Map();
 const MEDIA_CONCURRENCY=6;
-let reloadWorkspace=async()=>{};
-export function configureAdmin({reload}) { reloadWorkspace=reload; }
+let reloadWorkspace=async()=>{},adapter=null;
+export function configureAdmin({reload,bridge=null}) { reloadWorkspace=reload; adapter=bridge; }
 export function resetAdmin() {
   clearTimeout(timer); state=null; revision++;
   requestFilter='all'; offerTab='pending'; searches.clear(); selectedProducts.clear();
@@ -196,8 +196,8 @@ function trackingOptions(rows,item,current,canPay,{rfq=false}={}){
 
 async function mutate(collection,item,patch,redactionConfirmed=false){await api('/api/v1/mutations',{method:'POST',body:{collection,id:item.id,version:Number(item.version||0),patch,redactionConfirmed}});await reload();}
 
-function toast(msg){if(!isAdmin())return;const e=document.getElementById('toast');if(!e)return;e.textContent=msg;e.classList.remove('hidden');clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.add('hidden'),2400);}
-function activeView(){return document.querySelector('#bottomNav button.active')?.dataset.screen||'home';}
+function toast(msg){if(adapter)return adapter.toast(msg);if(!isAdmin())return;const e=document.getElementById('toast');if(!e)return;e.textContent=msg;e.classList.remove('hidden');clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.add('hidden'),2400);}
+function activeView(){if(adapter)return adapter.view();return document.querySelector('#bottomNav button.active')?.dataset.screen||'home';}
 function rootKey(view){return [view,lang(),revision,searchText(),requestFilter,offerTab].join('|');}
 function screen(){return document.getElementById('screen');}
 function setRoot(view,html){
@@ -222,7 +222,7 @@ function setRoot(view,html){
 }
 function schedule(){clearTimeout(timer);timer=setTimeout(render,120);}
 function badge(s){return`<span class="status-pill status-${esc(s||'')}">${esc(status(s))}</span>`;}
-function page(title,sub=''){return`<a class="secondary-btn" href="/studio.html">${esc(tr('لوحة المتجر والطلبات الجديدة','Store and new orders studio'))}</a><div class="page-head admin-page-head"><div><h1>${esc(title)}</h1>${sub?`<p>${esc(sub)}</p>`:''}</div></div>`;}
+function page(title,sub=''){return`${adapter?'':'<a class="secondary-btn" href="/studio.html">إدارة المتجر</a>'}<div class="page-head admin-page-head"><div><h1>${esc(title)}</h1>${sub?`<p>${esc(sub)}</p>`:''}</div></div>`;}
 function empty(){return`<div class="empty-state"><span>◇</span><p>${esc(tr('لا توجد بيانات حاليًا.','No data available.'))}</p></div>`;}
 function search(placeholder){return`<label class="admin-mobile-search"><span>⌕</span><input type="search" inputmode="search" enterkeyhint="search" data-admin-search value="${esc(searchText())}" placeholder="${esc(placeholder)}" aria-label="${esc(placeholder)}"></label>`;}
 function gallery(images=[],select=false){
@@ -469,8 +469,8 @@ function accounts(){const u=me(),rows=(state?.accounts||[]).filter(a=>['client',
 export function renderAdminScreen(v=activeView()){if(!isAdmin()||v==='notifications')return false;if(v==='home')home();else if(v==='requests')requests();else if(v==='offers')offers();else if(v==='account')accounts();return true;}
 function render(){if(!document.getElementById('appView')?.classList.contains('hidden'))renderAdminScreen();}
 
-function modal(titleText,kicker,html){const m=document.getElementById('modal');if(!m)return;document.getElementById('modalTitle').textContent=titleText;document.getElementById('modalKicker').textContent=kicker||'';document.getElementById('modalBody').innerHTML=html;m.classList.remove('hidden');hydrate(document.getElementById('modalBody'));}
-function closeModal(){document.getElementById('modal')?.classList.add('hidden');}
+function modal(titleText,kicker,html){if(adapter){adapter.modal(titleText,kicker,html);hydrate(document.getElementById('modalBody'));return;}const m=document.getElementById('modal');if(!m)return;document.getElementById('modalTitle').textContent=titleText;document.getElementById('modalKicker').textContent=kicker||'';document.getElementById('modalBody').innerHTML=html;m.classList.remove('hidden');hydrate(document.getElementById('modalBody'));}
+function closeModal(){if(adapter)return adapter.close();document.getElementById('modal')?.classList.add('hidden');}
 function ownerBox(x){const o=ownerOf(x);if(!o)return'';return`<section class="admin-owner-box"><strong>${esc(tr('صاحب المحتوى','Content owner'))}</strong><p>${esc(o.company||o.name||'#'+String(o.id).slice(0,8))}</p>${can('accounts.read')?`<small>${esc(o.name||'')} ${o.phone?`· ${esc(o.phone)}`:''} ${o.email?`· ${esc(o.email)}`:''} ${o.country?`· ${esc(o.country)}`:''}</small>`:''}</section>`;}
 function translations(x,editable){const t=x.translation||{},d=editable?'':'disabled';return`<div class="form-stack admin-translation"><label><span>${esc(tr('العنوان بالعربية','Arabic title'))}</span><input ${d} data-admin-tr="titleAr" value="${esc(t.titleAr||'')}"></label><label><span>${esc(tr('العنوان بالإنجليزية','English title'))}</span><input ${d} data-admin-tr="titleEn" value="${esc(t.titleEn||'')}"></label><label><span>${esc(tr('الوصف بالعربية','Arabic description'))}</span><textarea ${d} data-admin-tr="descriptionAr">${esc(t.descriptionAr||'')}</textarea></label><label><span>${esc(tr('الوصف بالإنجليزية','English description'))}</span><textarea ${d} data-admin-tr="descriptionEn">${esc(t.descriptionEn||'')}</textarea></label></div>`;}
 function supplierPicker(x){const s=(state?.accounts||[]).filter(a=>a.role==='supplier'&&!a.deletedAt&&!a.blockedAt);return`<section class="admin-supplier-picker"><h3>${esc(tr('الموردون المدعوون','Invited suppliers'))}</h3><div class="admin-check-list">${s.map(a=>`<label><input type="checkbox" data-admin-supplier value="${esc(a.id)}" ${(x.supplierIds||[]).includes(a.id)?'checked':''}><span>${esc(a.company||a.name||'#'+String(a.id).slice(0,8))}</span></label>`).join('')}</div></section>`;}
@@ -590,7 +590,7 @@ function interestTrackingEditor(x){
   const approve=current==='received'?'<button class="primary-btn admin-send-to-supplier" type="button" data-admin-send-interest-supplier="'+esc(x.id)+'">'+esc(tr('اعتماد وإرسال للمورد','Approve & send to supplier'))+'</button>':'';
   return '<section class="admin-tracking-editor"><h3>'+esc(tr('متابعة طلب المنتج الجاهز','Ready-product order tracking'))+'</h3>'+approve+'<label><span>'+esc(tr('الحالة الحالية','Current status'))+'</span><select data-admin-interest-tracking-status>'+trackingOptions(READY_TRACKING,x,current,canPay)+'</select></label>'+paymentMessageField(x,'interest',current)+'<label><span>'+esc(tr('ملاحظة للعميل (اختياري)','Customer note (optional)'))+'</span><textarea data-admin-interest-tracking-note maxlength="1000">'+esc(x.trackingNote||'')+'</textarea></label><small>'+(x.trackingUpdatedAt?esc(tr('آخر تحديث','Last update'))+': '+esc(date(x.trackingUpdatedAt)):'')+'</small><button class="primary-btn" type="button" data-admin-save-interest-tracking="'+esc(x.id)+'">'+esc(tr('حفظ حالة الطلب','Save order status'))+'</button></section>'+paymentReviewPanel(x,'interest');
 }
-function adminInvoicePanel(item,entityType){
+export function adminInvoicePanel(item,entityType){
   const proforma=item?.proformaInvoice,finalInvoice=item?.finalInvoice;
   if(!proforma&&!finalInvoice)return '';
   const button=(invoice,kind,label)=>invoice?.number?'<button type="button" class="invoice-document-btn '+(kind==='final'?'paid':'')+'" data-admin-invoice-pdf="'+kind+'" data-admin-invoice-type="'+esc(entityType)+'" data-admin-invoice-id="'+esc(item.id)+'"><span>'+esc(label)+'</span><strong>'+esc(invoice.number)+'</strong>'+(kind==='final'?'<b>PAID</b>':'')+'</button>':'';
@@ -604,6 +604,7 @@ async function openAdminInvoicePdf(target){
 }
 function openInterest(id){
   const x=(state?.interests||[]).find(item=>item.id===id);if(!x)return;
+  if(x.orderFlowVersion===2&&adapter){const parent=state.requests.find(o=>o.cartItems?.some(l=>l.interestId===id));if(parent)return adapter.openOrder(parent.id);}
   const offer=(state?.publicOffers||[]).find(o=>o.id===x.offerId),customer=account(x.customerId);
   const pricing=interestPricing(x);
   const orderSummary=pricing?'<section class="admin-selected-quote-card"><div class="admin-selected-quote-head"><div><small>'+esc(tr('طلب العرض العام','Public-offer order'))+'</small><strong>#'+esc(ref(x))+'</strong></div><span class="status-pill status-published">'+esc(tr('الكمية محددة','Quantity selected'))+'</span></div><div class="admin-selected-quote-values"><div><span>'+esc(tr('سعر الوحدة','Unit price'))+'</span><strong>'+esc(formatMoney(pricing.unitPrice,pricing.currency))+'</strong></div><div><span>'+esc(tr('الكمية','Quantity'))+'</span><strong>'+esc(Number(pricing.quantity).toLocaleString())+'</strong></div><div class="total"><span>'+esc(tr('الإجمالي','Total'))+'</span><strong>'+esc(formatMoney(pricing.total,pricing.currency))+'</strong></div></div><small>'+esc(tr('تم تثبيت السعر والعملة وقت تقديم العميل للطلب.','Price and currency were captured when the customer placed the request.'))+'</small></section>':'';
@@ -718,8 +719,9 @@ function requestQuotesPanel(request){
   const pending=rows.filter(q=>q.status==='pending').length;
   return `<section class="section-block admin-request-quotes"><div class="section-title"><div><h3>${esc(tr('عروض الأسعار المستلمة','Received quotes'))} (${rows.length})</h3><p>${pending?esc(tr(`${pending} بانتظار المراجعة`,`${pending} pending review`)):esc(tr('تمت مراجعة جميع العروض','All quotes reviewed'))}</p></div></div><div class="list-stack">${rows.map(q=>row(q,'quote')).join('')}</div></section>`;
 }
-function openRecord(kind,id){
+export function openRecord(kind,id){
   const arr=kind==='request'?state?.requests:kind==='quote'?state?.quotes:state?.publicOffers,x=(arr||[]).find(v=>v.id===id);if(!x)return;
+  if(kind==='request'&&x.orderFlowVersion===2&&adapter)return adapter.openOrder(id);
   if(kind==='request'&&x.orderType==='cart'){
     const html=ownerBox(x)+cartOrderAdminPanel(x)+selectedQuoteCard(x)+supplierConfirmationCard(x,'request')+replacementSupplierPanel(x,'request')+((can('requests.edit')||can('publish'))?trackingEditor(x):'')+adminInvoicePanel(x,'request');
     modal('#'+ref(x)+' — '+tr('طلب منتجات','Product order'),status(requestTracking(x)),html);return;
@@ -768,10 +770,10 @@ function readForm(x){const translation={};document.querySelectorAll('[data-admin
 async function approve(kind,id){const arr=kind==='request'?state.requests:kind==='quote'?state.quotes:state.publicOffers,x=arr.find(v=>v.id===id);if(!x)return;const f=readForm(x);if(Object.values(f.translation).some(v=>!v)){toast(tr('أكمل العنوان والوصف بالعربية والإنجليزية.','Complete Arabic and English title and description.'));return;}if(!f.identity||!f.contact){toast(tr('أكمل فحص إزالة الهوية وبيانات التواصل.','Complete both privacy checks.'));return;}if(kind==='request'&&!f.suppliers.length){toast(tr('اختر موردًا واحدًا على الأقل.','Select at least one supplier.'));return;}const patch={translation:f.translation,reviewedAt:new Date().toISOString(),status:kind==='request'?'sent':'published'},editPerm=kind==='request'?'requests.edit':'offers.edit';if(can(editPerm))patch.images=f.images;if(kind==='request')patch.supplierIds=f.suppliers;if(kind==='public'){if(activeCategories().length&&!f.categoryId){toast(tr('اختر التصنيف أولًا.','Choose a category first.'));return;}patch.categoryId=f.categoryId;}try{await mutate(kind==='request'?'requests':kind==='quote'?'quotes':'publicOffers',x,patch,true);closeModal();schedule();toast(tr('تم الاعتماد بنجاح.','Approved successfully.'));}catch(e){toast(e.message);}}
 async function saveReview(kind,id){const arr=kind==='request'?state.requests:kind==='quote'?state.quotes:state.publicOffers,x=arr.find(v=>v.id===id);if(!x)return;const f=readForm(x);if(Object.values(f.translation).some(v=>!v)){toast(tr('أكمل الترجمة أولًا.','Complete the translation first.'));return;}const patch={translation:f.translation,reviewedAt:new Date().toISOString()},editPerm=kind==='request'?'requests.edit':'offers.edit';if(can(editPerm))patch.images=f.images;if(kind==='public')patch.categoryId=f.categoryId;try{await mutate(kind==='request'?'requests':kind==='quote'?'quotes':'publicOffers',x,patch);closeModal();schedule();toast(tr('تم حفظ المراجعة.','Review saved.'));}catch(e){toast(e.message);}}
 async function requestStatus(id,s){const x=(state?.requests||[]).find(v=>v.id===id);if(!x)return;try{await mutate('requests',x,{status:s});closeModal();schedule();toast(tr('تم تحديث الحالة.','Status updated.'));}catch(e){toast(e.message);}}
-function go(view,tab){if(view==='offers'&&tab)offerTab=tab;document.querySelector(`#bottomNav button[data-screen="${view}"]`)?.click();setTimeout(schedule,30);}
+function go(view,tab){if(view==='offers'&&tab)offerTab=tab;if(adapter){adapter.navigate(view);return;}document.querySelector(`#bottomNav button[data-screen="${view}"]`)?.click();setTimeout(schedule,30);}
 
 document.addEventListener('click',e=>{
-  if(!isAdmin()||document.getElementById('appView').classList.contains('hidden'))return;
+  if(!isAdmin()||(adapter?!adapter.active():document.getElementById('appView')?.classList.contains('hidden')))return;
   const g=e.target.closest('[data-admin-go]');if(g){go(g.dataset.adminGo,g.dataset.adminTabTarget);return;}
   const all=e.target.closest('[data-admin-request-all]');if(all){requestFilter='all';schedule();return;}
   const active=e.target.closest('[data-admin-request-active]');if(active){requestFilter='active';schedule();return;}
