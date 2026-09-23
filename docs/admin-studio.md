@@ -27,3 +27,13 @@ Homepage content uses `shared/home-config.mjs`, persisted as `settings.storefron
 Legacy operation saves refresh a clean editor. Unsaved design drafts remain intact and retain their original settings version, so concurrent settings changes cause a conflict instead of silently overwriting data. Reload before republishing a conflicted draft.
 
 Validation: 27 backend tests, 15 mobile/session tests, Vite production build, and local browser checks for guest quick-add/cart totals, embedded account details, homepage text/visibility publication, and the preview cart. No production test orders were created.
+
+## Administrator creation and page layout
+
+Administrators with `accounts.manage` can create client/supplier accounts. The backend uses server-only Auth Admin, creates the existing profile through the signup trigger, records the creator, and never returns a password/session or sends an automatic email. The account owner sets a password through the existing recovery flow. Existing email addresses cannot be silently taken over.
+
+Creating a customer order requires `requests.edit` and `accounts.read`. The same stock, MOQ, tier-price, currency and supplier checks apply as customer checkout. The order and all lines belong to the selected active client; the commit and order audit identify the administrator. All nine fulfillment stages, payment confirmation, invoices, notes and shipping edits remain available.
+
+Page layout uses validated section settings shared by the backend and storefront. Desktop/mobile visibility and column counts, colors, alignment, spacing, image display, heading sizes and grid/list/horizontal display are editable. Main welcome/catalog/request/footer sections are reorderable and hideable; new sections include benefits, steps, FAQ, CTA, image/caption, dividers and spacers. New sections are inserted before the footer. Published guest/client stores and the preview share the renderer.
+
+Validation includes 30 backend tests; local browser checks created an account and an administrative order, completed all nine stages and generated invoices, then published a FAQ section and verified it in the storefront. Production verification is read-only; no customer records are created for testing.

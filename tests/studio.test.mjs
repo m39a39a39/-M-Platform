@@ -72,3 +72,18 @@ test('homepage visibility and bilingual content survive normalization with stric
  const output=normalizeStore({...base,home});assert.equal(output.home.showRequest,false);assert.equal(output.home.showSearch,false);assert.equal(output.home.welcomeTitle,'عنوان خاص');assert.equal(output.home.welcomeTitleEn,'Custom title');assert.equal(output.home.privateKey,undefined);assert.equal(output.home.showCatalog,true);
  for(const bad of [{showCart:'false'},{phone:'javascript:alert(1)'},{email:'<bad>'},{welcomeTitle:'x'.repeat(2001)}])assert.throws(()=>normalizeStore({...base,home:bad}));
 });
+
+test('admin-created orders belong to the customer and preserve the administrator audit actor',()=>withDB(async db=>{
+ const body={customerId:client.id,items:[{offerId:'offer-1',quantity:2}],delivery:{name:'Client',phone:'123',country:'SA',address:'Address'}};
+ await assert.rejects(()=>createCartOrder({id:'limited',role:'admin',permissions:['requests.edit']},body),e=>e.status===403);
+ await assert.rejects(()=>createCartOrder(admin,{...body,customerId:'supplier-1'}),e=>e.status===400);
+ await createCartOrder(admin,body);const o=db.state.requests[0];assert.equal(o.owner_id,client.id);assert.equal(o.data.orderStage,0);assert.equal(o.data.orderAudit[0].actorId,admin.id);assert.equal(db.state.interests[0].owner_id,client.id);assert.equal(db.invoices,0);
+ db.state.profiles[0].blocked_at='now';await assert.rejects(()=>createCartOrder(admin,body),e=>e.status===400);
+}));
+
+test('layout settings persist and reject executable styles and invalid bounds',()=>{
+ const base={theme:{name:'M',tagline:'',announcement:'',logo:'',color:'#123456',round:8},sections:[],banners:[],pages:[],links:[],collections:[]};
+ const section={id:'faq',type:'faq',channel:'both',visible:true,title:'FAQ',items:'Question | Answer',columns:4,mobileColumns:2,padding:48,background:'#fefefe',mobileVisible:false};
+ const s=normalizeStore({...base,sections:[section]}).sections[0];assert.equal(s.type,'faq');assert.equal(s.columns,4);assert.equal(s.mobileVisible,false);assert.equal(s.items,section.items);
+ for(const invalid of [{background:'url(javascript:bad)'},{columns:100},{padding:-1},{layout:'<script>'},{items:'x'.repeat(12001)},{mobileVisible:'false'}])assert.throws(()=>normalizeStore({...base,sections:[{...section,...invalid}]}));
+});
