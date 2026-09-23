@@ -1,3 +1,4 @@
+import {can} from './auth.mjs';
 import {randomUUID} from 'node:crypto';
 import {one,rpc,assert} from '../lib/supabase.mjs';
 import {active,open} from './records.mjs';
@@ -15,7 +16,10 @@ const trackingStart=now=>({
 });
 
 export async function createCartOrder(user,body={}){
-  assert(user?.role==='client',403,'غير مصرح / Unauthorized');
+  const administrative=user?.role==='admin';
+  assert(user?.role==='client'||can(user,'requests.edit')&&can(user,'accounts.read'),403,'غير مصرح / Unauthorized');
+  const customer=administrative?await one('profiles',String(body.customerId||'')):user;
+  assert(customer?.role==='client'&&active(customer),400,'اختر حساب عميل فعالًا');
   const items=Array.isArray(body.items)?body.items:[];
   assert(items.length>0&&items.length<=MAX_CART_ITEMS,400,'يمكن إضافة من 1 إلى 10 منتجات في الطلب الواحد / A cart order can contain 1 to 10 products');
 
@@ -67,6 +71,7 @@ export async function createCartOrder(user,body={}){
   const firstImages=lines.flatMap(x=>x.snapshot.images||[]).slice(0,5);
   const orderData={
     orderType:'cart',
+    ...(administrative?{orderAudit:[{at:now,actorId:user.id,action:'admin_create',changes:[]}]}:{}),
     orderFlowVersion:2,orderStage:0,delivery,orderHistory:[{at:now,stage:0}],
     product:'Product order',
     specs:'Multi-product ready-order cart',
@@ -99,12 +104,12 @@ export async function createCartOrder(user,body={}){
 
 
   const changes=[{
-    table:'requests',id:orderId,version:0,ownerId:user.id,data:orderData,action:'cart_order_create'
+    table:'requests',id:orderId,version:0,ownerId:customer.id,data:orderData,action:'cart_order_create'
   },...lines.map((line,index)=>({
     table:'interests',
     id:line.interestId,
     version:0,
-    ownerId:user.id,
+    ownerId:customer.id,
     offerId:line.offerId,
     data:{
       status:'active',

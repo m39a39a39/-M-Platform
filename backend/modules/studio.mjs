@@ -1,3 +1,4 @@
+import {SECTION_TYPES,normalizeSectionLayout} from '../../shared/section-layout.mjs';
 import {normalizeHome} from '../../shared/home-config.mjs';
 import {one,db,rpc,assert} from '../lib/supabase.mjs';
 import {can} from './auth.mjs';
@@ -12,7 +13,9 @@ export function normalizeStore(input){
   assert(input&&typeof input==='object',400);const t=input.theme||{};
   assert(/^#[0-9a-f]{6}$/i.test(t.color)&&[0,8,16,24].includes(Number(t.round)),400,'تحقق من اللون والزوايا');
   const out={theme:{name:text(t.name,60),tagline:text(t.tagline,100),announcement:text(t.announcement,140),color:t.color,round:Number(t.round),logo:media(t.logo)},sections:[],banners:[],pages:[],links:[],collections:[]};
-  out.sections=list(input.sections,30).map(s=>{assert(['hero','categories','products','text','banners'].includes(s.type)&&['both','web','app'].includes(s.channel),400);return {id:id(s.id),type:s.type,channel:s.channel,visible:!!s.visible,title:text(s.title||'',200),subtitle:text(s.subtitle||'',5000),button:text(s.button||'',80),image:media(s.image),collectionId:s.collectionId?id(s.collectionId):'',limit:Math.min(24,Math.max(1,Number(s.limit)||6))};});
+  out.sections=list(input.sections,30).map(s=>{assert(SECTION_TYPES.includes(s.type)&&['both','web','app'].includes(s.channel),400);let layout;try{layout=normalizeSectionLayout(s);}catch(error){assert(false,400,error.message);}return {...layout,id:id(s.id),type:s.type,channel:s.channel,visible:!!s.visible,title:text(s.title||'',200),subtitle:text(s.subtitle||'',5000),button:text(s.button||'',80),image:media(s.image),collectionId:s.collectionId?id(s.collectionId):'',limit:Math.min(24,Math.max(1,Number(s.limit)||6))};});
+  for(const type of ['welcome','catalog','request','footer'])assert(out.sections.filter(s=>s.type===type).length<=1,400,'القسم الأساسي موجود؛ عدّل القسم القائم بدل تكراره');
+  assert(new Set(out.sections.map(s=>s.id)).size===out.sections.length,400,'معرفات الأقسام مكررة');
   out.banners=list(input.banners,30).map(b=>{assert(['both','web','app'].includes(b.channel),400);for(const k of ['start','end'])assert(!b[k]||/^\d{4}-\d{2}-\d{2}$/.test(b[k]),400);return {id:id(b.id),title:text(b.title,200),subtitle:text(b.subtitle||'',2000),image:media(b.image),active:!!b.active,channel:b.channel,start:b.start||'',end:b.end||''};});
   out.pages=list(input.pages,30).map(p=>({id:id(p.id),title:text(p.title,120),content:text(p.content,10000),active:!!p.active}));
   out.links=list(input.links,30).map(l=>({id:id(l.id),title:text(l.title,100),target:id(l.target)}));

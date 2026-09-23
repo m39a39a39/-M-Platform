@@ -1,3 +1,4 @@
+import {createAccount} from './modules/admin-create.mjs';
 import {config,HttpError,assert} from './lib/supabase.mjs';
 import {identify,authRoute,isNativeClient,updateOwnCurrency} from './modules/auth.mjs';
 import {snapshot} from './modules/records.mjs';
@@ -69,6 +70,7 @@ export default async function handler(req,res){
         if(path==='/api/mutations')result=await mutate(user,body);
         else if(path==='/api/bulk-public-offers')result=await bulkUpdatePublicOffers(user,body);
         else if(path==='/api/moderation')result=await moderate(user,body);
+        else if(path==='/api/accounts/create')result=await createAccount(user,body);
         else if(path==='/api/accounts/update')result=await updateAccount(user,body);
         else if(path==='/api/profile/currency')result=await updateOwnCurrency(user,body);
         else if(path==='/api/order-management')result=await manageOrder(user,body);
