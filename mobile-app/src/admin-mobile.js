@@ -277,8 +277,9 @@ function requestFilterControls(allRows){
   return `<div class="admin-request-filters"><button type="button" data-admin-request-all class="${requestFilter==='all'?'active':''}">${esc(tr('كل الطلبات','All orders'))} (${allRows.length})</button><button type="button" data-admin-request-active class="${requestFilter==='active'?'active':''}">${esc(tr('الطلبات النشطة','Active orders'))} (${active})</button><button type="button" data-admin-request-quotes class="${requestFilter==='quotes_pending'?'active':''}">${esc(tr('عروض تحتاج مراجعة','Quotes to review'))} (${pendingQuotes})</button><label class="admin-filter-select"><span>${esc(tr('تصفية حسب الحالة','Filter by status'))}</span><select data-admin-request-filter>${options}</select></label></div>`;
 }
 function requests(){
-  const custom=(state?.requests||[]).filter(x=>!x.deletedAt&&!x.suspendedAt&&matches(x,'request')).map(x=>({...x,__kind:'request'}));
-  const interests=(state?.interests||[]).filter(x=>!x.cartOrderId&&matches(x,'interest')).map(x=>({...x,__kind:'interest'}));
+  const scope=adapter?.requestScope?.()||'all';
+  const custom=(state?.requests||[]).filter(x=>!x.deletedAt&&!x.suspendedAt&&(scope==='all'||scope==='sourcing'&&x.orderType!=='cart'&&x.orderFlowVersion!==2||scope==='legacy'&&x.orderType==='cart'&&x.orderFlowVersion!==2)&&matches(x,'request')).map(x=>({...x,__kind:'request'}));
+  const interests=(state?.interests||[]).filter(x=>scope!=='sourcing'&&!x.cartOrderId&&x.orderFlowVersion!==2&&matches(x,'interest')).map(x=>({...x,__kind:'interest'}));
   const allRows=[...custom,...interests];
   let rows=[...allRows];rows.sort((a,b)=>(a.__kind==='request'&&a.status==='review'?0:1)-(b.__kind==='request'&&b.status==='review'?0:1)||String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
   if(requestFilter==='active')rows=rows.filter(x=>!['completed','cancelled'].includes(unifiedRequestTracking(x)));
@@ -512,7 +513,7 @@ async function adminFilesToSources(input,maxFiles){
   try{return await filesToCompressedSources(input,{maxFiles});}
   catch(error){
     if(error?.message==='too_many')throw new Error(tr('الحد الأقصى 5 صور إجمالًا.','Maximum 5 images total.'));
-    if(error?.message==='too_large')throw new Error(tr('الصورة الأصلية كبيرة جدًا. اختر صورة أقل من 25 MB.','The original image is too large. Choose an image under 25 MB.'));
+    if(error?.message==='too_large')throw new Error(tr('الصورة الأصلية كبيرة جدًا. اختر صورة أقل من 10 MB.','The original image is too large. Choose an image under 10 MB.'));
     if(error?.message==='unsupported'||error?.message==='decode_failed')throw new Error(tr('تعذر قراءة هذه الصورة. جرّب صورة أخرى.','This image could not be read. Try another image.'));
     throw new Error(tr('تعذر ضغط الصورة. جرّب صورة أخرى.','The image could not be compressed. Try another image.'));
   }
@@ -606,13 +607,18 @@ async function openAdminInvoicePdf(target){
   const invoice=kind==='final'?item.finalInvoice:item.proformaInvoice;if(!invoice)return;
   target.disabled=true;try{await downloadInvoicePdf(invoice,{orderNo:ref(item)});}catch{toast(tr('تعذر فتح ملف الفاتورة. حاول مجددًا.','Could not open the invoice PDF. Please try again.'));}finally{target.disabled=false;}
 }
+function assignmentButton(x,collection){
+ if(!adapter||!can(collection==='requests'?'requests.edit':'offers.edit')||x.cancelledAt||['completed','cancelled'].includes(x.status)||['completed','cancelled','delivered'].includes(x.trackingStatus))return '';
+ const current=account(x.assignedSupplierId||x.supplierIds?.[0]);
+ return `<section class="admin-supplier-picker"><h3>إسناد التنفيذ</h3><p>${esc(current?.company||current?.name||'لم يحدد مورد للتنفيذ')}</p><button type="button" class="secondary-btn" data-action="assign-supplier" data-collection="${collection}" data-id="${esc(x.id)}">إسناد إلى مورد</button></section>`;
+}
 function openInterest(id){
   const x=(state?.interests||[]).find(item=>item.id===id);if(!x)return;
   if(x.orderFlowVersion===2&&adapter){const parent=state.requests.find(o=>o.cartItems?.some(l=>l.interestId===id));if(parent)return adapter.openOrder(parent.id);}
   const offer=(state?.publicOffers||[]).find(o=>o.id===x.offerId),customer=account(x.customerId);
   const pricing=interestPricing(x);
   const orderSummary=pricing?'<section class="admin-selected-quote-card"><div class="admin-selected-quote-head"><div><small>'+esc(tr('طلب العرض العام','Public-offer order'))+'</small><strong>#'+esc(ref(x))+'</strong></div><span class="status-pill status-published">'+esc(tr('الكمية محددة','Quantity selected'))+'</span></div><div class="admin-selected-quote-values"><div><span>'+esc(tr('سعر الوحدة','Unit price'))+'</span><strong>'+esc(formatMoney(pricing.unitPrice,pricing.currency))+'</strong></div><div><span>'+esc(tr('الكمية','Quantity'))+'</span><strong>'+esc(Number(pricing.quantity).toLocaleString())+'</strong></div><div class="total"><span>'+esc(tr('الإجمالي','Total'))+'</span><strong>'+esc(formatMoney(pricing.total,pricing.currency))+'</strong></div></div><small>'+esc(tr('تم تثبيت السعر والعملة وقت تقديم العميل للطلب.','Price and currency were captured when the customer placed the request.'))+'</small></section>':'';
-  const html=(customer?'<section class="admin-owner-box"><strong>'+esc(tr('العميل','Customer'))+'</strong><p>'+esc(customer.company||customer.name||'—')+'</p>'+(can('accounts.read')?'<small>'+esc(customer.name||'')+(customer.phone?' · '+esc(customer.phone):'')+(customer.email?' · '+esc(customer.email):'')+'</small>':'')+'</section>':'')+orderSummary+supplierConfirmationCard(x,'interest')+replacementSupplierPanel(x,'interest')+interestTrackingEditor(x)+adminInvoicePanel(x,'interest')+(offer?'<section class="admin-source-box"><h3>'+esc(tr('المنتج','Product'))+'</h3><strong>'+esc(title(offer))+'</strong><p>'+esc(desc(offer)||'—')+'</p></section>'+gallery(offer.images||[]):'');
+  const html=(customer?'<section class="admin-owner-box"><strong>'+esc(tr('العميل','Customer'))+'</strong><p>'+esc(customer.company||customer.name||'—')+'</p>'+(can('accounts.read')?'<small>'+esc(customer.name||'')+(customer.phone?' · '+esc(customer.phone):'')+(customer.email?' · '+esc(customer.email):'')+'</small>':'')+'</section>':'')+orderSummary+assignmentButton(x,'interests')+supplierConfirmationCard(x,'interest')+replacementSupplierPanel(x,'interest')+interestTrackingEditor(x)+adminInvoicePanel(x,'interest')+(offer?'<section class="admin-source-box"><h3>'+esc(tr('المنتج','Product'))+'</h3><strong>'+esc(title(offer))+'</strong><p>'+esc(desc(offer)||'—')+'</p></section>'+gallery(offer.images||[]):'');
   modal(offer?title(offer):tr('طلب منتج جاهز','Ready-product request'),'#'+ref(offer),html);
 }
 async function saveInterestTracking(id){
@@ -727,12 +733,12 @@ export function openRecord(kind,id){
   const arr=kind==='request'?state?.requests:kind==='quote'?state?.quotes:state?.publicOffers,x=(arr||[]).find(v=>v.id===id);if(!x)return;
   if(kind==='request'&&x.orderFlowVersion===2&&adapter)return adapter.openOrder(id);
   if(kind==='request'&&x.orderType==='cart'){
-    const html=ownerBox(x)+cartOrderAdminPanel(x)+selectedQuoteCard(x)+supplierConfirmationCard(x,'request')+replacementSupplierPanel(x,'request')+((can('requests.edit')||can('publish'))?trackingEditor(x):'')+adminInvoicePanel(x,'request');
+    const html=ownerBox(x)+assignmentButton(x,'requests')+cartOrderAdminPanel(x)+selectedQuoteCard(x)+supplierConfirmationCard(x,'request')+replacementSupplierPanel(x,'request')+((can('requests.edit')||can('publish'))?trackingEditor(x):'')+adminInvoicePanel(x,'request');
     modal('#'+ref(x)+' — '+tr('طلب منتجات','Product order'),status(requestTracking(x)),html);return;
   }
   const pending=kind==='request'?x.status==='review':x.status==='pending',editPerm=kind==='request'?'requests.edit':'offers.edit',editImages=pending&&can(editPerm),editTr=pending&&can('translate'),approve=pending&&can('publish'),linked=kind==='quote'?(state?.requests||[]).find(r=>r.id===x.requestId):null;
   let html=ownerBox(x)+`<section class="admin-source-box"><h3>${esc(tr('المحتوى الأصلي','Original content'))}</h3><strong>${esc(x.product||linked?.product||title(x))}</strong><p>${esc(x.specs||x.notes||'—')}</p>${kind==='request'?`<div class="facts"><span>${esc(tr('الكمية','Quantity'))}: ${esc(x.quantity||'—')}</span><span>${esc(tr('الدولة','Country'))}: ${esc(x.country||'—')}</span><span>${esc(tr('تاريخ الاحتياج','Needed date'))}: ${esc(x.neededDate||'—')}</span></div>${x.repeatedFromRequestId?`<p class="payment-review-note"><b>${esc(tr('طلب مكرر من','Repeated from'))}:</b> #${esc(ref((state?.requests||[]).find(r=>r.id===x.repeatedFromRequestId)||{id:x.repeatedFromRequestId}))}</p>`:''}`:''}${linked?`<div class="facts"><span>${esc(tr('الطلب المرتبط','Linked request'))}: #${esc(ref(linked))}</span></div>`:''}</section>`;
-  if(kind==='request')html+=requestQuotesPanel(x);
+  if(kind==='request')html+=assignmentButton(x,'requests')+requestQuotesPanel(x);
   if(kind==='request'&&(can('requests.edit')||can('publish')))html+=selectedQuoteCard(x)+supplierConfirmationCard(x,'request')+replacementSupplierPanel(x,'request')+trackingEditor(x);
   if(kind==='request')html+=adminInvoicePanel(x,'request');
   if(kind==='public'&&can('offers.edit'))html+=publicOfferEditor(x);

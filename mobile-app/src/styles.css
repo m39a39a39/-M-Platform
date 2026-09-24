@@ -797,75 +797,6 @@ input:focus,textarea:focus,select:focus {
   animation: spin .8s linear infinite;
 }
 
-.guest-wrap {
-  min-height: 100%;
-  padding-bottom: 34px;
-  width: min(100%,720px);
-  margin: 0 auto;
-  padding: calc(var(--safe-top) + 12px) max(12px,var(--safe-right)) calc(var(--safe-bottom) + 24px) max(12px,var(--safe-left));
-}
-
-.guest-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-
-.guest-brand {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1 1 auto;
-}
-
-.guest-brand strong {
-  display: block;
-  font-size: 15px;
-}
-
-.guest-brand small {
-  display: block;
-  margin-top: 3px;
-  color: #6a7d89;
-  line-height: 1.45;
-  font-size: 12px;
-}
-
-.guest-main {
-  display: grid;
-  gap: 20px;
-}
-
-.guest-hero {
-  background: #fff;
-  border: 1px solid #dfe8ed;
-  border-radius: 20px;
-  padding: 18px;
-  box-shadow: 0 18px 48px rgba(11,34,54,.08);
-}
-
-.guest-hero h1 {
-  font-size: 26px;
-  line-height: 1.25;
-  margin: 16px 0 12px;
-}
-
-.guest-hero>p {
-  color: #6a7d89;
-  line-height: 1.8;
-  margin: 0;
-  font-size: 14px;
-}
-
-.guest-actions {
-  display: grid;
-  grid-template-columns: repeat(2,minmax(0,1fr));
-  gap: 10px;
-  margin-top: 22px;
-}
-
 .guest-register-row {
   display: flex;
   justify-content: center;
@@ -885,71 +816,10 @@ input:focus,textarea:focus,select:focus {
   scroll-margin-top: 18px;
 }
 
-.guest-section-title {
-  margin-bottom: 12px;
-}
-
-.guest-section-title small {
-  display: block;
-  color: #77909f;
-  font-weight: 700;
-  margin-bottom: 4px;
-}
-
-.guest-section-title h2 {
-  margin: 0;
-  font-size: 20px;
-}
-
 .guest-offers-grid {
   display: grid;
   grid-template-columns: repeat(2,minmax(0,1fr));
   gap: 10px;
-}
-
-.guest-offer-card {
-  overflow: hidden;
-  background: #fff;
-  border: 1px solid #dfe8ed;
-  border-radius: 23px;
-  box-shadow: 0 14px 36px rgba(11,34,54,.07);
-  cursor: pointer;
-}
-
-.guest-offer-placeholder {
-  display: grid;
-  place-items: center;
-  font-size: 2rem;
-  font-weight: 900;
-  color: var(--navy);
-}
-
-.guest-offer-body {
-  padding: 10px;
-}
-
-.guest-offer-body small {
-  color: #78909d;
-  font-weight: 800;
-}
-
-.guest-offer-body h3 {
-  margin: 0 0 5px;
-  font-size: 14px;
-  line-height: 1.45;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.guest-offer-body p {
-  margin: 0;
-  color: #6a7d89;
-  line-height: 1.45;
-  font-size: 12px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .guest-facts {
@@ -1043,8 +913,6 @@ input:focus,textarea:focus,select:focus {
 .guest-modal-login {
   width: 100%;
 }
-.guest-header-actions{display:flex;align-items:center;gap:6px;flex:0 0 auto}
-.guest-new-request{margin:4px 0 14px}
 .guest-auth-required{display:grid;gap:16px}
 .guest-auth-required p{margin:0;color:var(--muted);line-height:1.75}
 .guest-auth-required-actions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
@@ -1052,10 +920,6 @@ input:focus,textarea:focus,select:focus {
 .guest-product-search input,.guest-modal-images+*{min-width:0}
 @media(max-width:420px){
   .guest-auth-required-actions{grid-template-columns:minmax(0,1fr)}
-}
-
-html[dir="ltr"] .guest-header,html[dir="ltr"] .guest-hero,html[dir="ltr"] .guest-offer-body {
-  text-align: left;
 }
 
 .admin-page-head {
@@ -1330,7 +1194,7 @@ html {
   margin-top: 10px;
 }
 
-.media-placeholder,.admin-image-tile>span,.guest-offer-image {
+.media-placeholder,.admin-image-tile>span{
   position: relative;
   aspect-ratio: 1 / 1;
   overflow: hidden;
@@ -1338,24 +1202,13 @@ html {
   background: #edf2f4;
 }
 
-.media-placeholder img,.admin-image-tile>span img,.guest-offer-image img {
+.media-placeholder img,.admin-image-tile>span img{
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
-}
-
-.guest-offer-images {
-  display: block;
-  padding: 0;
-  margin: 0;
-}
-
-.guest-offer-image {
-  width: 100%;
-  border-radius: 0;
 }
 
 .special-request-card {
@@ -1642,7 +1495,6 @@ html {
   .brand-block { grid-template-columns: 48px minmax(0,1fr) auto; gap: 10px; }
   .brand-block .brand-mark { width: 48px; height: 48px; }
   .card { padding: 20px; }
-  .guest-actions { grid-template-columns: minmax(0,1fr); }
 }
 
 

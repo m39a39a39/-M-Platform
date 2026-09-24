@@ -7,6 +7,7 @@ import {can} from './auth.mjs';
 const inIds=ids=>ids.map(x=>`"${String(x).replaceAll('"','')}"`).join(',');
 async function publishedPublicImage(src){
   const offers=await db('public_offers',`data->images=cs.${encodeURIComponent(JSON.stringify([src]))}&data->>status=eq.published&data->>deletedAt=is.null&select=owner_id&limit=10`);
+  if(offers.some(o=>!o.owner_id))return true;
   const ownerIds=[...new Set(offers.map(o=>o.owner_id).filter(Boolean))];
   if(!ownerIds.length)return false;
   const owners=await db('profiles',`id=in.(${inIds(ownerIds)})&blocked_at=is.null&deleted_at=is.null&select=id&limit=10`);
@@ -51,6 +52,7 @@ export async function media(user,id,res){
   if(!permitted){
     const s=await snapshot(user);
     permitted=s.settings.logo===src||storeImages(s.settings.storefront).includes(src)||(user?.role==='admin'&&storeImages(s.settings.studioDraft).includes(src))||['requests','quotes','publicOffers'].some(k=>s[k].some(r=>r.images?.includes(src)))||
+      (user?.role==='admin'&&(s.supplySources||[]).some(r=>r.proposal?.images?.includes(src)))||
       (user?.role==='admin'&&[...(s.requests||[]),...(s.interests||[])].some(r=>r.paymentReceipt?.src===src));
   }
   assert(permitted,404);

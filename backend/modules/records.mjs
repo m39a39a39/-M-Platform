@@ -1,18 +1,20 @@
+import {upgradeSettings} from './storefront-upgrade.mjs';
 import {db,one,assert} from '../lib/supabase.mjs';
+import {ownSource} from './supply-sources.mjs';
 import {can,profile} from './auth.mjs';
 export const tables={requests:'requests',quotes:'quotes',publicOffers:'public_offers',interests:'interests'};
 export const active=p=>p&&!p.blocked_at&&!p.deleted_at;
 export const open=r=>r&&!r.data.deletedAt&&!r.data.suspendedAt;
 export function unpack(row,kind){return {...row.data,id:row.id,displayNo:row.display_no,version:row.version,createdAt:row.created_at,...(kind==='requests'||kind==='interests'?{customerId:row.owner_id}:{supplierId:row.owner_id}),...(row.request_id?{requestId:row.request_id}:{}),...(row.offer_id?{offerId:row.offer_id}:{})};}
-export function ownRecord(row,kind){const item=unpack(row,kind);delete item.supplierIds;delete item.moderationHistory;delete item.reviewedAt;delete item.internalNotes;delete item.orderAudit;return item;}
+export function ownRecord(row,kind){const item=unpack(row,kind);delete item.supplierIds;delete item.moderationHistory;delete item.reviewedAt;delete item.internalNotes;delete item.orderAudit;delete item.supplierAssignmentHistory;delete item.assignedSupplierId;delete item.createdByAdmin;delete item.supplyTerms;delete item.supplySourceId;return item;}
 function publicSettings(data={}){const safe={...data};delete safe.bankAccounts;delete safe.studioDraft;return safe;}
 export function supplierInterest(row){
-  const d=row.data||{},snapshot=d.offerSnapshot||{};
+  const d=row.data||{},snapshot=d.offerSnapshot||{},terms=d.supplyTerms||{};
   const safeSnapshot={
     sku:String(snapshot.sku||''),product:String(snapshot.product||''),translation:snapshot.translation||{},
     images:Array.isArray(snapshot.images)?snapshot.images:[],country:String(snapshot.country||''),categoryId:String(snapshot.categoryId||'')
   };
-  return {id:row.id,displayNo:row.display_no,offerId:row.offer_id,version:row.version,createdAt:row.created_at,status:d.status,trackingStatus:d.trackingStatus||'received',cartOrderId:d.cartOrderId||'',cartLine:d.cartLine||'',quantity:d.quantity||'',unitPrice:d.unitPrice||'',currency:d.currency||'',moq:d.moq||'',total:d.total||'',leadTime:d.replacementLeadTime||'',offerSnapshot:safeSnapshot,paymentConfirmed:d.paymentStatus==='confirmed',supplierOrderStatus:d.supplierOrderStatus||'pending_confirmation',supplierOrderNote:d.supplierOrderNote||'',supplierOrderUpdatedAt:d.supplierOrderUpdatedAt||'',assignedSupplierId:d.assignedSupplierId||'',supplierAssignmentHistory:Array.isArray(d.supplierAssignmentHistory)?d.supplierAssignmentHistory:[]};
+  return {id:row.id,displayNo:row.display_no,offerId:row.offer_id,version:row.version,createdAt:row.created_at,status:d.status,trackingStatus:d.trackingStatus||'received',cartOrderId:d.cartOrderId||'',cartLine:d.cartLine||'',quantity:d.quantity||'',unitPrice:terms.unitPrice??'',currency:terms.currency||'',moq:terms.moq??'',total:terms.unitPrice!==undefined?Number(d.quantity)*terms.unitPrice:'',leadTime:terms.leadTime??'',offerSnapshot:safeSnapshot,paymentConfirmed:d.paymentStatus==='confirmed',supplierOrderStatus:d.supplierOrderStatus||'pending_confirmation',supplierOrderNote:d.supplierOrderNote||'',supplierOrderUpdatedAt:d.supplierOrderUpdatedAt||'',assignedSupplierId:d.assignedSupplierId||''};
 }
 // Pure projection: never serialize raw source text or counterpart identity.
 export function anonymous(row,kind,user){
@@ -49,7 +51,9 @@ export async function rows(table,query=''){
 }
 const inIds=ids=>ids.map(x=>`"${x}"`).join(',');
 export async function snapshot(user){
-  let requests=[],quotes=[],publicOffers=[],interests=[],accounts=[],settings,selectedSupplierQuotes=[];
+  let requests=[],quotes=[],publicOffers=[],interests=[],accounts=[],settings,selectedSupplierQuotes=[],supplySources=[];
+  if(user?.role==='supplier')supplySources=(await rows('supply_sources',`owner_id=eq.${user.id}`)).map(ownSource);
+  else if(user?.role==='admin'&&(can(user,'offers.read')||can(user,'offers.edit')||can(user,'publish')||can(user,'requests.edit')))supplySources=(await rows('supply_sources')).map(r=>({...ownSource(r),supplierId:r.owner_id}));
   if(user?.role==='admin'){
     const readRequests=can(user,'requests.read')||can(user,'requests.edit')||can(user,'translate')||can(user,'publish')||can(user,'trash')||can(user,'moderate');
     const readOffers=can(user,'offers.read')||can(user,'offers.edit')||can(user,'translate')||can(user,'publish')||can(user,'trash')||can(user,'moderate');
@@ -63,7 +67,7 @@ export async function snapshot(user){
       readAccounts?rows('profiles'):[]
     ]);
     accounts=readAccounts?accounts.map(p=>can(user,'accounts.read')||can(user,'accounts.manage')&&p.role!=='admin'||p.id===user.id||p.role==='admin'&&can(user,'team')?profile(p):{id:p.id,role:p.role,version:p.version,name:`#${p.id.slice(0,8)}`,blockedAt:p.blocked_at,deletedAt:p.deleted_at}):[profile(user)];
-    return {user:profile(user),accounts,requests:requests.map(r=>unpack(r,'requests')),quotes:quotes.map(r=>unpack(r,'quotes')),publicOffers:publicOffers.map(r=>unpack(r,'publicOffers')),interests:interests.map(r=>unpack(r,'interests')),settings:{...(can(user,'settings')?settings.data:Object.fromEntries(Object.entries(settings.data).filter(([k])=>k!=='studioDraft'))),_version:settings.version}};
+    return {user:profile(user),supplySources,accounts,requests:requests.map(r=>unpack(r,'requests')),quotes:quotes.map(r=>unpack(r,'quotes')),publicOffers:publicOffers.map(r=>unpack(r,'publicOffers')),interests:interests.map(r=>unpack(r,'interests')),settings:{...(can(user,'settings')?upgradeSettings(settings.data):Object.fromEntries(Object.entries(upgradeSettings(settings.data)).filter(([k])=>k!=='studioDraft'))),_version:settings.version}};
   }
 
   if(user?.role==='client'){
@@ -79,17 +83,19 @@ export async function snapshot(user){
       one('settings','site'),
       rows('requests',`data->supplierIds=cs.${encodeURIComponent(JSON.stringify([user.id]))}&data->>status=eq.sent&data->>deletedAt=is.null&data->>suspendedAt=is.null`),
       rows('quotes',`owner_id=eq.${user.id}&data->>deletedAt=is.null`),
-      rows('public_offers',`owner_id=eq.${user.id}&data->>deletedAt=is.null`)
+      rows('public_offers','data->>status=eq.published&data->>deletedAt=is.null')
     ]);
+    const assignedQuotes=await rows('quotes',`data->>assignedSupplierId=eq.${user.id}&data->>deletedAt=is.null`);
+    quotes=[...new Map([...quotes,...assignedQuotes].filter(q=>!q.data.assignedSupplierId||q.data.assignedSupplierId===user.id).map(q=>[q.id,q])).values()];
     const selectedIds=[...new Set(requests.map(r=>r.data?.selectedQuoteId).filter(Boolean))];
     selectedSupplierQuotes=selectedIds.length?await rows('quotes',`id=in.(${inIds(selectedIds)})`):[];
-    const ids=publicOffers.map(o=>o.id);
+    const ids=publicOffers.filter(o=>o.owner_id===user.id&&!o.data.storeOwned).map(o=>o.id);
     const ownedInterests=ids.length?await rows('interests',`offer_id=in.(${inIds(ids)})`):[];
     const assignedInterests=await rows('interests',`data->>assignedSupplierId=eq.${user.id}`);
-    interests=[...new Map([...ownedInterests,...assignedInterests].filter(i=>!i.data?.assignedSupplierId||i.data.assignedSupplierId===user.id).map(i=>[i.id,i])).values()];
+    interests=[...new Map([...ownedInterests,...assignedInterests].filter(i=>i.data?.assignedSupplierId===user.id||!i.data?.requiresAssignment&&!i.data?.assignedSupplierId).map(i=>[i.id,i])).values()];
     interests=interests.filter(i=>{
       const tracking=i.data?.trackingStatus||'received';
-      return !['completed','cancelled'].includes(tracking)&&(tracking!=='received'||['coordinating','accepted'].includes(i.data?.status));
+      return !['completed','cancelled'].includes(tracking)&&(i.data.assignedSupplierId===user.id||tracking!=='received'||['coordinating','accepted'].includes(i.data?.status));
     });
   }else{
     [settings,publicOffers]=await Promise.all([
@@ -98,32 +104,32 @@ export async function snapshot(user){
     ]);
   }
 
-  const ownerIds=[...new Set([...requests,...quotes,...publicOffers].map(r=>r.owner_id))];
+  const ownerIds=[...new Set([...requests,...quotes,...publicOffers].map(r=>r.owner_id).filter(Boolean))];
   const owners=ownerIds.length?await rows('profiles',`id=in.(${inIds(ownerIds)})`):[];
   const ownerActive=id=>active(owners.find(p=>p.id===id));
   if(user?.role==='supplier')requests=requests.filter(r=>{
     if(!ownerActive(r.owner_id)||['completed','cancelled'].includes(r.data?.trackingStatus))return false;
     const selected=r.data?.selectedQuoteId,selectedRow=selectedSupplierQuotes.find(q=>q.id===selected);
     const replacementOpen=selectedRow?.data?.supplierOrderStatus==='cannot_fulfill';
-    return !selected||replacementOpen||quotes.some(q=>q.id===selected&&q.owner_id===user.id);
+    return !selected||replacementOpen||quotes.some(q=>q.id===selected&&(q.data.assignedSupplierId||q.owner_id)===user.id);
   });
-  quotes=quotes.filter(q=>q.owner_id===user?.id||ownerActive(q.owner_id)&&open(requests.find(r=>r.id===q.request_id)));
-  publicOffers=publicOffers.filter(o=>o.owner_id===user?.id||ownerActive(o.owner_id)&&open(o));
+  quotes=quotes.filter(q=>q.owner_id===user?.id||user?.role==='supplier'&&q.data.assignedSupplierId===user.id||ownerActive(q.owner_id)&&open(requests.find(r=>r.id===q.request_id)));
+  publicOffers=publicOffers.filter(o=>open(o)&&(o.data.storeOwned||o.owner_id===user?.id||ownerActive(o.owner_id)));
   const projectedRequests=requests.map(r=>{
     if(r.owner_id===user?.id)return ownRecord(r,'requests');
     let item=anonymous(r,'requests',user);
     if(user?.role==='supplier'){
       item=projectCartReplacementRequest(r,item,user.id);
-      const ownSelected=quotes.find(q=>q.id===r.data?.selectedQuoteId&&q.owner_id===user.id);
+      const ownSelected=quotes.find(q=>q.id===r.data?.selectedQuoteId&&(q.data.assignedSupplierId||q.owner_id)===user.id);
       item.selectedForSupplier=!!(ownSelected&&ownSelected.data?.supplierOrderStatus!=='cannot_fulfill');
       item.replacementQuoteOpen=!!(r.data?.selectedQuoteId&&selectedSupplierQuotes.find(q=>q.id===r.data.selectedQuoteId)?.data?.supplierOrderStatus==='cannot_fulfill');
     }
     return item;
   });
-  return {user:profile(user),accounts:user?[profile(user)]:[],settings:{...publicSettings(settings.data),_version:settings.version},
+  return {user:profile(user),supplySources,accounts:user?[profile(user)]:[],settings:{...publicSettings(upgradeSettings(settings.data)),_version:settings.version},
     requests:projectedRequests,
-    quotes:quotes.map(r=>r.owner_id===user?.id?ownRecord(r,'quotes'):anonymous(r,'quotes',user)),
-    publicOffers:publicOffers.map(r=>r.owner_id===user?.id?ownRecord(r,'publicOffers'):anonymous(r,'publicOffers',user)),
+    quotes:quotes.map(r=>{if(r.owner_id===user?.id)return ownRecord(r,'quotes');const item=anonymous(r,'quotes',user);if(user?.role==='supplier'){for(const key of ['unitPrice','currency','moq','leadTime','sampleCost'])delete item[key];if(r.data.assignedSupplierId===user.id)Object.assign(item,{supplierOrderStatus:r.data.supplierOrderStatus,supplierOrderNote:r.data.supplierOrderNote,supplierOrderUpdatedAt:r.data.supplierOrderUpdatedAt});}return item;}),
+    publicOffers:publicOffers.map(r=>anonymous(r,'publicOffers',user)),
     interests:user?.role==='supplier'?interests.map(supplierInterest):interests.map(r=>r.owner_id===user?.id?ownRecord(r,'interests'):{id:r.id,offerId:r.offer_id,status:r.data.status,createdAt:r.created_at})};
 }
 export async function assertOpenRequest(id){const r=await one('requests',id);assert(open(r)&&active(await one('profiles',r?.owner_id)),409,'الطلب غير متاح / Request unavailable');return r;}

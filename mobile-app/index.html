@@ -2,64 +2,15 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#0b2236" />
   <title>M Platform</title>
   <link rel="stylesheet" href="/src/styles.css" />
 </head>
 <body>
   <div id="app" class="app-shell">
-    <section id="bootView" class="auth-wrap"><div class="card"><p data-auth-copy="loading">جارٍ التحقق من الجلسة...</p></div></section>
-    <section id="guestView" class="hidden guest-wrap">
-      <header class="guest-header">
-        <div class="brand-mini guest-brand"><span class="brand-mark small">M</span><div><strong>M Platform</strong><small id="guestTagline">اطلب ما تحتاجه، وقارن العروض بثقة.</small></div></div>
-        <div class="header-actions guest-header-actions"><button id="guestCartBtn" class="icon-btn header-cart" type="button" aria-label="Cart">🛒<i id="guestCartCount" class="nav-badge hidden"></i></button><button id="guestLangBtn" class="icon-btn" type="button">EN</button></div>
-      </header>
-
-      <main class="guest-main">
-        <section class="guest-hero">
-          <span class="eyebrow" id="guestEyebrow">منصة شراء وتوريد موثوقة</span>
-          <h1 id="guestTitle">اطلب ما تحتاجه، وقارن العروض بثقة.</h1>
-          <p id="guestSubtitle">منصة آمنة تربطك بموردين مؤهلين، بينما نتولى مراجعة العروض، التحقق من البضاعة، الترجمة، الشحن الموثوق، ومتابعة الضمان.</p>
-          <div class="guest-actions">
-            <button id="guestBrowseBtn" class="primary-btn" type="button">تصفح العروض</button>
-            <button id="guestLoginBtn" class="secondary-btn" type="button">تسجيل الدخول</button>
-          </div>
-          <div class="guest-register-row">
-            <button id="guestCustomerRegister" class="text-btn" type="button">إنشاء حساب عميل</button>
-            <button id="guestSupplierRegister" class="text-btn" type="button">إنشاء حساب مورد</button>
-          </div>
-        </section>
-
-        <section id="guestOffersSection" class="guest-offers-section">
-          <div class="section-title guest-section-title"><div><small id="guestOffersKicker">تصفح دون حساب</small><h2 id="guestOffersTitle">المنتجات</h2></div><button id="guestReloadBtn" class="text-btn" type="button">تحديث</button></div>
-          <label class="product-search-bar guest-product-search"><span>⌕</span><input id="guestProductSearch" type="search" inputmode="search" enterkeyhint="search" placeholder="ابحث عن منتج أو SKU" aria-label="البحث عن المنتجات"></label>
-          <div id="guestCategoryFilters" class="category-filter-bar hidden" role="tablist"></div>
-          <div id="guestSubcategoryFilters" class="category-filter-bar subcategory-filter-bar hidden" role="tablist"></div>
-          <div id="guestSupplyCountryFilters" class="supply-country-filter hidden" role="tablist"></div>
-          <section class="special-request-card guest-new-request"><div class="special-request-copy"><div class="special-request-heading"><span class="special-request-icon">＋</span><h2 id="guestRequestTitle">أرسل طلب جديد</h2></div><p id="guestRequestDescription">إذا لم تجد المنتج المناسب، سجّل الدخول وأرسل مواصفاتك.</p></div><button id="guestRequestBtn" class="primary-btn" type="button">+ أرسل طلب جديد</button></section>
-          <div id="guestOffers" class="guest-offers-grid"><div class="guest-loading">جارٍ تحميل المنتجات...</div></div>
-          <nav id="guestOffersPagination" class="product-pagination hidden" aria-label="Offers pagination">
-            <button id="guestPrevPage" class="pagination-btn" type="button">السابق</button>
-            <span id="guestPageInfo" class="pagination-info">1 / 1</span>
-            <button id="guestNextPage" class="pagination-btn" type="button">التالي</button>
-          </nav>
-        </section>
-
-        <section id="guestCompanyCard" class="company-footer-card">
-          <div class="company-footer-brand">
-            <span class="company-footer-mark">M</span>
-            <div><h2>MIG COMPANY</h2><p id="guestCompanyDescription">منصة تساعدك في طلب المنتجات، مقارنة العروض، ومتابعة التوريد بسهولة.</p></div>
-          </div>
-          <div class="company-contact">
-            <strong id="guestContactTitle">تواصل معنا</strong>
-            <a href="mailto:aljilany6@gmail.com">aljilany6@gmail.com</a>
-            <a href="https://wa.me/8618501770037" target="_blank" rel="noopener noreferrer">+86 185 0177 0037</a>
-          </div>
-          <small id="guestCopyright">© 2026 MIG COMPANY — جميع الحقوق محفوظة</small>
-        </section>
-      </main>
-    </section>
+    <section id="bootView"><div class="sf-loading" role="status"><strong>M Platform</strong><p data-auth-copy="loading">جارٍ التحقق من الجلسة...</p></div></section>
+    <section id="guestView" class="hidden"><main id="guest-storefront" aria-live="polite"></main></section>
 
     <section id="loginView" class="hidden auth-wrap">
       <header class="brand-block">

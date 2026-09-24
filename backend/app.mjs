@@ -1,3 +1,5 @@
+import {submitSupplySource,reviewSupplySource} from './modules/supply-sources.mjs';
+import {assignSupplier} from './modules/fulfillment.mjs';
 import {createAccount} from './modules/admin-create.mjs';
 import {config,HttpError,assert} from './lib/supabase.mjs';
 import {identify,authRoute,isNativeClient,updateOwnCurrency} from './modules/auth.mjs';
@@ -67,12 +69,15 @@ export default async function handler(req,res){
         assert(user,401);assert(req.method==='GET',405);result=await listNotifications(user);
       }else{
         assert(req.method==='POST',405);assert(user,401);
-        if(path==='/api/mutations')result=await mutate(user,body);
+        if(path==='/api/supply-sources/submit')result=await submitSupplySource(user,body);
+        else if(path==='/api/supply-sources/review')result=await reviewSupplySource(user,body);
+        else if(path==='/api/mutations')result=await mutate(user,body);
         else if(path==='/api/bulk-public-offers')result=await bulkUpdatePublicOffers(user,body);
         else if(path==='/api/moderation')result=await moderate(user,body);
         else if(path==='/api/accounts/create')result=await createAccount(user,body);
         else if(path==='/api/accounts/update')result=await updateAccount(user,body);
         else if(path==='/api/profile/currency')result=await updateOwnCurrency(user,body);
+        else if(path==='/api/orders/assign')result=await assignSupplier(user,body);
         else if(path==='/api/order-management')result=await manageOrder(user,body);
         else if(path==='/api/studio')result=await saveStudio(user,body);
         else if(path==='/api/settings')result=await saveSettings(user,body);

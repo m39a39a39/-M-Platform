@@ -3,7 +3,7 @@
 StoreRules.normalize(state.draft);StoreRules.normalize(state.published);
 state.history=(state.history||[]).map(h=>({...h,data:StoreRules.normalize(h.data)}));
 let committedState=clone(state),undoItems=[],redoItems=[],editGroup=null,lastEditGroup=null,historyMove=false;
-let collectionEdit=null,productEdit=null,activeProductTab='basic',productImageIndex=0;
+let collectionEdit=null,productEdit=null,activeProductTab='basic';
 paths.undo='M3 10h8a8 8 0 0 1 8 8 M3 10l5-5 M3 10l5 5';
 paths.redo='M21 10h-8a8 8 0 0 0-8 8 M21 10l-5-5 M21 10l-5 5';
 paths.compare='M8 3v18 M16 3v18 M3 7h10 M11 17h10';
@@ -54,15 +54,6 @@ function renderCollectionPicker(){
   const selectedProducts=collectionEdit.productIds.map(id=>state.draft.products.find(p=>p.id===id)).filter(Boolean),available=state.draft.products.filter(p=>!collectionEdit.productIds.includes(p.id));
   $('#collection-picker').innerHTML=`<div class="picked-products">${selectedProducts.map((p,i)=>`<div class="picker-row"><span class="rank">${fmt(i+1)}</span>${thumb(p)}<div class="picker-name"><strong>${esc(p.name)}</strong><small>${statuses[p.status][0]}</small></div>${ib('رفع '+p.name,'collection-up','up',`data-index="${i}" ${i?'':'disabled'}`)}${ib('خفض '+p.name,'collection-down','down',`data-index="${i}" ${i===selectedProducts.length-1?'disabled':''}`)}${ib('إزالة '+p.name,'collection-remove','close',`data-id="${p.id}"`)}</div>`).join('')||'<div class="empty compact">اختر منتجات من القائمة أدناه.</div>'}</div><h3 class="form-section-head">منتجات متاحة</h3>${available.map(p=>`<button type="button" class="picker-row add-pick" data-action="collection-add" data-id="${p.id}">${thumb(p)}<span class="picker-name">${esc(p.name)}<small>${esc(p.sku)} · ${statuses[p.status][0]}</small></span>${icon('plus')}</button>`).join('')||'<p class="help">أضفت جميع المنتجات.</p>'}`;
 }
-function sectionSettings(s){
-  let html=baseSectionSettings(s);
-  if(s.type==='products'){
-    const fieldHtml=`<div class="field"><label for="section-collection">مصدر المنتجات</label><select id="section-collection" data-section-field="collectionId"><option value="">جميع المنتجات المنشورة</option>${state.draft.collections.map(c=>`<option value="${c.id}" ${s.collectionId===c.id?'selected':''}>${esc(c.name)}${c.active?'':' (مخفية)'}</option>`).join('')}</select></div><div class="field"><label for="section-limit">عدد المنتجات المعروضة</label><select id="section-limit" data-section-field="limit">${[3,6,9,12,24].map(n=>`<option value="${n}" ${Number(s.limit)===n?'selected':''}>${fmt(n)}</option>`).join('')}</select></div><p class="help">تُعرض المنتجات المنشورة بترتيب المجموعة. المجموعة المخفية لا تعرض منتجات.</p>`;
-    html=html.replace('<p class="help">يعرض أول ٦ منتجات منشورة من قائمة المنتجات.</p>',fieldHtml);
-  }
-  return html;
-}
-
 function productTabs(){return `<div class="product-tabs" role="tablist" aria-label="أقسام المنتج">${[['basic','البيانات الأساسية'],['details','التوريد والمواصفات'],['images','الصور والفيديو'],['pricing','أسعار الجملة']].map(([id,title])=>`<button type="button" role="tab" id="product-tab-${id}" aria-controls="product-panel-${id}" aria-selected="${activeProductTab===id}" data-action="product-tab" data-tab="${id}" class="${activeProductTab===id?'active':''}">${title}</button>`).join('')}</div>`}
 function prototypeEditProduct(id){
   const existing=state.draft.products.find(p=>p.id===id);
@@ -71,7 +62,7 @@ function prototypeEditProduct(id){
   formModal(existing?'تعديل المنتج':'إضافة منتج',productTabs()+
     `<section id="product-panel-basic" class="product-panel" role="tabpanel" aria-labelledby="product-tab-basic"><div class="form-grid">${field('اسم المنتج','name',productEdit.name,'text','required maxlength="100"')}${field('رمز المنتج SKU','sku',productEdit.sku,'text','required maxlength="50"')}${selectField('التصنيف','category',[['','غير مصنف'],...state.draft.categories.map(c=>[c.name,c.name])],productEdit.category)}${selectField('الحالة','status',Object.entries(statuses).map(([k,v])=>[k,v[0]]),productEdit.status)}<div class="full">${area('وصف المنتج','description',productEdit.description)}</div></div></section>`+
     `<section id="product-panel-details" class="product-panel" role="tabpanel" aria-labelledby="product-tab-details" hidden><div class="form-grid">${field('بلد التوريد','country',productEdit.country,'text','maxlength="80"')}${field('المورد (للإدارة فقط)','supplier',productEdit.supplier,'text','maxlength="100"')}${field('مدة التجهيز بالأيام','leadDays',productEdit.leadDays,'number','min="0" step="1" required')}${field('الألوان — افصل بفاصلة','colors',productEdit.colors.join('، '),'text','maxlength="250"')}${field('المقاسات — افصل بفاصلة','sizes',productEdit.sizes.join('، '),'text','maxlength="250"')}</div><div class="form-section-head"><h3>المواصفات</h3>${btn('إضافة مواصفة','add-spec','plus')}</div><div id="spec-rows"></div><p class="help">الألوان والمقاسات خيارات وصفية في هذه النسخة؛ السعر والكمية موحّدان للمنتج.</p></section>`+
-    `<section id="product-panel-images" class="product-panel" role="tabpanel" aria-labelledby="product-tab-images" hidden><div class="form-section-head"><h3>صور المنتج</h3><small>حتى ٦ صور</small></div><div id="product-gallery-editor"></div><div class="upload"><label for="product-images">إضافة صور من الجهاز</label><input id="product-images" type="file" accept="image/png,image/jpeg,image/webp" multiple><p class="help">حتى ١ ميجابايت للصورة. أول صورة هي الصورة الأساسية.</p></div>${state.draft.media.length?`<div class="field" style="margin-top:16px"><label for="library-image">أو اختر من المكتبة</label><div class="row"><select id="library-image"><option value="">اختر صورة</option>${state.draft.media.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join('')}</select>${btn('إضافة','add-library-image','plus')}</div></div>`:''}${field('رابط فيديو للمنتج (HTTPS)','video',productEdit.video,'url','placeholder="https://…"')}<p class="help">يظهر كرابط خارجي اختياري في تفاصيل المنتج، ولا يفتح إلا عند الضغط عليه.</p></section>`+
+    `<section id="product-panel-images" class="product-panel" role="tabpanel" aria-labelledby="product-tab-images" hidden><div class="form-section-head"><h3>صور المنتج</h3><small>حتى ٦ صور</small></div><div id="product-gallery-editor"></div><div class="upload"><label for="product-images">إضافة صور من الجهاز</label><input id="product-images" type="file" accept="image/png,image/jpeg,image/webp" multiple><p class="help">حتى ١٠ ميجابايت، مع ضغط الصور الكبيرة تلقائيًا للصورة. أول صورة هي الصورة الأساسية.</p></div>${state.draft.media.length?`<div class="field" style="margin-top:16px"><label for="library-image">أو اختر من المكتبة</label><div class="row"><select id="library-image"><option value="">اختر صورة</option>${state.draft.media.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join('')}</select>${btn('إضافة','add-library-image','plus')}</div></div>`:''}${field('رابط فيديو للمنتج (HTTPS)','video',productEdit.video,'url','placeholder="https://…"')}<p class="help">يظهر كرابط خارجي اختياري في تفاصيل المنتج، ولا يفتح إلا عند الضغط عليه.</p></section>`+
     `<section id="product-panel-pricing" class="product-panel" role="tabpanel" aria-labelledby="product-tab-pricing" hidden>${selectField('طريقة التسعير','pricingMode',[['fixed','أسعار محددة حسب الكمية'],['rfq','طلب عرض سعر']],productEdit.pricingMode)}<div class="form-grid">${field('الحد الأدنى للطلب','moq',productEdit.moq,'number','required min="1" step="1"')}${field('السعر الأساسي / قطعة (ر.س)','price',productEdit.price,'number','min="0.01" step="0.01"')}</div><div id="fixed-pricing"><div class="form-section-head"><h3>شرائح أسعار الجملة</h3>${btn('إضافة شريحة','add-tier','plus')}</div><p class="help">السعر الأساسي يسري من الحد الأدنى للطلب. أضف سعرًا أقل للكميات الأكبر.</p><div id="tier-rows"></div></div><div id="rfq-note" class="notice" hidden>لن يظهر سعر للعميل. سيظهر خيار «اطلب عرض سعر» مع الحد الأدنى للطلب.</div><div class="pricing-example"><label for="test-quantity">جرّب كمية</label><input id="test-quantity" type="number" min="1" step="1" value="${productEdit.moq}"><div id="pricing-result" aria-live="polite"></div></div></section>`,async fd=>saveProductDetails(fd,existing));
   $('#dialog').classList.add('product-dialog');$('#edit-form').noValidate=true;
   renderSpecs();renderTiers();renderProductGallery();syncPricingMode();
@@ -120,28 +111,6 @@ async function saveProductDetails(fd,existing){
   productEdit.images.forEach((image,i)=>rememberMedia(image,name+' — '+(i+1)));closeModal();changed('تم حفظ بيانات المنتج وأسعاره');
 }
 
-function priceLabel(p){return p.pricingMode==='rfq'?'اطلب عرض سعر':fmt(p.price)+' ر.س / قطعة'}
-function productCardsHtml(products,editing){return products.map(p=>`<${editing?'div':'button'} ${editing?'':'type="button" data-action="preview-product" data-id="'+p.id+'"'} class="product-tile ${editing?'':'product-link'}">${thumb(p,'product-thumb')}<h4>${esc(p.name)}</h4><span>${priceLabel(p)}</span>${p.tiers.length&&p.pricingMode==='fixed'?'<small class="wholesale-badge">أسعار للكميات الأكبر</small>':''}</${editing?'div':'button'}>`).join('')}
-function storeHtml(data,dev='desktop',editing=false,page='home'){
-  const template=document.createElement('template');template.innerHTML=baseStoreHtml(data,dev,editing,page);
-  if(page==='home'){
-    const sections=data.sections.filter(s=>s.visible&&(s.channel==='both'||s.channel===channel));
-    Array.from(template.content.querySelectorAll('.store-section')).forEach((el,i)=>{if(sections[i]?.type==='products')el.querySelector('.product-grid').innerHTML=productCardsHtml(StoreRules.sectionProducts(data,sections[i]),editing)||'<p class="help">لا توجد منتجات متاحة في هذه المجموعة.</p>'});
-  }else if(page==='products'){
-    template.content.querySelector('.product-grid').innerHTML=productCardsHtml(data.products.filter(p=>p.status==='active'),editing)||'<p>لا توجد منتجات.</p>';
-  }else if(page.startsWith('product:')){
-    const p=data.products.find(p=>p.id===page.slice(8)&&p.status==='active');
-    template.content.querySelector('.store-block').outerHTML=p?productDetailHtml(p):'<div class="store-block">المنتج غير متاح في هذه النسخة.</div>';
-  }
-  return template.innerHTML;
-}
-function productDetailHtml(p){
-  const image=p.images[productImageIndex]||p.image;
-  return `<div class="store-block product-detail">${btn('العودة للمنتجات','preview-page','arrow','plain','data-page="products"')}<div class="detail-layout"><div><div class="detail-image">${image?`<img src="${esc(image)}" alt="${esc(p.name)}">`:`<span>${esc(p.name.charAt(0))}</span>`}</div><div class="detail-thumbnails">${p.images.map((img,i)=>`<button type="button" data-action="preview-image" data-index="${i}" aria-label="عرض الصورة ${i+1}" class="${i===productImageIndex?'active':''}"><img src="${esc(img)}" alt=""></button>`).join('')}</div>${p.video?`<a class="video-link" href="${esc(p.video)}" target="_blank" rel="noopener noreferrer">مشاهدة فيديو المنتج ↗</a>`:''}</div><div><small>${esc(p.category)}</small><h2>${esc(p.name)}</h2><p class="detail-description">${esc(p.description||'')}</p><div class="detail-tags">${p.country?tag('بلد التوريد: '+p.country,'gray'):''}${p.leadDays?tag('التجهيز: '+fmt(p.leadDays)+' يوم','gray'):''}</div>${p.colors.length?'<p class="detail-option"><strong>الألوان:</strong> '+p.colors.map(esc).join('، ')+'</p>':''}${p.sizes.length?'<p class="detail-option"><strong>المقاسات:</strong> '+p.sizes.map(esc).join('، ')+'</p>':''}<div class="detail-pricing"><strong>${priceLabel(p)}</strong><p class="help">الحد الأدنى للطلب: ${fmt(p.moq)} قطعة</p>${p.pricingMode==='fixed'?`<table class="price-table"><thead><tr><th>من كمية</th><th>سعر القطعة</th></tr></thead><tbody>${[{min:p.moq,price:p.price},...p.tiers].map(t=>`<tr><td>${fmt(t.min)}</td><td>${fmt(t.price)} ر.س</td></tr>`).join('')}</tbody></table><label for="preview-qty">كمية الطلب التجريبية</label><input id="preview-qty" type="number" min="${p.moq}" step="1" value="${p.moq}" data-product="${p.id}"><div id="preview-price-result" aria-live="polite"></div><small>تقدير قيمة المنتجات فقط، دون الشحن أو أي رسوم إضافية.</small>`:btn('اطلب عرض سعر','demo-rfq','','primary')}</div></div></div>${p.specs.length?`<h3 class="form-section-head">مواصفات المنتج</h3><table class="spec-table"><tbody>${p.specs.map(s=>`<tr><th>${esc(s.name)}</th><td>${esc(s.value)}</td></tr>`).join('')}</tbody></table>`:''}</div>`;
-}
-const originalPreview=preview;
-preview=function(mode='draft',reset=true){originalPreview(mode,reset);const el=$('#preview-qty');if(el){el.oninput=()=>{const p=state[previewMode].products.find(p=>p.id===el.dataset.product),qty=Number(el.value),price=StoreRules.unitPrice(p,qty);$('#preview-price-result').innerHTML=price===null?`<p class="price-error">أدخل كمية صحيحة لا تقل عن ${fmt(p.moq)}.</p>`:`<strong>${fmt(price)} ر.س / قطعة</strong><span>الإجمالي: ${fmt(Math.round(price*qty*100)/100)} ر.س</span>`};el.oninput()}};
-
 function diffValue(value,key,data){
   if(value===null||value==='')return '—';
   if(typeof value==='boolean')return value?'نعم':'لا';
@@ -181,8 +150,5 @@ document.addEventListener('click',e=>{
     case 'remove-product-image':productEdit.images.splice(index,1);renderProductGallery();break;
     case 'primary-image':productEdit.images.unshift(productEdit.images.splice(index,1)[0]);renderProductGallery();break;
     case 'add-library-image':{const m=state.draft.media.find(m=>m.id===$('#library-image').value);if(!m){toast('اختر صورة من المكتبة.');break}if(productEdit.images.length>=6){toast('الحد الأقصى ٦ صور.');break}if(!productEdit.images.includes(m.image))productEdit.images.push(m.image);renderProductGallery();break}
-    case 'preview-product':productImageIndex=0;previewPage='product:'+id;preview(previewMode,false);break;
-    case 'preview-image':productImageIndex=index;preview(previewMode,false);break;
-    case 'demo-rfq':toast('هذا عرض تجريبي للزر. لم يُرسل طلب إلى أي مورد.');break;
   }
 });

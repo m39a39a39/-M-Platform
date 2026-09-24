@@ -1,3 +1,4 @@
+import {assignSupplier} from '../backend/modules/fulfillment.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {changeOrder,checkoutDetails,manageOrder} from '../backend/modules/order-management.mjs';
@@ -34,7 +35,7 @@ test('store config cannot accept executable asset URLs or arbitrary fields',()=>
 const admin={id:'admin-1',role:'admin',is_owner:true},client={id:'client-1',role:'client',data:{name:'Customer',preferredCurrency:'SAR'}};
 const settings={id:'site',version:1,data:{categories:[{id:'cat-1',nameAr:'منتجات',nameEn:'Products',active:true}],subcategories:[],bankAccounts:[{id:'bank-1',currency:'SAR',active:true}],currencies:[{code:'SAR',nameAr:'ريال',nameEn:'Riyal',rate:1,active:true}]}};
 async function withDB(fn){
- const state={settings:[structuredClone(settings)],profiles:[client,{id:'supplier-1',role:'supplier',data:{}}],public_offers:[{id:'offer-1',owner_id:'supplier-1',version:1,data:{status:'published',unitPrice:10,currency:'SAR',moq:2,stock:'50',product:'Product',translation:{titleAr:'منتج',titleEn:'Product'},tiers:[{min:10,price:8}]}}],requests:[],interests:[],quotes:[]};
+ const state={supply_sources:[{id:'source-1',owner_id:'supplier-1',version:1,data:{productId:'offer-1',status:'approved',terms:{unitPrice:5,currency:'SAR',moq:2,stock:50,leadTime:7,country:'China'}}}],settings:[structuredClone(settings)],profiles:[client,{id:'supplier-1',role:'supplier',data:{}}],public_offers:[{id:'offer-1',owner_id:'supplier-1',version:1,data:{status:'published',unitPrice:10,currency:'SAR',moq:2,stock:'50',product:'Product',translation:{titleAr:'منتج',titleEn:'Product'},tiers:[{min:10,price:8}]}}],requests:[],interests:[],quotes:[]};
  const fetchOriginal=global.fetch,env={...process.env};Object.assign(process.env,{SUPABASE_URL:'https://test.invalid',SUPABASE_ANON_KEY:'test',SUPABASE_SERVICE_ROLE_KEY:'test',APP_ORIGIN:'https://test.invalid'});
  let invoice=0,commits=[];
  global.fetch=async(url,options={})=>{const u=new URL(url),table=u.pathname.split('/').at(-1),body=options.body?JSON.parse(options.body):null;
@@ -51,6 +52,7 @@ test('cart → availability → payment → delivery uses atomic parent/line wri
  const created=await createCartOrder(client,{items:[{offerId:'offer-1',quantity:10}],delivery:{name:'Customer',phone:'123',country:'SA',address:'Street 1'}});
  let row=db.state.requests[0];assert.equal(created.cartTotal,80);assert.equal(db.invoices,0);assert.equal(row.data.orderStage,0);assert.equal(row.data.proformaInvoice,undefined);assert.equal(db.commits[0].length,2);
  await assert.rejects(()=>manageOrder(client,{id:row.id,version:row.version,action:'next'}),e=>e.status===403);
+ await assignSupplier(admin,{collection:'requests',id:row.id,version:row.version,supplierId:'supplier-1'});row=db.state.requests[0];
  await manageOrder(admin,{id:row.id,version:row.version,action:'edit',lines:row.data.cartItems.map(l=>({...l,availabilityConfirmed:true}))});row=db.state.requests[0];
  await assert.rejects(()=>manageOrder(admin,{id:row.id,version:1,action:'next'}),e=>e.status===409);
  await manageOrder(admin,{id:row.id,version:row.version,action:'next',bankAccountId:'bank-1',paymentMessage:'Pay now'});row=db.state.requests[0];assert.equal(row.data.orderStage,1);assert.ok(row.data.proformaInvoice);
@@ -69,7 +71,7 @@ test('studio requires permission and settings version; draft is private and publ
 test('homepage visibility and bilingual content survive normalization with strict validation',()=>{
  const base={theme:{name:'M',tagline:'',announcement:'',logo:'',color:'#123456',round:8},sections:[],banners:[],pages:[],links:[],collections:[]};
  const home={showCart:true,showRequest:false,showSearch:false,welcomeTitle:'عنوان خاص',welcomeTitleEn:'Custom title',email:'store@example.test',phone:'+966 12345678',privateKey:'discard'};
- const output=normalizeStore({...base,home});assert.equal(output.home.showRequest,false);assert.equal(output.home.showSearch,false);assert.equal(output.home.welcomeTitle,'عنوان خاص');assert.equal(output.home.welcomeTitleEn,'Custom title');assert.equal(output.home.privateKey,undefined);assert.equal(output.home.showCatalog,true);
+ const output=normalizeStore({...base,home});assert.equal(output.home,undefined);assert.equal(output.options.showSearch,false);assert.equal(output.sections.find(s=>s.type==='hero').title,'عنوان خاص');assert.equal(output.sections.find(s=>s.type==='hero').titleEn,'Custom title');assert.equal(output.sections.find(s=>s.type==='cta').visible,false);assert.equal(output.sections.find(s=>s.type==='catalog').visible,true);
  for(const bad of [{showCart:'false'},{phone:'javascript:alert(1)'},{email:'<bad>'},{welcomeTitle:'x'.repeat(2001)}])assert.throws(()=>normalizeStore({...base,home:bad}));
 });
 
@@ -84,6 +86,6 @@ test('admin-created orders belong to the customer and preserve the administrator
 test('layout settings persist and reject executable styles and invalid bounds',()=>{
  const base={theme:{name:'M',tagline:'',announcement:'',logo:'',color:'#123456',round:8},sections:[],banners:[],pages:[],links:[],collections:[]};
  const section={id:'faq',type:'faq',channel:'both',visible:true,title:'FAQ',items:'Question | Answer',columns:4,mobileColumns:2,padding:48,background:'#fefefe',mobileVisible:false};
- const s=normalizeStore({...base,sections:[section]}).sections[0];assert.equal(s.type,'faq');assert.equal(s.columns,4);assert.equal(s.mobileVisible,false);assert.equal(s.items,section.items);
+ const s=normalizeStore({...base,schemaVersion:2,sections:[section]}).sections[0];assert.equal(s.type,'faq');assert.equal(s.columns,4);assert.equal(s.mobileVisible,false);assert.equal(s.items,section.items);
  for(const invalid of [{background:'url(javascript:bad)'},{columns:100},{padding:-1},{layout:'<script>'},{items:'x'.repeat(12001)},{mobileVisible:'false'}])assert.throws(()=>normalizeStore({...base,sections:[{...section,...invalid}]}));
 });

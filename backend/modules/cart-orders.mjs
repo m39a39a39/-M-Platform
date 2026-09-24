@@ -9,10 +9,10 @@ const MAX_CART_ITEMS=10;
 const SUPPORTED_CURRENCIES=new Set(['USD','SAR','AED','CNY','EUR']);
 
 const trackingStart=now=>({
-  trackingStatus:'supplier_confirmation',
+  trackingStatus:'received',
   trackingNote:'',
   trackingUpdatedAt:now,
-  trackingHistory:[{at:now,status:'supplier_confirmation',note:''}]
+  trackingHistory:[{at:now,status:'received',note:''}]
 });
 
 export async function createCartOrder(user,body={}){
@@ -33,8 +33,7 @@ export async function createCartOrder(user,body={}){
 
     const offer=await one('public_offers',offerId);
     assert(offer&&open(offer)&&offer.data.status==='published',409,'أحد المنتجات لم يعد متاحًا / A product is no longer available');
-    const supplier=await one('profiles',offer.owner_id);
-    assert(active(supplier)&&supplier.role==='supplier',409,'أحد الموردين غير متاح حاليًا / A supplier is currently unavailable');
+    // Availability is reviewed by the store; a product is independent of its sources.
     const d=offer.data||{},moq=Number(d.moq),stock=Number(d.stock),unitPrice=priceForQuantity(d,quantity),currency=String(d.currency||'').toUpperCase();
     assert(Number.isFinite(unitPrice)&&unitPrice>0&&Number.isFinite(moq)&&quantity>=moq,400,'تحقق من الكمية والحد الأدنى للطلب / Check quantity and MOQ');
     if(Number.isFinite(stock)&&stock>0)assert(quantity<=stock,400,'الكمية المطلوبة أكبر من المخزون المتاح / Requested quantity exceeds available stock');
@@ -72,7 +71,7 @@ export async function createCartOrder(user,body={}){
   const orderData={
     orderType:'cart',
     ...(administrative?{orderAudit:[{at:now,actorId:user.id,action:'admin_create',changes:[]}]}:{}),
-    orderFlowVersion:2,orderStage:0,delivery,orderHistory:[{at:now,stage:0}],
+    requiresAssignment:true,orderFlowVersion:2,orderStage:0,delivery,orderHistory:[{at:now,stage:0}],
     product:'Product order',
     specs:'Multi-product ready-order cart',
     translation:{
@@ -116,7 +115,7 @@ export async function createCartOrder(user,body={}){
       createdAt:now,
       updatedAt:now,
       cartOrderId:orderId,
-      orderFlowVersion:2,orderStage:0,
+      requiresAssignment:true,orderFlowVersion:2,orderStage:0,
       cartLine:index+1,
       quantity:line.quantity,
       unitPrice:line.unitPrice,

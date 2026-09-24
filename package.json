@@ -10,6 +10,10 @@
     "build": "node scripts/build.mjs",
     "dev": "node --env-file-if-exists=.env backend/local.mjs",
     "test": "node --test tests/*.test.mjs",
-    "check": "node scripts/check.mjs"
+    "check": "node scripts/check.mjs",
+    "preview:suppliers": "npm run build --prefix mobile-app && node scripts/preview-supply-sources.mjs"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.8"
   }
 }

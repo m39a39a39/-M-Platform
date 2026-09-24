@@ -1,5 +1,8 @@
+import './storefront.css';
 import * as storefront from './storefront.js';
 import * as admin from './admin-mobile.js';
+import {filesToCompressedSources} from './image-upload.js';
+window.MStudioImages={filesToCompressedSources};
 window.MStorefront=storefront;window.MAdmin=admin;
 import {session} from './session.js';
 window.MStudioSession=session;

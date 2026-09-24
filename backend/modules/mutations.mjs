@@ -117,7 +117,7 @@ async function paymentAccountSnapshot(accountId){
   assert(account,400,'اختر حسابًا بنكيًا نشطًا / Choose an active bank account');
   return Object.fromEntries(['id','label','beneficiary','bankName','iban','swift','accountNumber','country','currency'].map(k=>[k,String(account[k]||'')]));
 }
-async function assertProductTaxonomy(data,{required=false,activeOnly=false}={}){
+export async function assertProductTaxonomy(data,{required=false,activeOnly=false}={}){
   const settings=await one('settings','site'),s=settings?.data||{};
   const categories=Array.isArray(s.categories)?s.categories:[],subcategories=Array.isArray(s.subcategories)?s.subcategories:[];
   const countries=Array.isArray(s.supplyCountries)&&s.supplyCountries.length?s.supplyCountries:DEFAULT_SUPPLY_COUNTRIES;
@@ -199,6 +199,7 @@ export async function checkImages(images,user,old=[]){
 export async function mutate(user,body){
   const {collection,id,version,patch}=body,table=tables[collection];
   assert(table&&typeof id==='string'&&/^[A-Za-z0-9-]{1,80}$/.test(id)&&patch&&typeof patch==='object'&&!Array.isArray(patch),400);
+  assert(!(user.role==='supplier'&&collection==='publicOffers'),403,'قدّم عرض توريد؛ تعديل منتج المتجر متاح للإدارة فقط');
   const original=await one(table,id);
   assert(Number(version)===(original?.version||0),409,'تغيّرت البيانات؛ حدّث الصفحة / Refresh after conflict');
   const now=new Date().toISOString();
@@ -207,10 +208,11 @@ export async function mutate(user,body){
   const changes=Object.keys(patch),isAdmin=user.role==='admin';
   if(original?.data?.orderFlowVersion===2&&isAdmin&&['requests','interests'].includes(collection))assert(false,409,'استخدم إدارة الطلبات الجديدة لهذا الطلب');
   if(!original){
-    assert(collection==='requests'?user.role==='client':collection==='interests'?user.role==='client':user.role==='supplier');
+    assert(collection==='requests'?(user.role==='client'||isAdmin&&can(user,'requests.edit')&&can(user,'accounts.read')):collection==='interests'?user.role==='client':user.role==='supplier');
     const allowed=collection==='interests'?['offerId','quantity','status','repeatedFromInterestId']: [...contentFields[collection],...(collection==='quotes'?['requestId']:[]),...(collection==='requests'?['repeatedFromRequestId']:[]),'status'];
     assert(changes.every(k=>allowed.includes(k)),400);
     data=Object.fromEntries(changes.filter(k=>!['status','requestId','offerId'].includes(k)).map(k=>[k,patch[k]]));
+    if(isAdmin&&collection==='requests'){const customer=await one('profiles',String(body.customerId||''));assert(active(customer)&&customer.role==='client',400,'اختر عميلًا فعالًا');ownerId=customer.id;data.createdByAdmin=user.id;}
     data.status=collection==='requests'?'review':collection==='interests'?'active':'pending';data.createdAt=now;
     if(collection==='requests'||collection==='interests')setTracking(data,'received',now,'');
     if(collection==='requests'&&data.repeatedFromRequestId){
@@ -239,7 +241,7 @@ export async function mutate(user,body){
       assert(!existing.length,409,'سبق أن قدمت عرضًا على هذا الطلب / You already submitted an offer for this request');
     }else if(collection==='interests'){
       const offer=await one('public_offers',patch.offerId);
-      assert(open(offer)&&offer.data.status==='published'&&active(await one('profiles',offer.owner_id))&&(!offer.data.validUntil||offer.data.validUntil>=now.slice(0,10)),409);
+      assert(open(offer)&&offer.data.status==='published'&&(offer.data.storeOwned||active(await one('profiles',offer.owner_id)))&&(!offer.data.validUntil||offer.data.validUntil>=now.slice(0,10)),409);
       const quantity=Number(patch.quantity),moq=Number(offer.data.moq),unitPrice=Number(offer.data.unitPrice),stock=Number(offer.data.stock);
       assert(Number.isFinite(quantity)&&Number.isInteger(quantity)&&quantity>0&&quantity<=1e9,400,'أدخل كمية صحيحة / Enter a valid quantity');
       assert(Number.isFinite(moq)&&quantity>=moq,400,'الكمية أقل من الحد الأدنى للطلب / Quantity is below the minimum order');
@@ -254,7 +256,7 @@ export async function mutate(user,body){
         const existing=await db('interests',`owner_id=eq.${encodeURIComponent(user.id)}&offer_id=eq.${encodeURIComponent(patch.offerId)}&limit=1`);
         assert(!existing.length,409,'سبق أن طلبت هذا العرض؛ استخدم تكرار الطلب / You already requested this offer; use Repeat order');
       }
-      data.quantity=quantity;
+      data.requiresAssignment=true;data.quantity=quantity;
       data.unitPrice=unitPrice;
       data.currency=String(offer.data.currency||'').toUpperCase();
       data.moq=moq;
@@ -328,7 +330,7 @@ export async function mutate(user,body){
         assert(latest,409,'لا توجد عروض منشورة / No published quotes');
         data.lastSeenQuoteAt=latest;
       }
-    }else if(collection==='quotes'&&user.role==='supplier'&&original.owner_id===user.id){
+    }else if(collection==='quotes'&&user.role==='supplier'&&(original.data.assignedSupplierId||original.owner_id)===user.id){
       const orderFields=['supplierOrderStatus','supplierOrderNote'],isOrderUpdate=changes.length&&changes.every(k=>orderFields.includes(k));
       const r=await assertOpenRequest(original.request_id);
       if(isOrderUpdate){
@@ -337,6 +339,7 @@ export async function mutate(user,body){
         updateSupplierOrder(data,patch,now);
         linkedSupplierRequest=r;
       }else{
+        assert(original.owner_id===user.id,403,'يمكن للمورد المسند إليه تحديث التنفيذ فقط');
         assert(changes.length&&changes.every(k=>contentFields.quotes.includes(k)),400,'يمكن تعديل بيانات العرض فقط / Only offer fields can be edited');
         const selected=r.data.selectedQuoteId?await one('quotes',r.data.selectedQuoteId):null;
         const replacementOpen=!r.data.selectedQuoteId||(selected?.data?.supplierOrderStatus==='cannot_fulfill'&&r.data.selectedQuoteId!==original.id);
@@ -365,9 +368,9 @@ export async function mutate(user,body){
       data.reviewedAt=null;
     }else if(collection==='interests'&&user.role==='supplier'){
       const offer=await one('public_offers',original.offer_id);
-      assert(offer&&open(offer)&&(original.data.assignedSupplierId?original.data.assignedSupplierId===user.id:offer.owner_id===user.id),403,'غير مصرح بهذا الطلب / Unauthorized order');
+      assert(offer&&open(offer)&&(original.data.assignedSupplierId?original.data.assignedSupplierId===user.id:!original.data.requiresAssignment&&!offer.data.storeOwned&&offer.owner_id===user.id),403,'غير مصرح بهذا الطلب / Unauthorized order');
       if(original.data.cartOrderId)linkedCartRequest=await one('requests',original.data.cartOrderId);
-      assert((original.data.trackingStatus||'received')!=='received'&&!['completed','cancelled'].includes(original.data.trackingStatus),409,'الطلب غير جاهز للتنفيذ / Order is not ready for supplier action');
+      assert((original.data.assignedSupplierId===user.id||(original.data.trackingStatus||'received')!=='received')&&!['completed','cancelled'].includes(original.data.trackingStatus),409,'الطلب غير جاهز للتنفيذ / Order is not ready for supplier action');
       assert(changes.length&&changes.every(k=>['supplierOrderStatus','supplierOrderNote'].includes(k)),400,'يمكن تحديث حالة التنفيذ فقط / Only fulfillment status can be updated');
       if(patch.supplierOrderStatus==='production')assert(original.data.paymentStatus==='confirmed',409,'لا يمكن بدء الإنتاج قبل تأكيد الدفع / Production cannot start before payment is confirmed');
       updateSupplierOrder(data,patch,now);
@@ -537,7 +540,7 @@ export async function mutate(user,body){
     if(collection==='publicOffers'&&changes.some(k=>['categoryId','subcategoryId','country','status'].includes(k)))await assertProductTaxonomy(data,{required:data.status==='published',activeOnly:data.status==='published'});
     if(collection!=='interests'){
       await checkImages(data.images||[],user,original.data.images||[]);
-      assert(active(await one('profiles',ownerId)),409);
+      assert(collection==='publicOffers'&&data.storeOwned||active(await one('profiles',ownerId)),409);
       if(collection==='quotes')await assertOpenRequest(original.request_id);
       if(requiresRedaction(collection,data.status,changes)){
         assert(body.redactionConfirmed===true,400,'أكد مراجعة النصوص والصور وإزالة الهوية / Confirm redaction');
@@ -583,7 +586,7 @@ export async function mutate(user,body){
     requestData.updatedAt=now;
     commitBatch.push({table:'requests',id:linkedCartRequest.id,version:linkedCartRequest.version,ownerId:linkedCartRequest.owner_id,data:requestData,action:'cart_supplier_reassigned'});
   }
-  if(collection==='interests'&&!isAdmin&&linkedCartRequest&&open(linkedCartRequest)){
+  if(collection==='interests'&&!isAdmin&&linkedCartRequest&&linkedCartRequest.data.orderFlowVersion!==2&&open(linkedCartRequest)){
     const requestData=structuredClone(linkedCartRequest.data||{}),siblings=await db('interests',`data->>cartOrderId=eq.${encodeURIComponent(linkedCartRequest.id)}&data->>deletedAt=is.null`);
     const statuses=siblings.map(row=>row.id===id?(data.supplierOrderStatus||'pending_confirmation'):(row.data?.supplierOrderStatus||'pending_confirmation'));
     let changed=false;

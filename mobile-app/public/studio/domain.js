@@ -30,18 +30,12 @@
       lastMin=tier.min;lastPrice=tier.price;
     }
   }
-  function sectionProducts(data,s){
-    const collection=s.collectionId?data.collections.find(c=>c.id===s.collectionId):null;
-    if(s.collectionId&&(!collection||!collection.active))return [];
-    const list=collection?collection.productIds.map(id=>data.products.find(p=>p.id===id)).filter(Boolean):data.products;
-    return list.filter(p=>p.status==='active').slice(0,Number(s.limit)||6);
-  }
   const groups={products:'المنتجات',collections:'مجموعات المنتجات',categories:'التصنيفات',sections:'أقسام الرئيسية',banners:'البنرات',pages:'الصفحات',links:'القوائم',media:'الوسائط'};
   const fields={shortDescription:'وصف مختصر',nameEn:'الاسم الإنجليزي',descriptionEn:'الوصف الإنجليزي',notes:'ملاحظات',technicalSpecs:'المواصفات الفنية',options:'الخيارات',currency:'العملة',supplierId:'المورد',stock:'المخزون',name:'الاسم',title:'العنوان',description:'الوصف',subtitle:'النص الوصفي',price:'السعر الأساسي',moq:'الحد الأدنى',status:'الحالة',category:'التصنيف',sku:'رمز المنتج',image:'الصورة الأساسية',images:'صور المنتج',video:'رابط الفيديو',specs:'المواصفات',colors:'الألوان',sizes:'المقاسات',country:'بلد التوريد',supplier:'المورد',leadDays:'مدة التجهيز',tiers:'شرائح الجملة',pricingMode:'طريقة التسعير',productIds:'المنتجات وترتيبها',collectionId:'مجموعة المنتجات',limit:'عدد المنتجات',visible:'الظهور',active:'التفعيل',channel:'قناة الظهور',button:'نص الزر',content:'المحتوى',target:'وجهة الرابط',parent:'التصنيف الأب',start:'بداية العرض',end:'نهاية العرض',logo:'الشعار',color:'اللون الأساسي',round:'استدارة الإطار',announcement:'الشريط العلوي',tagline:'الوصف المختصر'};
   function differences(before,after){
     const result=[];
-    function changedFields(a,b){return [...new Set([...Object.keys(a),...Object.keys(b)])].filter(k=>k!=='id'&&JSON.stringify(a[k])!==JSON.stringify(b[k])).map(key=>({key,label:root.MStorefront?.HOME_FIELDS?.[key]||root.MStorefront?.HOME_TOGGLES?.[key]||fields[key]||key,before:copy(a[key]??null),after:copy(b[key]??null)}))}
-    const home=changedFields(before.home||{},after.home||{});if(home.length)result.push({group:'الرئيسية',title:'محتوى الرئيسية وظهورها',kind:'edit',fields:home});
+    function changedFields(a,b){return [...new Set([...Object.keys(a),...Object.keys(b)])].filter(k=>k!=='id'&&JSON.stringify(a[k])!==JSON.stringify(b[k])).map(key=>({key,label:fields[key]||key,before:copy(a[key]??null),after:copy(b[key]??null)}))}
+    const home=changedFields(before.options||{},after.options||{});if(home.length)result.push({group:'الرئيسية',title:'خيارات المتجر',kind:'edit',fields:home});
     const theme=changedFields(before.theme,after.theme);if(theme.length)result.push({group:'الهوية',title:'هوية المتجر',kind:'edit',fields:theme});
     for(const [key,label] of Object.entries(groups)){
       const a=before[key]||[],b=after[key]||[];
@@ -52,6 +46,6 @@
     }
     return result;
   }
-  const api={normalize,unitPrice,validatePricing,sectionProducts,differences};
+  const api={normalize,unitPrice,validatePricing,differences};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.StoreRules=api;
 })(typeof window==='undefined'?globalThis:window);

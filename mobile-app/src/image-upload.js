@@ -1,5 +1,5 @@
 const MAX_FILES=5;
-const MAX_INPUT_BYTES=25*1024*1024;
+const MAX_INPUT_BYTES=10*1024*1024;
 const TARGET_BYTES=900*1024;
 const MAX_DIMENSION=2200;
 
@@ -33,7 +33,7 @@ async function loadImage(file){
 }
 
 const canvasBlob=(canvas,quality)=>new Promise((resolve,reject)=>{
-  canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('compress_failed')),'image/jpeg',quality);
+  canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('compress_failed')),'image/webp',quality);
 });
 
 async function compressFile(file){
@@ -54,18 +54,16 @@ async function compressFile(file){
     for(let attempt=0;attempt<14;attempt++){
       const canvas=document.createElement('canvas');
       canvas.width=width;canvas.height=height;
-      const ctx=canvas.getContext('2d',{alpha:false});
+      const ctx=canvas.getContext('2d');
       if(!ctx)throw new Error('compress_failed');
-      ctx.fillStyle='#fff';
-      ctx.fillRect(0,0,width,height);
       ctx.drawImage(loaded.image,0,0,width,height);
       const blob=await canvasBlob(canvas,quality);
       canvas.width=1;canvas.height=1;
       if(blob.size<=TARGET_BYTES)return readAsDataUrl(blob);
       if(quality>.56)quality=Math.max(.56,quality-.08);
       else{
-        width=Math.max(640,Math.round(width*.82));
-        height=Math.max(640,Math.round(height*.82));
+        width=Math.max(1,Math.round(width*.82));
+        height=Math.max(1,Math.round(height*.82));
         quality=.78;
       }
     }
