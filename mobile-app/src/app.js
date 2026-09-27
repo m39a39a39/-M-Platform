@@ -1128,36 +1128,78 @@ function openBulkPublicImport(){
   });
   $('bulkExcelFile')?.addEventListener('change',e=>handleBulkWorkbookFile(e.target.files?.[0]));
 }
+const BULK_SERVER_MAX_ITEMS=20;
+const BULK_SERVER_MAX_CHARS=2700000;
+const BULK_SERVER_CONCURRENCY=2;
+function bulkServerItem(row){
+  return {
+    rowNumber:row.rowNumber,sku:row.sku,product:row.product,specs:row.specs,
+    unitPrice:String(row.unitPrice),currency:row.currency,moq:String(row.moq),
+    stock:String(row.stock??''),leadTime:String(row.leadTime),
+    categoryId:row.categoryId,subcategoryId:row.subcategoryId||'',
+    country:normalizeSupplyCountry(row.country,supplyCountries()),
+    images:(row.images||[]).map(x=>x.source)
+  };
+}
+function bulkServerJobs(rows){
+  const batches=[],fallback=[];let current=[],size=32;
+  const flush=()=>{if(current.length){batches.push(current);current=[];size=32;}};
+  for(const row of rows){
+    if(row.duplicateOfferId&&row.duplicateAction==='update'){fallback.push(row);continue;}
+    const item=bulkServerItem(row),estimate=JSON.stringify(item).length+32;
+    if(estimate>BULK_SERVER_MAX_CHARS){fallback.push(row);continue;}
+    if(current.length&&(current.length>=BULK_SERVER_MAX_ITEMS||size+estimate>BULK_SERVER_MAX_CHARS))flush();
+    current.push({row,item});size+=estimate;
+  }
+  flush();return {batches,fallback};
+}
 async function importBulkProducts(){
   if(busy)return;
   bulkRevalidate();
   const ready=bulkImportRows.filter(r=>!r.errors.length&&r.duplicateAction!=='skip');
   if(!ready.length){$('bulkImportMessage').textContent=tr('لا توجد منتجات جاهزة للاستيراد.','No products are ready to import.');return;}
-  busy=true;let done=0,failed=0,nextIndex=0;
-  const imported=new Set(),concurrency=Math.min(4,ready.length);
+  busy=true;let done=0,failed=0,jobIndex=0;
+  const imported=new Set(),{batches,fallback}=bulkServerJobs(ready);
+  const jobs=[...batches.map(batch=>({type:'batch',batch})),...fallback.map(row=>({type:'legacy',row}))];
   const updateProgress=()=>{
-    const processed=done+failed,next=Math.min(ready.length,processed+1),msg=$('bulkImportMessage');
-    if(msg)msg.textContent=tr(`جارٍ استيراد ${next} من ${ready.length}...`,`Importing ${next} of ${ready.length}...`);
+    const processed=done+failed,msg=$('bulkImportMessage');
+    if(msg)msg.textContent=tr(`جارٍ الاستيراد... ${processed} من ${ready.length}`,`Importing... ${processed} of ${ready.length}`);
   };
-  const importRow=async row=>{
+  const failRow=(row,error)=>{
+    row.errors=['server'];row.serverError=error?.message||String(error||tr('تعذر استيراد هذا المنتج.','Could not import this product.'));failed++;
+  };
+  const importBatch=async batch=>{
+    try{
+      const response=await request('/api/v1/supply-sources/bulk-submit',{method:'POST',auth:true,body:{items:batch.map(x=>x.item)}});
+      const results=new Map((response?.results||[]).map(x=>[Number(x.rowNumber),x]));
+      for(const {row} of batch){
+        const result=results.get(Number(row.rowNumber));
+        if(result?.ok){imported.add(row.rowNumber);done++;}
+        else failRow(row,new Error(result?.error||tr('تعذر استيراد هذا المنتج.','Could not import this product.')));
+      }
+    }catch(error){
+      for(const {row} of batch)failRow(row,error);
+    }
+    updateProgress();
+  };
+  const importLegacy=async row=>{
     try{
       const images=await uploadSources(row.images.map(x=>x.source));
       const patch={sku:row.sku,product:row.product,specs:row.specs,country:normalizeSupplyCountry(row.country,supplyCountries()),unitPrice:String(row.unitPrice),currency:row.currency,moq:String(row.moq),stock:String(row.stock??''),leadTime:String(row.leadTime),validUntil:row.validUntil||'',categoryId:row.categoryId,subcategoryId:row.subcategoryId||'',images};
       await request('/api/v1/supply-sources/submit',{method:'POST',auth:true,body:row.duplicateOfferId&&row.duplicateAction==='update'?{productId:row.duplicateOfferId,terms:patch}:patch});
       imported.add(row.rowNumber);done++;
-    }catch(error){
-      row.errors=['server'];row.serverError=error.message;failed++;
-    }finally{updateProgress();}
+    }catch(error){failRow(row,error);}
+    updateProgress();
   };
   const worker=async()=>{
-    while(nextIndex<ready.length){
-      const index=nextIndex++;
-      await importRow(ready[index]);
+    while(jobIndex<jobs.length){
+      const job=jobs[jobIndex++];
+      if(job.type==='batch')await importBatch(job.batch);else await importLegacy(job.row);
     }
   };
   try{
     updateProgress();
-    await Promise.all(Array.from({length:concurrency},worker));
+    await Promise.all(Array.from({length:Math.min(BULK_SERVER_CONCURRENCY,jobs.length)},worker));
     await loadData({render:false});
     bulkImportRows=bulkImportRows.filter(r=>!imported.has(r.rowNumber));
     if(!bulkImportRows.length||bulkImportRows.every(r=>r.duplicateAction==='skip'&&!r.errors.length)){
