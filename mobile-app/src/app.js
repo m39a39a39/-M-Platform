@@ -1133,20 +1133,31 @@ async function importBulkProducts(){
   bulkRevalidate();
   const ready=bulkImportRows.filter(r=>!r.errors.length&&r.duplicateAction!=='skip');
   if(!ready.length){$('bulkImportMessage').textContent=tr('لا توجد منتجات جاهزة للاستيراد.','No products are ready to import.');return;}
-  busy=true;let done=0,failed=0;
-  const imported=new Set();
-  try{
-    for(const row of ready){
-      const msg=$('bulkImportMessage');if(msg)msg.textContent=tr(`جارٍ استيراد ${done+1} من ${ready.length}...`,`Importing ${done+1} of ${ready.length}...`);
-      try{
-        const images=await uploadSources(row.images.map(x=>x.source));
-        const patch={sku:row.sku,product:row.product,specs:row.specs,country:normalizeSupplyCountry(row.country,supplyCountries()),unitPrice:String(row.unitPrice),currency:row.currency,moq:String(row.moq),stock:String(row.stock??''),leadTime:String(row.leadTime),validUntil:row.validUntil||'',categoryId:row.categoryId,subcategoryId:row.subcategoryId||'',images};
-        await request('/api/v1/supply-sources/submit',{method:'POST',auth:true,body:row.duplicateOfferId&&row.duplicateAction==='update'?{productId:row.duplicateOfferId,terms:patch}:patch});
-        imported.add(row.rowNumber);done++;
-      }catch(error){
-        row.errors=['server'];row.serverError=error.message;failed++;
-      }
+  busy=true;let done=0,failed=0,nextIndex=0;
+  const imported=new Set(),concurrency=Math.min(4,ready.length);
+  const updateProgress=()=>{
+    const processed=done+failed,next=Math.min(ready.length,processed+1),msg=$('bulkImportMessage');
+    if(msg)msg.textContent=tr(`جارٍ استيراد ${next} من ${ready.length}...`,`Importing ${next} of ${ready.length}...`);
+  };
+  const importRow=async row=>{
+    try{
+      const images=await uploadSources(row.images.map(x=>x.source));
+      const patch={sku:row.sku,product:row.product,specs:row.specs,country:normalizeSupplyCountry(row.country,supplyCountries()),unitPrice:String(row.unitPrice),currency:row.currency,moq:String(row.moq),stock:String(row.stock??''),leadTime:String(row.leadTime),validUntil:row.validUntil||'',categoryId:row.categoryId,subcategoryId:row.subcategoryId||'',images};
+      await request('/api/v1/supply-sources/submit',{method:'POST',auth:true,body:row.duplicateOfferId&&row.duplicateAction==='update'?{productId:row.duplicateOfferId,terms:patch}:patch});
+      imported.add(row.rowNumber);done++;
+    }catch(error){
+      row.errors=['server'];row.serverError=error.message;failed++;
+    }finally{updateProgress();}
+  };
+  const worker=async()=>{
+    while(nextIndex<ready.length){
+      const index=nextIndex++;
+      await importRow(ready[index]);
     }
+  };
+  try{
+    updateProgress();
+    await Promise.all(Array.from({length:concurrency},worker));
     await loadData({render:false});
     bulkImportRows=bulkImportRows.filter(r=>!imported.has(r.rowNumber));
     if(!bulkImportRows.length||bulkImportRows.every(r=>r.duplicateAction==='skip'&&!r.errors.length)){
