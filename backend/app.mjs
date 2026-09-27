@@ -1,3 +1,4 @@
+import {supplierCatalog} from './modules/supplier-catalog.mjs';
 import {bulkSupplySources} from './modules/bulk-supply-sources.mjs';
 import {submitSupplySource,reviewSupplySource} from './modules/supply-sources.mjs';
 import {bulkSubmitSupplySources} from './modules/bulk-import.mjs';
@@ -66,6 +67,7 @@ export default async function handler(req,res){
     }else{
       const user=await identify(req,res,path==='/api/state'||path.startsWith('/api/media/')&&req.method==='GET');
       if(path==='/api/state'){assert(req.method==='GET',405);result=await snapshot(user);}
+      else if(path==='/api/supplier-catalog'){assert(req.method==='GET',405);result=await supplierCatalog(user,url.searchParams);}
       else if(path.startsWith('/api/media/')){assert(req.method==='GET',405);await media(user,path.split('/').at(-1),res);return;}
       else if(path==='/api/notifications'){
         assert(user,401);assert(req.method==='GET',405);result=await listNotifications(user);

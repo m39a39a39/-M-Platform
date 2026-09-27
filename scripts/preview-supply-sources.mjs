@@ -1,5 +1,6 @@
 // Isolated, disposable local preview. Never connects to a deployed database.
 import http from 'node:http';
+import {supplierCatalog} from '../backend/modules/supplier-catalog.mjs';
 import {bulkSupplySources} from '../backend/modules/bulk-supply-sources.mjs';
 import {defaultStore} from '../shared/storefront-model.mjs';
 import {readFile} from 'node:fs/promises';
@@ -27,7 +28,10 @@ for(const [i,names] of sampleNames.entries()){
  const item=await submitSupplySource(supplier,{terms,proposal:{...proposal,sku:'SAMPLE-'+(i+2),product:names[0]}});
  await reviewSupplySource(admin,{id:item.sourceId,version:1,action:'approve',salePrice:75+i*20,currency:'SAR',translation:{titleAr:names[0],titleEn:names[1],descriptionAr:proposal.specs,descriptionEn:'Sample product'},redactionConfirmed:true});
 }
-const storefront=defaultStore();storefront.sections[0].image=proposal.images[0];storefront.sections.splice(1,0,{id:'categories',type:'categories',title:'تسوق حسب التصنيف',titleEn:'Shop by category',visible:true,channel:'both',categoryImages:{cat:proposal.images[0]}});
+await pg.exec('alter table public_offers add column display_no bigint');
+for(let i=0;i<45;i++)await pg.query('insert into public_offers(id,owner_id,data,display_no) values($1,null,$2,$3)',[crypto.randomUUID(),JSON.stringify({storeOwned:true,status:'published',product:'منتج تجريبي '+i,sku:'SKU-'+i,categoryId:i%2?'cat':'cat2',subcategoryId:i%2?'sub':'sub2',country:i%3?'China':'UAE',translation:{titleAr:'منتج تجريبي '+i,titleEn:'Test product '+i},unitPrice:50+i,moq:1,stock:100,currency:'SAR'}),10000+i]);
+await pg.query(`update settings set data=data || $1::jsonb`,[JSON.stringify({categories:[{id:'cat',nameAr:'إلكترونيات',nameEn:'Electronics',active:true},{id:'cat2',nameAr:'حقائب',nameEn:'Bags',active:true}],subcategories:[{id:'sub',parentId:'cat',nameAr:'سماعات',nameEn:'Headphones',active:true},{id:'sub2',parentId:'cat2',nameAr:'سفر',nameEn:'Travel',active:true}],supplyCountries:[{id:'China',nameAr:'الصين',nameEn:'China',active:true},{id:'UAE',nameAr:'الإمارات',nameEn:'UAE',active:true}]})]);
+const storefront=defaultStore();storefront.sections.find(s=>s.type==='catalog').catalog={categoryIds:['cat','cat2'],subcategoryIds:['sub','sub2'],countryIds:['China','UAE']};storefront.pages.push({id:'sample-policy',title:'سياسة تجريبية',titleEn:'Test policy',content:'نص للاختبار المحلي فقط',contentEn:'Local test only',active:true,footer:true,policy:true});storefront.sections[0].image=proposal.images[0];storefront.sections.splice(1,0,{id:'categories',type:'categories',title:'تسوق حسب التصنيف',titleEn:'Shop by category',visible:true,channel:'both',categoryIds:['cat','cat2'],categoryImages:{cat:proposal.images[0]}});
 await pg.query("update settings set data=jsonb_set(data,'{storefront}',$1::jsonb) where id='site'",[JSON.stringify(storefront)]);
 await createCartOrder(client,{items:[{offerId:approved.productId,quantity:4}],delivery:{name:'عميل الاختبار',phone:'12345',country:'السعودية',address:'عنوان تجريبي'}});
 for(let i=0;i<55;i++)await submitSupplySource(supplier,{terms,proposal:{...proposal,sku:'BULK-PREVIEW-'+i,product:'عرض تجريبي '+i}});
@@ -44,6 +48,7 @@ http.createServer(async(req,res)=>{try{
   else if(url.pathname.endsWith('/state'))result=await snapshot(current);
   else if(url.pathname.includes('/media/')){res.setHeader('Content-Type','image/png');res.end(image);return;}
   else if(url.pathname.endsWith('/notifications'))result=[];
+  else if(url.pathname.endsWith('/supplier-catalog'))result=await supplierCatalog(current,url.searchParams);
   else if(url.pathname.endsWith('/supply-sources/bulk'))result=await bulkSupplySources(current,body);
   else if(!current){res.statusCode=401;result={error:'سجّل الدخول إلى المعاينة'};}
   else if(url.pathname.endsWith('/supply-sources/submit'))result=await submitSupplySource(current,body);

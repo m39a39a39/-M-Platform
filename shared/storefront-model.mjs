@@ -1,3 +1,4 @@
+import {policyTemplates} from './catalog-controls.mjs';
 // The only homepage model. An empty sections array means an intentionally empty page.
 export const STORE_OPTIONS={showSearch:'البحث',showCategories:'فلاتر التصنيفات',showCountries:'فلاتر الدول',showCart:'السلة',showPrices:'الأسعار',showStock:'المخزون',showLogin:'تسجيل الدخول',showCustomerRegister:'تسجيل عميل',showSupplierRegister:'تسجيل مورد'};
 export const defaultOptions=()=>Object.fromEntries(Object.keys(STORE_OPTIONS).map(k=>[k,true]));
@@ -8,7 +9,7 @@ export const defaultSections=()=>[
  {id:'request',type:'cta',title:'تبحث عن منتج محدد؟',titleEn:'Looking for something specific?',subtitle:'أرسل المواصفات والكميات المطلوبة.',subtitleEn:'Share your specifications and quantities.',button:'اطلب توريدًا خاصًا',buttonEn:'Request sourcing',buttonTarget:'request',visible:true,channel:'both'},
  {id:'footer',type:'footer',title:'MIG COMPANY',titleEn:'MIG COMPANY',subtitle:'طلب المنتجات ومتابعة التوريد في مكان واحد.',subtitleEn:'Products and sourcing in one place.',visible:true,channel:'both'}
 ];
-export function defaultStore(){return {schemaVersion:2,theme:{name:'M Platform',tagline:'',taglineEn:'',announcement:'',announcementEn:'',color:'#193d43',round:16,logo:''},options:defaultOptions(),sections:defaultSections(),banners:[],pages:[],links:[],collections:[]};}
+export function defaultStore(){return {schemaVersion:2,theme:{name:'M Platform',tagline:'',taglineEn:'',announcement:'',announcementEn:'',color:'#193d43',round:16,logo:''},options:defaultOptions(),sections:defaultSections(),policiesInitialized:true,banners:[],pages:policyTemplates(),links:[],collections:[]};}
 export function selectSectionProducts(offers,s,collections=[]){
  let rows=offers.filter(p=>p.status==='published'&&!p.deletedAt&&!p.studioArchived);
  const mode=s.productSource||'latest';

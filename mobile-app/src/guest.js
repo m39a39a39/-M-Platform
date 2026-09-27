@@ -1,3 +1,4 @@
+import {mountSiteChrome} from './site-chrome.js';
 import {renderStorefront,bindStorefront,productExtras,tierPrice,homeConfig,storeProductCard} from './storefront.js';
 import { languageReady, getLanguage, onLanguageChange, toggleLanguage } from './language.js';
 import { showView } from './views.js';
@@ -188,11 +189,12 @@ function renderOffers(){
 }
 function mountGuestStore(){
  if(!state)return;const h=homeConfig(state.settings),host=$('guest-storefront');
- catalog.remove();host.innerHTML=renderStorefront(state,'web',{catalog:'',cartCount:cartItems.length});host.querySelector('[data-store-catalog-slot]')?.replaceChildren(catalog);
+ catalog.remove();host.innerHTML=renderStorefront(state,'web',{chrome:false,money,cartCount:cartItems.length});
+ if($('appView').classList.contains('hidden'))mountSiteChrome(state,{cartCount:cartItems.length},{hydrate:hydrateImages,action:guestChromeAction});
  catalogNode('guestProductSearch').placeholder=t('search');catalogNode('guestProductSearch').setAttribute('aria-label',t('search'));catalogNode('guestPrevPage').textContent=t('previous');catalogNode('guestNextPage').textContent=t('next');
  catalog.querySelector('.guest-product-search').hidden=!h.showSearch;
  catalogNode('guestCategoryFilters').hidden=!h.showCategories;catalogNode('guestSubcategoryFilters').hidden=!h.showCategories;catalogNode('guestSupplyCountryFilters').hidden=!h.showCountries;
- bindStorefront(host,state,{money,hydrate:hydrateImages,product:openOffer,add:id=>{try{const p=publishedOffers().find(p=>p.id===id);addToCart(p,(Number(p.moq)||1)+(cartItems.find(x=>x.offerId===id)?.quantity||0));showGuestToast(t('added'));}catch(e){showGuestToast(e.message);}},page:(title,html)=>{$('modalTitle').textContent=title;$('modalKicker').textContent='';$('modalBody').innerHTML=html;$('modal').classList.remove('hidden');},category:id=>{category=id;renderOffers();},catalog:()=>catalog.isConnected&&catalog.scrollIntoView({behavior:'smooth'}),action:action=>{if(action==='cart')openGuestCart();if(action==='login')showLogin();if(action==='request')requireCustomerAuth('new-request');if(action==='register-client')register('client');if(action==='register-supplier')register('supplier');if(action==='language')toggleLanguage();if(action==='home')host.scrollIntoView({behavior:'smooth'});}});
+ bindStorefront(host,state,{chrome:false,money,hydrate:hydrateImages,product:openOffer,add:id=>{try{const p=publishedOffers().find(p=>p.id===id);addToCart(p,(Number(p.moq)||1)+(cartItems.find(x=>x.offerId===id)?.quantity||0));showGuestToast(t('added'));}catch(e){showGuestToast(e.message);}},page:(title,html)=>{$('modalTitle').textContent=title;$('modalKicker').textContent='';$('modalBody').innerHTML=html;$('modal').classList.remove('hidden');},category:id=>{category=id;renderOffers();},catalog:()=>catalog.isConnected&&catalog.scrollIntoView({behavior:'smooth'}),action:action=>{if(action==='cart')openGuestCart();if(action==='login')showLogin();if(action==='request')requireCustomerAuth('new-request');if(action==='register-client')register('client');if(action==='register-supplier')register('supplier');if(action==='language')toggleLanguage();if(action==='home')host.scrollIntoView({behavior:'smooth'});}});
  hydrateImages(host);
 }
 async function load(){
@@ -296,9 +298,11 @@ $('modal').addEventListener('click',e=>{
   if(e.target.closest('[data-guest-auth-login]')){closeModal();showLogin();return;}
   if(e.target.closest('[data-guest-auth-register]')){closeModal();register('client');return;}
 });
-window.addEventListener('mplatform:view',e=>{if(e.detail?.id==='guestView'){loadCart();ensureLoaded();}});
+window.addEventListener('mplatform:view',e=>{if(['guestView','loginView','registerView','resetView','sessionView'].includes(e.detail?.id)){loadCart();ensureLoaded();if(state)mountSiteChrome(state,{cartCount:cartItems.length},{hydrate:hydrateImages,action:guestChromeAction});}});
 
 (async()=>{
   await languageReady;lang=getLanguage();loadCart();apply();
   if(!$('guestView').classList.contains('hidden'))ensureLoaded();
 })();
+
+function guestChromeAction(action){if(action==='cart')openGuestCart();if(action==='login')showLogin();if(action==='register-supplier')register('supplier');if(action==='register-client')register('client');if(action==='language')toggleLanguage();}

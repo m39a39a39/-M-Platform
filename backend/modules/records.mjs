@@ -20,7 +20,7 @@ export function supplierInterest(row){
 export function anonymous(row,kind,user){
   const d=row.data;
   const result={id:row.id,displayNo:row.display_no,version:row.version,createdAt:row.created_at,status:d.status,translation:d.translation||{},images:d.images||[],country:d.country||''};
-  const fields=kind==='requests'?['quantity','neededDate']:['unitPrice','currency','moq','leadTime','sampleCost','stock','validUntil','categoryId','shortDescription','productNotes','options','technicalSpecs','tiers'];
+  const fields=kind==='requests'?['quantity','neededDate']:['sku','subcategoryId','unitPrice','currency','moq','leadTime','sampleCost','stock','validUntil','categoryId','shortDescription','productNotes','options','technicalSpecs','tiers'];
   for(const key of fields)if(d[key]!==undefined)result[key]=d[key];
   if(kind==='requests'){result.supplierIds=[user.id];result.quoteSelected=!!d.selectedQuoteId;result.paymentConfirmed=d.paymentStatus==='confirmed';}
   if(kind==='quotes')result.publishedAt=d.publishedAt||d.updatedAt||d.reviewedAt||row.created_at;
@@ -83,7 +83,7 @@ export async function snapshot(user){
       one('settings','site'),
       rows('requests',`data->supplierIds=cs.${encodeURIComponent(JSON.stringify([user.id]))}&data->>status=eq.sent&data->>deletedAt=is.null&data->>suspendedAt=is.null`),
       rows('quotes',`owner_id=eq.${user.id}&data->>deletedAt=is.null`),
-      rows('public_offers','data->>status=eq.published&data->>deletedAt=is.null')
+      rows('public_offers',`owner_id=eq.${user.id}&data->>deletedAt=is.null`)
     ]);
     const assignedQuotes=await rows('quotes',`data->>assignedSupplierId=eq.${user.id}&data->>deletedAt=is.null`);
     quotes=[...new Map([...quotes,...assignedQuotes].filter(q=>!q.data.assignedSupplierId||q.data.assignedSupplierId===user.id).map(q=>[q.id,q])).values()];
