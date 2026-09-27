@@ -1,6 +1,8 @@
+import {mountSupplierCatalog,supplierProduct,resetSupplierCatalog} from './supplier-catalog.js';
+import {mountSiteChrome} from './site-chrome.js';
 import './storefront.css';
 import {Capacitor} from '@capacitor/core';
-import {renderStorefront,bindStorefront,productExtras,orderTimeline,stageLabel,tierPrice,homeConfig,storeProductCard} from './storefront.js';
+import {storeRoute,renderStoreRoute,renderStorefront,bindStorefront,productExtras,orderTimeline,stageLabel,tierPrice,homeConfig,storeProductCard} from './storefront.js';
 import { session } from './session.js';
 import { languageReady, getLanguage, onLanguageChange, toggleLanguage } from './language.js';
 import { showView } from './views.js';
@@ -383,11 +385,12 @@ async function loadData({render=true}={}){
 }
 configureAdmin({reload:()=>loadData({render:false})});
 session.onReset(reason=>{
-  currentUser=null;platformState=null;notifications=[];activeScreen='home';activeSub='primary';readyProductsPage=1;readyCategory='all';readySubcategory='all';readyCountry='all';readySearch='';cartItems=[];clientOrderSeen={};clientRequestFilter='all';
+  resetSupplierCatalog();currentUser=null;platformState=null;notifications=[];activeScreen='home';activeSub='primary';readyProductsPage=1;readyCategory='all';readySubcategory='all';readyCountry='all';readySearch='';cartItems=[];clientOrderSeen={};clientRequestFilter='all';
   resetAdmin();closeModal();
   for(const url of mediaCache.values())URL.revokeObjectURL(url);
   mediaCache.clear();mediaTasks.clear();publicMediaSources.clear();lastDataLoadedAt=0;$('screen').replaceChildren();$('headerRole').textContent='';
   $('navUnread').classList.add('hidden');$('toast').classList.add('hidden');
+
   document.querySelectorAll('#bottomNav button').forEach(b=>b.classList.toggle('active',b.dataset.screen==='home'));
   if(reason==='logout')showView('bootView');
   if(reason==='expired'){showView('loginView');setMessage(tr('انتهت جلسة الدخول. سجّل الدخول مجددًا.','Your session expired. Please sign in again.'));}
@@ -433,6 +436,7 @@ function updateShell(){
   $('navUnread').textContent=badge;$('headerUnread').textContent=badge;
   $('navUnread').classList.toggle('hidden',role!=='admin'||!unread);
   $('headerUnread').classList.toggle('hidden',!['supplier','client'].includes(role)||!unread);
+  mountSiteChrome(platformState,{role,cartCount:cartItems.length,unread},{hydrate:hydrateImages,action:action=>{if(action==='cart')openCart();if(action==='language')toggleLanguage();if(action==='refresh')void loadData().catch(e=>showToast(errorText(e)));if(action==='account'||action==='notifications'){activeScreen=action;renderScreen();}if(action==='register-supplier')window.dispatchEvent(new CustomEvent('mplatform:register',{detail:{role:'supplier'}}));}});
   document.querySelectorAll('#bottomNav button').forEach(b=>b.classList.toggle('active',b.dataset.screen===activeScreen));
 }
 
@@ -654,8 +658,8 @@ function renderHome(){
     const products=productResultsHtml();
     const h=homeConfig(platformState.settings);
     const catalog=`<section class="ready-products-section">${h.showSearch?productSearchBar():''}<div id="readyProductFilters">${productFiltersHtml()}</div><div id="readyProductsGrid" class="public-offers-grid">${products.grid}</div><div id="readyProductsPagination">${products.pagination}</div></section>`;
-    $('screen').innerHTML=`<div id="customer-storefront">${renderStorefront(platformState,Capacitor.isNativePlatform()?'app':'web',{money,client:true,catalog,cartCount:cartItems.length})}</div>`;
-    bindStorefront($('customer-storefront'),platformState,{money,hydrate:hydrateImages,product:openPublicOffer,add:id=>{try{const p=platformState.publicOffers.find(p=>p.id===id);addToCart(p,(Number(p.moq)||1)+(cartItems.find(x=>x.offerId===id)?.quantity||0));showToast(tr('تمت الإضافة إلى السلة','Added to cart'));}catch(e){showToast(e.message);}},page:(title,html)=>openModal(title,'',html),category:id=>{readyCategory=id;renderHome();},catalog:()=>document.getElementById('store-catalog')?.scrollIntoView({behavior:'smooth'}),action:action=>{if(action==='cart')openCart();if(action==='request')openNewRequest();}});
+    $('screen').innerHTML=`<div id="customer-storefront">${renderStorefront(platformState,Capacitor.isNativePlatform()?'app':'web',{money,chrome:false,client:true,catalog,cartCount:cartItems.length})}</div>`;
+    bindStorefront($('customer-storefront'),platformState,{chrome:false,money,hydrate:hydrateImages,product:openPublicOffer,add:id=>{try{const p=platformState.publicOffers.find(p=>p.id===id);addToCart(p,(Number(p.moq)||1)+(cartItems.find(x=>x.offerId===id)?.quantity||0));showToast(tr('تمت الإضافة إلى السلة','Added to cart'));}catch(e){showToast(e.message);}},page:(title,html)=>openModal(title,'',html),category:id=>{readyCategory=id;renderHome();},catalog:()=>document.getElementById('store-catalog')?.scrollIntoView({behavior:'smooth'}),action:action=>{if(action==='cart')openCart();if(action==='request')openNewRequest();}});
     updateCartBadge();
   }else if(role==='supplier'){
     const quotes=platformState.quotes||[],invites=(platformState.requests||[]).filter(r=>!supplierRequestAnswered(r,quotes));
@@ -709,7 +713,8 @@ function renderOffers(){
       `<div class="client-quote-groups">${groups.map(clientQuoteGroupCard).join('')||empty()}</div>`;
   }else if(currentUser.role==='supplier'){
     const sources=platformState.supplySources||[],offers=platformState.publicOffers||[];
-    $('screen').innerHTML=pageHeader(tr('منتجات المتجر ومصادر التوريد','Store products and supply sources'),tr('المنتجات ملك للمتجر. قدم عرض توريد لمنتج قائم أو اقترح منتجًا جديدًا للمراجعة.','Products belong to the store. Offer to supply an existing product or propose a new one.'),`<button class="primary-small" data-action="new-public">+ ${esc(tr('اقتراح منتج جديد','Propose a new product'))}</button>`)+segment([['primary',tr('منتجات المتجر','Store catalog')],['sources',tr('عروض التوريد الخاصة بي','My supply offers')]])+`<div class="list-stack">${activeSub==='sources'?sources.map(source=>{const o=offers.find(p=>p.id===source.productId)||source.proposal||{},t=source.terms;return `<article class="request-card"><h3>${esc(titleOf(o))}</h3><p>${esc(({pending:'بانتظار مراجعة الإدارة',approved:'مصدر توريد معتمد',rejected:'مرفوض'})[source.status]||source.status)}</p><p>سعر توريدك: ${money(t.unitPrice,t.currency)} · MOQ ${esc(t.moq)} · المخزون ${esc(t.stock)} · التجهيز ${esc(t.leadTime)} يوم</p><p>${esc(source.reviewNote)}</p>${source.productId?`<button type="button" class="secondary-btn" data-supply-product="${esc(source.productId)}">تعديل عرض التوريد</button>`:''}</article>`;}).join('')||empty():offers.map(o=>itemCard(o,{subtitle:descriptionOf(o),meta:tr('منتج المتجر','Store product'),action:`data-public-offer="${esc(o.id)}"`,images:true})+`<button class="secondary-btn" data-supply-product="${esc(o.id)}" >${esc(sources.some(x=>x.productId===o.id)?tr('تعديل عرض التوريد','Edit supply offer'):tr('أستطيع توريد هذا المنتج','I can supply this product'))}</button>`).join('')||empty()}</div>`;
+    $('screen').innerHTML=pageHeader(tr('منتجات المتجر ومصادر التوريد','Store products and supply sources'),tr('ابحث في منتجات المتجر وقدّم عرض توريد.','Find store products and submit a supply offer.'),`<button class="primary-small" data-action="new-public">+ ${esc(tr('اقتراح منتج جديد','Propose a new product'))}</button>`)+segment([['primary',tr('منتجات المتجر','Store catalog')],['sources',tr('عروض التوريد الخاصة بي','My supply offers')]])+(activeSub==='sources'?`<div class="list-stack">${sources.map(source=>{const o=offers.find(p=>p.id===source.productId)||source.proposal||{},t=source.terms;return `<article class="request-card"><h3>${esc(titleOf(o)||source.productId)}</h3><p>${esc(source.status)}</p><p>${money(t.unitPrice,t.currency)} · MOQ ${esc(t.moq)} · ${esc(tr('المخزون','Stock'))}: ${esc(t.stock)}</p><p>${esc(source.reviewNote)}</p>${source.productId?`<button class="secondary-btn" data-supply-product="${esc(source.productId)}">${esc(tr('تعديل عرض التوريد','Edit supply offer'))}</button>`:''}</article>`;}).join('')||empty()}</div>`:'<div id="supplier-catalog"></div>');
+    if(activeSub!=='sources')mountSupplierCatalog($('supplier-catalog'),{state:platformState,request,language:lang,hydrate:hydrateImages,card:o=>itemCard(o,{subtitle:descriptionOf(o),meta:tr('منتج المتجر','Store product'),action:`data-public-offer="${esc(o.id)}"`,images:true}),sourceButton:o=>`<button class="secondary-btn" data-supply-product="${esc(o.id)}">${esc(sources.some(x=>x.productId===o.id)?tr('تعديل عرض التوريد','Edit supply offer'):tr('أستطيع توريد هذا المنتج','I can supply this product'))}</button>`});
   }else renderAdminCollection('offers');
 }
 
@@ -723,7 +728,7 @@ function renderAccount(){
   $('screen').innerHTML=pageHeader(t('account'))+`<section class="profile-card"><div class="avatar">${esc((u.name||u.company||u.email||'M').charAt(0).toUpperCase())}</div><h2>${esc(u.name||u.company||'M Platform')}</h2><p>${esc(t(u.role))}</p><dl><div><dt>${esc(t('email'))}</dt><dd>${esc(u.email||'—')}</dd></div>${u.company?`<div><dt>${tr('الشركة','Company')}</dt><dd>${esc(u.company)}</dd></div>`:''}${u.country?`<div><dt>${esc(t('country'))}</dt><dd>${esc(u.country)}</dd></div>`:''}</dl>${settingsGroup}<p class="session-note">${esc(t('sessionNote'))}</p><button class="danger-btn" data-action="logout">${esc(t('logout'))}</button></section>`;
 }
 function renderAdminCollection(kind){const rows=kind==='requests'?(platformState.requests||[]):[...(platformState.quotes||[]),...(platformState.publicOffers||[])];$('screen').innerHTML=pageHeader(kind==='requests'?t('requests'):t('offers'),t('adminMobile'))+`<div class="list-stack">${rows.slice(0,50).map(x=>itemCard(x,{subtitle:descriptionOf(x),badge:cardBadge(x.status),meta:`#${ref(x)} · ${date(x.createdAt)}`})).join('')||empty()}</div>`;}
-function renderScreen(){if(!currentUser||!platformState)return;updateShell();if(renderAdminScreen(activeScreen))return;if(activeScreen==='home')renderHome();else if(activeScreen==='orders')renderSupplierOrders();else if(activeScreen==='requests')renderRequests();else if(activeScreen==='offers')renderOffers();else if(activeScreen==='notifications')renderNotifications();else renderAccount();hydrateImages($('screen'));}
+function renderScreen(){if(!currentUser||!platformState)return;updateShell();const route=storeRoute();if(activeScreen==='home'&&(route.page||route.category)&&currentUser.role!=='client'){const isCatalog=route.category||route.page==='products';$('screen').innerHTML=renderStoreRoute(platformState,route,{chrome:false,money});if(isCatalog&&currentUser.role==='supplier'){const host=$('screen').querySelector('[data-store-catalog-slot]');mountSupplierCatalog(host,{state:platformState,request,language:lang,card:p=>itemCard(p,{subtitle:descriptionOf(p),action:`data-public-offer="${esc(p.id)}"`}),hydrate:hydrateImages,sourceButton:p=>`<button class="secondary-btn" data-supply-product="${esc(p.id)}">${tr('أستطيع توريد هذا المنتج','I can supply this product')}</button>`,fixedCategory:route.category});}else bindStorefront($('screen'),platformState,{chrome:false,money,hydrate:hydrateImages,product:openPublicOffer});hydrateImages($('screen'));return;}if(renderAdminScreen(activeScreen))return;if(activeScreen==='home')renderHome();else if(activeScreen==='orders')renderSupplierOrders();else if(activeScreen==='requests')renderRequests();else if(activeScreen==='offers')renderOffers();else if(activeScreen==='notifications')renderNotifications();else renderAccount();hydrateImages($('screen'));}
 
 function quoteTotal(q,r){
   const unit=Number(q?.unitPrice),quantity=Number(r?.quantity);
@@ -806,14 +811,15 @@ function openReadyOrder(interestId){
   const productInfo=o?`<section class="client-detail-content"><h3>${esc(t('specifications'))}</h3><p class="long-copy">${esc(descriptionOf(o)||'—')}</p><div class="facts"><span>MOQ ${esc(o.moq||'—')}</span>${homeConfig(platformState.settings).showStock?`<span>${esc(t('stock'))}: ${esc(o.stock||'—')}</span>`:''}<span>${esc(t('leadTime'))}: ${esc(o.leadTime||'—')}</span></div>${gallery(o.images)}</section>`:'';
   openModal(title,`#${ref(interest)}`,`${summary}${clientReadyActionPanel(interest,o)}${statusCard}${paymentPanel(interest,'interest')}${invoicePanel(interest,'interest')}${trackingTimeline(interest,{flow:READY_TRACKING_FLOW,statusResolver:readyTrackingStatus})}${productInfo}`);
 }
-function offerSupply(productId){
- const product=(platformState.publicOffers||[]).find(p=>p.id===productId),source=(platformState.supplySources||[]).find(s=>s.productId===productId);if(!product||currentUser.role!=='supplier')return;
+async function offerSupply(productId){
+ let fetched;try{fetched=await supplierProduct(productId,request);}catch(error){showToast(error.message);return;}
+ const product=fetched,source=(platformState.supplySources||[]).find(s=>s.productId===productId);if(!product||currentUser?.role!=='supplier')return;
  openModal('أستطيع توريد هذا المنتج',titleOf(product),`<form id="supply-source-form" class="form-stack"><p>عرضك خاص بك وبالإدارة ولا يغيّر سعر البيع في المتجر.</p><label>سعر التوريد<input name="unitPrice" type="number" min="0.01" step="0.01" required></label><label>العملة<select name="currency">${['SAR','USD','CNY','AED','EUR'].map(c=>`<option>${c}</option>`).join('')}</select></label><label>الحد الأدنى<input name="moq" type="number" min="1" step="1" required></label><label>الكمية المتوفرة<input name="stock" type="number" min="0" step="1" required></label><label>مدة التجهيز بالأيام<input name="leadTime" type="number" min="1" step="1" required></label><label>بلد التوريد<input name="country" maxlength="80" required></label><p class="form-message" id="supply-source-message"></p><button class="primary-btn" type="submit">إرسال العرض للمراجعة</button></form>`);
  if(source)for(const [key,value] of Object.entries(source.terms))if($('supply-source-form').elements[key])$('supply-source-form').elements[key].value=value;
  $('supply-source-form').onsubmit=async e=>{e.preventDefault();const b=e.target.querySelector('button');b.disabled=true;try{await request('/api/v1/supply-sources/submit',{method:'POST',auth:true,body:{productId,...(source?{sourceId:source.id,version:source.version}:{}),terms:Object.fromEntries(new FormData(e.target))}});await loadData({render:false});closeModal();activeScreen='offers';activeSub='sources';renderScreen();showToast('تم إرسال عرض التوريد للمراجعة');}catch(error){$('supply-source-message').textContent=error.message;b.disabled=false;}};
 }
-function openPublicOffer(offerId){
-  const o=(platformState.publicOffers||[]).find(x=>x.id===offerId);if(!o)return;
+async function openPublicOffer(offerId){
+  let o=(platformState.publicOffers||[]).find(x=>x.id===offerId);if(currentUser?.role==='supplier')try{o=await supplierProduct(offerId,request);}catch(error){showToast(error.message);return;}if(!o)return;
   const cartItem=cartItems.find(x=>x.offerId===o.id);
   const moq=Math.max(1,Math.ceil(Number(o.moq)||1)),stock=Number(o.stock),maxAttr=Number.isFinite(stock)&&stock>0?` max="${esc(Math.floor(stock))}"`:'';
   const initialQty=cartItem?.quantity||moq;
@@ -1233,7 +1239,7 @@ async function handleAction(target){
   if(target.dataset.repeatRequest){const source=(platformState.requests||[]).find(x=>x.id===target.dataset.repeatRequest);if(source)return openNewRequest(source);}
   if(target.dataset.action==='new-public')return openNewPublic();
   if(target.dataset.action==='bulk-public-import')return openBulkPublicImport();
-  if(target.dataset.action==='view-public-offers'){activeScreen='offers';activeSub='primary';renderScreen();$('screen').scrollTop=0;return;}
+  if(target.dataset.action==='view-public-offers'){activeScreen='offers';activeSub='primary';renderScreen();$('screen').scrollTop=0;window.scrollTo(0,0);return;}
   if(target.dataset.action==='toggle-language')return toggleLanguage();
   if(target.hasAttribute('data-save-client-currency')){
     const select=$('screen')?.querySelector('[data-client-currency]'),currency=String(select?.value||'').toUpperCase();if(!currency)return;
@@ -1301,9 +1307,9 @@ async function logout(){
 async function enterWorkspace(){
   await loadData({render:false});
   if(!currentUser)return;
-  if(currentUser.role==='admin'){location.replace('/studio.html');return;}
+  if(currentUser.role==='admin'&&!storeRoute().page&&!storeRoute().category&&!['account','notifications'].includes(new URLSearchParams(location.search).get('screen'))){location.replace('/studio.html');return;}
   const postAuth=takePostAuthAction();
-  showView('appView');activeScreen='home';activeSub='primary';renderScreen();
+  showView('appView');const requestedScreen=new URLSearchParams(location.search).get('screen');activeScreen=['account','notifications'].includes(requestedScreen)?requestedScreen:'home';activeSub='primary';renderScreen();
   if(currentUser.role==='client'&&postAuth==='open-cart')setTimeout(()=>openCart(),0);
   else if(currentUser.role==='client'&&postAuth==='new-request')setTimeout(()=>openNewRequest(),0);
 }
@@ -1331,10 +1337,10 @@ $('forgotPasswordBtn').addEventListener('click',async()=>{
 $('langBtn').addEventListener('click',toggleLanguage);
 $('appLangBtn').addEventListener('click',toggleLanguage);
 $('headerCartBtn')?.addEventListener('click',()=>{if(currentUser?.role==='client')openCart();});
-$('headerNotificationsBtn').addEventListener('click',()=>{if(!currentUser)return;activeScreen='notifications';renderScreen();$('screen').scrollTop=0;});
+$('headerNotificationsBtn').addEventListener('click',()=>{if(!currentUser)return;activeScreen='notifications';renderScreen();$('screen').scrollTop=0;window.scrollTo(0,0);});
 onLanguageChange(value=>{lang=value;applyLanguage();applyRegistrationLanguage();applyResetLanguage();});
 $('refreshBtn').addEventListener('click',async()=>{if(busy)return;busy=true;$('refreshBtn').classList.add('spin');try{await loadData();showToast(t('refreshing'));}catch(e){showToast(errorText(e));}finally{busy=false;$('refreshBtn').classList.remove('spin');}});
-$('bottomNav').addEventListener('click',e=>{const b=e.target.closest('button[data-screen]');if(!b)return;activeScreen=b.dataset.screen;if(activeScreen==='offers')activeSub='primary';if(activeScreen==='requests'&&currentUser?.role==='supplier')activeSub='pending';renderScreen();$('screen').scrollTop=0;});
+$('bottomNav').addEventListener('click',e=>{const b=e.target.closest('button[data-screen]');if(!b)return;history.replaceState(null,'',location.pathname);activeScreen=b.dataset.screen;if(activeScreen==='offers')activeSub='primary';if(activeScreen==='requests'&&currentUser?.role==='supplier')activeSub='pending';renderScreen();$('screen').scrollTop=0;window.scrollTo(0,0);});
 $('screen').addEventListener('click',e=>{const sub=e.target.closest('[data-sub]');if(sub){activeSub=sub.dataset.sub;renderScreen();return;}const target=e.target.closest('[data-action],[data-save-client-currency],[data-category],[data-subcategory],[data-supply-country],[data-client-order-filter],[data-cart-order],[data-ready-order],[data-client-offers-request],[data-request],[data-supplier-request],[data-supplier-order-id],[data-public-offer],[data-supply-product],[data-edit-quote],[data-quote-request],[data-select-quote],[data-approve-cart-replacement],[data-reject-cart-replacement],[data-interest],[data-notification],[data-payment-notification],[data-payment-upload],[data-payment-document],[data-invoice-pdf],[data-copy-value]');if(target)handleAction(target);});
 $('screen').addEventListener('input',e=>{const input=e.target.closest('[data-product-search]');if(!input)return;readySearch=input.value;readyProductsPage=1;refreshProductResults();});
 $('modal').addEventListener('click',e=>{if(e.target.closest('[data-close-modal]')){closeModal();return;}const target=e.target.closest('[data-ready-order],[data-client-offers-request],[data-edit-quote],[data-quote-request],[data-select-quote],[data-approve-replacement-quote],[data-reject-replacement-quote],[data-approve-cart-replacement],[data-reject-cart-replacement],[data-interest],[data-supplier-order-status],[data-supplier-order-cannot],[data-payment-upload],[data-payment-document],[data-invoice-pdf],[data-copy-value]');if(target)handleAction(target);});

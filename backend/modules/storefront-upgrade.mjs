@@ -1,7 +1,8 @@
+import {policyTemplates} from '../../shared/catalog-controls.mjs';
 import {normalizeHome} from './legacy-home-data.mjs';
 import {defaultStore,defaultOptions} from '../../shared/storefront-model.mjs';
 export function upgradeStore(input,settings={}){
- if(input?.schemaVersion===2)return input;
+ if(input?.schemaVersion===2)return input.policiesInitialized?input:{...input,policiesInitialized:true,pages:[...(input.pages||[]),...policyTemplates().filter(p=>!(input.pages||[]).some(x=>x.id===p.id))]};
  if(!input)return defaultStore();
  const h=normalizeHome(input.home||{},settings),out={...defaultStore(),...structuredClone(input),schemaVersion:2,options:{...defaultOptions(),...Object.fromEntries(Object.keys(defaultOptions()).map(k=>[k,h[k]]))}};
  const old=input.sections||[],explicit=new Set(old.map(s=>s.type));

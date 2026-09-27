@@ -6,6 +6,7 @@ import {sectionDefaults} from '../shared/section-layout.mjs';
 const source=readFileSync(new URL('../mobile-app/public/studio/advanced.js',import.meta.url),'utf8');
 function editor(){
  const context=vm.createContext({types:{categories:['تصنيفات','grid'],text:['نص','text'],banners:['إعلانات','image'],hero:['بنر رئيسي','image'],products:['منتجات','box']},document:{addEventListener(){}},window:{MStorefront:{sectionDefaults}},state:{draft:{categories:[],collections:[],products:[],sections:[{type:'catalog'}]}},esc:String,icon:()=>'',field:(label,name,value,type,attrs)=>`<input aria-label="${label}" ${attrs||''}>`,btn:()=>'',modal:(title,html)=>{context.dialog=html;}});
+ vm.runInContext(readFileSync(new URL('../mobile-app/public/studio/storefront-controls.js',import.meta.url),'utf8').split("document.addEventListener('change'")[0],context);
  vm.runInContext(source.slice(0,source.indexOf("document.addEventListener('change'")),context);return context;
 }
 test('image-only inspector has relevant controls without text, text color or ineffective spacing controls',()=>{
