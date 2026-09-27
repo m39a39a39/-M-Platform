@@ -1,4 +1,5 @@
 import {submitSupplySource,reviewSupplySource} from './modules/supply-sources.mjs';
+import {bulkSubmitSupplySources} from './modules/bulk-import.mjs';
 import {assignSupplier} from './modules/fulfillment.mjs';
 import {createAccount} from './modules/admin-create.mjs';
 import {config,HttpError,assert} from './lib/supabase.mjs';
@@ -57,7 +58,7 @@ export default async function handler(req,res){
       assert(req.headers.origin===c.origin||trustedNative||bearer&&nativeNoOrigin||path.startsWith('/api/auth/')&&nativeNoOrigin,403,'مصدر الطلب غير مسموح / Invalid origin');
       assert((req.headers['content-type']||'').includes('application/json'),415);
     }
-    const body=req.method==='POST'?await readBody(req,['/api/uploads','/api/payment-receipts'].includes(path)?7500000:1800000):{};
+    const body=req.method==='POST'?await readBody(req,path==='/api/supply-sources/bulk-submit'?3500000:['/api/uploads','/api/payment-receipts'].includes(path)?7500000:1800000):{};
     let result;
     if(path.startsWith('/api/auth/')){
       assert(req.method==='POST',405);result=await authRoute(path.split('/').at(-1),req,res,body);
@@ -70,6 +71,7 @@ export default async function handler(req,res){
       }else{
         assert(req.method==='POST',405);assert(user,401);
         if(path==='/api/supply-sources/submit')result=await submitSupplySource(user,body);
+        else if(path==='/api/supply-sources/bulk-submit')result=await bulkSubmitSupplySources(user,body);
         else if(path==='/api/supply-sources/review')result=await reviewSupplySource(user,body);
         else if(path==='/api/mutations')result=await mutate(user,body);
         else if(path==='/api/bulk-public-offers')result=await bulkUpdatePublicOffers(user,body);
