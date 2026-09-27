@@ -40,6 +40,25 @@ async function storeMedia(user,{bytes,mime},errorMessage){
   return {src:`/api/media/${id}`,mime};
 }
 export async function upload(user,{source}){return storeMedia(user,decodeImage(source),'تعذر رفع الصورة / Upload failed');}
+export async function uploadImageBatch(user,sources){
+  assert(Array.isArray(sources)&&sources.length<=100,400,'دفعة الصور غير صالحة / Invalid image batch');
+  if(!sources.length)return [];
+  const c=config(),rows=sources.map(source=>{
+    const {bytes,mime}=decodeImage(source),id=randomUUID(),path=`${user.id}/${id}`;
+    return {id,path,mime,bytes};
+  });
+  let next=0;
+  const worker=async()=>{
+    while(next<rows.length){
+      const index=next++,row=rows[index];
+      const response=await fetch(`${c.url}/storage/v1/object/m-private/${row.path}`,{method:'POST',headers:{apikey:c.service,Authorization:`Bearer ${c.service}`,'Content-Type':row.mime},body:row.bytes,signal:AbortSignal.timeout(15000)});
+      assert(response.ok,502,'تعذر رفع الصورة / Upload failed');
+    }
+  };
+  await Promise.all(Array.from({length:Math.min(8,rows.length)},worker));
+  await db('media','',{method:'POST',body:rows.map(({id,path,mime})=>({id,owner_id:user.id,path,mime})),headers:{Prefer:'return=minimal'}});
+  return rows.map(row=>`/api/media/${row.id}`);
+}
 export async function uploadPaymentReceipt(user,source){return storeMedia(user,decodePaymentReceipt(source),'تعذر رفع إيصال الدفع / Receipt upload failed');}
 export async function media(user,id,res){
   assert(/^[a-f0-9-]{36}$/.test(id),404);const m=await one('media',id);assert(m,404);
