@@ -2,3 +2,12 @@
 @media(max-width:1100px){.editing-tools .review-button svg{display:none}.editing-tools .review-button{max-width:145px}.topbar .demo{display:none}}
 @media(max-width:850px){.topbar{flex-wrap:wrap;gap:10px}.top-actions{width:100%;justify-content:space-between}.editing-tools{order:0;margin-inline-end:auto}.top-actions .avatar{display:none}.topbar .breadcrumbs{font-size:14px}}
 @media(max-width:560px){.product-tabs button{font-size:13px;padding:10px}.product-dialog .dialog-body{padding-inline:14px}.spec-row{grid-template-columns:1fr 1fr auto;gap:5px}.spec-row input{font-size:13px;padding:8px}.tier-row{gap:7px}.pricing-example{grid-template-columns:1fr 90px}#product-gallery-editor{grid-template-columns:repeat(2,1fr)}.gallery-edit-card img{height:100px}.detail-layout{grid-template-columns:1fr}.detail-image{max-height:250px}.diff-header,.diff-row{grid-template-columns:1fr 1fr;gap:8px}.diff-row>strong,.diff-header>span:first-child{grid-column:1/-1}.picker-row{gap:6px}.picker-row .thumb{width:32px;height:32px}.picker-row .icon{padding:5px;min-width:29px}.picker-name{font-size:13px}.review-summary{align-items:flex-start;padding:12px}.review-dialog .dialog-foot{flex-wrap:wrap}.editing-tools .review-button{max-width:none;font-size:12px}.top-actions>button{font-size:12px}.product-detail .plain{font-size:13px}}
+
+/* Bulk supply editor keeps editable columns usable on desktop and small screens. */
+#dialog.supply-bulk-dialog{width:min(96vw,1500px);max-width:1500px}
+.supply-edit-table{min-width:1300px}
+.supply-edit-table td{vertical-align:top;min-width:110px}
+.supply-edit-table td:first-child{min-width:180px;position:sticky;right:0;background:var(--panel,#fff);z-index:1}
+.supply-edit-table input,.supply-edit-table select,.supply-edit-table textarea{width:100%;min-width:100px;box-sizing:border-box}
+.supply-edit-table textarea{min-width:220px;min-height:80px}
+#supply-search{min-width:220px;flex:1}
