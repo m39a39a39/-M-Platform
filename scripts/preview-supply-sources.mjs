@@ -1,5 +1,6 @@
 // Isolated, disposable local preview. Never connects to a deployed database.
 import http from 'node:http';
+import {bulkSupplySources} from '../backend/modules/bulk-supply-sources.mjs';
 import {defaultStore} from '../shared/storefront-model.mjs';
 import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
@@ -29,6 +30,7 @@ for(const [i,names] of sampleNames.entries()){
 const storefront=defaultStore();storefront.sections[0].image=proposal.images[0];storefront.sections.splice(1,0,{id:'categories',type:'categories',title:'تسوق حسب التصنيف',titleEn:'Shop by category',visible:true,channel:'both',categoryImages:{cat:proposal.images[0]}});
 await pg.query("update settings set data=jsonb_set(data,'{storefront}',$1::jsonb) where id='site'",[JSON.stringify(storefront)]);
 await createCartOrder(client,{items:[{offerId:approved.productId,quantity:4}],delivery:{name:'عميل الاختبار',phone:'12345',country:'السعودية',address:'عنوان تجريبي'}});
+for(let i=0;i<55;i++)await submitSupplySource(supplier,{terms,proposal:{...proposal,sku:'BULK-PREVIEW-'+i,product:'عرض تجريبي '+i}});
 const root=fileURLToPath(new URL('../mobile-app/dist/',import.meta.url));
 const image=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6UAAAAABJRU5ErkJggg==','base64');
 http.createServer(async(req,res)=>{try{
@@ -42,6 +44,7 @@ http.createServer(async(req,res)=>{try{
   else if(url.pathname.endsWith('/state'))result=await snapshot(current);
   else if(url.pathname.includes('/media/')){res.setHeader('Content-Type','image/png');res.end(image);return;}
   else if(url.pathname.endsWith('/notifications'))result=[];
+  else if(url.pathname.endsWith('/supply-sources/bulk'))result=await bulkSupplySources(current,body);
   else if(!current){res.statusCode=401;result={error:'سجّل الدخول إلى المعاينة'};}
   else if(url.pathname.endsWith('/supply-sources/submit'))result=await submitSupplySource(current,body);
   else if(url.pathname.endsWith('/supply-sources/review'))result=await reviewSupplySource(current,body);

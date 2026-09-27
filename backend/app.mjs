@@ -1,3 +1,4 @@
+import {bulkSupplySources} from './modules/bulk-supply-sources.mjs';
 import {submitSupplySource,reviewSupplySource} from './modules/supply-sources.mjs';
 import {bulkSubmitSupplySources} from './modules/bulk-import.mjs';
 import {assignSupplier} from './modules/fulfillment.mjs';
@@ -72,6 +73,7 @@ export default async function handler(req,res){
         assert(req.method==='POST',405);assert(user,401);
         if(path==='/api/supply-sources/submit')result=await submitSupplySource(user,body);
         else if(path==='/api/supply-sources/bulk-submit')result=await bulkSubmitSupplySources(user,body);
+        else if(path==='/api/supply-sources/bulk')result=await bulkSupplySources(user,body);
         else if(path==='/api/supply-sources/review')result=await reviewSupplySource(user,body);
         else if(path==='/api/mutations')result=await mutate(user,body);
         else if(path==='/api/bulk-public-offers')result=await bulkUpdatePublicOffers(user,body);
