@@ -31,7 +31,7 @@ export async function bulkSubmitSupplySources(user,body={}){
 
   const prepared=await Promise.all(normalized.map(async(item,index)=>{
     try{
-      const terms=supplyTerms(item),[start,end]=ranges[index];
+      const terms=supplyTerms({...item,stock:item.stock===''||item.stock===undefined||item.stock===null?'0':item.stock}),[start,end]=ranges[index];
       const proposal={
         sku:String(item.sku||'').trim(),
         product:String(item.product||'').trim(),
