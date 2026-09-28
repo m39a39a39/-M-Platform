@@ -1,5 +1,5 @@
 export const CATALOG_CONTROLS={showProductImage:'صورة المنتج',showOrigin:'بلد المنتج',showMoq:'الحد الأدنى للطلب',showSearch:'شريط البحث',showCategories:'التصنيفات الرئيسية',showSubcategories:'التصنيفات الفرعية',showCountries:'بلد التوريد',showAll:'خيار الكل',showSort:'ترتيب المنتجات',showCount:'عدد النتائج',showReset:'مسح الفلاتر',showPagination:'أزرار الصفحات',showPrices:'الأسعار',showStock:'المخزون',showCart:'إضافة للسلة'};
-export const catalogDefaults=()=>({...Object.fromEntries(Object.keys(CATALOG_CONTROLS).map(k=>[k,true])),categoryIds:[],subcategoryIds:[],countryIds:[],pageSize:20,sort:'newest'});
+export const catalogDefaults=()=>({...Object.fromEntries(Object.keys(CATALOG_CONTROLS).map(k=>[k,true])),categoryIds:[],subcategoryIds:[],countryIds:[],pageSize:20,sort:'newest',searchPosition:'before',filterLayout:'top'});
 export function catalogConfig(settings){const s=settings?.storefront?.sections?.find(s=>s.type==='catalog')||{};return {...catalogDefaults(),...settings?.storefront?.options,...s.catalog};}
 export function selectedTaxonomy(rows,ids){return (ids||[]).map(id=>(rows||[]).find(c=>c.id===id&&c.active!==false)).filter(Boolean);}
 export function catalogProducts(offers,filters={}){
