@@ -1,0 +1,35 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {createStoreDB,withLocalAPI,ids} from './helpers/store-db.mjs';
+import {bulkUpdatePublicOffers,mutate} from '../backend/modules/mutations.mjs';
+import {deleteOrder} from '../backend/modules/delete-order.mjs';
+import {snapshot} from '../backend/modules/records.mjs';
+import {submitSupplySource,reviewSupplySource} from '../backend/modules/supply-sources.mjs';
+const admin={id:ids.admin,role:'admin',is_owner:true},supplier={id:ids.supplier,role:'supplier'},client={id:ids.client,role:'client'};
+test('catalog bulk edits and deletes preserve source terms, validate permissions and reject stale/invalid batches',async()=>{const pg=await createStoreDB();try{await withLocalAPI(pg,async()=>{
+ const make=async sku=>{const s=await submitSupplySource(supplier,{terms:{unitPrice:5,currency:'SAR',moq:1,stock:100,leadTime:7,country:'China'},proposal:{sku,product:'منتج',specs:'وصف',categoryId:'cat',images:['/api/media/'+ids.media]}});return reviewSupplySource(admin,{id:s.sourceId,version:1,action:'approve',salePrice:20,currency:'SAR',translation:{titleAr:'منتج',titleEn:'Product',descriptionAr:'وصف',descriptionEn:'Description'},redactionConfirmed:true});};
+ const a=await make('FIRST'),b=await make('SECOND');const items=[{id:a.productId,version:1,patch:{sku:'EDITED',unitPrice:30,currency:'USD',stock:'0',leadTime:'4',translation:{titleAr:'اسم جديد',titleEn:'New name'}}},{id:b.productId,version:1,patch:{unitPrice:25}}];
+ await assert.rejects(()=>bulkUpdatePublicOffers(supplier,{items,redactionConfirmed:true}),e=>e.status===403);
+ await assert.rejects(()=>bulkUpdatePublicOffers(admin,{items:[items[0],{...items[1],patch:{moq:0}}],redactionConfirmed:true}),e=>e.status===400);
+ assert.equal((await snapshot(admin)).publicOffers.find(p=>p.id===a.productId).unitPrice,20);
+ await assert.rejects(()=>bulkUpdatePublicOffers(admin,{items:[items[0],items[0]],redactionConfirmed:true}),e=>e.status===400);
+ await bulkUpdatePublicOffers(admin,{items,redactionConfirmed:true});let state=await snapshot(admin);assert.equal(state.publicOffers.find(p=>p.id===a.productId).sku,'EDITED');assert.equal(state.publicOffers.find(p=>p.id===a.productId).translation.titleEn,'New name');assert.ok(state.supplySources.every(s=>s.terms.unitPrice===5));
+ await assert.rejects(()=>bulkUpdatePublicOffers(admin,{items,redactionConfirmed:true}),e=>e.status===409);
+ await assert.rejects(()=>bulkUpdatePublicOffers({...admin,is_owner:false,permissions:['offers.edit']},{items:[{id:a.productId,version:2,delete:true}]}),e=>e.status===403);
+ await bulkUpdatePublicOffers(admin,{items:[{id:a.productId,version:2,delete:true}]});assert.equal((await snapshot(null)).publicOffers.length,1);assert.ok((await snapshot(admin)).publicOffers.find(p=>p.id===a.productId).deletedAt);
+ });}finally{await pg.close();}});
+test('order deletion hides all three order types, protects child integrity and preserves financial history',async()=>{const pg=await createStoreDB();try{await withLocalAPI(pg,async()=>{
+ const order=crypto.randomUUID(),rfq=crypto.randomUUID(),child=crypto.randomUUID(),legacy=crypto.randomUUID(),product=crypto.randomUUID(),product2=crypto.randomUUID(),quote=crypto.randomUUID();
+ await pg.query('insert into public_offers(id,owner_id,data) values($1,$2,$3)',[product,ids.supplier,JSON.stringify({status:'published',product:'P'})]);
+ await pg.query('insert into public_offers(id,owner_id,data) values($1,$2,$3)',[product2,ids.supplier,JSON.stringify({status:'published',product:'P2'})]);
+ for(const [id,extra] of [[order,{orderType:'cart',orderFlowVersion:2,orderStage:8,cartItems:[{interestId:child}]}],[rfq,{orderType:'custom'}]])await pg.query('insert into requests(id,owner_id,data) values($1,$2,$3)',[id,ids.client,JSON.stringify({status:'sent',supplierIds:[ids.supplier],finalInvoice:{number:'KEEP-123'},paymentReceipt:{src:'receipt'},...extra})]);
+ for(const [id,extra] of [[child,{cartOrderId:order,assignedSupplierId:ids.supplier}],[legacy,{}]])await pg.query('insert into interests(id,owner_id,offer_id,data) values($1,$2,$3,$4)',[id,ids.client,id===legacy?product2:product,JSON.stringify({status:'active',trackingStatus:'production',finalInvoice:{number:'KEEP-CHILD'},...extra})]);
+ await pg.query('insert into quotes(id,owner_id,request_id,data) values($1,$2,$3,$4)',[quote,ids.supplier,rfq,JSON.stringify({status:'published'})]);
+ const body={kind:'request',id:order,version:1,reason:'طلب تجريبي'};
+ await assert.rejects(()=>deleteOrder(supplier,body),e=>e.status===403);await assert.rejects(()=>deleteOrder({...admin,is_owner:false,permissions:['trash']},body),e=>e.status===403);await assert.rejects(()=>deleteOrder(admin,{...body,version:2}),e=>e.status===409);
+ await assert.rejects(()=>deleteOrder(admin,{kind:'interest',id:child,version:1,reason:'test'}),e=>e.status===409);
+ await deleteOrder(admin,body);const saved=(await pg.query('select data from requests where id=$1',[order])).rows[0].data;assert.equal(saved.finalInvoice.number,'KEEP-123');assert.equal(saved.paymentReceipt.src,'receipt');assert.ok(saved.deletedAt);assert.ok((await pg.query('select data from interests where id=$1',[child])).rows[0].data.deletedAt);
+ assert.ok(!(await snapshot(client)).requests.some(x=>x.id===order));assert.ok(!(await snapshot(client)).interests.some(x=>x.id===child));assert.ok(!(await snapshot(supplier)).interests.some(x=>x.id===child));
+ await deleteOrder(admin,{kind:'request',id:rfq,version:1,reason:'test'});assert.ok(!(await snapshot(supplier)).quotes.some(x=>x.id===quote));assert.ok((await snapshot(admin)).quotes.find(x=>x.id===quote).deletedAt);
+ await deleteOrder(admin,{kind:'interest',id:legacy,version:1,reason:'test'});assert.ok(!(await snapshot(client)).interests.some(x=>x.id===legacy));
+ await assert.rejects(()=>mutate(admin,{collection:'interests',id:legacy,version:2,patch:{status:'active'}}),e=>e.status===409);
+ });}finally{await pg.close();}});
