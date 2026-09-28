@@ -82,5 +82,5 @@ function normalizeCatalog(raw={},options={}){
  const result={...catalogDefaults(),...Object.fromEntries(Object.keys(CATALOG_CONTROLS).filter(k=>typeof options[k]==='boolean').map(k=>[k,options[k]]))};for(const k of Object.keys(CATALOG_CONTROLS)){assert(raw[k]===undefined||typeof raw[k]==='boolean',400);if(raw[k]!==undefined)result[k]=raw[k];}
  for(const k of ['categoryIds','subcategoryIds','countryIds'])result[k]=list(raw[k]||[],100).map(v=>text(v,80));
  assert(raw.pageSize===undefined||[12,20,40,60].includes(Number(raw.pageSize)),400);result.pageSize=Number(raw.pageSize)||20;
- assert(raw.sort===undefined||['newest','name','price-asc','price-desc'].includes(raw.sort),400);result.sort=raw.sort||'newest';return result;
+ assert(raw.sort===undefined||['newest','name','price-asc','price-desc'].includes(raw.sort),400);result.sort=raw.sort||'newest';for(const [key,values] of Object.entries({searchPosition:['before','after'],filterLayout:['top','sidebar']})){assert(raw[key]===undefined||values.includes(raw[key]),400,'موضع أدوات البحث غير صالح');result[key]=raw[key]||values[0];}return result;
 }
