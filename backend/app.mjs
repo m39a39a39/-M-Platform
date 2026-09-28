@@ -1,3 +1,4 @@
+import {deleteOrder} from './modules/delete-order.mjs';
 import {supplierCatalog} from './modules/supplier-catalog.mjs';
 import {bulkSupplySources} from './modules/bulk-supply-sources.mjs';
 import {submitSupplySource,reviewSupplySource} from './modules/supply-sources.mjs';
@@ -78,6 +79,7 @@ export default async function handler(req,res){
         else if(path==='/api/supply-sources/bulk')result=await bulkSupplySources(user,body);
         else if(path==='/api/supply-sources/review')result=await reviewSupplySource(user,body);
         else if(path==='/api/mutations')result=await mutate(user,body);
+        else if(path==='/api/orders/delete')result=await deleteOrder(user,body);
         else if(path==='/api/bulk-public-offers')result=await bulkUpdatePublicOffers(user,body);
         else if(path==='/api/moderation')result=await moderate(user,body);
         else if(path==='/api/accounts/create')result=await createAccount(user,body);

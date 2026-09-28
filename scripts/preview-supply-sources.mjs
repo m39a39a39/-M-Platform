@@ -1,5 +1,7 @@
 // Isolated, disposable local preview. Never connects to a deployed database.
 import http from 'node:http';
+import {deleteOrder} from '../backend/modules/delete-order.mjs';
+import {bulkUpdatePublicOffers} from '../backend/modules/mutations.mjs';
 import {supplierCatalog} from '../backend/modules/supplier-catalog.mjs';
 import {bulkSupplySources} from '../backend/modules/bulk-supply-sources.mjs';
 import {defaultStore} from '../shared/storefront-model.mjs';
@@ -14,7 +16,7 @@ import {createCartOrder} from '../backend/modules/cart-orders.mjs';
 import {mutate} from '../backend/modules/mutations.mjs';
 import {manageOrder} from '../backend/modules/order-management.mjs';
 import {saveStudio} from '../backend/modules/studio.mjs';
-const port=4194,origin=`http://127.0.0.1:${port}`,pg=await createStoreDB();
+const port=Number(process.env.PREVIEW_PORT)||4194,origin=`http://127.0.0.1:${port}`,pg=await createStoreDB();
 Object.assign(process.env,{SUPABASE_URL:'https://local-test.invalid',SUPABASE_ANON_KEY:'local',SUPABASE_SERVICE_ROLE_KEY:'local',APP_ORIGIN:origin});
 global.fetch=localRest(pg);
 const user=async key=>(await pg.query('select * from profiles where id=$1',[ids[key]])).rows[0];
@@ -35,6 +37,7 @@ const storefront=defaultStore();storefront.sections.find(s=>s.type==='catalog').
 await pg.query("update settings set data=jsonb_set(data,'{storefront}',$1::jsonb) where id='site'",[JSON.stringify(storefront)]);
 await createCartOrder(client,{items:[{offerId:approved.productId,quantity:4}],delivery:{name:'عميل الاختبار',phone:'12345',country:'السعودية',address:'عنوان تجريبي'}});
 for(let i=0;i<55;i++)await submitSupplySource(supplier,{terms,proposal:{...proposal,sku:'BULK-PREVIEW-'+i,product:'عرض تجريبي '+i}});
+for(const type of ['custom','cart'])await pg.query('insert into requests(id,owner_id,data) values($1,$2,$3)',[crypto.randomUUID(),ids.client,JSON.stringify({orderType:type,product:type==='cart'?'طلب منتجات سابق تجريبي':'طلب توريد تجريبي',specs:'اختبار الحذف المحلي',status:'review',quantity:5,country:'China',images:[]})]);
 const root=fileURLToPath(new URL('../mobile-app/dist/',import.meta.url));
 const image=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6UAAAAABJRU5ErkJggg==','base64');
 http.createServer(async(req,res)=>{try{
@@ -57,6 +60,8 @@ http.createServer(async(req,res)=>{try{
   else if(url.pathname.endsWith('/cart-orders'))result=await createCartOrder(current,body);
   else if(url.pathname.endsWith('/mutations'))result=await mutate(current,body);
   else if(url.pathname.endsWith('/order-management'))result=await manageOrder(current,body);
+  else if(url.pathname.endsWith('/orders/delete'))result=await deleteOrder(current,body);
+  else if(url.pathname.endsWith('/bulk-public-offers'))result=await bulkUpdatePublicOffers(current,body);
   else if(url.pathname.endsWith('/studio'))result=await saveStudio(current,body);
   else if(url.pathname.endsWith('/uploads')){const id=crypto.randomUUID();await pg.query('insert into media(id,owner_id,path,mime) values($1,$2,$3,$4)',[id,current.id,'fixture/'+id,'image/png']);result={src:'/api/media/'+id};}
   else {res.statusCode=404;result={error:'هذا الإجراء خارج نطاق المعاينة'};}

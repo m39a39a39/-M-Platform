@@ -201,6 +201,7 @@ export async function mutate(user,body){
   assert(table&&typeof id==='string'&&/^[A-Za-z0-9-]{1,80}$/.test(id)&&patch&&typeof patch==='object'&&!Array.isArray(patch),400);
   assert(!(user.role==='supplier'&&collection==='publicOffers'),403,'قدّم عرض توريد؛ تعديل منتج المتجر متاح للإدارة فقط');
   const original=await one(table,id);
+  assert(!original?.data.deletedAt,409,'السجل محذوف / Record deleted');
   assert(Number(version)===(original?.version||0),409,'تغيّرت البيانات؛ حدّث الصفحة / Refresh after conflict');
   const now=new Date().toISOString();
   let data=structuredClone(original?.data||{}),ownerId=original?.owner_id||user.id;
@@ -361,6 +362,8 @@ export async function mutate(user,body){
       assert(['pending','published'].includes(data.status),409,'العرض غير قابل للتعديل / Offer is not editable');
       for(const key of changes)data[key]=patch[key];
       validateContent('publicOffers',data);
+      assert(Number.isInteger(Number(data.moq))&&Number.isInteger(Number(data.leadTime)),400,'الكميات والأيام يجب أن تكون أعدادًا صحيحة');
+      assert(data.stock===''||data.stock==null||Number.isInteger(Number(data.stock))&&Number(data.stock)>=0,400,'المخزون غير صالح');
       await checkImages(data.images||[],user,original.data.images||[]);
       await assertProductTaxonomy(data,{required:true,activeOnly:true});
       data.status='pending';
@@ -641,13 +644,14 @@ export async function bulkUpdatePublicOffers(user,body={}){
   assert(user?.role==='admin',403,'غير مسموح / Not allowed');
   const items=Array.isArray(body.items)?body.items:[];
   assert(items.length>0&&items.length<=200,400,'اختر من 1 إلى 200 منتج / Select 1 to 200 products');
-  const now=new Date().toISOString(),commit=[];
+  const now=new Date().toISOString(),commit=[],seen=new Set();
   for(const item of items){
     const id=String(item?.id||''),patch=item?.patch||{},row=await one('public_offers',id);
     assert(row&&open(row),404,'منتج غير متاح / Product unavailable');
+    assert(!seen.has(id),400,'منتج مكرر في العملية');seen.add(id);
     assert(Number(item.version)===row.version,409,'تغيّرت بيانات أحد المنتجات؛ حدّث الصفحة / A product changed; refresh and try again');
     const data=structuredClone(row.data||{}),keys=Object.keys(patch);
-    const editable=new Set(['product','specs','unitPrice','moq','stock','categoryId','subcategoryId','country']);
+    const editable=new Set(['product','specs','sku','unitPrice','currency','moq','stock','leadTime','categoryId','subcategoryId','country']);
     assert(item.delete||keys.length,400,'لا توجد تغييرات / No changes');
     if(item.delete){
       assert(can(user,'trash'),403);
@@ -672,6 +676,8 @@ export async function bulkUpdatePublicOffers(user,body={}){
         }else assert(false,400,'حقل غير قابل للتعديل الجماعي / Field cannot be bulk edited');
       }
       validateContent('publicOffers',data);
+      assert(Number.isInteger(Number(data.moq))&&Number.isInteger(Number(data.leadTime)),400,'الكميات والأيام يجب أن تكون أعدادًا صحيحة');
+      assert(data.stock===''||data.stock==null||Number.isInteger(Number(data.stock))&&Number(data.stock)>=0,400,'المخزون غير صالح');
       await assertProductTaxonomy(data,{required:data.status==='published',activeOnly:data.status==='published'});
       if(data.status==='published'){
         assert(['titleAr','titleEn','descriptionAr','descriptionEn'].every(k=>data.translation?.[k]?.trim()),400,'أكمل الاسم والوصف بالعربية والإنجليزية قبل النشر / Complete Arabic and English name and description before publishing');

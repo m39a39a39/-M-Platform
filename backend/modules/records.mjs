@@ -67,7 +67,7 @@ export async function snapshot(user){
       readAccounts?rows('profiles'):[]
     ]);
     accounts=readAccounts?accounts.map(p=>can(user,'accounts.read')||can(user,'accounts.manage')&&p.role!=='admin'||p.id===user.id||p.role==='admin'&&can(user,'team')?profile(p):{id:p.id,role:p.role,version:p.version,name:`#${p.id.slice(0,8)}`,blockedAt:p.blocked_at,deletedAt:p.deleted_at}):[profile(user)];
-    return {user:profile(user),supplySources,accounts,requests:requests.map(r=>unpack(r,'requests')),quotes:quotes.map(r=>unpack(r,'quotes')),publicOffers:publicOffers.map(r=>unpack(r,'publicOffers')),interests:interests.map(r=>unpack(r,'interests')),settings:{...(can(user,'settings')?upgradeSettings(settings.data):Object.fromEntries(Object.entries(upgradeSettings(settings.data)).filter(([k])=>k!=='studioDraft'))),_version:settings.version}};
+    return {user:profile(user),supplySources,accounts,requests:requests.map(r=>unpack(r,'requests')),quotes:quotes.map(r=>{const parent=requests.find(p=>p.id===r.request_id);return {...unpack(r,'quotes'),...(parent?.data.deletedAt&&!r.data.deletedAt?{deletedAt:parent.data.deletedAt,deletedWithOrder:parent.id}:{})};}),publicOffers:publicOffers.map(r=>unpack(r,'publicOffers')),interests:interests.map(r=>unpack(r,'interests')),settings:{...(can(user,'settings')?upgradeSettings(settings.data):Object.fromEntries(Object.entries(upgradeSettings(settings.data)).filter(([k])=>k!=='studioDraft'))),_version:settings.version}};
   }
 
   if(user?.role==='client'){
@@ -104,6 +104,8 @@ export async function snapshot(user){
     ]);
   }
 
+  interests=interests.filter(open);
+  if(user?.role==='supplier'&&quotes.length){const parentIds=[...new Set(quotes.map(q=>q.request_id).filter(Boolean))],parents=parentIds.length?await rows('requests',`id=in.(${inIds(parentIds)})`):[];quotes=quotes.filter(q=>parents.some(p=>p.id===q.request_id&&open(p)));}
   const ownerIds=[...new Set([...requests,...quotes,...publicOffers].map(r=>r.owner_id).filter(Boolean))];
   const owners=ownerIds.length?await rows('profiles',`id=in.(${inIds(ownerIds)})`):[];
   const ownerActive=id=>active(owners.find(p=>p.id===id));
