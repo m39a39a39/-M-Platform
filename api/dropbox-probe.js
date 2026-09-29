@@ -1,0 +1,2 @@
+const URL='https://www.dropbox.com/scl/fo/bavhjj1oeb2v874c1fsqx/AJAsG9LJ2mbiYC6LI520Q84?rlkey=fgyizdtlw4dtk8wkcxrb7e3vk&dl=1';
+export default async function handler(req,res){try{const r=await fetch(URL,{headers:{'user-agent':'Mozilla/5.0'},redirect:'follow',signal:AbortSignal.timeout(30000)});const b=Buffer.from(await r.arrayBuffer());res.status(200).json({status:r.status,url:r.url,type:r.headers.get('content-type'),length:b.length,head:b.subarray(0,16).toString('hex'),disp:r.headers.get('content-disposition')});}catch(e){res.status(500).json({error:String(e.message||e)});}}
