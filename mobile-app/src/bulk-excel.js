@@ -406,6 +406,10 @@ export async function parseBulkProductWorkbook(file,context={}){
       if(col===undefined)continue;
       const pic=pictures.find(x=>x.row===rowNo&&x.col===col);
       if(pic)rowImages.push(pic);
+      else{
+        const marker=String(cells.get(col)??'').trim();
+        if(/^yesido:[A-Za-z0-9._-]{1,80}$/i.test(marker))rowImages.push({row:rowNo,col,path:'',mime:'image/yesido',size:0,source:marker});
+      }
     }
     if(!hasData&&!rowImages.length)continue;
     rows.push({
