@@ -44,7 +44,7 @@ function detailImages(html,sku){
     const alt=strip((tag.match(/\balt=["']([^"']*)["']/i)||[])[1]||'');
     if(alt&&!alt.toUpperCase().includes(String(sku).toUpperCase()))continue;
     for(const attr of ['data-original','data-src','src']){
-      const mm=tag.match(new RegExp('\\b'+attr+'=["\\']([^"\\']+)["\\']','i'));
+      const mm=tag.match(new RegExp("\\\\b"+attr+"=[\\\"']([^\\\"']+)[\\\"']","i"));
       if(!mm)continue;
       const u=abs(mm[1]);
       if(!u||!/(?:icdn\.tradew\.com|iyesido\.com)/i.test(u))continue;
