@@ -29,9 +29,30 @@ function imageUrls(html){
 function sitemapUrls(xml){return [...xml.matchAll(/<loc>(https?:\/\/[^<]+\/products\/[^<]+)<\/loc>/gi)].map(m=>m[1].replace(/&amp;/g,'&'));}
 function score(url,title){const u=new URL(url),slug=tok(u.pathname.split('/').pop()),want=tok(title);const set=new Set(slug);let hits=0;for(const w of want)if(set.has(w))hits++;return want.length?hits/want.length:0;}
 async function resolve(model,title,allUrls){
- const urls=KNOWN[model]?[KNOWN[model]]:allUrls.map(url=>({url,score:score(url,title)})).filter(x=>x.score>.28).sort((a,b)=>b.score-a.score).slice(0,5).map(x=>x.url);
+ let urls=KNOWN[model]?[KNOWN[model]]:allUrls.map(url=>({url,score:score(url,title)})).filter(x=>x.score>.28).sort((a,b)=>b.score-a.score).slice(0,5).map(x=>x.url);
  const checked=[];
- for(const url of urls){try{const p=await get(url);const exact=exactModel(p.text,model);checked.push({url:p.url,status:p.status,exact,title:(p.text.match(/<title[^>]*>([\s\S]*?)<\/title>/i)||[])[1]?.replace(/<[^>]+>/g,' ').trim()||'',images:exact?imageUrls(p.text):[]});if(exact)break;}catch(e){checked.push({url,status:0,exact:false,error:String(e.message||e),images:[]});}}
+ const inspect=async list=>{
+   for(const url of list){
+     if(checked.some(x=>x.url===url))continue;
+     try{
+       const p=await get(url),exact=exactModel(p.text,model);
+       checked.push({url:p.url,status:p.status,exact,title:(p.text.match(/<title[^>]*>([\s\S]*?)<\/title>/i)||[])[1]?.replace(/<[^>]+>/g,' ').trim()||'',images:exact?imageUrls(p.text):[]});
+       if(exact)return true;
+     }catch(e){checked.push({url,status:0,exact:false,error:String(e.message||e),images:[]});}
+   }
+   return false;
+ };
+ let found=await inspect(urls);
+ if(!found){
+   await new Promise(r=>setTimeout(r,900));
+   const s=await get(base+'/search/?Keyword='+encodeURIComponent(title));
+   if(s.status===200){
+     const q=[];
+     for(const m of s.text.matchAll(/href=["']([^"']*\/products\/[^"'?#]+)[^"']*["']/gi)){try{const u=new URL(m[1],base).href;if(!q.includes(u))q.push(u);}catch{}}
+     urls=[...new Set([...urls,...q.slice(0,8)])];
+     await inspect(q.slice(0,8));
+   }
+ }
  return {model,title,candidates:urls.length,exact:checked.filter(x=>x.exact),checked:checked.map(x=>({url:x.url,status:x.status,exact:x.exact,title:x.title}))};
 }
-export default async function handler(req,res){if(String(req.query?.key||'')!==KEY){res.status(404).json({error:'Not found'});return;}try{const sm=await get('https://moxom.com.cn/en-sitemap.xml');const allUrls=sitemapUrls(sm.text);const start=Math.max(0,Number(req.query?.start||0)||0),count=Math.max(1,Math.min(6,Number(req.query?.count||4)||4));const results=[];for(const [model,title] of ITEMS.slice(start,start+count)){results.push(await resolve(model,title,allUrls));await new Promise(r=>setTimeout(r,250));}res.status(200).json({sitemapStatus:sm.status,urlCount:allUrls.length,start,count:results.length,results});}catch(e){res.status(500).json({error:String(e.message||e)});}}
+export default async function handler(req,res){if(String(req.query?.key||'')!==KEY){res.status(404).json({error:'Not found'});return;}try{const sm=await get('https://moxom.com.cn/en-sitemap.xml');const allUrls=sitemapUrls(sm.text);const start=Math.max(0,Number(req.query?.start||0)||0),count=Math.max(1,Math.min(3,Number(req.query?.count||2)||2));const results=[];for(const [model,title] of ITEMS.slice(start,start+count)){results.push(await resolve(model,title,allUrls));await new Promise(r=>setTimeout(r,900));}res.status(200).json({sitemapStatus:sm.status,urlCount:allUrls.length,start,count:results.length,results});}catch(e){res.status(500).json({error:String(e.message||e)});}}
