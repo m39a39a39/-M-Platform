@@ -7,18 +7,36 @@ const SUPPLIER_ID='9cbb161d-5203-4f2e-a15a-33df270884e7';
 const clean=v=>String(v??'').trim();
 async function translate(text){
   const value=clean(text); if(!value)return '';
-  const hosts=['https://lingva.ml','https://translate.dr460nf1r3.org','https://lingva.garudalinux.org','https://translate.jae.fi'];
-  let last='';
-  for(const host of hosts){
+  const errors=[];
+  const libreHosts=[
+    'https://translate.flossboxin.org.in',
+    'https://lt.blitzw.in',
+    'https://translate.terraprint.co',
+    'https://trans.zillyhuhn.com',
+    'https://translate.argosopentech.com'
+  ];
+  for(const host of libreHosts){
     try{
-      const r=await fetch(host+'/api/v1/en/ar',{method:'POST',headers:{'content-type':'application/json','user-agent':'Mozilla/5.0'},body:JSON.stringify({query:value}),signal:AbortSignal.timeout(25000)});
-      if(!r.ok){last='translate_http_'+r.status;continue;}
-      const data=await r.json(),out=clean(data?.translation);
+      const r=await fetch(host+'/translate',{method:'POST',headers:{'content-type':'application/json','user-agent':'Mozilla/5.0'},body:JSON.stringify({q:value,source:'en',target:'ar',format:'text'}),signal:AbortSignal.timeout(25000)});
+      if(!r.ok){errors.push(host+':'+r.status);continue;}
+      const data=await r.json(),out=clean(data?.translatedText);
       if(out)return out;
-      last='translate_empty';
-    }catch(error){last=String(error?.message||error);}
+      errors.push(host+':empty');
+    }catch(error){errors.push(host+':'+String(error?.message||error));}
   }
-  throw new Error(last||'translation_failed');
+  const lingvaHosts=['https://lingva.ml','https://translate.dr460nf1r3.org','https://lingva.garudalinux.org','https://translate.jae.fi'];
+  if(value.length<5000){
+    for(const host of lingvaHosts){
+      try{
+        const r=await fetch(host+'/api/v1/en/ar/'+encodeURIComponent(value),{headers:{'user-agent':'Mozilla/5.0'},signal:AbortSignal.timeout(25000)});
+        if(!r.ok){errors.push(host+':'+r.status);continue;}
+        const data=await r.json(),out=clean(data?.translation);
+        if(out)return out;
+        errors.push(host+':empty');
+      }catch(error){errors.push(host+':'+String(error?.message||error));}
+    }
+  }
+  throw new Error('translation_failed '+errors.join('|').slice(0,1200));
 }
 async function mapPool(items,limit,fn){
   const out=new Array(items.length);let next=0;
