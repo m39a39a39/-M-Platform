@@ -111,13 +111,13 @@ function parseSheet(xml,shared){
   for(const rm of String(xml).matchAll(/<(?:[\w-]+:)?row\b([^>]*)>([\s\S]*?)<\/(?:[\w-]+:)?row>/g)){
     const rowNo=Number(attr(rm[1],'r')||0);if(!rowNo)continue;
     const cells=new Map();
-    for(const cm of rm[2].matchAll(/<(?:[\w-]+:)?c\b([^>]*)>([\s\S]*?)<\/(?:[\w-]+:)?c>/g)){
-      const ref=attr(cm[1],'r'),type=attr(cm[1],'t'),letters=(ref.match(/[A-Z]+/i)||[''])[0],col=colIndex(letters);
+    for(const cm of rm[2].matchAll(/<(?:[\w-]+:)?c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/(?:[\w-]+:)?c>)/g)){
+      const attrs=cm[1]||'',body=cm[2]||'',ref=attr(attrs,'r'),type=attr(attrs,'t'),letters=(ref.match(/[A-Z]+/i)||[''])[0],col=colIndex(letters);
       let value='';
       if(type==='inlineStr'){
-        for(const t of cm[2].matchAll(/<(?:[\w-]+:)?t(?:\s[^>]*)?>([\s\S]*?)<\/(?:[\w-]+:)?t>/g))value+=xmlDecode(t[1]);
+        for(const t of body.matchAll(/<(?:[\w-]+:)?t(?:\s[^>]*)?>([\s\S]*?)<\/(?:[\w-]+:)?t>/g))value+=xmlDecode(t[1]);
       }else{
-        const raw=tagText(cm[2],'v');
+        const raw=tagText(body,'v');
         value=type==='s'?shared[Number(raw)]??'':raw;
       }
       cells.set(col,String(value??'').trim());
