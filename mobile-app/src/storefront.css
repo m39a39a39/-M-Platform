@@ -55,3 +55,28 @@
 @container(max-width:850px){.sf-filters-sidebar{grid-template-columns:1fr}.sf-filters-sidebar .sf-catalog-controls{flex-direction:row}.sf-footer-grid{grid-template-columns:1fr 1fr;gap:28px}.sf-footer-brand{grid-column:1/-1}}
 @container(max-width:600px){.sf-catalog-tools{padding:14px}.sf-catalog-controls label{min-width:calc(50% - 12px)}.sf-footer-grid{grid-template-columns:1fr 1fr;gap:28px 18px}.sf-footer-contact{grid-column:1/-1}.sf-footer-bottom{align-items:start}.sf-categories a{padding:14px 8px}.sf-categories a strong{font-size:13px}}
 .sf-nav{display:flex;align-items:center;gap:24px;padding:12px 24px;border-top:1px solid #edf1ee;border-bottom:1px solid #e2e8e5;background:#fff}.sf-nav a{font-size:13px;font-weight:600;text-decoration:none;color:var(--store-accent,#193d43);padding:6px 0}.sf-nav a:hover{text-decoration:underline}
+
+/* Curated homepage merchandising: visually separate product stories without changing product data. */
+.sf-layout-block[data-layout-section="home-new-arrivals"]{background:linear-gradient(180deg,#fff 0%,#f7fafc 100%);border:1px solid #e7edf2}
+.sf-layout-block[data-layout-section="home-new-arrivals"] .sf-section>h2{font-size:clamp(24px,3vw,36px);letter-spacing:-.02em}
+.sf-layout-block[data-layout-section="home-new-arrivals"] .sf-product{box-shadow:0 10px 28px rgba(23,46,51,.06);border-color:#e7ece9}
+.sf-layout-block[data-layout-section="home-power-banks"]{background:linear-gradient(135deg,#102d3a 0%,#1b4653 100%);color:#fff}
+.sf-layout-block[data-layout-section="home-power-banks"] .sf-section>p{color:#d7e5e8}
+.sf-layout-block[data-layout-section="home-power-banks"] .sf-product{border:0;box-shadow:0 14px 32px rgba(0,0,0,.18)}
+.sf-layout-block[data-layout-section="home-audio"]{background:#fff;border-block:1px solid #e9eeeb}
+.sf-layout-block[data-layout-section="home-audio"] .sf-products{gap:22px}
+.sf-layout-block[data-layout-section="home-audio"] .sf-product{border-radius:24px}
+.sf-layout-block[data-layout-section="home-audio"] .sf-product-visual{background:#f4f2ef}
+.sf-layout-block[data-layout-section="home-charging"]{background:linear-gradient(135deg,#f3f7ff 0%,#eef7f5 100%)}
+.sf-layout-block[data-layout-section="home-charging"] .sf-product{border-color:#dce7e9}
+.sf-layout-block[data-layout-section^="home-"] .sf-section>p{max-width:680px;color:var(--store-muted)}
+.sf-layout-block[data-layout-section^="home-"] .sf-all-products{margin-inline-start:auto;border:0;text-decoration:underline;text-underline-offset:4px}
+@container(max-width:600px){
+ .sf-layout-block[data-layout-section^="home-"]{border-radius:0}
+ .sf-layout-block[data-layout-section="home-power-banks"] .sf-products,
+ .sf-layout-block[data-layout-section="home-audio"] .sf-products,
+ .sf-layout-block[data-layout-section="home-charging"] .sf-products{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:8px}
+ .sf-layout-block[data-layout-section="home-power-banks"] .sf-products>*,
+ .sf-layout-block[data-layout-section="home-audio"] .sf-products>*,
+ .sf-layout-block[data-layout-section="home-charging"] .sf-products>*{flex:0 0 72%;scroll-snap-align:start}
+}
