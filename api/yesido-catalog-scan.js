@@ -66,10 +66,11 @@ export default async function handler(req,res){
     const listUrl=page===1?`${BASE}/products-list.htm`:`${BASE}/p${page}/products-list.htm`;
     const html=await get(listUrl);
     const products=pageProducts(html);
-    const detailed=await pool(products,8,async p=>{
+    const withDetails=String(req.query?.details||'1')!=='0';
+    const detailed=withDetails?await pool(products,8,async p=>{
       const d=detailImages(await get(p.url),p.sku);
       return {...p,title:d.title||p.title,images:d.images};
-    });
+    }):products;
     res.setHeader('Content-Type','application/json; charset=utf-8');
     res.setHeader('Cache-Control','no-store');
     res.status(200).json({page,listUrl,count:detailed.length,products:detailed});
