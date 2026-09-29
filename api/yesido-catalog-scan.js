@@ -32,23 +32,24 @@ function pageProducts(html){
   return [...found.values()];
 }
 function detailImages(html,sku){
-  const h1=(html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)||[])[1]||'';
-  const title=strip(h1);
-  const cutAt=html.search(/Detail Information/i);
-  const top=cutAt>0?html.slice(0,cutAt):html.slice(0,Math.min(html.length,180000));
+  const h1Match=html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+  const title=strip(h1Match?.[1]||'');
+  const h1Index=h1Match?.index??0;
+  const related=html.slice(h1Index).search(/Related Products/i);
+  const endIndex=related>0?h1Index+related:Math.min(html.length,h1Index+350000);
+  const section=html.slice(h1Index,endIndex);
   const urls=[];
   const imgRe=/<img\b[^>]*>/gi;
   let m;
-  while((m=imgRe.exec(top))){
+  while((m=imgRe.exec(section))){
     const tag=m[0];
-    const alt=strip((tag.match(/\balt=["']([^"']*)["']/i)||[])[1]||'');
-    if(alt&&!alt.toUpperCase().includes(String(sku).toUpperCase()))continue;
-    for(const attr of ['data-original','data-src','src']){
+    for(const attr of ['data-original','data-original-src','data-src','data-lazy','src']){
       const mm=tag.match(new RegExp("\\\\b"+attr+"=[\\\"']([^\\\"']+)[\\\"']","i"));
       if(!mm)continue;
       const u=abs(mm[1]);
       if(!u||!/(?:icdn\.tradew\.com|iyesido\.com)/i.test(u))continue;
-      if(/logo|icon|avatar|flag/i.test(u))continue;
+      if(!/\.(?:jpe?g|png|webp)(?:\?|$)/i.test(u))continue;
+      if(/logo|icon|avatar|flag|qrcode|wechat/i.test(u))continue;
       const clean=original(u);
       if(!urls.includes(clean))urls.push(clean);
     }
