@@ -2,7 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {rpc,assert} from '../lib/supabase.mjs';
 import {supplyTerms} from './supply-sources.mjs';
 import {validateContent,assertProductTaxonomy} from './mutations.mjs';
-import {uploadImageBatch} from './media.mjs';
+import {uploadProductImages} from './media.mjs';
 
 const active=p=>p&&!p.blocked_at&&!p.deleted_at;
 const rowNumber=value=>{
@@ -22,21 +22,26 @@ export async function bulkSubmitSupplySources(user,body={}){
     return {...raw,rowNumber:number,images};
   });
 
-  const flatImages=[],ranges=[];
-  for(const item of normalized){
-    const start=flatImages.length;flatImages.push(...item.images);ranges.push([start,flatImages.length]);
-  }
-  const uploaded=await uploadImageBatch(user,flatImages);
+  const uploadedByIndex=new Array(normalized.length),imageErrors=new Array(normalized.length);let nextImage=0;
+  const imageWorker=async()=>{
+    while(nextImage<normalized.length){
+      const index=nextImage++;
+      try{uploadedByIndex[index]=await uploadProductImages(user,normalized[index].images);}
+      catch(error){imageErrors[index]=error;}
+    }
+  };
+  await Promise.all(Array.from({length:Math.min(4,normalized.length)},imageWorker));
   const now=new Date().toISOString();
 
   const prepared=await Promise.all(normalized.map(async(item,index)=>{
     try{
-      const terms=supplyTerms({...item,stock:item.stock===''||item.stock===undefined||item.stock===null?'0':item.stock}),[start,end]=ranges[index];
+      if(imageErrors[index])throw imageErrors[index];
+      const terms=supplyTerms({...item,stock:item.stock===''||item.stock===undefined||item.stock===null?'0':item.stock});
       const proposal={
         sku:String(item.sku||'').trim(),
         product:String(item.product||'').trim(),
         specs:String(item.specs||'').trim(),
-        images:uploaded.slice(start,end),
+        images:uploadedByIndex[index]||[],
         categoryId:String(item.categoryId||'').trim(),
         subcategoryId:String(item.subcategoryId||'').trim()
       };
