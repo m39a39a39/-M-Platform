@@ -108,14 +108,14 @@ function parseSharedStrings(xml){
 }
 function parseSheet(xml,shared){
   const rows=new Map();
-  for(const rm of String(xml).matchAll(/<row\b([^>]*)>([\s\S]*?)<\/row>/g)){
+  for(const rm of String(xml).matchAll(/<(?:[\w-]+:)?row\b([^>]*)>([\s\S]*?)<\/(?:[\w-]+:)?row>/g)){
     const rowNo=Number(attr(rm[1],'r')||0);if(!rowNo)continue;
     const cells=new Map();
-    for(const cm of rm[2].matchAll(/<c\b([^>]*)>([\s\S]*?)<\/c>/g)){
+    for(const cm of rm[2].matchAll(/<(?:[\w-]+:)?c\b([^>]*)>([\s\S]*?)<\/(?:[\w-]+:)?c>/g)){
       const ref=attr(cm[1],'r'),type=attr(cm[1],'t'),letters=(ref.match(/[A-Z]+/i)||[''])[0],col=colIndex(letters);
       let value='';
       if(type==='inlineStr'){
-        for(const t of cm[2].matchAll(/<t(?:\s[^>]*)?>([\s\S]*?)<\/t>/g))value+=xmlDecode(t[1]);
+        for(const t of cm[2].matchAll(/<(?:[\w-]+:)?t(?:\s[^>]*)?>([\s\S]*?)<\/(?:[\w-]+:)?t>/g))value+=xmlDecode(t[1]);
       }else{
         const raw=tagText(cm[2],'v');
         value=type==='s'?shared[Number(raw)]??'':raw;
@@ -127,7 +127,7 @@ function parseSheet(xml,shared){
   return rows;
 }
 function findFirstWorksheet(workbookXml,relsXml){
-  const sheetTag=String(workbookXml).match(/<sheet\b[^>]*\/?>/);
+  const sheetTag=String(workbookXml).match(/<(?:[\w-]+:)?sheet\b[^>]*\/?>/);
   if(!sheetTag)return 'xl/worksheets/sheet1.xml';
   const rid=attr(sheetTag[0],'r:id'),rels=relationships(relsXml),target=rels.get(rid);
   return target?resolvePath('xl/workbook.xml',target):'xl/worksheets/sheet1.xml';
