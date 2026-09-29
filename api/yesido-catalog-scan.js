@@ -36,22 +36,25 @@ function detailImages(html,sku){
   const title=strip(h1Match?.[1]||'');
   const h1Index=h1Match?.index??0;
   const related=html.slice(h1Index).search(/Related Products/i);
-  const endIndex=related>0?h1Index+related:Math.min(html.length,h1Index+350000);
-  const section=html.slice(h1Index,endIndex);
+  const endIndex=related>0?h1Index+related:Math.min(html.length,h1Index+450000);
+  const section=decode(html.slice(h1Index,endIndex)).replace(/\\\//g,'/');
   const urls=[];
+  const add=value=>{
+    const u=abs(value?.startsWith('//')?'https:'+value:value);
+    if(!u||!/(?:icdn\.tradew\.com|iyesido\.com)/i.test(u))return;
+    if(!/\.(?:jpe?g|png|webp)(?:\?|$)/i.test(u))return;
+    if(/logo|icon|avatar|flag|qrcode|wechat/i.test(u))return;
+    const clean=original(u);
+    if(!urls.includes(clean))urls.push(clean);
+  };
+  for(const m of section.matchAll(/(?:https?:)?\/\/[^"'<>\s]+?\.(?:jpe?g|png|webp)(?:\?[^"'<>\s]*)?/gi))add(m[0]);
   const imgRe=/<img\b[^>]*>/gi;
   let m;
   while((m=imgRe.exec(section))){
     const tag=m[0];
     for(const attr of ['data-original','data-original-src','data-src','data-lazy','src']){
       const mm=tag.match(new RegExp("\\\\b"+attr+"=[\\\"']([^\\\"']+)[\\\"']","i"));
-      if(!mm)continue;
-      const u=abs(mm[1]);
-      if(!u||!/(?:icdn\.tradew\.com|iyesido\.com)/i.test(u))continue;
-      if(!/\.(?:jpe?g|png|webp)(?:\?|$)/i.test(u))continue;
-      if(/logo|icon|avatar|flag|qrcode|wechat/i.test(u))continue;
-      const clean=original(u);
-      if(!urls.includes(clean))urls.push(clean);
+      if(mm)add(mm[1]);
     }
   }
   return {title,images:urls.slice(0,8)};
