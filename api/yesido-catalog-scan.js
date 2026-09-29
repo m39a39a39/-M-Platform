@@ -35,29 +35,22 @@ function detailImages(html,sku){
   const h1Match=html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
   const title=strip(h1Match?.[1]||'');
   const h1Index=h1Match?.index??0;
-  const related=html.slice(h1Index).search(/Related Products/i);
-  const endIndex=related>0?h1Index+related:Math.min(html.length,h1Index+450000);
-  const section=decode(html.slice(h1Index,endIndex)).replace(/\\\//g,'/');
+  const relatedOffset=html.slice(h1Index).search(/Related Products/i);
+  const endIndex=relatedOffset>0?h1Index+relatedOffset:Math.min(html.length,h1Index+500000);
+  const section=html.slice(h1Index,endIndex).replaceAll('\\/','/');
   const urls=[];
-  const add=value=>{
-    const u=abs(value?.startsWith('//')?'https:'+value:value);
-    if(!u||!/(?:icdn\.tradew\.com|iyesido\.com)/i.test(u))return;
-    if(!/\.(?:jpe?g|png|webp)(?:\?|$)/i.test(u))return;
-    if(/logo|icon|avatar|flag|qrcode|wechat/i.test(u))return;
-    const clean=original(u);
+  const push=u=>{
+    const clean=original(abs(u.startsWith('//')?'https:'+u:u));
+    if(!clean||!/icdn\.tradew\.com\/file\//i.test(clean))return;
+    if(!/\.(?:jpe?g|png|webp)(?:\?|$)/i.test(clean))return;
+    if(/logo|icon|avatar|flag|qrcode|wechat/i.test(clean))return;
     if(!urls.includes(clean))urls.push(clean);
   };
-  for(const m of section.matchAll(/(?:https?:)?\/\/[^"'<>\s]+?\.(?:jpe?g|png|webp)(?:\?[^"'<>\s]*)?/gi))add(m[0]);
-  const imgRe=/<img\b[^>]*>/gi;
-  let m;
-  while((m=imgRe.exec(section))){
-    const tag=m[0];
-    for(const attr of ['data-original','data-original-src','data-src','data-lazy','src']){
-      const mm=tag.match(new RegExp("\\\\b"+attr+"=[\\\"']([^\\\"']+)[\\\"']","i"));
-      if(mm)add(mm[1]);
-    }
+  for(const m of section.matchAll(/(?:https?:)?\/\/icdn\.tradew\.com\/file\/[^"'<>\s\\]+/gi))push(m[0]);
+  if(!urls.length){
+    for(const m of section.matchAll(/(?:src|data-src|data-original|data-original-src|href)=["']([^"']+)["']/gi))push(m[1]);
   }
-  return {title,images:urls.slice(0,8)};
+  return {title,images:urls.slice(0,12)};
 }
 async function pool(items,limit,fn){
   const out=new Array(items.length);let next=0;
