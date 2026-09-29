@@ -46,7 +46,9 @@ export async function importMoxom(items){
       };
       validateContent('publicOffers',{...data,images:['placeholder']});
       await assertProductTaxonomy(data,{required:true,activeOnly:true});
-      const imageData=`data:image/jpeg;base64,${item.imageBase64}`;
+      const mime=String(item.imageMime||'image/webp');
+      assert(['image/jpeg','image/png','image/webp'].includes(mime),400,'Invalid image MIME');
+      const imageData=`data:${mime};base64,${item.imageBase64}`;
       data.images=await uploadProductImages(user,[imageData]);
       const id=randomUUID();
       await rpc('commit_changes',{actor:ADMIN_ID,changes:[{
