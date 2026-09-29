@@ -7,14 +7,18 @@ const SUPPLIER_ID='9cbb161d-5203-4f2e-a15a-33df270884e7';
 const clean=v=>String(v??'').trim();
 async function translate(text){
   const value=clean(text); if(!value)return '';
-  const u=new URL('https://translate.googleapis.com/translate_a/single');
-  u.searchParams.set('client','gtx');u.searchParams.set('sl','en');u.searchParams.set('tl','ar');u.searchParams.set('dt','t');u.searchParams.set('q',value);
-  const r=await fetch(u,{headers:{'user-agent':'Mozilla/5.0'},signal:AbortSignal.timeout(20000)});
-  if(!r.ok)throw new Error('translate_http_'+r.status);
-  const data=await r.json();
-  const out=Array.isArray(data?.[0])?data[0].map(x=>Array.isArray(x)?x[0]||'':'').join(''):'';
-  if(!clean(out))throw new Error('translate_empty');
-  return clean(out);
+  const hosts=['https://lingva.ml','https://translate.dr460nf1r3.org','https://lingva.garudalinux.org','https://translate.jae.fi'];
+  let last='';
+  for(const host of hosts){
+    try{
+      const r=await fetch(host+'/api/v1/en/ar',{method:'POST',headers:{'content-type':'application/json','user-agent':'Mozilla/5.0'},body:JSON.stringify({query:value}),signal:AbortSignal.timeout(25000)});
+      if(!r.ok){last='translate_http_'+r.status;continue;}
+      const data=await r.json(),out=clean(data?.translation);
+      if(out)return out;
+      last='translate_empty';
+    }catch(error){last=String(error?.message||error);}
+  }
+  throw new Error(last||'translation_failed');
 }
 async function mapPool(items,limit,fn){
   const out=new Array(items.length);let next=0;
@@ -28,7 +32,7 @@ export default async function handler(req,res){
     const rows=await db('supply_sources',
       `owner_id=eq.${SUPPLIER_ID}&data->>status=eq.pending&order=created_at.asc&limit=${limit}`);
     const admin=await one('profiles',ADMIN_ID);
-    const translated=await mapPool(rows,4,async row=>{
+    const translated=await mapPool(rows,2,async row=>{
       const p=row.data?.proposal||{},t=row.data?.terms||{};
       const [titleAr,descriptionAr]=await Promise.all([translate(p.product),translate(p.specs)]);
       const salePrice=Math.round((Number(t.unitPrice)/1.6)*100)/100;
