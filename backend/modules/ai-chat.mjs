@@ -46,7 +46,11 @@ export async function aiGatewaySmokeTest(){
       }),
       signal:AbortSignal.timeout(15000)
     });
-    if(!response.ok)return {ok:false,stage:'gateway',status:response.status};
+    if(!response.ok){
+      const failed=await response.json().catch(()=>null);
+      const detail=String(failed?.error?.message||failed?.error||failed?.message||failed?.type||'').slice(0,300);
+      return {ok:false,stage:'gateway',status:response.status,detail,type:String(failed?.type||failed?.error?.type||'').slice(0,120)};
+    }
     const data=await response.json().catch(()=>null);
     return {ok:!!extractReply(data),stage:'gateway',status:response.status};
   }catch{
