@@ -1,4 +1,14 @@
+import {uploadProductImages} from '../backend/modules/media.mjs';
 const KEY='moxomfix-9f73c2e6';
+const ADMIN_ID='e729ac18-9ee3-4a8b-bcc0-fcb0e308f3e9';
+const OFFICIAL6=[
+  ['LX-VC808','https://ueeshop.ly200-cdn.com/u_file/UPAF/UPAF635/2604/products/24/95bc8c69b1.jpg'],
+  ['LX-VC809','https://ueeshop.ly200-cdn.com/u_file/UPAF/UPAF635/2604/products/24/c9241c2954.jpg'],
+  ['MX-VS201','https://ueeshop.ly200-cdn.com/u_file/UPAF/UPAF635/2608/products/27/feb1381837.jpg'],
+  ['MX-CP08','https://ueeshop.ly200-cdn.com/u_file/UPAF/UPAF635/2609/products/18/f9e21cac32.jpg'],
+  ['LX-ST808','https://ueeshop.ly200-cdn.com/u_file/UPAF/UPAF635/2605/products/14/ce5a0b8ebd.jpg'],
+  ['MX-VS198','https://ueeshop.ly200-cdn.com/u_file/UPAF/UPAF635/2608/products/27/8dc36091c4.jpg']
+];
 const UA={'user-agent':'Mozilla/5.0 (compatible; MPlatform/1.0)','accept-language':'en-US,en;q=0.9'};
 const fetchText=async url=>{
   try{
@@ -37,6 +47,22 @@ const exactSkuInPage=(html,sku)=>{
 export default async function handler(req,res){
   if(req.query.key!==KEY)return res.status(404).json({ok:false});
   res.setHeader('Cache-Control','no-store');
+  if(req.query.mode==='official6'){
+    const user={id:ADMIN_ID,role:'admin'},results=[];
+    for(const [sku,url] of OFFICIAL6){
+      try{
+        const r=await fetch(url,{headers:{...UA,accept:'image/*'},signal:AbortSignal.timeout(20000)});
+        if(!r.ok)throw new Error('image HTTP '+r.status);
+        const b=Buffer.from(await r.arrayBuffer());
+        if(b.length<20000||b.length>5242880)throw new Error('image size '+b.length);
+        const mime=b[0]===255&&b[1]===216&&b[2]===255?'image/jpeg':b.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]))?'image/png':b.toString('ascii',0,4)==='RIFF'&&b.toString('ascii',8,12)==='WEBP'?'image/webp':null;
+        if(!mime)throw new Error('unsupported image');
+        const images=await uploadProductImages(user,[`data:${mime};base64,${b.toString('base64')}`]);
+        results.push({sku,ok:true,bytes:b.length,mime,source:url,images});
+      }catch(e){results.push({sku,ok:false,error:String(e?.message||e),source:url});}
+    }
+    return res.status(200).json({ok:results.every(x=>x.ok),results});
+  }
   const q=String(req.query.q||'').trim();
   const sku=String(req.query.sku||'').trim();
   const sitemapTerms=String(req.query.map||'').trim();
