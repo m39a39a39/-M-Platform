@@ -1,8 +1,28 @@
 import {snapshot} from './records.mjs';
 import {assert,HttpError} from '../lib/supabase.mjs';
+import {createHash} from 'node:crypto';
 
 const GATEWAY_URL='https://ai-gateway.vercel.sh/v1/chat/completions';
 const DEFAULT_MODEL='openai/gpt-5.6-luna';
+const usageWindows=new Map();
+const RATE_WINDOW_MS=10*60*1000;
+function viewerKey(user,req){
+  if(user?.id)return 'user:'+user.id;
+  const forwarded=String(req?.headers?.['x-forwarded-for']||'').split(',')[0].trim();
+  const ip=forwarded||String(req?.socket?.remoteAddress||'unknown');
+  return 'guest:'+createHash('sha256').update(ip).digest('hex').slice(0,24);
+}
+function enforceRateLimit(user,req){
+  const key=viewerKey(user,req),now=Date.now(),limit=user?40:12;
+  let row=usageWindows.get(key);
+  if(!row||now-row.startedAt>=RATE_WINDOW_MS)row={startedAt:now,count:0};
+  row.count+=1;usageWindows.set(key,row);
+  if(usageWindows.size>5000){
+    for(const [k,v] of usageWindows)if(now-v.startedAt>=RATE_WINDOW_MS)usageWindows.delete(k);
+  }
+  if(row.count>limit)throw new HttpError(429,'تم الوصول إلى حد الاستخدام مؤقتًا. حاول بعد قليل. / Too many AI requests. Try again shortly.');
+  return key;
+}
 
 const clean=value=>String(value??'').replace(/[\u0000-\u001f\u007f]/g,' ').replace(/\s+/g,' ').trim();
 const clamp=(value,max)=>clean(value).slice(0,max);
@@ -103,10 +123,11 @@ function gatewayError(status){
   return new HttpError(502,'تعذر الحصول على رد من المساعد الذكي. / AI assistant unavailable.');
 }
 
-export async function aiChat(user,body={}){
+export async function aiChat(user,body={},req=null){
   assert(!user||user.role==='client',403,'المساعد الذكي متاح للعملاء والمتصفحين فقط / AI assistant is for customers and visitors only');
   const message=clamp(body.message,2000);
   assert(message,400,'اكتب رسالتك أولًا / Enter a message first');
+  const gatewayUser=enforceRateLimit(user,req);
   const language=body.language==='en'?'en':'ar';
   const state=await snapshot(user||null);
   const context={
@@ -144,7 +165,7 @@ When recommending products, include SKU, price, and MOQ when available.`;
     max_tokens:700,
     temperature:0.2,
     reasoning:{effort:'none'},
-    providerOptions:{gateway:{tags:['feature:m-platform-ai-chat'],...(user?.id?{user:user.id}:{})}}
+    providerOptions:{gateway:{tags:['feature:m-platform-ai-chat'],user:gatewayUser}}
   };
   let response;
   try{
