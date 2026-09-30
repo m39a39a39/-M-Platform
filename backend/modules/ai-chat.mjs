@@ -8,6 +8,16 @@ const DEFAULT_MODEL='openai/gpt-5.6-luna';
 const usageWindows=new Map();
 const RATE_WINDOW_MS=10*60*1000;
 const IMAGE_MAX_CHARS=700000;
+
+function gatewayAuthToken(){
+  if(process.env.AI_GATEWAY_API_KEY)return process.env.AI_GATEWAY_API_KEY;
+  try{
+    const requestContext=globalThis[Symbol.for('@vercel/request-context')]?.get?.();
+    const oidc=requestContext?.headers?.['x-vercel-oidc-token'];
+    if(oidc)return oidc;
+  }catch{}
+  return process.env.VERCEL_OIDC_TOKEN||'';
+}
 function safeImage(value){
   if(!value)return '';
   const text=String(value);
@@ -220,7 +230,7 @@ export async function aiChat(user,body={},req=null){
     if(conversation.status==='human')return {conversationId:conversation.id,humanMode:true};
   }
   const gatewayUser=enforceRateLimit(user,req);
-  const apiKey=process.env.AI_GATEWAY_API_KEY||process.env.VERCEL_OIDC_TOKEN;
+  const apiKey=gatewayAuthToken();
   if(!apiKey)throw new HttpError(503,'لم يتم تفعيل خدمة الذكاء الاصطناعي بعد. / AI service is not configured yet.');
   const model=String(process.env.AI_CHAT_MODEL||DEFAULT_MODEL);
   const imageSearch=image?await analyzeProductImage({image,message,language,apiKey,model,gatewayUser}):null;
