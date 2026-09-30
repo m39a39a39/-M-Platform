@@ -13,6 +13,7 @@ import { parseBulkProductWorkbook, validateBulkProductRows, normalizeSupplyCount
 import { categoryRows, subcategoryRows, supplyCountryRows, taxonomyLabel } from './catalog-taxonomy.js';
 import './image-viewer.js';
 import { downloadInvoicePdf } from './invoice-pdf.js';
+import { mountAiChat, unmountAiChat } from './ai-chat.js';
 
 let currentUser=null;
 let platformState=null;
@@ -368,6 +369,14 @@ function id(){return crypto.randomUUID();}
 
 const rawFetch=(path,options={})=>session.raw(path,options);
 const request=(path,options={})=>session.request(path,options);
+function syncClientAiChat(){
+  if(currentUser?.role!=='client'){unmountAiChat();return;}
+  mountAiChat({
+    mode:'client',
+    language:()=>lang,
+    send:body=>request('/api/v1/ai-chat',{method:'POST',auth:true,body})
+  });
+}
 async function mutate(collection,itemId,version,patch){return request('/api/v1/mutations',{method:'POST',auth:true,body:{collection,id:itemId,version:Number(version||0),patch}});}
 
 async function loadData({render=true}={}){
@@ -386,7 +395,7 @@ async function loadData({render=true}={}){
 configureAdmin({reload:()=>loadData({render:false})});
 session.onReset(reason=>{
   resetSupplierCatalog();currentUser=null;platformState=null;notifications=[];activeScreen='home';activeSub='primary';readyProductsPage=1;readyCategory='all';readySubcategory='all';readyCountry='all';readySearch='';cartItems=[];clientOrderSeen={};clientRequestFilter='all';
-  resetAdmin();closeModal();
+  resetAdmin();closeModal();unmountAiChat();
   for(const url of mediaCache.values())URL.revokeObjectURL(url);
   mediaCache.clear();mediaTasks.clear();publicMediaSources.clear();lastDataLoadedAt=0;$('screen').replaceChildren();$('headerRole').textContent='';
   $('navUnread').classList.add('hidden');$('toast').classList.add('hidden');
@@ -1309,7 +1318,7 @@ async function enterWorkspace(){
   if(!currentUser)return;
   if(currentUser.role==='admin'&&!storeRoute().page&&!storeRoute().category&&!['account','notifications'].includes(new URLSearchParams(location.search).get('screen'))){location.replace('/studio.html');return;}
   const postAuth=takePostAuthAction();
-  showView('appView');const requestedScreen=new URLSearchParams(location.search).get('screen');activeScreen=['account','notifications'].includes(requestedScreen)?requestedScreen:'home';activeSub='primary';renderScreen();
+  showView('appView');const requestedScreen=new URLSearchParams(location.search).get('screen');activeScreen=['account','notifications'].includes(requestedScreen)?requestedScreen:'home';activeSub='primary';renderScreen();syncClientAiChat();
   if(currentUser.role==='client'&&postAuth==='open-cart')setTimeout(()=>openCart(),0);
   else if(currentUser.role==='client'&&postAuth==='new-request')setTimeout(()=>openNewRequest(),0);
 }
@@ -1338,7 +1347,7 @@ $('langBtn').addEventListener('click',toggleLanguage);
 $('appLangBtn').addEventListener('click',toggleLanguage);
 $('headerCartBtn')?.addEventListener('click',()=>{if(currentUser?.role==='client')openCart();});
 $('headerNotificationsBtn').addEventListener('click',()=>{if(!currentUser)return;activeScreen='notifications';renderScreen();$('screen').scrollTop=0;window.scrollTo(0,0);});
-onLanguageChange(value=>{lang=value;applyLanguage();applyRegistrationLanguage();applyResetLanguage();});
+onLanguageChange(value=>{lang=value;applyLanguage();applyRegistrationLanguage();applyResetLanguage();if(currentUser?.role==='client')syncClientAiChat();});
 $('refreshBtn').addEventListener('click',async()=>{if(busy)return;busy=true;$('refreshBtn').classList.add('spin');try{await loadData();showToast(t('refreshing'));}catch(e){showToast(errorText(e));}finally{busy=false;$('refreshBtn').classList.remove('spin');}});
 $('bottomNav').addEventListener('click',e=>{const b=e.target.closest('button[data-screen]');if(!b)return;history.replaceState(null,'',location.pathname);activeScreen=b.dataset.screen;if(activeScreen==='offers')activeSub='primary';if(activeScreen==='requests'&&currentUser?.role==='supplier')activeSub='pending';renderScreen();$('screen').scrollTop=0;window.scrollTo(0,0);});
 $('screen').addEventListener('click',e=>{const sub=e.target.closest('[data-sub]');if(sub){activeSub=sub.dataset.sub;renderScreen();return;}const target=e.target.closest('[data-action],[data-save-client-currency],[data-category],[data-subcategory],[data-supply-country],[data-client-order-filter],[data-cart-order],[data-ready-order],[data-client-offers-request],[data-request],[data-supplier-request],[data-supplier-order-id],[data-public-offer],[data-supply-product],[data-edit-quote],[data-quote-request],[data-select-quote],[data-approve-cart-replacement],[data-reject-cart-replacement],[data-interest],[data-notification],[data-payment-notification],[data-payment-upload],[data-payment-document],[data-invoice-pdf],[data-copy-value]');if(target)handleAction(target);});
