@@ -14,7 +14,7 @@ const esc=value=>String(value??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;
 const copy={
   ar:{
     title:'مساعد M الذكي',subtitle:'مستشار مشتريات وتوريد',humanSubtitle:'فريق M يتولى المحادثة الآن',team:'فريق M',
-    placeholder:'اكتب ماذا تبحث عنه...',send:'إرسال',close:'إغلاق',photo:'البحث بصورة',imageReady:'الصورة جاهزة للبحث',imageError:'تعذر قراءة الصورة. اختر صورة أخرى.',imageSearch:'📷 بحث بصورة',
+    placeholder:'اكتب ماذا تبحث عنه...',send:'إرسال',close:'إغلاق',photo:'إضافة صورة من الكاميرا أو الاستديو',imageReady:'الصورة جاهزة للبحث',imageError:'تعذر قراءة الصورة. اختر صورة أخرى.',imageSearch:'📷 بحث بصورة',
     guestHello:'مرحبًا 👋 أخبرني ماذا تريد شراءه، وسأساعدك في اختيار الأنسب من المنتجات المتاحة.',
     clientHello:'مرحبًا 👋 أخبرني ماذا تحتاج، وسأساعدك في المنتجات والعروض وحالة طلباتك.',
     error:'تعذر الحصول على رد الآن. حاول مرة أخرى.',thinking:'جاري البحث...',
@@ -23,7 +23,7 @@ const copy={
   },
   en:{
     title:'M AI Assistant',subtitle:'Smart buying & sourcing advisor',humanSubtitle:'M Team is handling this conversation',team:'M Team',
-    placeholder:'Tell me what you are looking for...',send:'Send',close:'Close',photo:'Search by image',imageReady:'Image ready to search',imageError:'Could not read this image. Choose another image.',imageSearch:'📷 Image search',
+    placeholder:'Tell me what you are looking for...',send:'Send',close:'Close',photo:'Add image from camera or photo library',imageReady:'Image ready to search',imageError:'Could not read this image. Choose another image.',imageSearch:'📷 Image search',
     guestHello:'Hi 👋 Tell me what you want to buy and I will help you choose the best fit from available products.',
     clientHello:'Hi 👋 Tell me what you need and I can help with products, quotes, and your order status.',
     error:'I could not get a response right now. Please try again.',thinking:'Searching...',
@@ -69,7 +69,7 @@ function ensureHost(){
       <div class="m-ai-messages" aria-live="polite"></div>
       <div class="m-ai-chips"></div>
       <div class="m-ai-image-preview hidden"><img alt=""><span></span><button type="button" aria-label="Remove image">×</button></div>
-      <form class="m-ai-form"><label class="m-ai-photo" title=""><span>📷</span><input type="file" accept="image/*" capture="environment"></label><textarea rows="1" maxlength="2000"></textarea><button type="submit"></button></form>
+      <form class="m-ai-form"><label class="m-ai-photo" title=""><span>📷</span><input type="file" accept="image/*"></label><textarea rows="1" maxlength="2000"></textarea><button type="submit"></button></form>
     </section>`;
   document.body.append(host);
   host.querySelector('.m-ai-launcher').addEventListener('click',()=>{markEngaged();setOpen(host.querySelector('.m-ai-panel').classList.contains('hidden'));});
