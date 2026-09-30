@@ -28,8 +28,11 @@ const api=(path,options={})=>session.request(path,{...options,auth:true});
 const reload=()=>reloadWorkspace();
 function chatUnread(){return chatRows.reduce((sum,x)=>sum+Number(x.unreadAdmin||0),0);}
 function updateChatBadge(){
-  const badge=document.getElementById('navChatUnread'),count=chatUnread();if(!badge)return;
-  badge.textContent=count>99?'99+':String(count||'');badge.classList.toggle('hidden',!count);
+  const count=chatUnread(),text=count>99?'99+':String(count||'');
+  for(const id of ['navChatUnread','headerChatUnread']){
+    const badge=document.getElementById(id);if(!badge)continue;
+    badge.textContent=text;badge.classList.toggle('hidden',!count);
+  }
 }
 async function refreshConversationsSummary(renderView=false){
   if(!isAdmin())return;
