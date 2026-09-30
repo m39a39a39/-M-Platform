@@ -39,8 +39,10 @@ async function createConversation(user,guestKey,language='ar'){
 export async function ensureConversation(user,body={},create=true){
   assert(!user||user.role==='client',403,'غير مصرح / Unauthorized');
   const guestKey=clean(body.guestKey,120),language=body.language==='en'?'en':'ar';
+  if(!user&&!validGuestKey(guestKey)){if(create)assert(false,400,'جلسة المحادثة غير صالحة / Invalid chat session');return null;}
   let row=body.conversationId?await getConversation(clean(body.conversationId,80)):null;
   if(row&&!ownsConversation(user,row,guestKey))row=null;
+  if(row?.status==='closed'&&create)row=null;
   if(!row)row=await latestConversation(user,guestKey);
   if(!row&&create)row=await createConversation(user,guestKey,language);
   return row;
