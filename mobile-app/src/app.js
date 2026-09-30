@@ -408,13 +408,15 @@ session.onReset(reason=>{
 });
 
 function updateShell(){
-  const role=currentUser?.role||'client',bottom=$('bottomNav'),requestLabel=document.querySelector('#bottomNav [data-nav="requests"]'),offersLabel=document.querySelector('#bottomNav [data-nav="offers"]'),accountLabel=document.querySelector('#bottomNav [data-nav="account"]'),requestButton=requestLabel?.closest('button'),accountButton=accountLabel?.closest('button'),utilityNav=$('navUnread')?.closest('button');
+  const role=currentUser?.role||'client',bottom=$('bottomNav'),requestLabel=document.querySelector('#bottomNav [data-nav="requests"]'),offersLabel=document.querySelector('#bottomNav [data-nav="offers"]'),accountLabel=document.querySelector('#bottomNav [data-nav="account"]'),requestButton=requestLabel?.closest('button'),accountButton=accountLabel?.closest('button'),utilityNav=$('navUnread')?.closest('button'),chatNav=$('adminChatNav');
+  bottom.classList.toggle('admin-nav',role==='admin');chatNav?.classList.toggle('hidden',role!=='admin');
   $('headerRole').textContent=t(role);
   $('appLangBtn').textContent=lang==='ar'?'EN':'AR';
   const homeLabel=document.querySelector('[data-nav="home"]');if(homeLabel)homeLabel.textContent=t('home');
   if(requestLabel)requestLabel.textContent=role==='supplier'?tr('طلبات الأسعار','Quote requests'):role==='client'?tr('طلباتي','My orders'):t('requests');
   if(offersLabel)offersLabel.textContent=['admin','supplier'].includes(role)?tr('المنتجات','Products'):t('offers');
   if(accountLabel)accountLabel.textContent=t('account');
+  const chatLabel=document.querySelector('#bottomNav [data-nav="conversations"]');if(chatLabel)chatLabel.textContent=tr('المحادثات','Chats');
   if(role==='supplier'){
     if(utilityNav){
       utilityNav.classList.remove('hidden');utilityNav.dataset.screen='orders';
