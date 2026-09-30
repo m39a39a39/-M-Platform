@@ -21,3 +21,14 @@
 .m-ai-nudge-close{position:absolute;inset-inline-end:9px;top:8px;width:24px;height:24px;border-radius:8px;display:grid;place-items:center;font-size:18px;color:var(--muted,#6d7f8c)}
 @keyframes mAiNudgeIn{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
 @media (max-width:640px){.m-ai-nudge{position:fixed;inset-inline:12px;bottom:calc(138px + var(--safe-bottom));width:auto}}
+
+.m-ai-form{align-items:end}
+.m-ai-photo{width:42px;height:42px;border:1px solid #d8e3e9;border-radius:13px;display:grid;place-items:center;background:#fff;cursor:pointer;flex:0 0 auto}
+.m-ai-photo span{font-size:19px;line-height:1}
+.m-ai-photo input{position:absolute;opacity:0;pointer-events:none;width:1px;height:1px}
+.m-ai-photo:has(input:disabled){opacity:.45;pointer-events:none}
+.m-ai-image-preview{margin:0 12px 8px;padding:8px 10px;border:1px solid #d8e3e9;border-radius:14px;background:#f7fafb;display:grid;grid-template-columns:48px minmax(0,1fr) 30px;align-items:center;gap:9px}
+.m-ai-image-preview.hidden{display:none}
+.m-ai-image-preview img{width:48px;height:48px;border-radius:10px;object-fit:cover}
+.m-ai-image-preview span{font-size:12px;font-weight:700;color:#526775}
+.m-ai-image-preview button{border:0;background:transparent;font-size:20px;color:#70838f}
