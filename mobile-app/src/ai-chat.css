@@ -15,3 +15,9 @@
 .m-ai-thinking{color:var(--muted,#6d7f8c)}.m-ai-thinking span{display:inline-block;width:5px;height:5px;border-radius:50%;background:currentColor;animation:mAiDot 1s infinite ease-in-out}.m-ai-thinking span:nth-child(2){animation-delay:.12s}.m-ai-thinking span:nth-child(3){animation-delay:.24s}
 @keyframes mAiDot{0%,70%,100%{opacity:.25;transform:translateY(0)}35%{opacity:1;transform:translateY(-3px)}}
 @media (max-width:640px){.m-ai-chat{inset-inline-end:12px;bottom:calc(76px + var(--safe-bottom))}.m-ai-launcher{width:54px;height:54px;border-radius:18px}.m-ai-panel{position:fixed;inset-inline:8px;bottom:calc(72px + var(--safe-bottom));width:auto;height:min(620px,76dvh);border-radius:22px}}
+
+.m-ai-nudge{position:absolute;inset-inline-end:0;bottom:70px;width:min(310px,calc(100vw - 32px));border:1px solid #d7e8ef;background:#fff;color:var(--navy,#0b2236);border-radius:18px;padding:12px 38px 12px 14px;box-shadow:0 16px 38px rgba(11,34,54,.18);text-align:start;display:grid;grid-template-columns:30px 1fr;gap:9px;align-items:start;animation:mAiNudgeIn .22s ease-out}
+.m-ai-nudge strong{width:30px;height:30px;border-radius:10px;background:var(--navy,#0b2236);color:#fff;display:grid;place-items:center;font-size:13px}.m-ai-nudge p{margin:1px 0 0;line-height:1.45;font-size:13px}
+.m-ai-nudge-close{position:absolute;inset-inline-end:9px;top:8px;width:24px;height:24px;border-radius:8px;display:grid;place-items:center;font-size:18px;color:var(--muted,#6d7f8c)}
+@keyframes mAiNudgeIn{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
+@media (max-width:640px){.m-ai-nudge{position:fixed;inset-inline:12px;bottom:calc(138px + var(--safe-bottom));width:auto}}
