@@ -4,26 +4,42 @@ import { downloadInvoicePdf } from './invoice-pdf.js';
 import { categoryRows, subcategoryRows, supplyCountryRows, taxonomyLabel } from './catalog-taxonomy.js';
 let state=null,revision=0;
 let requestFilter='all',offerTab='pending',timer=null;
+let chatRows=[],chatTimer=null;
 let selectedProducts=new Set();
 const searches=new Map(),mediaCache=new Map(),mediaTasks=new Map();
 const MEDIA_CONCURRENCY=6;
 let reloadWorkspace=async()=>{},adapter=null;
 export function configureAdmin({reload,bridge=null}) { reloadWorkspace=reload; adapter=bridge; }
 export function resetAdmin() {
-  clearTimeout(timer); state=null; revision++;
-  requestFilter='all'; offerTab='pending'; searches.clear(); selectedProducts.clear();
+  clearTimeout(timer);clearTimeout(chatTimer);chatTimer=null; state=null; revision++;
+  requestFilter='all'; offerTab='pending'; chatRows=[]; searches.clear(); selectedProducts.clear();
+  document.getElementById('navChatUnread')?.classList.add('hidden');
   for(const url of mediaCache.values()) URL.revokeObjectURL(url);
   mediaCache.clear();mediaTasks.clear();
 }
 export function updateAdminState(next) {
   if(next?.user?.role!=='admin') { resetAdmin(); return; }
   if(state?.user?.id!==next.user.id) resetAdmin();
-  state=next; revision++;
+  state=next; revision++;void refreshConversationsSummary(false);
 }
 const searchKey=()=>activeView()==='offers'?`offers:${offerTab}`:activeView();
 const searchText=()=>searches.get(searchKey())||'';
 const api=(path,options={})=>session.request(path,{...options,auth:true});
 const reload=()=>reloadWorkspace();
+function chatUnread(){return chatRows.reduce((sum,x)=>sum+Number(x.unreadAdmin||0),0);}
+function updateChatBadge(){
+  const badge=document.getElementById('navChatUnread'),count=chatUnread();if(!badge)return;
+  badge.textContent=count>99?'99+':String(count||'');badge.classList.toggle('hidden',!count);
+}
+async function refreshConversationsSummary(renderView=false){
+  if(!isAdmin())return;
+  try{
+    const result=await api('/api/v1/ai-conversations');
+    chatRows=Array.isArray(result?.conversations)?result.conversations:[];revision++;updateChatBadge();
+    if(renderView&&activeView()==='conversations')chats();
+  }catch{}
+  clearTimeout(chatTimer);chatTimer=setTimeout(()=>void refreshConversationsSummary(activeView()==='conversations'),10000);
+}
 const lang=()=>document.documentElement.lang==='en'?'en':'ar';
 const tr=(ar,en)=>lang()==='ar'?ar:en;
 const esc=v=>String(v??'').replace(/[&<>'\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[c]));
@@ -265,8 +281,9 @@ function home(){
   const pendingRequests=req.filter(x=>!x.deletedAt&&!x.suspendedAt&&x.status==='review');
   const pendingQuotes=qs.filter(x=>!x.deletedAt&&x.status==='pending');
   const pendingProducts=po.filter(x=>!x.deletedAt&&x.status==='pending');
+  const unreadChats=chatUnread();
   const priority=[...pendingRequests.slice(0,2).map(x=>row(x,'request')),...pendingQuotes.slice(0,2).map(x=>row(x,'quote')),...pendingProducts.slice(0,2).map(x=>row(x,'public'))].join('');
-  setRoot('home',page(tr('لوحة الإدارة','Admin dashboard'),tr('متابعة الطلبات والمنتجات وعروض الأسعار من مكان واحد.','Monitor orders, products, and supplier quotes from one place.'))+`<div class="stats-grid admin-stats"><button class="stat-card" data-admin-go="requests"><strong>${pendingRequests.length}</strong><span>${esc(tr('طلبات بانتظار الاعتماد','Orders pending approval'))}</span></button><button class="stat-card" data-admin-go="offers"><strong>${pendingProducts.length}</strong><span>${esc(tr('منتجات بانتظار المراجعة','Products pending review'))}</span></button><button class="stat-card" data-admin-go="requests"><strong>${pendingQuotes.length}</strong><span>${esc(tr('عروض أسعار بانتظار المراجعة','Quotes pending review'))}</span></button><button class="stat-card" data-admin-go="account"><strong>${acc.filter(a=>['client','supplier'].includes(a.role)&&!a.deletedAt).length}</strong><span>${esc(tr('العملاء والموردون','Customers & suppliers'))}</span></button></div><section class="section-block"><div class="section-title"><h2>${esc(tr('الأولوية الآن','Priority now'))}</h2></div><div class="list-stack">${priority||empty()}</div></section>`);
+  setRoot('home',page(tr('لوحة الإدارة','Admin dashboard'),tr('متابعة الطلبات والمنتجات وعروض الأسعار من مكان واحد.','Monitor orders, products, and supplier quotes from one place.'))+`<div class="stats-grid admin-stats"><button class="stat-card" data-admin-go="requests"><strong>${pendingRequests.length}</strong><span>${esc(tr('طلبات بانتظار الاعتماد','Orders pending approval'))}</span></button><button class="stat-card" data-admin-go="offers"><strong>${pendingProducts.length}</strong><span>${esc(tr('منتجات بانتظار المراجعة','Products pending review'))}</span></button><button class="stat-card" data-admin-go="requests"><strong>${pendingQuotes.length}</strong><span>${esc(tr('عروض أسعار بانتظار المراجعة','Quotes pending review'))}</span></button><button class="stat-card" data-admin-go="conversations"><strong>${unreadChats}</strong><span>${esc(tr('محادثات جديدة','New chat messages'))}</span></button><button class="stat-card" data-admin-go="account"><strong>${acc.filter(a=>['client','supplier'].includes(a.role)&&!a.deletedAt).length}</strong><span>${esc(tr('العملاء والموردون','Customers & suppliers'))}</span></button></div><section class="section-block"><div class="section-title"><h2>${esc(tr('الأولوية الآن','Priority now'))}</h2></div><div class="list-stack">${priority||empty()}</div></section>`);
 }
 const unifiedRequestTracking=x=>x.__kind==='interest'?interestTracking(x):requestTracking(x);
 function requestFilterControls(allRows){
@@ -466,12 +483,53 @@ async function submitTeamStatus(form){
     await reload();closeModal();schedule();toast(form.dataset.action==='block'?tr('تم إيقاف المدير.','Manager disabled.'):tr('تمت إعادة تفعيل المدير.','Manager reactivated.'));
   }catch(e){toast(e.message);}
 }
+
+function chatCustomer(row){
+  if(!row?.customerId)return {name:tr('زائر','Visitor'),detail:tr('غير مسجل','Not signed in')};
+  const a=account(row.customerId);return {name:a?.company||a?.name||tr('عميل','Customer'),detail:a?.email||a?.phone||('#'+String(row.customerId).slice(0,8))};
+}
+function chatStatusLabel(value){return value==='human'?tr('فريق M يرد','M Team replying'):value==='closed'?tr('مغلقة','Closed'):tr('الذكاء الاصطناعي','AI active');}
+function chats(){
+  const rows=[...chatRows].sort((a,b)=>String(b.lastMessageAt||'').localeCompare(String(a.lastMessageAt||'')));
+  setRoot('conversations',page(tr('محادثات العملاء','Customer conversations'),tr('شاهد محادثات الذكاء الاصطناعي واستلم أي محادثة للرد بنفسك.','View AI conversations and take over any conversation to reply yourself.'))+
+    `<div class="list-stack admin-chat-list" data-admin-results>${rows.map(row=>{const who=chatCustomer(row),unread=Number(row.unreadAdmin||0);return `<button type="button" class="admin-chat-card ${unread?'unread':''}" data-admin-conversation="${esc(row.id)}"><div class="admin-chat-avatar">${esc(who.name.charAt(0)||'M')}</div><div class="admin-chat-card-copy"><div><strong>${esc(who.name)}</strong><span class="status-pill ${row.status==='human'?'status-review':row.status==='closed'?'status-cancelled':'status-published'}">${esc(chatStatusLabel(row.status))}</span></div><small>${esc(who.detail)} · ${esc(date(row.lastMessageAt))}</small></div>${unread?`<i>${unread>99?'99+':unread}</i>`:''}</button>`;}).join('')||empty()}</div>`);
+}
+async function openChatConversation(id){
+  try{
+    const result=await api('/api/v1/ai-conversations?conversationId='+encodeURIComponent(id));
+    const row=result?.conversation;if(!row)return;
+    const who=chatCustomer(row),messages=Array.isArray(result.messages)?result.messages:[];
+    chatRows=chatRows.map(x=>x.id===id?{...x,...row,unreadAdmin:0}:x);updateChatBadge();
+    const messagesHtml=messages.map(m=>{
+      const sender=m.sender==='customer'?tr('العميل','Customer'):m.sender==='admin'?tr('فريق M','M Team'):tr('المساعد الذكي','AI assistant');
+      return `<div class="admin-chat-message ${esc(m.sender)}"><small>${esc(sender)}</small><p>${esc(m.content)}</p><time>${esc(date(m.createdAt))}</time></div>`;
+    }).join('');
+    const controls=row.status==='human'
+      ?`<button type="button" class="secondary-btn" data-admin-chat-action="ai" data-chat-id="${esc(row.id)}">${esc(tr('إرجاع الرد للذكاء الاصطناعي','Return to AI'))}</button>`
+      :`<button type="button" class="primary-btn" data-admin-chat-action="takeover" data-chat-id="${esc(row.id)}">${esc(row.status==='closed'?tr('إعادة فتح واستلام المحادثة','Reopen & take over'):tr('استلام المحادثة','Take over chat'))}</button>`;
+    const reply=row.status==='closed'?'':`<form id="adminChatReplyForm" class="admin-chat-reply" data-chat-id="${esc(row.id)}"><textarea name="message" maxlength="4000" required placeholder="${esc(tr('اكتب ردك للعميل...','Write your reply...'))}"></textarea><button type="submit" class="primary-btn">${esc(tr('إرسال الرد','Send reply'))}</button></form>`;
+    modal(who.name,chatStatusLabel(row.status),`<section class="admin-chat-thread"><div class="admin-chat-customer"><strong>${esc(who.name)}</strong><small>${esc(who.detail)}</small></div><div class="admin-chat-messages">${messagesHtml||empty()}</div><div class="admin-chat-controls">${controls}${row.status!=='closed'?'<button type="button" class="danger-text" data-admin-chat-action="close" data-chat-id="'+esc(row.id)+'">'+esc(tr('إغلاق المحادثة','Close chat'))+'</button>':'<button type="button" class="secondary-btn" data-admin-chat-action="ai" data-chat-id="'+esc(row.id)+'">'+esc(tr('إعادة فتح بالذكاء الاصطناعي','Reopen with AI'))+'</button>'}</div>${reply}</section>`);
+    revision++;if(activeView()==='conversations')chats();
+  }catch(e){toast(e.message);}
+}
+async function runChatAction(id,action,message=''){
+  try{
+    await api('/api/v1/ai-conversations',{method:'POST',body:{conversationId:id,action,message}});
+    await refreshConversationsSummary(false);await openChatConversation(id);
+  }catch(e){toast(e.message);}
+}
+async function submitChatReply(form){
+  const text=form.message.value.trim();if(!text)return;
+  const button=form.querySelector('button');button.disabled=true;
+  await runChatAction(form.dataset.chatId,'reply',text);
+}
+
 function accounts(section='account'){const u=me(),rows=(state?.accounts||[]).filter(a=>(section==='customers'?a.role==='client':section==='suppliers'?a.role==='supplier':['client','supplier'].includes(a.role))&&!a.deletedAt&&matches(a,'account'));const specialized={team:()=>teamPanel(),currencies:()=>currencyPanel(),banks:()=>bankAccountPanel(),categories:()=>categoryPanel()+subcategoryPanel(),countries:()=>supplyCountryPanel()};
  if(specialized[section]){setRoot(section,specialized[section]());return;}
  if(['customers','suppliers'].includes(section)){setRoot(section,`<section class="section-block admin-directory"><div class="section-title"><h2>${esc(section==='customers'?tr('العملاء','Customers'):tr('الموردون','Suppliers'))}</h2></div>${search(tr('ابحث بالاسم أو الشركة','Search name or company'))}<div class="list-stack" data-admin-results>${rows.slice(0,100).map(a=>`<button class="admin-account-row" data-admin-account="${esc(a.id)}"><div><strong>${esc(a.company||a.name||'#'+String(a.id).slice(0,8))}</strong><small>${esc(a.role==='client'?tr('عميل','Customer'):tr('مورد','Supplier'))} · ${esc(a.blockedAt?tr('متوقف','Disabled'):tr('نشط','Active'))}</small></div><span>›</span></button>`).join('')||empty()}</div></section>`);return;}
  setRoot('account',`<section class="profile-card admin-profile"><div class="avatar">${esc((u?.name||'M').charAt(0))}</div><h2>${esc(u?.name||tr('الإدارة','Admin'))}</h2><p>${esc(tr('حساب إدارة','Admin account'))}</p><button class="danger-btn" data-action="logout">${esc(tr('تسجيل الخروج','Sign out'))}</button></section>`);
 }
-export function renderAdminScreen(v=activeView()){if(!isAdmin()||v==='notifications')return false;if(v==='home')home();else if(v==='requests')requests();else if(v==='offers')offers();else if(['account','customers','suppliers','team','currencies','banks','categories','countries'].includes(v))accounts(v);return true;}
+export function renderAdminScreen(v=activeView()){if(!isAdmin()||v==='notifications')return false;if(v==='home')home();else if(v==='requests')requests();else if(v==='offers')offers();else if(v==='conversations')chats();else if(['account','customers','suppliers','team','currencies','banks','categories','countries'].includes(v))accounts(v);return true;}
 function render(){if(!document.getElementById('appView')?.classList.contains('hidden'))renderAdminScreen();}
 
 function modal(titleText,kicker,html){if(adapter){adapter.modal(titleText,kicker,html);hydrate(document.getElementById('modalBody'));return;}const m=document.getElementById('modal');if(!m)return;document.getElementById('modalTitle').textContent=titleText;document.getElementById('modalKicker').textContent=kicker||'';document.getElementById('modalBody').innerHTML=html;m.classList.remove('hidden');hydrate(document.getElementById('modalBody'));}
@@ -784,6 +842,8 @@ function go(view,tab){if(view==='offers'&&tab)offerTab=tab;if(adapter){adapter.n
 
 document.addEventListener('click',e=>{
   if(!isAdmin()||(adapter?!adapter.active():document.getElementById('appView')?.classList.contains('hidden')))return;
+  const chat=e.target.closest('[data-admin-conversation]');if(chat){openChatConversation(chat.dataset.adminConversation);return;}
+  const chatAction=e.target.closest('[data-admin-chat-action]');if(chatAction){runChatAction(chatAction.dataset.chatId,chatAction.dataset.adminChatAction);return;}
   const del=e.target.closest('[data-admin-delete-order]');if(del){e.preventDefault();e.stopPropagation();deleteOrderDialog(del.dataset.orderKind,del.dataset.adminDeleteOrder);return;}
   const g=e.target.closest('[data-admin-go]');if(g){go(g.dataset.adminGo,g.dataset.adminTabTarget);return;}
   const all=e.target.closest('[data-admin-request-all]');if(all){requestFilter='all';schedule();return;}
@@ -868,7 +928,8 @@ if(window.visualViewport){
 document.addEventListener('click',e=>{const target=e.target.closest?.('[data-admin-invoice-pdf]');if(target&&isAdmin()){e.preventDefault();openAdminInvoicePdf(target);}});
 document.addEventListener('submit',e=>{
   if(!isAdmin())return;
-  if(e.target.matches('[data-cart-replacement-quote-form]')){e.preventDefault();submitCartReplacementQuote(e.target);}
+  if(e.target.matches('#adminChatReplyForm')){e.preventDefault();submitChatReply(e.target);}
+  else if(e.target.matches('[data-cart-replacement-quote-form]')){e.preventDefault();submitCartReplacementQuote(e.target);}
   else if(e.target.matches('[data-cart-replacement-invite-form]')){e.preventDefault();submitCartReplacementInvite(e.target);}
   else if(e.target.matches('#adminReplacementSupplierForm')){e.preventDefault();submitReplacementSupplier(e.target);}
   else if(e.target.matches('#adminReplacementQuoteForm')){e.preventDefault();submitReplacementQuote(e.target);}
