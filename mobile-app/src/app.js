@@ -375,7 +375,8 @@ function syncClientAiChat(){
   mountAiChat({
     mode:'client',
     language:()=>lang,
-    send:body=>request('/api/v1/ai-chat',{method:'POST',auth:true,body})
+    send:body=>request('/api/v1/ai-chat',{method:'POST',auth:true,body}),
+    fetchConversation:params=>request('/api/v1/ai-conversation?'+new URLSearchParams({conversationId:String(params.conversationId||''),guestKey:String(params.guestKey||''),language:String(params.language||lang)}),{auth:true})
   });
 }
 async function mutate(collection,itemId,version,patch){return request('/api/v1/mutations',{method:'POST',auth:true,body:{collection,id:itemId,version:Number(version||0),patch}});}
