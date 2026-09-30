@@ -18,6 +18,18 @@ function gatewayAuthToken(){
   }catch{}
   return process.env.VERCEL_OIDC_TOKEN||'';
 }
+export function aiGatewayAuthStatus(){
+  let requestOidc=false;
+  try{
+    requestOidc=!!globalThis[Symbol.for('@vercel/request-context')]?.get?.()?.headers?.['x-vercel-oidc-token'];
+  }catch{}
+  return {
+    configured:!!gatewayAuthToken(),
+    apiKey:!!process.env.AI_GATEWAY_API_KEY,
+    envOidc:!!process.env.VERCEL_OIDC_TOKEN,
+    requestOidc
+  };
+}
 function safeImage(value){
   if(!value)return '';
   const text=String(value);
