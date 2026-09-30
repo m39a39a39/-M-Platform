@@ -408,8 +408,8 @@ session.onReset(reason=>{
 });
 
 function updateShell(){
-  const role=currentUser?.role||'client',bottom=$('bottomNav'),requestLabel=document.querySelector('#bottomNav [data-nav="requests"]'),offersLabel=document.querySelector('#bottomNav [data-nav="offers"]'),accountLabel=document.querySelector('#bottomNav [data-nav="account"]'),requestButton=requestLabel?.closest('button'),accountButton=accountLabel?.closest('button'),utilityNav=$('navUnread')?.closest('button'),chatNav=$('adminChatNav');
-  bottom.classList.toggle('admin-nav',role==='admin');chatNav?.classList.toggle('hidden',role!=='admin');
+  const role=currentUser?.role||'client',bottom=$('bottomNav'),requestLabel=document.querySelector('#bottomNav [data-nav="requests"]'),offersLabel=document.querySelector('#bottomNav [data-nav="offers"]'),accountLabel=document.querySelector('#bottomNav [data-nav="account"]'),requestButton=requestLabel?.closest('button'),accountButton=accountLabel?.closest('button'),utilityNav=$('navUnread')?.closest('button'),chatNav=$('adminChatNav'),headerChat=$('headerAdminChatsBtn');
+  bottom.classList.toggle('admin-nav',role==='admin');chatNav?.classList.toggle('hidden',role!=='admin');headerChat?.classList.toggle('hidden',role!=='admin');
   $('headerRole').textContent=t(role);
   $('appLangBtn').textContent=lang==='ar'?'EN':'AR';
   const homeLabel=document.querySelector('[data-nav="home"]');if(homeLabel)homeLabel.textContent=t('home');
@@ -449,6 +449,9 @@ function updateShell(){
   $('navUnread').textContent=badge;$('headerUnread').textContent=badge;
   $('navUnread').classList.toggle('hidden',role!=='admin'||!unread);
   $('headerUnread').classList.toggle('hidden',!['supplier','client'].includes(role)||!unread);
+  const chatUnread=Number(document.getElementById('navChatUnread')?.textContent||0),headerChatUnread=$('headerChatUnread');
+  if(headerChatUnread){headerChatUnread.textContent=chatUnread>99?'99+':String(chatUnread);headerChatUnread.classList.toggle('hidden',role!=='admin'||!chatUnread);}
+  if(headerChat){const label=tr('المحادثات','Chats');headerChat.setAttribute('aria-label',label);headerChat.title=label;}
   mountSiteChrome(platformState,{role,cartCount:cartItems.length,unread},{hydrate:hydrateImages,action:action=>{if(action==='cart')openCart();if(action==='language')toggleLanguage();if(action==='refresh')void loadData().catch(e=>showToast(errorText(e)));if(action==='account'||action==='notifications'){activeScreen=action;renderScreen();}if(action==='register-supplier')window.dispatchEvent(new CustomEvent('mplatform:register',{detail:{role:'supplier'}}));}});
   document.querySelectorAll('#bottomNav button').forEach(b=>b.classList.toggle('active',b.dataset.screen===activeScreen));
 }
@@ -1353,6 +1356,7 @@ $('langBtn').addEventListener('click',toggleLanguage);
 $('appLangBtn').addEventListener('click',toggleLanguage);
 $('headerCartBtn')?.addEventListener('click',()=>{if(currentUser?.role==='client')openCart();});
 $('headerNotificationsBtn').addEventListener('click',()=>{if(!currentUser)return;activeScreen='notifications';renderScreen();$('screen').scrollTop=0;window.scrollTo(0,0);});
+$('headerAdminChatsBtn')?.addEventListener('click',()=>{if(currentUser?.role!=='admin')return;activeScreen='conversations';renderScreen();$('screen').scrollTop=0;window.scrollTo(0,0);});
 onLanguageChange(value=>{lang=value;applyLanguage();applyRegistrationLanguage();applyResetLanguage();if(currentUser?.role==='client')syncClientAiChat();});
 $('refreshBtn').addEventListener('click',async()=>{if(busy)return;busy=true;$('refreshBtn').classList.add('spin');try{await loadData();showToast(t('refreshing'));}catch(e){showToast(errorText(e));}finally{busy=false;$('refreshBtn').classList.remove('spin');}});
 $('bottomNav').addEventListener('click',e=>{const b=e.target.closest('button[data-screen]');if(!b)return;history.replaceState(null,'',location.pathname);activeScreen=b.dataset.screen;if(activeScreen==='offers')activeSub='primary';if(activeScreen==='requests'&&currentUser?.role==='supplier')activeSub='pending';renderScreen();$('screen').scrollTop=0;window.scrollTo(0,0);});
