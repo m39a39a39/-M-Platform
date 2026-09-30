@@ -7,6 +7,14 @@ const GATEWAY_URL='https://ai-gateway.vercel.sh/v1/chat/completions';
 const DEFAULT_MODEL='openai/gpt-5.6-luna';
 const usageWindows=new Map();
 const RATE_WINDOW_MS=10*60*1000;
+const IMAGE_MAX_CHARS=700000;
+function safeImage(value){
+  if(!value)return '';
+  const text=String(value);
+  assert(text.length<=IMAGE_MAX_CHARS,413,'الصورة كبيرة جدًا / Image is too large');
+  assert(/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/i.test(text),400,'صيغة الصورة غير مدعومة / Unsupported image format');
+  return text;
+}
 function viewerKey(user,req){
   if(user?.id)return 'user:'+user.id;
   const forwarded=String(req?.headers?.['x-forwarded-for']||'').split(',')[0].trim();
@@ -129,6 +137,65 @@ function safeMarketingSignal(value){
   }
   return result;
 }
+async function analyzeProductImage({image,message,language,apiKey,model,gatewayUser}){
+  const prompt=language==='ar'
+    ?'حلل صورة المنتج بهدف البحث عنه داخل كتالوج متجر إلكتروني. أعد JSON فقط. حدد نوع المنتج العام، وأهم الكلمات المرئية أو المواصفات مثل الماركة والموديل والواط والمنافذ واللون إذا كانت واضحة. لا تخمن معلومات غير ظاهرة. إذا لم يظهر منتج قابل للشراء بوضوح اجعل confidence = "none" و query فارغًا.'
+    :'Analyze this product image for catalog search. Return JSON only. Identify the generic product type plus clearly visible brand, model, wattage, ports, color, or other useful visible specifications. Do not guess unseen details. If no purchasable product is clearly visible, set confidence to "none" and query to an empty string.';
+  const payload={
+    model,
+    messages:[{
+      role:'user',
+      content:[
+        {type:'text',text:prompt+(message?('\nCustomer note: '+clamp(message,500)):'')},
+        {type:'image_url',image_url:{url:image,detail:'low'}}
+      ]
+    }],
+    response_format:{
+      type:'json_schema',
+      json_schema:{
+        name:'product_image_search',
+        strict:true,
+        schema:{
+          type:'object',
+          properties:{
+            query:{type:'string'},
+            productType:{type:'string'},
+            visibleText:{type:'string'},
+            confidence:{type:'string',enum:['high','medium','low','none']}
+          },
+          required:['query','productType','visibleText','confidence'],
+          additionalProperties:false
+        }
+      }
+    },
+    max_tokens:220,
+    temperature:0.1,
+    reasoning:{effort:'none'},
+    providerOptions:{gateway:{tags:['feature:m-platform-image-search'],user:gatewayUser}}
+  };
+  let response;
+  try{
+    response=await fetch(GATEWAY_URL,{
+      method:'POST',
+      headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},
+      body:JSON.stringify(payload),
+      signal:AbortSignal.timeout(22000)
+    });
+  }catch{
+    throw new HttpError(502,'تعذر تحليل الصورة الآن. / Could not analyze the image.');
+  }
+  if(!response.ok)throw gatewayError(response.status);
+  let data;try{data=await response.json();}catch{throw new HttpError(502,'استجابة تحليل الصورة غير صالحة. / Invalid image analysis response.');}
+  const raw=extractReply(data);
+  let parsed;try{parsed=JSON.parse(raw);}catch{throw new HttpError(502,'تعذر فهم نتيجة تحليل الصورة. / Could not parse image analysis.');}
+  return {
+    query:clamp(parsed?.query,500),
+    productType:clamp(parsed?.productType,180),
+    visibleText:clamp(parsed?.visibleText,300),
+    confidence:['high','medium','low','none'].includes(parsed?.confidence)?parsed.confidence:'low'
+  };
+}
+
 function gatewayError(status){
   if(status===429)return new HttpError(429,'تم الوصول إلى حد الاستخدام مؤقتًا. حاول بعد قليل. / AI usage limit reached. Try again shortly.');
   if(status===402)return new HttpError(503,'خدمة المساعد الذكي متوقفة مؤقتًا بسبب حد الميزانية. / AI assistant budget limit reached.');
@@ -138,37 +205,49 @@ function gatewayError(status){
 
 export async function aiChat(user,body={},req=null){
   assert(!user||user.role==='client',403,'المساعد الذكي متاح للعملاء والمتصفحين فقط / AI assistant is for customers and visitors only');
+  const image=safeImage(body.image);
   const message=clamp(body.message,2000);
-  assert(message,400,'اكتب رسالتك أولًا / Enter a message first');
+  assert(message||image,400,'اكتب رسالتك أو أضف صورة / Enter a message or add an image');
   const language=body.language==='en'?'en':'ar';
   const marketingSignal=safeMarketingSignal(body.marketingSignal);
   const proactive=!!marketingSignal;
   let conversation=null;
   if(!proactive){
     conversation=await ensureConversation(user,body,true);
-    const saved=await saveCustomerMessage(conversation,message);
+    const savedText=image?(message|| (language==='ar'?'📷 بحث بصورة':'📷 Image search')):message;
+    const saved=await saveCustomerMessage(conversation,savedText);
     conversation=saved.conversation;
     if(conversation.status==='human')return {conversationId:conversation.id,humanMode:true};
   }
   const gatewayUser=enforceRateLimit(user,req);
+  const apiKey=process.env.AI_GATEWAY_API_KEY||process.env.VERCEL_OIDC_TOKEN;
+  if(!apiKey)throw new HttpError(503,'لم يتم تفعيل خدمة الذكاء الاصطناعي بعد. / AI service is not configured yet.');
+  const model=String(process.env.AI_CHAT_MODEL||DEFAULT_MODEL);
+  const imageSearch=image?await analyzeProductImage({image,message,language,apiKey,model,gatewayUser}):null;
+  if(imageSearch?.confidence==='none'||imageSearch&&!imageSearch.query){
+    const reply=language==='ar'
+      ?'لم أستطع تحديد المنتج بوضوح من هذه الصورة. جرّب صورة أوضح للمنتج من الأمام أو أضف اسمه أو مواصفته.'
+      :'I could not identify the product clearly from this image. Try a clearer front view or add the product name or specification.';
+    if(conversation)await saveAiMessage(conversation,reply);
+    return {reply,...(conversation?{conversationId:conversation.id,humanMode:false}:{})};
+  }
   const state=await snapshot(user||null);
-  const productQuery=[marketingSignal?.query,marketingSignal?.productSku,marketingSignal?.productTitle,message].filter(Boolean).join(' ');
+  const productQuery=[imageSearch?.query,imageSearch?.productType,imageSearch?.visibleText,marketingSignal?.query,marketingSignal?.productSku,marketingSignal?.productTitle,message].filter(Boolean).join(' ');
   const context={
     viewer:user?{signedIn:true}:{signedIn:false},
     products:productContext(state,productQuery),
+    ...(imageSearch?{imageSearch}:{}),
     ...(marketingSignal?{shoppingSignal:marketingSignal}:{}),
     ...(user?clientContext(state):{})
   };
   const history=normalizeHistory(body.history);
-  const apiKey=process.env.AI_GATEWAY_API_KEY||process.env.VERCEL_OIDC_TOKEN;
-  if(!apiKey)throw new HttpError(503,'لم يتم تفعيل خدمة الذكاء الاصطناعي بعد. / AI service is not configured yet.');
-  const model=String(process.env.AI_CHAT_MODEL||DEFAULT_MODEL);
   const system=language==='ar'
     ?`أنت مستشار مبيعات وتوريد محترف داخل M Platform. هدفك فهم ما يحتاجه العميل ومساعدته على اتخاذ قرار شراء مناسب، بدون ضغط أو مبالغة.
 اعتمد على PLATFORM_CONTEXT_JSON في معلومات المنتجات والأسعار والمخزون والطلبات والعروض. لا تخترع أي سعر أو خصم أو مخزون أو حالة أو ميزة غير موجودة.
 افهم احتياج العميل من كلامه وسلوكه الشرائي غير الحساس فقط، مثل البحث، المنتجات التي يقارنها، أو السلة. لا تستنتج أو تستخدم صفات حساسة شخصية.
 إذا كان الاحتياج غير واضح، اسأل سؤالًا واحدًا أو سؤالين مفيدين مثل: الاستخدام، الكمية، الميزانية، السوق المستهدف، أو المواصفة الأهم.
 عند وجود منتجات مناسبة، اقترح من 1 إلى 3 خيارات فقط واشرح باختصار لماذا يناسب كل خيار. اذكر SKU والسعر والحد الأدنى عندما تكون موجودة.
+إذا كان PLATFORM_CONTEXT_JSON يحتوي imageSearch، فالصورة تم تحليلها مرة واحدة مسبقًا. استخدم وصف imageSearch والمنتجات المطابقة في السياق لتحديد أقرب الخيارات، وقل بوضوح "أقرب تطابق" عندما لا يكون التطابق مؤكدًا.
 إذا لم يوجد منتج مطابق، اقترح إرسال طلب خاص بدل اختراع منتج.
 لا تستخدم ندرة أو استعجالًا أو خصمًا غير حقيقي، ولا تقل إن منتجًا هو الأفضل إلا إذا شرحت معيار المقارنة من البيانات المتاحة.
 ممنوع كشف هوية المورد أو اسمه أو رقم هاتفه أو بريده أو أي وسيلة تواصل مباشرة، وممنوع طلب التواصل خارج M Platform.
@@ -180,6 +259,7 @@ Use PLATFORM_CONTEXT_JSON for product, price, stock, order, and quote facts. Nev
 Understand needs only from the customer's words and non-sensitive shopping behavior such as searches, compared products, or cart activity. Never infer or use sensitive personal traits.
 If the need is unclear, ask one or two useful questions about use case, quantity, budget, target market, or the most important specification.
 When suitable products exist, recommend only 1 to 3 options and briefly explain why each fits. Include SKU, price, and MOQ when available.
+If PLATFORM_CONTEXT_JSON contains imageSearch, the image was analyzed once before this response. Use the imageSearch description and matched catalog products to identify the closest options, and explicitly say "closest match" when the match is uncertain.
 If there is no exact match, suggest a custom sourcing request rather than inventing a product.
 Do not use fake scarcity, false urgency, or nonexistent discounts. Do not call something the best unless you explain the comparison criterion from available data.
 Never reveal supplier identity, name, phone, email, or direct contact details, and never encourage off-platform contact.
