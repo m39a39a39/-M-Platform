@@ -1,6 +1,7 @@
 import {snapshot} from './records.mjs';
 import {assert,HttpError} from '../lib/supabase.mjs';
 import {createHash} from 'node:crypto';
+import {ensureConversation,saveCustomerMessage,saveAiMessage} from './ai-conversations.mjs';
 
 const GATEWAY_URL='https://ai-gateway.vercel.sh/v1/chat/completions';
 const DEFAULT_MODEL='openai/gpt-5.6-luna';
@@ -139,9 +140,17 @@ export async function aiChat(user,body={},req=null){
   assert(!user||user.role==='client',403,'المساعد الذكي متاح للعملاء والمتصفحين فقط / AI assistant is for customers and visitors only');
   const message=clamp(body.message,2000);
   assert(message,400,'اكتب رسالتك أولًا / Enter a message first');
-  const gatewayUser=enforceRateLimit(user,req);
   const language=body.language==='en'?'en':'ar';
   const marketingSignal=safeMarketingSignal(body.marketingSignal);
+  const proactive=!!marketingSignal;
+  let conversation=null;
+  if(!proactive){
+    conversation=await ensureConversation(user,body,true);
+    const saved=await saveCustomerMessage(conversation,message);
+    conversation=saved.conversation;
+    if(conversation.status==='human')return {conversationId:conversation.id,humanMode:true};
+  }
+  const gatewayUser=enforceRateLimit(user,req);
   const state=await snapshot(user||null);
   const productQuery=[marketingSignal?.query,marketingSignal?.productSku,marketingSignal?.productTitle,message].filter(Boolean).join(' ');
   const context={
@@ -205,5 +214,10 @@ If PLATFORM_CONTEXT_JSON contains shoppingSignal, write a very short proactive m
   let data;try{data=await response.json();}catch{throw new HttpError(502,'استجابة المساعد غير صالحة. / Invalid AI response.');}
   const reply=extractReply(data);
   if(!reply)throw new HttpError(502,'لم يصل رد من المساعد الذكي. / Empty AI response.');
-  return {reply};
+  if(conversation){
+    const current=await ensureConversation(user,{conversationId:conversation.id,guestKey:body.guestKey,language},false);
+    if(current?.status==='human')return {conversationId:current.id,humanMode:true};
+    await saveAiMessage(current||conversation,reply);
+  }
+  return {reply,...(conversation?{conversationId:conversation.id,humanMode:false}:{})};
 }
