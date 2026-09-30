@@ -13,7 +13,7 @@ import { parseBulkProductWorkbook, validateBulkProductRows, normalizeSupplyCount
 import { categoryRows, subcategoryRows, supplyCountryRows, taxonomyLabel } from './catalog-taxonomy.js';
 import './image-viewer.js';
 import { downloadInvoicePdf } from './invoice-pdf.js';
-import { mountAiChat, unmountAiChat } from './ai-chat.js';
+import { mountAiChat, unmountAiChat, aiChatSignal } from './ai-chat.js';
 
 let currentUser=null;
 let platformState=null;
@@ -288,6 +288,7 @@ function addToCart(offer,quantity){
   if(!existing&&cartItems.length>=10)throw new Error(tr('الحد الأقصى 10 منتجات في الطلب الواحد.','Maximum 10 products per cart order.'));
   if(existing)existing.quantity=q;else cartItems.push({offerId:offer.id,quantity:q});
   saveCart();
+  if(currentUser?.role==='client')aiChatSignal('cart_add',{productSku:offer.sku||'',productTitle:titleOf(offer),price:Number(offer.unitPrice)||0,currency:offer.currency||'',moq:Number(offer.moq)||0,quantity:q,cartCount:cartItems.length});
 }
 function productSearchBar(){
   return `<label class="product-search-bar"><span>⌕</span><input type="search" inputmode="search" enterkeyhint="search" data-product-search value="${esc(readySearch)}" placeholder="${esc(tr('ابحث عن منتج أو SKU','Search products or SKU'))}" aria-label="${esc(tr('البحث عن المنتجات','Search products'))}"></label>`;
@@ -829,6 +830,7 @@ async function offerSupply(productId){
 }
 async function openPublicOffer(offerId){
   let o=(platformState.publicOffers||[]).find(x=>x.id===offerId);if(currentUser?.role==='supplier')try{o=await supplierProduct(offerId,request);}catch(error){showToast(error.message);return;}if(!o)return;
+  if(currentUser?.role==='client')aiChatSignal('product_view',{productSku:o.sku||'',productTitle:titleOf(o),price:Number(o.unitPrice)||0,currency:o.currency||'',moq:Number(o.moq)||0});
   const cartItem=cartItems.find(x=>x.offerId===o.id);
   const moq=Math.max(1,Math.ceil(Number(o.moq)||1)),stock=Number(o.stock),maxAttr=Number.isFinite(stock)&&stock>0?` max="${esc(Math.floor(stock))}"`:'';
   const initialQty=cartItem?.quantity||moq;
@@ -861,6 +863,7 @@ async function submitPublicInterest(e){
 function openCart(){
   if(currentUser?.role!=='client')return;
   const rows=cartRows();
+  aiChatSignal('cart_open',{cartCount:rows.length,cartTotal:rows.reduce((sum,row)=>sum+Number(row.total||0),0),currency:rows[0]?.currency||''});
   if(!rows.length){
     openModal(tr('سلة الطلب','Order cart'),tr('طلب متعدد المنتجات','Multi-product order'),`<div class="empty-state cart-empty"><span>🛒</span><p>${esc(tr('السلة فارغة. أضف منتجات من الصفحة الرئيسية.','Your cart is empty. Add products from the home page.'))}</p></div>`);
     return;
@@ -1351,7 +1354,7 @@ onLanguageChange(value=>{lang=value;applyLanguage();applyRegistrationLanguage();
 $('refreshBtn').addEventListener('click',async()=>{if(busy)return;busy=true;$('refreshBtn').classList.add('spin');try{await loadData();showToast(t('refreshing'));}catch(e){showToast(errorText(e));}finally{busy=false;$('refreshBtn').classList.remove('spin');}});
 $('bottomNav').addEventListener('click',e=>{const b=e.target.closest('button[data-screen]');if(!b)return;history.replaceState(null,'',location.pathname);activeScreen=b.dataset.screen;if(activeScreen==='offers')activeSub='primary';if(activeScreen==='requests'&&currentUser?.role==='supplier')activeSub='pending';renderScreen();$('screen').scrollTop=0;window.scrollTo(0,0);});
 $('screen').addEventListener('click',e=>{const sub=e.target.closest('[data-sub]');if(sub){activeSub=sub.dataset.sub;renderScreen();return;}const target=e.target.closest('[data-action],[data-save-client-currency],[data-category],[data-subcategory],[data-supply-country],[data-client-order-filter],[data-cart-order],[data-ready-order],[data-client-offers-request],[data-request],[data-supplier-request],[data-supplier-order-id],[data-public-offer],[data-supply-product],[data-edit-quote],[data-quote-request],[data-select-quote],[data-approve-cart-replacement],[data-reject-cart-replacement],[data-interest],[data-notification],[data-payment-notification],[data-payment-upload],[data-payment-document],[data-invoice-pdf],[data-copy-value]');if(target)handleAction(target);});
-$('screen').addEventListener('input',e=>{const input=e.target.closest('[data-product-search]');if(!input)return;readySearch=input.value;readyProductsPage=1;refreshProductResults();});
+$('screen').addEventListener('input',e=>{const input=e.target.closest('[data-product-search]');if(!input)return;readySearch=input.value;readyProductsPage=1;refreshProductResults();aiChatSignal('search',{query:readySearch,results:filteredReadyOffers().length});});
 $('modal').addEventListener('click',e=>{if(e.target.closest('[data-close-modal]')){closeModal();return;}const target=e.target.closest('[data-ready-order],[data-client-offers-request],[data-edit-quote],[data-quote-request],[data-select-quote],[data-approve-replacement-quote],[data-reject-replacement-quote],[data-approve-cart-replacement],[data-reject-cart-replacement],[data-interest],[data-supplier-order-status],[data-supplier-order-cannot],[data-payment-upload],[data-payment-document],[data-invoice-pdf],[data-copy-value]');if(target)handleAction(target);});
 
 App.addListener('appUrlOpen',async event=>{const url=event.url||'';if(!currentUser)return;if(url.includes('/notifications')){activeScreen='notifications';renderScreen();return;}const supplierOrder=url.match(/\/supplier\/orders\/interest\/([^?]+)/);if(supplierOrder&&currentUser.role==='supplier'){activeScreen='orders';renderScreen();openSupplierOrder('public',decodeURIComponent(supplierOrder[1]));return;}const cartOrder=url.match(/\/customer\/cart-orders\/([^?]+)/);if(cartOrder&&currentUser.role==='client'){activeScreen='requests';renderScreen();openCartOrder(decodeURIComponent(cartOrder[1]));return;}const m=url.match(/\/requests\/([^?]+)/);if(m){if(currentUser.role==='supplier'){activeScreen='requests';activeSub='pending';openSupplierRequest(decodeURIComponent(m[1]));}else openClientRequest(decodeURIComponent(m[1]));}});
