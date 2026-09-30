@@ -65,6 +65,29 @@ export default async function handler(req,res){
   }
   const q=String(req.query.q||'').trim();
   const sku=String(req.query.sku||'').trim();
+  const direct=String(req.query.direct||'').trim();
+  if(direct){
+    const pairs=direct.split(',').map(x=>x.trim()).filter(Boolean).slice(0,30);
+    const results=[];
+    for(const pair of pairs){
+      const i=pair.indexOf('|'); if(i<1)continue;
+      const s=pair.slice(0,i), path=pair.slice(i+1);
+      const page=await fetchText(absolute(path));
+      const images=extractProductImages(page.text);
+      const exact=page.ok&&exactSkuInPage(page.text,s);
+      const probes=[];
+      if(exact){
+        for(const image of images.slice(0,5)){
+          try{
+            const rr=await fetch(image,{method:'HEAD',headers:UA,signal:AbortSignal.timeout(10000)});
+            probes.push({url:image,status:rr.status,type:rr.headers.get('content-type'),length:Number(rr.headers.get('content-length')||0)});
+          }catch(e){probes.push({url:image,status:0,error:String(e?.message||e)});}
+        }
+      }
+      results.push({sku:s,path,status:page.status,title:titleOf(page.text),exact,images:exact?images.slice(0,5):[],probes});
+    }
+    return res.status(200).json({ok:true,results});
+  }
   const sitemapTerms=String(req.query.map||'').trim();
   if(sitemapTerms){
     const sm=await fetchText('https://moxom.com.cn/en-sitemap.xml');
