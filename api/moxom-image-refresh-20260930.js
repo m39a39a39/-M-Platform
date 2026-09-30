@@ -16,7 +16,7 @@ export default async function handler(req,res){
   const rows=[];
   for(const u of urls)rows.push(await fetchText(u));
   const home=rows[3]?.text||'';
-  const forms=[...home.matchAll(/<form\\b[\\s\\S]*?<\\/form>/gi)].map(m=>m[0]).filter(x=>/search/i.test(x)).slice(0,10);
+  const forms=[...home.matchAll(new RegExp('<form\\b[\\s\\S]*?<\\/form>','gi'))].map(m=>m[0]).filter(x=>/search/i.test(x)).slice(0,10);
   const links=[...home.matchAll(/href=["']([^"']+)["']/gi)].map(m=>m[1]).filter(x=>/search|product|sitemap/i.test(x)).slice(0,100);
   res.setHeader('Cache-Control','no-store');
   res.status(200).json({ok:true,rows:rows.map(r=>({...r,text:r.text.slice(0,20000)})),forms,links});
