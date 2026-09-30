@@ -1,4 +1,5 @@
 import './ai-chat.css';
+import {filesToCompressedSources} from './image-upload.js';
 
 let controller=null;
 let pollTimer=null;
@@ -13,7 +14,7 @@ const esc=value=>String(value??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;
 const copy={
   ar:{
     title:'مساعد M الذكي',subtitle:'مستشار مشتريات وتوريد',humanSubtitle:'فريق M يتولى المحادثة الآن',team:'فريق M',
-    placeholder:'اكتب ماذا تبحث عنه...',send:'إرسال',close:'إغلاق',
+    placeholder:'اكتب ماذا تبحث عنه...',send:'إرسال',close:'إغلاق',photo:'البحث بصورة',imageReady:'الصورة جاهزة للبحث',imageError:'تعذر قراءة الصورة. اختر صورة أخرى.',imageSearch:'📷 بحث بصورة',
     guestHello:'مرحبًا 👋 أخبرني ماذا تريد شراءه، وسأساعدك في اختيار الأنسب من المنتجات المتاحة.',
     clientHello:'مرحبًا 👋 أخبرني ماذا تحتاج، وسأساعدك في المنتجات والعروض وحالة طلباتك.',
     error:'تعذر الحصول على رد الآن. حاول مرة أخرى.',thinking:'جاري البحث...',
@@ -22,7 +23,7 @@ const copy={
   },
   en:{
     title:'M AI Assistant',subtitle:'Smart buying & sourcing advisor',humanSubtitle:'M Team is handling this conversation',team:'M Team',
-    placeholder:'Tell me what you are looking for...',send:'Send',close:'Close',
+    placeholder:'Tell me what you are looking for...',send:'Send',close:'Close',photo:'Search by image',imageReady:'Image ready to search',imageError:'Could not read this image. Choose another image.',imageSearch:'📷 Image search',
     guestHello:'Hi 👋 Tell me what you want to buy and I will help you choose the best fit from available products.',
     clientHello:'Hi 👋 Tell me what you need and I can help with products, quotes, and your order status.',
     error:'I could not get a response right now. Please try again.',thinking:'Searching...',
@@ -67,7 +68,8 @@ function ensureHost(){
       <header class="m-ai-head"><div><strong></strong><small></small></div><button class="m-ai-close" type="button">×</button></header>
       <div class="m-ai-messages" aria-live="polite"></div>
       <div class="m-ai-chips"></div>
-      <form class="m-ai-form"><textarea rows="1" maxlength="2000"></textarea><button type="submit"></button></form>
+      <div class="m-ai-image-preview hidden"><img alt=""><span></span><button type="button" aria-label="Remove image">×</button></div>
+      <form class="m-ai-form"><label class="m-ai-photo" title=""><span>📷</span><input type="file" accept="image/*" capture="environment"></label><textarea rows="1" maxlength="2000"></textarea><button type="submit"></button></form>
     </section>`;
   document.body.append(host);
   host.querySelector('.m-ai-launcher').addEventListener('click',()=>{markEngaged();setOpen(host.querySelector('.m-ai-panel').classList.contains('hidden'));});
@@ -77,6 +79,8 @@ function ensureHost(){
     markEngaged();hideNudge();setOpen(true);
   });
   host.querySelector('.m-ai-form').addEventListener('submit',submit);
+  host.querySelector('.m-ai-photo input').addEventListener('change',selectImage);
+  host.querySelector('.m-ai-image-preview button').addEventListener('click',clearPendingImage);
   host.querySelector('textarea').addEventListener('keydown',event=>{
     if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();host.querySelector('.m-ai-form').requestSubmit();}
   });
@@ -107,6 +111,10 @@ function render(){
   host.querySelector('.m-ai-close').setAttribute('aria-label',t('close'));
   host.querySelector('textarea').placeholder=t('placeholder');
   host.querySelector('.m-ai-form button').textContent=t('send');
+  const photo=host.querySelector('.m-ai-photo');photo.title=t('photo');photo.setAttribute('aria-label',t('photo'));
+  const preview=host.querySelector('.m-ai-image-preview');
+  preview.classList.toggle('hidden',!controller.pendingImage);
+  if(controller.pendingImage){preview.querySelector('img').src=controller.pendingImage;preview.querySelector('span').textContent=t('imageReady');}
   const messages=host.querySelector('.m-ai-messages');
   const greeting=controller.mode==='client'?t('clientHello'):t('guestHello');
   const rows=[{role:'assistant',content:greeting},...controller.messages];
@@ -114,8 +122,8 @@ function render(){
   if(controller.loading&&!controller.humanMode)messages.insertAdjacentHTML('beforeend',`<div class="m-ai-row assistant"><div class="m-ai-thinking"><span></span><span></span><span></span> ${esc(t('thinking'))}</div></div>`);
   const chips=controller.mode==='client'?t('chipsClient'):t('chipsGuest');
   host.querySelector('.m-ai-chips').innerHTML=controller.messages.length?'':chips.map(label=>`<button type="button" data-prompt="${esc(label)}">${esc(label)}</button>`).join('');
-  const input=host.querySelector('textarea'),send=host.querySelector('.m-ai-form button');
-  input.disabled=controller.loading;send.disabled=controller.loading;
+  const input=host.querySelector('textarea'),send=host.querySelector('.m-ai-form button'),photoInput=host.querySelector('.m-ai-photo input');
+  input.disabled=controller.loading;send.disabled=controller.loading;photoInput.disabled=controller.loading;
   requestAnimationFrame(()=>{messages.scrollTop=messages.scrollHeight;});
 }
 function setConversationId(id){
@@ -142,16 +150,32 @@ async function syncRemote(silent=false){
     render();
   }catch{}
 }
+async function selectImage(event){
+  if(!controller||controller.loading)return;
+  const input=event.currentTarget;if(!input.files?.length)return;
+  try{
+    const sources=await filesToCompressedSources(input,{maxFiles:1,targetBytes:420*1024,maxDimension:1024});
+    controller.pendingImage=sources[0]||'';render();
+  }catch{
+    controller.pendingImage='';
+    const host=ensureHost(),messages=host.querySelector('.m-ai-messages');
+    messages.insertAdjacentHTML('beforeend',`<div class="m-ai-row assistant"><div>${esc(t('imageError'))}</div></div>`);
+  }finally{input.value='';}
+}
+function clearPendingImage(){
+  if(!controller)return;controller.pendingImage='';render();
+}
 async function submit(event){
   event.preventDefault();
   if(!controller||controller.loading)return;
-  const host=ensureHost(),input=host.querySelector('textarea'),message=input.value.trim();if(!message)return;
-  markEngaged();hideNudge();input.value='';
-  controller.messages.push({role:'user',content:message});controller.messages=controller.messages.slice(-40);
+  const host=ensureHost(),input=host.querySelector('textarea'),message=input.value.trim(),image=controller.pendingImage||'';if(!message&&!image)return;
+  markEngaged();hideNudge();input.value='';controller.pendingImage='';
+  const visibleMessage=message||t('imageSearch');
+  controller.messages.push({role:'user',content:visibleMessage});controller.messages=controller.messages.slice(-40);
   controller.loading=true;render();
   try{
     const history=controller.messages.slice(0,-1).slice(-10).map(x=>({role:x.role==='user'?'user':'assistant',content:x.content}));
-    const result=await controller.send({message,history,language:language(),guestKey:visitorKey(),conversationId:controller.conversationId||''});
+    const result=await controller.send({message:message||t('imageSearch'),history,language:language(),guestKey:visitorKey(),conversationId:controller.conversationId||'',...(image?{image}: {})});
     if(result?.conversationId)setConversationId(result.conversationId);
     controller.humanMode=!!result?.humanMode;
     if(result?.reply)controller.messages.push({role:'assistant',content:String(result.reply)});
@@ -207,7 +231,7 @@ export function mountAiChat({mode='guest',language:languageGetter=()=> 'ar',send
   if(typeof send!=='function')return;
   const sameMode=controller?.mode===mode,stored=storedConversationId(mode);
   stopPolling();
-  controller={mode,language:languageGetter,send,fetchConversation,messages:sameMode?controller.messages:[],loading:false,humanMode:sameMode?controller.humanMode:false,conversationId:sameMode?controller.conversationId||stored:stored,lastRemoteId:sameMode?controller.lastRemoteId||0:0};
+  controller={mode,language:languageGetter,send,fetchConversation,messages:sameMode?controller.messages:[],loading:false,humanMode:sameMode?controller.humanMode:false,conversationId:sameMode?controller.conversationId||stored:stored,lastRemoteId:sameMode?controller.lastRemoteId||0:0,pendingImage:sameMode?controller.pendingImage||'':''};
   const host=ensureHost();host.classList.remove('hidden');render();
   if(controller.conversationId){startPolling();setTimeout(()=>void syncRemote(true),120);}
 }
