@@ -501,6 +501,9 @@ input:focus,textarea:focus,select:focus {
 .bottom-nav.client-nav {
   grid-template-columns: repeat(4,minmax(0,1fr));
 }
+.bottom-nav.admin-nav {
+  grid-template-columns: repeat(6,minmax(0,1fr));
+}
 
 .bottom-nav button {
   position: relative;
