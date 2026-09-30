@@ -3,6 +3,7 @@ import {renderStorefront,bindStorefront,productExtras,tierPrice,homeConfig,store
 import { languageReady, getLanguage, onLanguageChange, toggleLanguage } from './language.js';
 import { showView } from './views.js';
 import { categoryRows, subcategoryRows, supplyCountryRows, taxonomyLabel } from './catalog-taxonomy.js';
+import { mountAiChat, unmountAiChat } from './ai-chat.js';
 
 const browserOrigin=typeof location!=='undefined'&&/^https?:$/.test(location.protocol)&&!['localhost','127.0.0.1','::1','[::1]'].includes(location.hostname)?location.origin:'';
 const API=String(import.meta.env?.VITE_API_ORIGIN||browserOrigin||'https://m-platform-tan.vercel.app').replace(/\/$/,'');
@@ -159,6 +160,15 @@ function renderLoading(error=false){$('guest-storefront').innerHTML=`<div class=
 async function api(path){
   const r=await fetch(API+path,{credentials:'omit',headers:{'X-M-Client':'native'}});if(!r.ok)throw new Error(`HTTP ${r.status}`);return r.json();
 }
+async function aiSend(body){
+  const r=await fetch(API+'/api/v1/ai-chat',{method:'POST',credentials:'omit',headers:{'Content-Type':'application/json','X-M-Client':'native'},body:JSON.stringify(body)});
+  let data={};try{data=await r.json();}catch{}
+  if(!r.ok)throw new Error(data?.error||t('error'));
+  return data;
+}
+function mountGuestAiChat(){
+  mountAiChat({mode:'guest',language:()=>lang,send:aiSend});
+}
 async function imageUrl(src){
   if(mediaCache.has(src))return mediaCache.get(src);
   if(mediaTasks.has(src))return mediaTasks.get(src);
@@ -289,7 +299,7 @@ $('backToGuestBtn').addEventListener('click',showGuest);
 catalogNode('guestPrevPage').addEventListener('click',()=>{if(offersPage>1){offersPage--;renderOffers();catalog.scrollIntoView({behavior:'smooth',block:'start'});}});
 catalogNode('guestNextPage').addEventListener('click',()=>{const total=Math.max(1,Math.ceil(filteredOffers().length/PAGE_SIZE));if(offersPage<total){offersPage++;renderOffers();catalog.scrollIntoView({behavior:'smooth',block:'start'});}});
 catalogNode('guestProductSearch').addEventListener('input',e=>{searchText=e.target.value;offersPage=1;renderOffers();});
-onLanguageChange(value=>{lang=value;apply();});
+onLanguageChange(value=>{lang=value;apply();if(!$('guestView').classList.contains('hidden'))mountGuestAiChat();});
 catalogNode('guestCategoryFilters').addEventListener('click',e=>{const b=e.target.closest('[data-guest-category]');if(!b)return;category=b.dataset.guestCategory;subcategory='all';offersPage=1;renderOffers();});
 catalogNode('guestSubcategoryFilters')?.addEventListener('click',e=>{const b=e.target.closest('[data-guest-subcategory]');if(!b)return;subcategory=b.dataset.guestSubcategory;offersPage=1;renderOffers();});
 catalogNode('guestSupplyCountryFilters').addEventListener('click',e=>{const b=e.target.closest('[data-guest-country]');if(!b)return;supplyCountry=b.dataset.guestCountry;offersPage=1;renderOffers();});
@@ -298,11 +308,18 @@ $('modal').addEventListener('click',e=>{
   if(e.target.closest('[data-guest-auth-login]')){closeModal();showLogin();return;}
   if(e.target.closest('[data-guest-auth-register]')){closeModal();register('client');return;}
 });
-window.addEventListener('mplatform:view',e=>{if(['guestView','loginView','registerView','resetView','sessionView'].includes(e.detail?.id)){loadCart();ensureLoaded();if(state)mountSiteChrome(state,{cartCount:cartItems.length},{hydrate:hydrateImages,action:guestChromeAction});}});
+window.addEventListener('mplatform:view',e=>{
+  const view=e.detail?.id;
+  if(['guestView','loginView','registerView','resetView','sessionView'].includes(view)){
+    loadCart();ensureLoaded();if(state)mountSiteChrome(state,{cartCount:cartItems.length},{hydrate:hydrateImages,action:guestChromeAction});
+  }
+  if(view==='guestView')mountGuestAiChat();
+  else if(['loginView','registerView','resetView','sessionView'].includes(view))unmountAiChat();
+});
 
 (async()=>{
   await languageReady;lang=getLanguage();loadCart();apply();
-  if(!$('guestView').classList.contains('hidden'))ensureLoaded();
+  if(!$('guestView').classList.contains('hidden')){ensureLoaded();mountGuestAiChat();}
 })();
 
 function guestChromeAction(action){if(action==='cart')openGuestCart();if(action==='login')showLogin();if(action==='register-supplier')register('supplier');if(action==='register-client')register('client');if(action==='language')toggleLanguage();}
