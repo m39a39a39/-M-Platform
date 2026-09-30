@@ -39,6 +39,23 @@ export default async function handler(req,res){
   res.setHeader('Cache-Control','no-store');
   const q=String(req.query.q||'').trim();
   const sku=String(req.query.sku||'').trim();
+  const sitemapTerms=String(req.query.map||'').trim();
+  if(sitemapTerms){
+    const sm=await fetchText('https://moxom.com.cn/en-sitemap.xml');
+    const urls=[...sm.text.matchAll(/<loc>([^<]+)<\/loc>/gi)].map(m=>decodeHtml(m[1])).filter(u=>/\/products\//i.test(u));
+    const terms=sitemapTerms.toLowerCase().split(',').map(x=>x.trim()).filter(Boolean);
+    const norm=s=>s.toLowerCase().replace(/[^a-z0-9]+/g,' ');
+    const results=terms.map(term=>{
+      const words=norm(term).split(/\s+/).filter(x=>x.length>2);
+      const ranked=urls.map(u=>{
+        const n=norm(u);
+        let score=0; for(const w of words) if(n.includes(w)) score++;
+        return {url:u,score};
+      }).filter(x=>x.score>0).sort((a,b)=>b.score-a.score).slice(0,20);
+      return {term,ranked};
+    });
+    return res.status(200).json({ok:true,status:sm.status,total:urls.length,results});
+  }
   if(q&&sku){
     const search=await fetchText('https://www.moxom.com.cn/search/?Keyword='+encodeURIComponent(q));
     const links=cleanProductLinks(search.text).slice(0,20);
