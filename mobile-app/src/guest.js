@@ -167,8 +167,15 @@ async function aiSend(body){
   if(!r.ok)throw new Error(data?.error||t('error'));
   return data;
 }
+async function aiConversation(params={}){
+  const q=new URLSearchParams({conversationId:String(params.conversationId||''),guestKey:String(params.guestKey||''),language:String(params.language||lang)});
+  const r=await fetch(API+'/api/v1/ai-conversation?'+q.toString(),{credentials:'omit',headers:{'X-M-Client':'native'}});
+  let data={};try{data=await r.json();}catch{}
+  if(!r.ok)throw new Error(data?.error||t('error'));
+  return data;
+}
 function mountGuestAiChat(){
-  mountAiChat({mode:'guest',language:()=>lang,send:aiSend});
+  mountAiChat({mode:'guest',language:()=>lang,send:aiSend,fetchConversation:aiConversation});
 }
 async function imageUrl(src){
   if(mediaCache.has(src))return mediaCache.get(src);
