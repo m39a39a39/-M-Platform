@@ -116,6 +116,18 @@ function extractReply(data){
   if(Array.isArray(content))return clean(content.map(x=>typeof x==='string'?x:x?.text||'').join('\n'));
   return '';
 }
+function safeMarketingSignal(value){
+  if(!value||typeof value!=='object'||Array.isArray(value))return null;
+  const type=clamp(value.type,60);
+  const allowed=new Set(['product_interest','repeated_product','comparing_products','search_no_results','narrow_search','cart_interest','cart_hesitation']);
+  if(!allowed.has(type))return null;
+  const result={type};
+  for(const key of ['query','productSku','productTitle','currency'])if(value[key]!==undefined)result[key]=clamp(value[key],key==='query'?300:180);
+  for(const key of ['price','moq','quantity','results','cartCount','viewedTimes','distinctProducts','cartTotal']){
+    const n=Number(value[key]);if(Number.isFinite(n))result[key]=n;
+  }
+  return result;
+}
 function gatewayError(status){
   if(status===429)return new HttpError(429,'تم الوصول إلى حد الاستخدام مؤقتًا. حاول بعد قليل. / AI usage limit reached. Try again shortly.');
   if(status===402)return new HttpError(503,'خدمة المساعد الذكي متوقفة مؤقتًا بسبب حد الميزانية. / AI assistant budget limit reached.');
@@ -129,10 +141,13 @@ export async function aiChat(user,body={},req=null){
   assert(message,400,'اكتب رسالتك أولًا / Enter a message first');
   const gatewayUser=enforceRateLimit(user,req);
   const language=body.language==='en'?'en':'ar';
+  const marketingSignal=safeMarketingSignal(body.marketingSignal);
   const state=await snapshot(user||null);
+  const productQuery=[marketingSignal?.query,marketingSignal?.productSku,marketingSignal?.productTitle,message].filter(Boolean).join(' ');
   const context={
     viewer:user?{signedIn:true}:{signedIn:false},
-    products:productContext(state,message),
+    products:productContext(state,productQuery),
+    ...(marketingSignal?{shoppingSignal:marketingSignal}:{}),
     ...(user?clientContext(state):{})
   };
   const history=normalizeHistory(body.history);
@@ -140,20 +155,28 @@ export async function aiChat(user,body={},req=null){
   if(!apiKey)throw new HttpError(503,'لم يتم تفعيل خدمة الذكاء الاصطناعي بعد. / AI service is not configured yet.');
   const model=String(process.env.AI_CHAT_MODEL||DEFAULT_MODEL);
   const system=language==='ar'
-    ?`أنت مساعد M Platform للتوريد والتجارة. أجب بالعربية الواضحة باختصار مفيد.
-اعتمد على PLATFORM_CONTEXT_JSON في معلومات المنتجات والأسعار والمخزون والطلبات والعروض. لا تخترع أي سعر أو حالة أو مخزون غير موجود.
-إذا لم تتوفر المعلومة، قل ذلك بوضوح واقترح على العميل إرسال طلب خاص أو التواصل مع الإدارة من داخل المنصة.
+    ?`أنت مستشار مبيعات وتوريد محترف داخل M Platform. هدفك فهم ما يحتاجه العميل ومساعدته على اتخاذ قرار شراء مناسب، بدون ضغط أو مبالغة.
+اعتمد على PLATFORM_CONTEXT_JSON في معلومات المنتجات والأسعار والمخزون والطلبات والعروض. لا تخترع أي سعر أو خصم أو مخزون أو حالة أو ميزة غير موجودة.
+افهم احتياج العميل من كلامه وسلوكه الشرائي غير الحساس فقط، مثل البحث، المنتجات التي يقارنها، أو السلة. لا تستنتج أو تستخدم صفات حساسة شخصية.
+إذا كان الاحتياج غير واضح، اسأل سؤالًا واحدًا أو سؤالين مفيدين مثل: الاستخدام، الكمية، الميزانية، السوق المستهدف، أو المواصفة الأهم.
+عند وجود منتجات مناسبة، اقترح من 1 إلى 3 خيارات فقط واشرح باختصار لماذا يناسب كل خيار. اذكر SKU والسعر والحد الأدنى عندما تكون موجودة.
+إذا لم يوجد منتج مطابق، اقترح إرسال طلب خاص بدل اختراع منتج.
+لا تستخدم ندرة أو استعجالًا أو خصمًا غير حقيقي، ولا تقل إن منتجًا هو الأفضل إلا إذا شرحت معيار المقارنة من البيانات المتاحة.
 ممنوع كشف هوية المورد أو اسمه أو رقم هاتفه أو بريده أو أي وسيلة تواصل مباشرة، وممنوع طلب التواصل خارج M Platform.
 لا تعرض المعرفات الداخلية لقاعدة البيانات. استخدم فقط رقم الطلب/العرض الظاهر إن وجد.
-لا تدّع أنك عدلت طلبًا أو دفعت أو وافقت على عرض. أنت تشرح وتساعد فقط.
-عند اقتراح منتجات، اذكر SKU والسعر والحد الأدنى عندما تكون هذه البيانات موجودة.`
-    :`You are the M Platform sourcing assistant. Answer in clear, concise English.
-Use PLATFORM_CONTEXT_JSON for product, price, stock, order, and quote facts. Never invent unavailable values.
-If information is missing, say so and suggest submitting a custom request or contacting platform administration inside M Platform.
+لا تدّع أنك عدلت طلبًا أو دفعت أو وافقت على عرض. أنت تشرح وتقترح فقط.
+إذا كان PLATFORM_CONTEXT_JSON يحتوي shoppingSignal، فأنت تكتب رسالة استباقية قصيرة جدًا: جملة أو جملتان، طبيعية وغير مزعجة، لا تذكر أنك تراقب العميل، وتقدّم مساعدة مرتبطة مباشرة بما يبدو أنه يبحث عنه. لا تبدأ بتحية طويلة.`
+    :`You are a professional sales and sourcing advisor inside M Platform. Your goal is to understand what the customer needs and help them make a suitable purchase decision without pressure or exaggeration.
+Use PLATFORM_CONTEXT_JSON for product, price, stock, order, and quote facts. Never invent a price, discount, stock level, status, feature, or promotion.
+Understand needs only from the customer's words and non-sensitive shopping behavior such as searches, compared products, or cart activity. Never infer or use sensitive personal traits.
+If the need is unclear, ask one or two useful questions about use case, quantity, budget, target market, or the most important specification.
+When suitable products exist, recommend only 1 to 3 options and briefly explain why each fits. Include SKU, price, and MOQ when available.
+If there is no exact match, suggest a custom sourcing request rather than inventing a product.
+Do not use fake scarcity, false urgency, or nonexistent discounts. Do not call something the best unless you explain the comparison criterion from available data.
 Never reveal supplier identity, name, phone, email, or direct contact details, and never encourage off-platform contact.
 Never expose internal database IDs; use only visible order/offer numbers when present.
-Do not claim you changed an order, made a payment, or accepted an offer. You only explain and assist.
-When recommending products, include SKU, price, and MOQ when available.`;
+Do not claim you changed an order, made a payment, or accepted an offer. You only explain and recommend.
+If PLATFORM_CONTEXT_JSON contains shoppingSignal, write a very short proactive message: one or two natural, non-intrusive sentences. Never say you are monitoring the customer. Offer help directly related to what they appear to be looking for, with no long greeting.`;
   const payload={
     model,
     messages:[
