@@ -501,6 +501,9 @@ input:focus,textarea:focus,select:focus {
 .bottom-nav.client-nav {
   grid-template-columns: repeat(4,minmax(0,1fr));
 }
+.bottom-nav.admin-nav {
+  grid-template-columns: repeat(6,minmax(0,1fr));
+}
 
 .bottom-nav button {
   position: relative;
@@ -2265,3 +2268,16 @@ body.image-viewer-open {
   .admin-bulk-products-form textarea,
   .admin-bulk-products-form select{font-size:16px!important}
 }
+
+.admin-chat-list{gap:10px}
+.admin-chat-card{width:100%;border:1px solid var(--line);background:#fff;border-radius:16px;padding:12px;display:grid;grid-template-columns:42px minmax(0,1fr) auto;gap:10px;align-items:center;text-align:start;color:var(--navy)}
+.admin-chat-card.unread{border-color:#80c7e8;box-shadow:0 5px 18px rgba(22,153,219,.10)}
+.admin-chat-avatar{width:42px;height:42px;border-radius:14px;background:#eef7fb;display:grid;place-items:center;font-weight:900}
+.admin-chat-card-copy{min-width:0}.admin-chat-card-copy>div{display:flex;gap:8px;align-items:center;justify-content:space-between}.admin-chat-card-copy strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.admin-chat-card-copy small{display:block;margin-top:5px;color:var(--muted)}
+.admin-chat-card>i{min-width:23px;height:23px;border-radius:99px;background:#d64040;color:#fff;font-style:normal;display:grid;place-items:center;font-size:11px;font-weight:800}
+.admin-chat-thread{display:grid;gap:14px}.admin-chat-customer{display:grid;gap:3px;padding:12px;border-radius:14px;background:#f5f8fa}.admin-chat-customer small{color:var(--muted)}
+.admin-chat-messages{display:grid;gap:9px;max-height:52vh;overflow:auto;padding:3px}
+.admin-chat-message{max-width:88%;border-radius:15px;padding:10px 12px;background:#f1f5f7;justify-self:start}.admin-chat-message.customer{background:#eaf6fc;justify-self:end}.admin-chat-message.admin{background:#edf8ef}.admin-chat-message small,.admin-chat-message time{display:block;font-size:10px;color:var(--muted)}.admin-chat-message p{margin:4px 0 5px;white-space:pre-wrap;line-height:1.5}
+.admin-chat-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.admin-chat-reply{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}.admin-chat-reply textarea{min-height:54px;max-height:130px;resize:vertical}
+.m-ai-sender{display:block;font-size:10px;font-weight:800;margin-bottom:3px;opacity:.7}
+@media(max-width:520px){.bottom-nav.admin-nav button b{font-size:9px}.admin-chat-reply{grid-template-columns:1fr}.admin-chat-reply button{width:100%}}

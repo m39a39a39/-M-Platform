@@ -18,6 +18,8 @@ import {submitPaymentReceipt,reviewPaymentReceipt} from './modules/payments.mjs'
 import {manageOrder} from './modules/order-management.mjs';
 import {saveStudio} from './modules/studio.mjs';
 import {createCartOrder} from './modules/cart-orders.mjs';
+import {aiChat} from './modules/ai-chat.mjs';
+import {customerConversation,adminConversationList,adminConversationRead,adminConversationAction} from './modules/ai-conversations.mjs';
 
 const NATIVE_ORIGINS=new Set(['capacitor://localhost','http://localhost','https://localhost']);
 const nativeOrigin=req=>NATIVE_ORIGINS.has(String(req.headers.origin||''));
@@ -66,8 +68,15 @@ export default async function handler(req,res){
     if(path.startsWith('/api/auth/')){
       assert(req.method==='POST',405);result=await authRoute(path.split('/').at(-1),req,res,body);
     }else{
-      const user=await identify(req,res,path==='/api/state'||path.startsWith('/api/media/')&&req.method==='GET');
+      const user=await identify(req,res,path==='/api/state'||path==='/api/ai-chat'||path==='/api/ai-conversation'&&req.method==='GET'||path.startsWith('/api/media/')&&req.method==='GET');
       if(path==='/api/state'){assert(req.method==='GET',405);result=await snapshot(user);}
+      else if(path==='/api/ai-chat'){assert(req.method==='POST',405);result=await aiChat(user,body,req);}
+      else if(path==='/api/ai-conversation'){
+        assert(req.method==='GET',405);result=await customerConversation(user,{conversationId:url.searchParams.get('conversationId')||'',guestKey:url.searchParams.get('guestKey')||'',language:url.searchParams.get('language')||'ar'});
+      }
+      else if(path==='/api/ai-conversations'){
+        assert(req.method==='GET',405);result=url.searchParams.get('conversationId')?await adminConversationRead(user,url.searchParams.get('conversationId')):await adminConversationList(user);
+      }
       else if(path==='/api/supplier-catalog'){assert(req.method==='GET',405);result=await supplierCatalog(user,url.searchParams);}
       else if(path.startsWith('/api/media/')){assert(req.method==='GET',405);await media(user,path.split('/').at(-1),res);return;}
       else if(path==='/api/notifications'){
@@ -94,6 +103,7 @@ export default async function handler(req,res){
         else if(path==='/api/payment-receipts')result=await submitPaymentReceipt(user,body);
         else if(path==='/api/payment-review')result=await reviewPaymentReceipt(user,body);
         else if(path==='/api/cart-orders')result=await createCartOrder(user,body);
+        else if(path==='/api/ai-conversations')result=await adminConversationAction(user,body);
         else if(path==='/api/notifications/read')result=await markNotificationsRead(user,body);
         else if(path==='/api/push/register')result=await registerPushDevice(user,body);
         else if(path==='/api/push/unregister')result=await unregisterPushDevice(user,body);
