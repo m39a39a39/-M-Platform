@@ -26,7 +26,7 @@ export async function aiGatewayHealthCheck(){
       method:'POST',
       headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},
       body:JSON.stringify({
-        model:String(process.env.AI_CHAT_MODEL||DEFAULT_MODEL),
+        model:'google/gemini-3.5-flash-lite',
         messages:[{role:'user',content:'Reply with OK only.'}],
         max_tokens:8,
         temperature:0,
