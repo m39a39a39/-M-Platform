@@ -18,24 +18,52 @@ function gatewayAuthToken(){
   }catch{}
   return process.env.VERCEL_OIDC_TOKEN||'';
 }
+const FALLBACK_MODEL='openai/gpt-5.4-nano';
+async function gatewayRequest({apiKey,payload,timeoutMs}){
+  const models=[String(payload.model||DEFAULT_MODEL),FALLBACK_MODEL].filter((x,i,a)=>x&&a.indexOf(x)===i);
+  let lastError=null;
+  for(let i=0;i<models.length;i++){
+    const model=models[i];
+    let response;
+    try{
+      response=await fetch(GATEWAY_URL,{
+        method:'POST',
+        headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},
+        body:JSON.stringify({...payload,model}),
+        signal:AbortSignal.timeout(timeoutMs)
+      });
+    }catch(error){
+      lastError=error;
+      if(i<models.length-1)continue;
+      throw error;
+    }
+    if(response.ok)return {response,model};
+    const failed=await response.clone().json().catch(()=>null);
+    const type=String(failed?.type||failed?.error?.type||'');
+    const canFallback=response.status===403&&type==='no_providers_available';
+    if(canFallback&&i<models.length-1)continue;
+    return {response,model};
+  }
+  throw lastError||new Error('AI Gateway unavailable');
+}
 export async function aiGatewaySmokeTest(){
   const apiKey=gatewayAuthToken();
   if(!apiKey)return {ok:false,stage:'auth'};
-  const models=[String(process.env.AI_CHAT_MODEL||DEFAULT_MODEL),'openai/gpt-5.4-nano'];
-  const results=[];
-  for(const model of models){
-    try{
-      const response=await fetch(GATEWAY_URL,{
-        method:'POST',
-        headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},
-        body:JSON.stringify({model,messages:[{role:'user',content:'Reply with OK only.'}],max_tokens:8,temperature:0,reasoning:{effort:'none'}}),
-        signal:AbortSignal.timeout(15000)
-      });
-      const data=await response.json().catch(()=>null);
-      results.push({model,ok:response.ok&&!!extractReply(data),status:response.status,type:String(data?.type||data?.error?.type||'').slice(0,120)});
-    }catch{results.push({model,ok:false,status:0,type:'network'});}
-  }
-  return {ok:results.some(x=>x.ok),results};
+  try{
+    const {response,model}=await gatewayRequest({
+      apiKey,
+      timeoutMs:15000,
+      payload:{
+        model:String(process.env.AI_CHAT_MODEL||DEFAULT_MODEL),
+        messages:[{role:'user',content:'Reply with OK only.'}],
+        max_tokens:8,
+        temperature:0,
+        reasoning:{effort:'none'}
+      }
+    });
+    const data=await response.json().catch(()=>null);
+    return {ok:response.ok&&!!extractReply(data),status:response.status,model};
+  }catch{return {ok:false,status:0,stage:'network'};}
 }
 function safeImage(value){
   if(!value)return '';
@@ -204,12 +232,7 @@ async function analyzeProductImage({image,message,language,apiKey,model,gatewayU
   };
   let response;
   try{
-    response=await fetch(GATEWAY_URL,{
-      method:'POST',
-      headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},
-      body:JSON.stringify(payload),
-      signal:AbortSignal.timeout(22000)
-    });
+    ({response}=await gatewayRequest({apiKey,payload,timeoutMs:22000}));
   }catch{
     throw new HttpError(502,'تعذر تحليل الصورة الآن. / Could not analyze the image.');
   }
@@ -310,12 +333,7 @@ If PLATFORM_CONTEXT_JSON contains shoppingSignal, write a very short proactive m
   };
   let response;
   try{
-    response=await fetch(GATEWAY_URL,{
-      method:'POST',
-      headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},
-      body:JSON.stringify(payload),
-      signal:AbortSignal.timeout(26000)
-    });
+    ({response}=await gatewayRequest({apiKey,payload,timeoutMs:26000}));
   }catch{
     throw new HttpError(502,'تعذر الاتصال بالمساعد الذكي. / Could not reach AI assistant.');
   }
