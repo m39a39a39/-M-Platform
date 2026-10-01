@@ -18,66 +18,6 @@ function gatewayAuthToken(){
   }catch{}
   return process.env.VERCEL_OIDC_TOKEN||'';
 }
-export async function aiGatewayHealthCheck(){
-  const apiKey=gatewayAuthToken();
-  if(!apiKey)return {ok:false,stage:'auth'};
-  try{
-    const response=await fetch(GATEWAY_URL,{
-      method:'POST',
-      headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},
-      body:JSON.stringify({
-        model:'google/gemini-3.5-flash-lite',
-        messages:[{role:'user',content:'Reply with OK only.'}],
-        max_tokens:8,
-        temperature:0,
-        reasoning:{effort:'none'}
-      }),
-      signal:AbortSignal.timeout(15000)
-    });
-    if(!response.ok){
-      const failed=await response.json().catch(()=>null);
-      return {
-        ok:false,
-        stage:'gateway',
-        status:response.status,
-        type:String(failed?.type||failed?.error?.type||'').slice(0,120),
-        detail:String(failed?.error?.message||failed?.error||failed?.message||'').slice(0,240)
-      };
-    }
-    const data=await response.json().catch(()=>null);
-    return {ok:!!extractReply(data),stage:'gateway',status:response.status,model:String(process.env.AI_CHAT_MODEL||DEFAULT_MODEL)};
-  }catch{
-    return {ok:false,stage:'network'};
-  }
-}
-const FALLBACK_MODEL='openai/gpt-5.4-nano';
-async function gatewayRequest({apiKey,payload,timeoutMs}){
-  const models=[String(payload.model||DEFAULT_MODEL),FALLBACK_MODEL].filter((x,i,a)=>x&&a.indexOf(x)===i);
-  let lastError=null;
-  for(let i=0;i<models.length;i++){
-    const model=models[i];
-    let response;
-    try{
-      response=await fetch(GATEWAY_URL,{
-        method:'POST',
-        headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},
-        body:JSON.stringify(model===FALLBACK_MODEL&&payload.response_format?(({response_format,...rest})=>({...rest,model}))(payload):{...payload,model}),
-        signal:AbortSignal.timeout(timeoutMs)
-      });
-    }catch(error){
-      lastError=error;
-      if(i<models.length-1)continue;
-      throw error;
-    }
-    if(response.ok)return {response,model};
-    const failed=await response.clone().json().catch(()=>null);
-    const type=String(failed?.type||failed?.error?.type||'');
-    const canFallback=response.status===403&&type==='no_providers_available';
-    if(canFallback&&i<models.length-1)continue;
-    return {response,model};
-  }
-  throw lastError||new Error('AI Gateway unavailable');
-}
 function safeImage(value){
   if(!value)return '';
   const text=String(value);
