@@ -54,7 +54,7 @@ test('cart → availability → payment → delivery uses atomic parent/line wri
  const created=await createCartOrder(client,{items:[{offerId:'offer-1',quantity:10}],delivery:{name:'Customer',phone:'123',country:'SA',address:'Street 1'}});
  let row=db.state.requests[0];assert.equal(created.cartTotal,80);assert.equal(db.invoices,0);assert.equal(row.data.orderStage,0);assert.equal(row.data.proformaInvoice,undefined);assert.equal(db.commits[0].length,2);
  await assert.rejects(()=>manageOrder(client,{id:row.id,version:row.version,action:'next'}),e=>e.status===403);
- await assignSupplier(admin,{collection:'requests',id:row.id,version:row.version,supplierId:'supplier-1'});row=db.state.requests[0];
+ // Supply source is optional: availability can be verified before assigning a supplier.
  await manageOrder(admin,{id:row.id,version:row.version,action:'edit',lines:row.data.cartItems.map(l=>({...l,availabilityConfirmed:true}))});row=db.state.requests[0];
  await assert.rejects(()=>manageOrder(admin,{id:row.id,version:1,action:'next'}),e=>e.status===409);
  await assert.rejects(()=>manageOrder(admin,{id:row.id,version:row.version,action:'next',bankAccountId:'bank-1',paymentMessage:'Pay now'}),e=>e.status===409);
