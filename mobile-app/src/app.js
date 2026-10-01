@@ -400,7 +400,7 @@ async function loadData({render=true}={}){
 configureAdmin({reload:()=>loadData({render:false}),modal:openModal,close:closeModal,toast:showToast,view:()=>activeScreen});
 session.onReset(reason=>{
   resetSupplierCatalog();currentUser=null;platformState=null;notifications=[];activeScreen='home';activeSub='primary';readyProductsPage=1;readyCategory='all';readySubcategory='all';readyCountry='all';readySearch='';cartItems=[];clientOrderSeen={};clientRequestFilter='all';
-  resetAdmin();closeModal();unmountAiChat();
+  resetAdmin();closeModal({all:true});unmountAiChat();
   for(const url of mediaCache.values())URL.revokeObjectURL(url);
   mediaCache.clear();mediaTasks.clear();publicMediaSources.clear();lastDataLoadedAt=0;$('screen').replaceChildren();$('headerRole').textContent='';
   $('navUnread').classList.add('hidden');$('toast').classList.add('hidden');
@@ -479,8 +479,29 @@ async function copyText(value){
   if(!copied&&navigator.clipboard?.writeText){try{await navigator.clipboard.writeText(text);copied=true;}catch{}}
   showToast(copied?tr('تم النسخ.','Copied.'):tr('تعذر النسخ.','Could not copy.'));
 }
-function openModal(title,kicker,html){$('modalTitle').textContent=title;$('modalKicker').textContent=kicker||'';$('modalBody').innerHTML=html;$('modal').classList.remove('hidden');hydrateImages($('modalBody'));}
-function closeModal(){$('modal').classList.add('hidden');$('modalBody').innerHTML='';}
+const modalStack=[];
+function modalSnapshot(){
+  if($('modal').classList.contains('hidden'))return null;
+  return {title:$('modalTitle').textContent,kicker:$('modalKicker').textContent,html:$('modalBody').innerHTML,scrollTop:$('modalBody').scrollTop};
+}
+function renderModalLayer(layer){
+  $('modalTitle').textContent=layer.title||'';
+  $('modalKicker').textContent=layer.kicker||'';
+  $('modalBody').innerHTML=layer.html||'';
+  $('modal').classList.remove('hidden');
+  hydrateImages($('modalBody'));
+  requestAnimationFrame(()=>{$('modalBody').scrollTop=layer.scrollTop||0;});
+}
+function openModal(title,kicker,html){
+  const current=modalSnapshot();
+  if(current)modalStack.push(current);
+  renderModalLayer({title,kicker,html,scrollTop:0});
+}
+function closeModal({all=false}={}){
+  if(!all&&modalStack.length){renderModalLayer(modalStack.pop());return;}
+  modalStack.length=0;
+  $('modal').classList.add('hidden');$('modalBody').innerHTML='';
+}
 
 function mediaImage(src,attrs=''){
   const cached=mediaCache.get(src);
