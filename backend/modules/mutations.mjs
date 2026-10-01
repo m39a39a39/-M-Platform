@@ -103,19 +103,24 @@ export function normalizeBankAccounts(input){
     assert(raw&&typeof raw==='object'&&!Array.isArray(raw),400);
     const id=String(raw.id||'').trim(),label=String(raw.label||'').trim(),beneficiary=String(raw.beneficiary||'').trim(),bankName=String(raw.bankName||'').trim();
     const iban=String(raw.iban||'').trim().replace(/\s+/g,' '),swift=String(raw.swift||'').trim(),accountNumber=String(raw.accountNumber||'').trim(),country=String(raw.country||'').trim(),currency=String(raw.currency||'').trim().toUpperCase();
+    const acceptedCurrencies=[...new Set((Array.isArray(raw.acceptedCurrencies)?raw.acceptedCurrencies:[currency]).map(v=>String(v||'').trim().toUpperCase()).filter(Boolean))];
+    const routingCountries=[...new Set((Array.isArray(raw.routingCountries)?raw.routingCountries:[]).map(v=>String(v||'').trim()).filter(Boolean))].slice(0,50);
+    const priority=Math.max(0,Math.min(999,Number.isFinite(Number(raw.priority))?Math.trunc(Number(raw.priority)):100));
     assert(/^[A-Za-z0-9-]{1,80}$/.test(id)&&!ids.has(id),400,'معرّف الحساب البنكي غير صالح / Invalid bank account id');
     assert(label&&label.length<=100&&beneficiary&&beneficiary.length<=160&&bankName&&bankName.length<=160,400,'أكمل بيانات الحساب البنكي / Complete bank account details');
     assert((iban||accountNumber)&&iban.length<=120&&swift.length<=40&&accountNumber.length<=120&&country.length<=100,400,'تحقق من بيانات الحساب البنكي / Check bank account details');
     assert(PAYMENT_CURRENCIES.includes(currency),400,'عملة الحساب البنكي غير مدعومة / Unsupported bank currency');
+    assert(acceptedCurrencies.length&&acceptedCurrencies.every(v=>PAYMENT_CURRENCIES.includes(v)),400,'عملات الاستلام غير مدعومة / Unsupported receiving currencies');
+    assert(routingCountries.every(v=>v.length<=100),400,'دول التوجيه غير صالحة / Invalid routing countries');
     ids.add(id);
-    return {id,label,beneficiary,bankName,iban,swift,accountNumber,country,currency,active:raw.active!==false,order:index};
+    return {id,label,beneficiary,bankName,iban,swift,accountNumber,country,currency,acceptedCurrencies,routingCountries,priority,isDefault:raw.isDefault===true,active:raw.active!==false,order:index};
   });
 }
 async function paymentAccountSnapshot(accountId){
   const settings=await one('settings','site'),rows=Array.isArray(settings?.data?.bankAccounts)?settings.data.bankAccounts:[];
   const account=rows.find(x=>x?.id===accountId&&x.active!==false);
   assert(account,400,'اختر حسابًا بنكيًا نشطًا / Choose an active bank account');
-  return Object.fromEntries(['id','label','beneficiary','bankName','iban','swift','accountNumber','country','currency'].map(k=>[k,String(account[k]||'')]));
+  return {...Object.fromEntries(['id','label','beneficiary','bankName','iban','swift','accountNumber','country','currency'].map(k=>[k,String(account[k]||'')])),acceptedCurrencies:Array.isArray(account.acceptedCurrencies)?account.acceptedCurrencies:[String(account.currency||'')],routingCountries:Array.isArray(account.routingCountries)?account.routingCountries:[],priority:Number(account.priority)||100,isDefault:account.isDefault===true};
 }
 export async function assertProductTaxonomy(data,{required=false,activeOnly=false}={}){
   const settings=await one('settings','site'),s=settings?.data||{};
@@ -486,6 +491,7 @@ export async function mutate(user,body){
       }else if((collection==='requests'||collection==='interests')&&key==='paymentBankAccountId'){
         assert(collection==='requests'?(can(user,'requests.edit')||can(user,'publish')):(can(user,'offers.edit')||can(user,'publish')));
         assert(typeof patch[key]==='string'&&patch[key].length<=80,400,'اختر الحساب البنكي / Choose a bank account');
+        assert(original.data.trackingStatus!=='payment_confirmation',409,'تم تثبيت حساب الاستلام لهذا الطلب / The receiving account is locked for this order');
         data.paymentBankAccountId=patch[key];data.paymentBankAccount=await paymentAccountSnapshot(patch[key]);
       }else if((collection==='requests'||collection==='interests')&&key==='paymentAmount'){
         assert(collection==='requests'?(can(user,'requests.edit')||can(user,'publish')):(can(user,'offers.edit')||can(user,'publish')));
@@ -510,7 +516,8 @@ export async function mutate(user,body){
       const enteringPayment=original.data.trackingStatus!=='payment_confirmation';
       assert(data.paymentMessage?.trim(),400,'اكتب رسالة الدفع للعميل / Add a payment message');
       assert(data.paymentBankAccount?.id&&data.paymentAmount&&data.paymentCurrency,400,'أكمل الحساب البنكي والمبلغ والعملة / Complete bank account, amount, and currency');
-      assert(String(data.paymentBankAccount.currency||'').toUpperCase()===String(data.paymentCurrency||'').toUpperCase(),400,'عملة الحساب البنكي يجب أن تطابق عملة الدفع / Bank account currency must match payment currency');
+      const accepted=Array.isArray(data.paymentBankAccount.acceptedCurrencies)?data.paymentBankAccount.acceptedCurrencies.map(v=>String(v).toUpperCase()):[String(data.paymentBankAccount.currency||'').toUpperCase()];
+      assert(accepted.includes(String(data.paymentCurrency||'').toUpperCase()),400,'الحساب البنكي لا يقبل عملة هذا الطلب / Bank account does not accept this order currency');
       if(collection==='requests'){
         if(data.orderType==='cart'){
           const children=await db('interests',`data->>cartOrderId=eq.${encodeURIComponent(id)}&data->>deletedAt=is.null`);
