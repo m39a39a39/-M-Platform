@@ -21,29 +21,21 @@ function gatewayAuthToken(){
 export async function aiGatewaySmokeTest(){
   const apiKey=gatewayAuthToken();
   if(!apiKey)return {ok:false,stage:'auth'};
-  try{
-    const response=await fetch(GATEWAY_URL,{
-      method:'POST',
-      headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},
-      body:JSON.stringify({
-        model:String(process.env.AI_CHAT_MODEL||DEFAULT_MODEL),
-        messages:[{role:'user',content:'Reply with OK only.'}],
-        max_tokens:8,
-        temperature:0,
-        reasoning:{effort:'none'}
-      }),
-      signal:AbortSignal.timeout(15000)
-    });
-    if(!response.ok){
-      const failed=await response.json().catch(()=>null);
-      const detail=String(failed?.error?.message||failed?.error||failed?.message||'').slice(0,300);
-      return {ok:false,stage:'gateway',status:response.status,type:String(failed?.type||failed?.error?.type||'').slice(0,120),detail};
-    }
-    const data=await response.json().catch(()=>null);
-    return {ok:!!extractReply(data),stage:'gateway',status:response.status};
-  }catch{
-    return {ok:false,stage:'network'};
+  const models=[String(process.env.AI_CHAT_MODEL||DEFAULT_MODEL),'openai/gpt-5.4-nano'];
+  const results=[];
+  for(const model of models){
+    try{
+      const response=await fetch(GATEWAY_URL,{
+        method:'POST',
+        headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},
+        body:JSON.stringify({model,messages:[{role:'user',content:'Reply with OK only.'}],max_tokens:8,temperature:0,reasoning:{effort:'none'}}),
+        signal:AbortSignal.timeout(15000)
+      });
+      const data=await response.json().catch(()=>null);
+      results.push({model,ok:response.ok&&!!extractReply(data),status:response.status,type:String(data?.type||data?.error?.type||'').slice(0,120)});
+    }catch{results.push({model,ok:false,status:0,type:'network'});}
   }
+  return {ok:results.some(x=>x.ok),results};
 }
 function safeImage(value){
   if(!value)return '';
