@@ -21,33 +21,6 @@ function gatewayAuthToken(){
 export async function aiGatewaySmokeTest(){
   const apiKey=gatewayAuthToken();
   if(!apiKey)return {ok:false,stage:'auth'};
-  try{
-    const response=await fetch(GATEWAY_URL,{
-      method:'POST',
-      headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},
-      body:JSON.stringify({
-        model:String(process.env.AI_CHAT_MODEL||DEFAULT_MODEL),
-        messages:[{role:'user',content:'Reply with OK only.'}],
-        max_tokens:8,
-        temperature:0,
-        reasoning:{effort:'none'}
-      }),
-      signal:AbortSignal.timeout(15000)
-    });
-    if(!response.ok){
-      const failed=await response.json().catch(()=>null);
-      const detail=String(failed?.error?.message||failed?.error||failed?.message||failed?.type||'').slice(0,250);
-      return {ok:false,stage:'gateway',status:response.status,detail,type:String(failed?.type||failed?.error?.type||'').slice(0,120)};
-    }
-    const data=await response.json().catch(()=>null);
-    return {ok:!!extractReply(data),stage:'gateway',status:response.status,model:String(process.env.AI_CHAT_MODEL||DEFAULT_MODEL)};
-  }catch{
-    return {ok:false,stage:'network'};
-  }
-}
-export async function aiGatewaySmokeTest(){
-  const apiKey=gatewayAuthToken();
-  if(!apiKey)return {ok:false,stage:'auth'};
   const models=[String(process.env.AI_CHAT_MODEL||DEFAULT_MODEL),'openai/gpt-5.4-nano'];
   const results=[];
   for(const model of models){
