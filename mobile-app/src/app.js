@@ -397,7 +397,7 @@ async function loadData({render=true}={}){
   updateAdminState(next);updateShell();
   if(render)renderScreen();
 }
-configureAdmin({reload:()=>loadData({render:false})});
+configureAdmin({reload:()=>loadData({render:false}),modal:openModal,close:closeModal,toast:showToast,view:()=>activeScreen});
 session.onReset(reason=>{
   resetSupplierCatalog();currentUser=null;platformState=null;notifications=[];activeScreen='home';activeSub='primary';readyProductsPage=1;readyCategory='all';readySubcategory='all';readyCountry='all';readySearch='';cartItems=[];clientOrderSeen={};clientRequestFilter='all';
   resetAdmin();closeModal();unmountAiChat();
