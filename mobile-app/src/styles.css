@@ -2318,3 +2318,10 @@ body.image-viewer-open {
  .payment-summary-meta{display:grid;gap:2px}
  .payment-summary-meta b{text-align:start}
 }
+
+/* Global overlay stacking: keep feedback and active dialogs above refreshed page content */
+.modal{z-index:1000;isolation:isolate}
+.modal-backdrop{z-index:0}
+.modal-sheet{z-index:1}
+.toast{z-index:1100}
+body:has(.modal:not(.hidden)){overflow:hidden}
