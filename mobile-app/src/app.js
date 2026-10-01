@@ -324,27 +324,30 @@ function paymentLabel(status){const row=PAYMENT_LABELS[status];return row?(lang=
 function paymentEntity(type,id){return type==='request'?(platformState?.requests||[]).find(x=>x.id===id):(platformState?.interests||[]).find(x=>x.id===id);}
 function bankTransferCard(item){
   const a=item?.paymentBankAccount;if(!a?.id)return '';
-  const rows=[
+  const reference='#'+ref(item),currency=item.paymentCurrency||a.currency;
+  const primary=[
     [tr('اسم المستفيد','Beneficiary'),a.beneficiary],
-    [tr('اسم البنك','Bank'),a.bankName],
+    [tr('اسم البنك','Bank'),a.bankName]
+  ].filter(x=>x[1]);
+  const transfer=[
     ['IBAN',a.iban],
     ['SWIFT / BIC',a.swift],
     [tr('رقم الحساب','Account number'),a.accountNumber],
-    [tr('الدولة','Country'),a.country]
+    [tr('مرجع التحويل','Transfer reference'),reference]
   ].filter(x=>x[1]);
-  const reference='#'+ref(item);
-  return `<section class="payment-bank-card"><div class="payment-bank-head"><div><small>${esc(tr('بيانات التحويل البنكي','Bank transfer details'))}</small><strong>${esc(a.label||a.bankName)}</strong></div><div class="payment-amount"><small>${esc(tr('المبلغ المطلوب','Amount due'))}</small><b>${exactMoney(item.paymentAmount,item.paymentCurrency||a.currency)}</b></div></div><div class="payment-bank-grid">${rows.map(([label,value])=>`<div><span>${esc(label)}</span><strong>${esc(value)}</strong><button type="button" class="copy-btn" data-copy-value="${esc(value)}">${esc(tr('نسخ','Copy'))}</button></div>`).join('')}<div><span>${esc(tr('مرجع التحويل','Transfer reference'))}</span><strong>${esc(reference)}</strong><button type="button" class="copy-btn" data-copy-value="${esc(reference)}">${esc(tr('نسخ','Copy'))}</button></div></div><button type="button" class="secondary-btn full" data-copy-value="${esc(rows.map(([label,value])=>label+': '+value).concat([tr('المبلغ','Amount')+': '+String(item.paymentAmount||'')+' '+String(item.paymentCurrency||a.currency||''),tr('مرجع التحويل','Transfer reference')+': '+reference]).join('\n'))}">${esc(tr('نسخ جميع بيانات التحويل','Copy all transfer details'))}</button></section>`;
+  const copyIcon='<span aria-hidden="true">⧉</span>';
+  return `<section class="payment-bank-card payment-summary"><div class="payment-summary-amount"><small>${esc(tr('المبلغ المطلوب','Amount due'))}</small><strong>${exactMoney(item.paymentAmount,currency)}</strong></div><div class="payment-summary-bank"><div class="payment-summary-title"><span class="payment-summary-icon">↗</span><div><small>${esc(tr('التحويل البنكي','Bank transfer'))}</small><strong>${esc(a.label||a.bankName)}</strong></div></div>${primary.map(([label,value])=>`<div class="payment-summary-meta"><span>${esc(label)}</span><b>${esc(value)}</b></div>`).join('')}<div class="payment-summary-fields">${transfer.map(([label,value])=>`<div class="payment-summary-row"><div><span>${esc(label)}</span><strong dir="ltr">${esc(value)}</strong></div><button type="button" class="copy-icon-btn" data-copy-value="${esc(value)}" aria-label="${esc(tr('نسخ','Copy'))}">${copyIcon}</button></div>`).join('')}</div></div></section>`;
 }
 function paymentPanel(item,entityType){
   const status=item?.paymentStatus;
   if(!status&&item?.trackingStatus!=='payment_confirmation')return '';
   const receipt=item?.paymentReceipt,canUpload=item?.trackingStatus==='payment_confirmation'&&['awaiting_receipt','reupload_requested'].includes(status);
-  const message=item?.paymentMessage||tr('يرجى إتمام عملية الدفع وإرفاق إيصال الدفع لتأكيد طلبك.','Please complete payment and upload the receipt to confirm your order.');
   const receiptHtml=receipt?.src?(receipt.mime==='application/pdf'
     ?`<button type="button" class="secondary-btn full" data-payment-document="${esc(receipt.src)}">${esc(tr('عرض إيصال PDF','View PDF receipt'))}</button>`
     :`<div class="payment-receipt-preview" data-viewer-gallery><img alt="" data-media="${esc(receipt.src)}" data-image-viewer></div>`):'';
-  const uploadText=status==='reupload_requested'?tr('إعادة رفع إيصال الدفع','Upload receipt again'):tr('إرفاق إيصال الدفع','Upload payment receipt');
-  return `<section class="payment-card"><div class="payment-card-head"><div><small>${esc(tr('الدفع','Payment'))}</small><strong>${esc(paymentLabel(status||'awaiting_receipt'))}</strong></div></div><p>${esc(message)}</p>${bankTransferCard(item)}${item?.paymentReviewNote?`<p class="payment-review-note"><b>${esc(tr('ملاحظة الإدارة','Admin note'))}:</b> ${esc(item.paymentReviewNote)}</p>`:''}${receiptHtml}${canUpload?`<button class="primary-btn full" type="button" data-payment-upload data-entity-type="${entityType}" data-entity-id="${esc(item.id)}">${esc(uploadText)}</button>`:''}</section>`;
+  const uploadText=status==='reupload_requested'?tr('إعادة رفع إيصال التحويل','Upload receipt again'):tr('رفع إيصال التحويل','Upload transfer receipt');
+  const waiting=status==='receipt_submitted'?`<div class="payment-submitted-state">✓ ${esc(paymentLabel(status))}</div>`:'';
+  return `<section class="payment-card payment-checkout"><div class="payment-card-head"><div><small>${esc(tr('إتمام الدفع','Complete payment'))}</small><strong>${esc(paymentLabel(status||'awaiting_receipt'))}</strong></div><span class="payment-order-ref">${esc(tr('طلب','Order'))} #${esc(ref(item))}</span></div><p class="payment-short-instruction">${esc(tr('حوّل المبلغ إلى الحساب أدناه، ثم ارفع إيصال التحويل.','Transfer the amount to the account below, then upload the transfer receipt.'))}</p>${bankTransferCard(item)}${item?.paymentReviewNote?`<p class="payment-review-note"><b>${esc(tr('ملاحظة الإدارة','Admin note'))}:</b> ${esc(item.paymentReviewNote)}</p>`:''}${receiptHtml}${canUpload?`<button class="primary-btn full payment-upload-primary" type="button" data-payment-upload data-entity-type="${entityType}" data-entity-id="${esc(item.id)}">${esc(uploadText)}</button>`:waiting}</section>`;
 }
 function invoicePanel(item,entityType){
   const proforma=item?.proformaInvoice,finalInvoice=item?.finalInvoice;
