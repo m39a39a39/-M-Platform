@@ -77,7 +77,16 @@ document.addEventListener('click',async e=>{
     if(a==='order-edit')editOrder(o);
     if(a==='order-note')formModal('ملاحظة داخلية لا تظهر للعميل',area('الملاحظة','note',''),fd=>orderAction(o,{action:'note',note:fd.get('note')}));
     if(a==='order-cancel')formModal('إلغاء الطلب',area('سبب الإلغاء (يظهر للعميل)','reason',''),fd=>orderAction(o,{action:'cancel',reason:fd.get('reason')}),'تأكيد إلغاء الطلب');
-    if(a==='order-verify-availability')await orderAction(o,{action:'verify-availability'});
+    if(a==='order-verify-availability'){
+      const lines=o.cartItems||[];
+      formModal('تأكيد توفر البضاعة',`<p class="help">أكد توفر المنتجات المطلوبة، ثم اضغط تأكيد التوفر.</p>${lines.map((l,i)=>`<fieldset><legend>${esc(l.translation?.titleAr||l.product||('المنتج '+(i+1)))}</legend><p>الكمية المطلوبة: <strong>${esc(l.quantity)}</strong></p><label><input type="checkbox" name="available-${i}" ${l.availabilityConfirmed?'checked':''}> متوفر بالكمية المطلوبة</label></fieldset>`).join('')}`,async fd=>{
+        if(!lines.every((_,i)=>fd.has('available-'+i)))throw Error('أكد توفر جميع المنتجات أولًا');
+        await api('order-management',{id:o.id,version:o.version,action:'edit',delivery:o.delivery,carrier:o.carrier||'',trackingNumber:o.trackingNumber||'',lines:lines.map((l,i)=>({interestId:l.interestId,quantity:Number(l.quantity),unitPrice:Number(l.unitPrice),availabilityConfirmed:fd.has('available-'+i)}))});
+        liveState=await window.MStudioSession.state();
+        const updated=liveState.requests.find(x=>x.id===o.id);
+        await orderAction(updated,{action:'verify-availability'});
+      },'تأكيد التوفر');
+    }
     if(a==='order-payment')formModal('تأكيد استلام الدفع',`<p>تأكد من وصول المبلغ فعليًا قبل تأكيد الدفع وبدء التجهيز.</p>${field('المبلغ المستلم','amount',o.paymentAmount,'number','required min="0.01" step="0.01"')}${field('مرجع العملية البنكية','reference','','text','required')}`,fd=>orderAction(o,{action:'confirm-payment',amount:Number(fd.get('amount')),currency:o.currency,reference:fd.get('reference')}),'تأكيد الدفع');
     if(a==='order-next'){if(o.orderStage===0){const accounts=paymentAccountsForOrder(o),selected=accounts[0]?.id||'';formModal('الانتقال إلى بانتظار الدفع',selectField('حساب التحويل','bankAccountId',accounts.map(a=>[a.id,(a.label||a.bankName||a.id)+' · '+String(a.currency||'')]),selected)+(accounts.length?'':'<p class="help">لا يوجد حساب نشط يقبل عملة هذا الطلب.</p>')+area('تعليمات الدفع للعميل','paymentMessage','يرجى تحويل المبلغ المعتمد وإرفاق الإيصال.'),fd=>orderAction(o,{action:'next',bankAccountId:fd.get('bankAccountId'),paymentMessage:fd.get('paymentMessage')}));}else if(o.orderStage===3)formModal('تأكيد تسليم الشحنة لشركة الشحن',field('شركة الشحن','carrier',o.carrier||'','text','required maxlength="120"')+field('رقم التتبع','trackingNumber',o.trackingNumber||'','text','required maxlength="120"'),fd=>orderAction(o,{action:'next',carrier:fd.get('carrier'),trackingNumber:fd.get('trackingNumber')}),'تأكيد الشحن');else await orderAction(o,{action:'next'});}
     if(a==='order-receipt'){const response=await window.MStudioSession.raw(o.paymentReceipt.src,{auth:true});if(!response.ok)throw Error('تعذر عرض الإيصال');const url=URL.createObjectURL(await response.blob());const link=document.createElement('a');link.href=url;link.download='payment-receipt';link.click();setTimeout(()=>URL.revokeObjectURL(url),60000);}
