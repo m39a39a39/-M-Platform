@@ -33,7 +33,7 @@ function toast(msg){
   positionToast();
   toastTimer=setTimeout(()=>{
     toastElement.classList.remove('show');
-    if(typeof toastElement.hidePopover==='function')toastElement.hidePopover();
+    if(toastElement.isConnected&&typeof toastElement.hidePopover==='function')toastElement.hidePopover();
   },3500);
 }
 document.addEventListener('close',event=>{if(event.target instanceof HTMLDialogElement)positionToast();},true);
