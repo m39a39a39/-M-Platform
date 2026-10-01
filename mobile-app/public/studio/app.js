@@ -14,9 +14,31 @@ const types={hero:['بنر رئيسي','image'],categories:['التصنيفات'
 const statuses={active:['منشور',''],draft:['مسودة','warn'],archived:['مؤرشف','gray']};
 const tag=(text,cls='')=>`<span class="chip ${cls}">${esc(text)}</span>`;
 
-let toastTimer;function toast(msg){$('#toast').textContent=msg;$('#toast').classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').classList.remove('show'),3500)}
+let toastTimer;
+const toastElement=$('#toast');
+function positionToast(){
+  const dialogs=document.querySelectorAll('dialog[open]');
+  const host=dialogs[dialogs.length-1]||document.body;
+  if(typeof toastElement.hidePopover==='function'&&toastElement.matches(':popover-open'))toastElement.hidePopover();
+  host.append(toastElement);
+  if(typeof toastElement.showPopover==='function'){
+    toastElement.setAttribute('popover','manual');
+    if(toastElement.classList.contains('show'))toastElement.showPopover();
+  }
+}
+function toast(msg){
+  clearTimeout(toastTimer);
+  toastElement.textContent=msg;
+  toastElement.classList.add('show');
+  positionToast();
+  toastTimer=setTimeout(()=>{
+    toastElement.classList.remove('show');
+    if(typeof toastElement.hidePopover==='function')toastElement.hidePopover();
+  },3500);
+}
+document.addEventListener('close',event=>{if(event.target instanceof HTMLDialogElement)positionToast();},true);
 function changed(msg){const ok=persist();render();if(ok&&msg)toast(msg)}
-function modal(title,body,footer='',cls=''){const d=$('#dialog');d.className=cls;d.innerHTML=`<div class="dialog-head"><h2>${esc(title)}</h2>${ib('إغلاق','close','close')}</div>${body}${footer?`<div class="dialog-foot">${footer}</div>`:''}`;if(!d.open)d.showModal()}
+function modal(title,body,footer='',cls=''){const d=$('#dialog');if(d.contains(toastElement))document.body.append(toastElement);d.className=cls;d.innerHTML=`<div class="dialog-head"><h2>${esc(title)}</h2>${ib('إغلاق','close','close')}</div>${body}${footer?`<div class="dialog-foot">${footer}</div>`:''}`;if(!d.open)d.showModal();positionToast()}
 function closeModal(){$('#dialog').close()}
 function confirmAction(title,description,fn,label='تأكيد'){modal(title,`<div class="dialog-body"><p>${esc(description)}</p></div>`,btn('إلغاء','close')+btn(label,'confirm','','danger'));$('#dialog [data-action=confirm]').onclick=()=>{closeModal();fn()}}
 function field(label,name,value='',type='text',extra=''){return `<div class="field"><label for="f-${name}">${label}</label><input id="f-${name}" name="${name}" type="${type}" value="${esc(value)}" ${extra}></div>`}
