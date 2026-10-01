@@ -36,7 +36,8 @@ export async function aiGatewaySmokeTest(){
     });
     if(!response.ok){
       const failed=await response.json().catch(()=>null);
-      return {ok:false,stage:'gateway',status:response.status,type:String(failed?.type||failed?.error?.type||'').slice(0,120)};
+      const detail=String(failed?.error?.message||failed?.error||failed?.message||'').slice(0,300);
+      return {ok:false,stage:'gateway',status:response.status,type:String(failed?.type||failed?.error?.type||'').slice(0,120),detail};
     }
     const data=await response.json().catch(()=>null);
     return {ok:!!extractReply(data),stage:'gateway',status:response.status};
