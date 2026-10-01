@@ -22,9 +22,14 @@ export function changeOrder(current,body,now=new Date().toISOString()){
         return {...line,quantity,unitPrice,total:cents(quantity*unitPrice)/100,availabilityConfirmed:edit.availabilityConfirmed===true};
       });
       data.cartTotal=data.cartItems.reduce((n,l)=>n+cents(l.total),0)/100;assert(data.cartTotal<=1e12,400);
+      data.availabilityVerifiedAt=null;
     }
     if(body.carrier!==undefined)data.carrier=clean(body.carrier,120);
     if(body.trackingNumber!==undefined)data.trackingNumber=clean(body.trackingNumber,120);
+  }else if(action==='verify-availability'){
+    assert(stage===0,409,'الطلب تجاوز مرحلة التحقق من التوفر');
+    assert(data.cartItems.every(l=>l.availabilityConfirmed),409,'أكد توفر جميع المنتجات أولًا');
+    data.availabilityVerifiedAt=now;
   }else if(action==='note'){
     data.internalNotes=[...(data.internalNotes||[]),{at:now,text:clean(body.note,2000,true)}];
   }else if(action==='cancel'){
@@ -35,7 +40,7 @@ export function changeOrder(current,body,now=new Date().toISOString()){
     data.paymentReference=clean(body.reference,200,true);data.paymentStatus='confirmed';data.paymentConfirmedAt=now;data.paymentUpdatedAt=now;
     data.orderStage=2;
   }else if(action==='next'){
-    if(stage===0){assert(data.cartItems.every(l=>l.availabilityConfirmed),409,'أكد توفر جميع المنتجات أولًا');data.paymentAmount=data.cartTotal;data.paymentCurrency=data.currency;data.paymentStatus='awaiting_receipt';data.paymentMessage=clean(body.paymentMessage,1000,true);}
+    if(stage===0){assert(data.availabilityVerifiedAt,409,'انتقل أولًا إلى تم التحقق من توفر البضاعة');data.paymentAmount=data.cartTotal;data.paymentCurrency=data.currency;data.paymentStatus='awaiting_receipt';data.paymentMessage=clean(body.paymentMessage,1000,true);}
     if(stage===1)assert(data.paymentStatus==='confirmed',409,'يجب تأكيد الدفع قبل التجهيز');
     if(stage===3){
       if(body.carrier!==undefined)data.carrier=clean(body.carrier,120,true);
@@ -58,7 +63,7 @@ export async function manageOrder(user,body){
   const row=await one('requests',body.id);assert(row&&!row.data.deletedAt,404);assert(row.version===body.version,409,'تغيّر الطلب؛ حدّث الصفحة');
   const now=new Date().toISOString(),data=changeOrder(row.data,body,now),children=await db('interests',`data->>cartOrderId=eq.${encodeURIComponent(row.id)}`);
   assert(children.length===data.cartItems.length,409,'منتجات الطلب غير متطابقة');
-  if(row.data.requiresAssignment&&body.action==='next'&&row.data.orderStage===0){
+  if(row.data.requiresAssignment&&['verify-availability','next'].includes(body.action)&&row.data.orderStage===0){
     assert(children.every(c=>c.data.assignedSupplierId&&c.data.supplySourceId&&c.data.supplierOrderStatus!=='cannot_fulfill'),409,'حدد مصدر توريد قادرًا على التنفيذ لكل منتج');
     for(const child of children){const line=data.cartItems.find(l=>l.interestId===child.id),terms=child.data.supplyTerms;assert(terms&&line.quantity>=terms.moq&&line.quantity<=terms.stock,409,'تحقق من كمية المنتج وحدود مصدر التوريد');const supplier=await one('profiles',child.data.assignedSupplierId);assert(supplier&&supplier.role==='supplier'&&!supplier.blocked_at&&!supplier.deleted_at,409,'المورد غير فعال');}
   }
