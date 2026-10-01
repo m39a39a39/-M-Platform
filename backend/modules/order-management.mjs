@@ -6,6 +6,20 @@ export const ORDER_TRACKING=['supplier_confirmation','payment_confirmation','pro
 const clean=(value,max,required=false)=>{assert(typeof value==='string'&&value.length<=max&&(!required||value.trim()),400,'أكمل البيانات المطلوبة');return value.trim();};
 export function checkoutDetails(raw){assert(raw&&typeof raw==='object',400,'أكمل بيانات مراجعة الطلب');return {name:clean(raw.name,120,true),phone:clean(raw.phone,80,true),country:clean(raw.country,100,true),address:clean(raw.address,1000,true),notes:clean(raw.notes||'',2000)};}
 const cents=value=>Math.round(Number(value)*100);
+const bankKey=value=>String(value||'').trim().toLowerCase();
+const bankAccepts=(account,currency)=>{
+  const wanted=String(currency||'').trim().toUpperCase();
+  const accepted=Array.isArray(account?.acceptedCurrencies)&&account.acceptedCurrencies.length?account.acceptedCurrencies:[account?.currency];
+  return account?.active!==false&&accepted.some(value=>String(value||'').trim().toUpperCase()===wanted);
+};
+const routedBankAccounts=(accounts,currency,country)=>{
+  const key=bankKey(country);
+  return accounts.filter(account=>bankAccepts(account,currency)).sort((a,b)=>{
+    const ar=Array.isArray(a.routingCountries)?a.routingCountries.map(bankKey).filter(Boolean):[],br=Array.isArray(b.routingCountries)?b.routingCountries.map(bankKey).filter(Boolean):[];
+    const aRoute=key&&ar.includes(key)?0:ar.length?2:1,bRoute=key&&br.includes(key)?0:br.length?2:1;
+    return aRoute-bRoute||(a.isDefault===b.isDefault?0:a.isDefault?-1:1)||(Number(a.priority)||100)-(Number(b.priority)||100)||(Number(a.order)||0)-(Number(b.order)||0);
+  });
+};
 export function changeOrder(current,body,now=new Date().toISOString()){
   const data=structuredClone(current),before=structuredClone(current);assert(data.orderFlowVersion===2,409,'هذا الطلب يستخدم المسار السابق');
   assert(!data.cancelledAt&&data.orderStage<8,409,'الطلب مغلق');
@@ -65,8 +79,10 @@ export async function manageOrder(user,body){
   assert(children.length===data.cartItems.length,409,'منتجات الطلب غير متطابقة');
   const customer=await one('profiles',row.owner_id);
   if(row.data.orderStage===0&&data.orderStage===1){
-    const settings=await one('settings','site'),account=(settings.data.bankAccounts||[]).find(a=>a.id===body.bankAccountId&&a.active!==false);assert(account&&String(account.currency).toUpperCase()===data.currency,400,'اختر حسابًا بنفس عملة الطلب');
-    data.paymentBankAccountId=account.id;data.paymentBankAccount=account;data.proformaInvoice=await issueCartProforma(customer,data,row.id,now);
+    const settings=await one('settings','site'),accounts=Array.isArray(settings?.data?.bankAccounts)?settings.data.bankAccounts:[],eligible=routedBankAccounts(accounts,data.currency,data.delivery?.country);
+    const account=(body.bankAccountId?eligible.find(a=>a.id===body.bankAccountId):null)||eligible[0];
+    assert(account,400,'لا يوجد حساب تحويل نشط يقبل عملة الطلب');
+    data.paymentBankAccountId=account.id;data.paymentBankAccount=structuredClone(account);data.proformaInvoice=await issueCartProforma(customer,data,row.id,now);
   }
   if(body.action==='confirm-payment')data.finalInvoice=await issueFinalInvoice(customer,data,row.id,now);
   data.orderAudit.at(-1).actorId=user.id;
