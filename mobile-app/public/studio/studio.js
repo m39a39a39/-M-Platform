@@ -125,6 +125,7 @@ function diffValue(value,key,data){
   if(key==='pricingMode')return value==='rfq'?'طلب عرض سعر':'أسعار محددة';
   if(key==='channel')return {both:'الموقع والتطبيق',web:'الموقع فقط',app:'التطبيق فقط'}[value]||value;
   if(typeof value==='number')return fmt(value);
+  if(value&&typeof value==='object')return JSON.stringify(value);
   return String(value);
 }
 function reviewChanges(){

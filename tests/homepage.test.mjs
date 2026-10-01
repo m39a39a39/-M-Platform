@@ -7,8 +7,8 @@ import {upgradeStore} from '../backend/modules/storefront-upgrade.mjs';
 import {renderStorefront} from '../mobile-app/src/storefront.js';
 const products=[{id:'a',status:'published',categoryId:'c',createdAt:'2026-01-01',translation:{titleAr:'منتج',titleEn:'Product'},unitPrice:4},{id:'b',status:'published',categoryId:'d',createdAt:'2026-02-01',translation:{titleAr:'آخر',titleEn:'Other'},unitPrice:5},{id:'secret',status:'review'}];
 test('section removal persists without reintroducing builtins, including an empty homepage',()=>{
- const input={...defaultStore(),sections:[]},output=normalizeStore(input);assert.deepEqual(output.sections,[]);assert.deepEqual(upgradeStore(output).sections,[]);
- const html=renderStorefront({settings:{storefront:output},publicOffers:products},'web',{language:'en'});assert.doesNotMatch(html,/data-layout-section|store-catalog|sf-footer|sf-custom-hero/);
+ const input={...defaultStore(),sections:[]},output=normalizeStore(input);assert.deepEqual(output.sections.filter(s=>s.page==='home'),[]);assert.deepEqual(upgradeStore(output).sections,output.sections);
+ const html=renderStorefront({settings:{storefront:output},publicOffers:products},'web',{language:'en'});assert.doesNotMatch(html,/store-catalog|sf-footer|sf-custom-hero/);
 });
 test('one renderer respects order, visibility, language and independent section content',()=>{
  const store=defaultStore();store.sections=[{id:'second',type:'text',title:'ثاني',titleEn:'Second',visible:true,channel:'both'},{id:'first',type:'text',title:'أول',titleEn:'First',visible:true,channel:'both'},{id:'hidden',type:'text',title:'SECRET',visible:false,channel:'both'}];

@@ -1,7 +1,8 @@
+import {ensureThemePages} from '../../shared/theme-pages.mjs';
 import {policyTemplates} from '../../shared/catalog-controls.mjs';
 import {normalizeHome} from './legacy-home-data.mjs';
 import {defaultStore,defaultOptions} from '../../shared/storefront-model.mjs';
-export function upgradeStore(input,settings={}){
+function upgradeStoreLegacy(input,settings={}){
  if(input?.schemaVersion===2)return input.policiesInitialized?input:{...input,policiesInitialized:true,pages:[...(input.pages||[]),...policyTemplates().filter(p=>!(input.pages||[]).some(x=>x.id===p.id))]};
  if(!input)return defaultStore();
  const h=normalizeHome(input.home||{},settings),out={...defaultStore(),...structuredClone(input),schemaVersion:2,options:{...defaultOptions(),...Object.fromEntries(Object.keys(defaultOptions()).map(k=>[k,h[k]]))}};
@@ -11,3 +12,5 @@ export function upgradeStore(input,settings={}){
  delete out.home;return out;
 }
 export function upgradeSettings(data={}){const out={...data,storefront:upgradeStore(data.storefront,data)};if(data.studioDraft)out.studioDraft=upgradeStore(data.studioDraft,data);for(const k of ['homeTitleAr','homeTitleEn','homeSubtitleAr','homeSubtitleEn'])delete out[k];return out;}
+
+export function upgradeStore(input,settings={}){return ensureThemePages(upgradeStoreLegacy(input,settings));}

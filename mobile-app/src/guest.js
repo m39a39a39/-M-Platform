@@ -96,7 +96,7 @@ function saveCart(){
 }
 function updateCartBadge(){
   const count=cartItems.length,badge=$('guestCartCount');
-  document.querySelectorAll('#guest-storefront [data-store-cart-count]').forEach(el=>el.textContent=String(count));
+  document.querySelectorAll('#guest-storefront [data-store-cart-count], #site-header [data-store-cart-count]').forEach(el=>el.textContent=String(count));
   if(badge){badge.textContent=count>99?'99+':String(count);badge.classList.toggle('hidden',!count);}
 }
 function cartRows(){
@@ -212,7 +212,7 @@ function mountGuestStore(){
  catalogNode('guestProductSearch').placeholder=t('search');catalogNode('guestProductSearch').setAttribute('aria-label',t('search'));catalogNode('guestPrevPage').textContent=t('previous');catalogNode('guestNextPage').textContent=t('next');
  catalog.querySelector('.guest-product-search').hidden=!h.showSearch;
  catalogNode('guestCategoryFilters').hidden=!h.showCategories;catalogNode('guestSubcategoryFilters').hidden=!h.showCategories;catalogNode('guestSupplyCountryFilters').hidden=!h.showCountries;
- bindStorefront(host,state,{chrome:false,money,hydrate:hydrateImages,product:openOffer,add:id=>{try{const p=publishedOffers().find(p=>p.id===id);addToCart(p,(Number(p.moq)||1)+(cartItems.find(x=>x.offerId===id)?.quantity||0));showGuestToast(t('added'));}catch(e){showGuestToast(e.message);}},page:(title,html)=>{$('modalTitle').textContent=title;$('modalKicker').textContent='';$('modalBody').innerHTML=html;$('modal').classList.remove('hidden');},category:id=>{category=id;renderOffers();},catalog:()=>catalog.isConnected&&catalog.scrollIntoView({behavior:'smooth'}),action:action=>{if(action==='cart')openGuestCart();if(action==='login')showLogin();if(action==='request')requireCustomerAuth('new-request');if(action==='register-client')register('client');if(action==='register-supplier')register('supplier');if(action==='language')toggleLanguage();if(action==='home')host.scrollIntoView({behavior:'smooth'});}});
+ bindStorefront(host,state,{chrome:false,observe:aiChatSignal,money,hydrate:hydrateImages,product:openOffer,add:(id,quantity)=>{try{const p=publishedOffers().find(p=>p.id===id);addToCart(p,(quantity??(Number(p.moq)||1))+(cartItems.find(x=>x.offerId===id)?.quantity||0));showGuestToast(t('added'));}catch(e){showGuestToast(e.message);}},page:(title,html)=>{$('modalTitle').textContent=title;$('modalKicker').textContent='';$('modalBody').innerHTML=html;$('modal').classList.remove('hidden');},category:id=>{category=id;renderOffers();},catalog:()=>catalog.isConnected&&catalog.scrollIntoView({behavior:'smooth'}),action:action=>{if(action==='cart')openGuestCart();if(action==='login')showLogin();if(action==='request')requireCustomerAuth('new-request');if(action==='register-client')register('client');if(action==='register-supplier')register('supplier');if(action==='language')toggleLanguage();if(action==='home')host.scrollIntoView({behavior:'smooth'});}});
  hydrateImages(host);
 }
 async function load(){
@@ -233,35 +233,7 @@ function ensureLoaded(){if(!state&&!loadTask)void load();}
 function showGuest(){showView('guestView');}
 function showLogin(){showView('loginView');}
 function closeModal(){$('modal').classList.add('hidden');$('modalBody').innerHTML='';}
-function openOffer(id){
-  const o=publishedOffers().find(x=>x.id===id);if(!o)return;
-  aiChatSignal('product_view',{productSku:o.sku||'',productTitle:title(o),price:Number(o.unitPrice)||0,currency:o.currency||'',moq:Number(o.moq)||0});
-  const existing=cartItems.find(x=>x.offerId===o.id),moq=Math.max(1,Math.ceil(Number(o.moq)||1)),stock=Number(o.stock),initialQty=existing?.quantity||moq;
-  const maxAttr=Number.isFinite(stock)&&stock>0?` max="${esc(Math.floor(stock))}"`:'';
-  $('modalKicker').textContent=`#${ref(o)}`;$('modalTitle').textContent=title(o);
-  $('modalBody').innerHTML=`${o.images?.length?`<div class="guest-modal-images" data-viewer-gallery>${o.images.map(src=>`<img alt="" data-guest-modal-media="${esc(src)}" data-image-viewer />`).join('')}</div>`:''}
-    <div class="quote-price">${money(o.unitPrice,o.currency)}</div>
-    <div class="facts"><span>MOQ ${esc(o.moq||'—')}</span>${homeConfig(state.settings).showStock&&o.stock!==undefined?`<span>${esc(t('stock'))}: ${esc(o.stock||'—')}</span>`:''}<span>${esc(t('production'))}: ${esc(o.leadTime||'—')} ${esc(t('days'))}</span><span>${esc(t('supplyCountry'))}: ${esc(countryLabel(o.country))}</span></div>
-    <p class="guest-modal-description">${esc(description(o)||'—')}</p>${productExtras(o,homeConfig(state.settings))}
-    <form id="guestProductCartForm" class="public-interest-form" data-offer-id="${esc(o.id)}">
-      <div class="public-interest-head"><div><strong>${esc(t('quantity'))}</strong><small>MOQ: ${esc(o.moq||'—')}</small></div></div>
-      <label><span>${esc(t('quantity'))}</span><input id="guestProductQuantity" name="quantity" type="number" min="${esc(moq)}" step="1" value="${esc(initialQty)}"${maxAttr} required></label>
-      <div class="public-interest-total"><span>${esc(t('productTotal'))}</span><strong id="guestProductTotal">${money(initialQty*tierPrice(o,initialQty),o.currency)}</strong></div>
-      <p class="form-message" id="guestProductMessage"></p>
-      <button class="primary-btn full" type="submit">${esc(existing?t('updateCart'):t('addCart'))}</button>
-    </form>`;
-  if(!homeConfig(state.settings).showCart)$('guestProductCartForm').hidden=true;
-  if(!homeConfig(state.settings).showPrices)$('modalBody').querySelector('.quote-price')?.remove();
-  $('modal').classList.remove('hidden');
-  hydrateImages($('modalBody'),'data-guest-modal-media');
-  const input=$('guestProductQuantity'),total=$('guestProductTotal');
-  input?.addEventListener('input',()=>{const q=Number(input.value);total.textContent=money((Number.isFinite(q)?q:0)*tierPrice(o,q),o.currency);});
-  $('guestProductCartForm')?.addEventListener('submit',e=>{
-    e.preventDefault();
-    try{addToCart(o,Number(e.currentTarget.quantity.value));closeModal();showGuestToast(t('added'));}
-    catch(error){$('guestProductMessage').textContent=error.message;}
-  });
-}
+function openOffer(id){location.assign('/?product='+encodeURIComponent(id));}
 function showGuestToast(message){
   const toast=$('toast');if(!toast)return;toast.textContent=message;toast.classList.remove('hidden');clearTimeout(showGuestToast.t);showGuestToast.t=setTimeout(()=>toast.classList.add('hidden'),2200);
 }
@@ -333,3 +305,4 @@ window.addEventListener('mplatform:view',e=>{
 })();
 
 function guestChromeAction(action){if(action==='cart')openGuestCart();if(action==='login')showLogin();if(action==='register-supplier')register('supplier');if(action==='register-client')register('client');if(action==='language')toggleLanguage();}
+

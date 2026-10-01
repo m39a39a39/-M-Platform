@@ -30,7 +30,7 @@
       lastMin=tier.min;lastPrice=tier.price;
     }
   }
-  const groups={products:'المنتجات',collections:'مجموعات المنتجات',categories:'التصنيفات',sections:'أقسام الرئيسية',banners:'البنرات',pages:'الصفحات',links:'القوائم',media:'الوسائط'};
+  const groups={products:'المنتجات',collections:'مجموعات المنتجات',categories:'التصنيفات',sections:'أقسام الصفحات',banners:'البنرات',pages:'الصفحات',links:'القوائم',media:'الوسائط'};
   const fields={shortDescription:'وصف مختصر',nameEn:'الاسم الإنجليزي',descriptionEn:'الوصف الإنجليزي',notes:'ملاحظات',technicalSpecs:'المواصفات الفنية',options:'الخيارات',currency:'العملة',supplierId:'المورد',stock:'المخزون',name:'الاسم',title:'العنوان',description:'الوصف',subtitle:'النص الوصفي',price:'السعر الأساسي',moq:'الحد الأدنى',status:'الحالة',category:'التصنيف',sku:'رمز المنتج',image:'الصورة الأساسية',images:'صور المنتج',video:'رابط الفيديو',specs:'المواصفات',colors:'الألوان',sizes:'المقاسات',country:'بلد التوريد',supplier:'المورد',leadDays:'مدة التجهيز',tiers:'شرائح الجملة',pricingMode:'طريقة التسعير',productIds:'المنتجات وترتيبها',collectionId:'مجموعة المنتجات',limit:'عدد المنتجات',visible:'الظهور',active:'التفعيل',channel:'قناة الظهور',button:'نص الزر',content:'المحتوى',target:'وجهة الرابط',parent:'التصنيف الأب',start:'بداية العرض',end:'نهاية العرض',logo:'الشعار',color:'اللون الأساسي',round:'استدارة الإطار',announcement:'الشريط العلوي',tagline:'الوصف المختصر'};
   function differences(before,after){
     const result=[];
