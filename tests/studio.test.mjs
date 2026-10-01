@@ -9,6 +9,8 @@ const order=()=>({orderFlowVersion:2,orderStage:0,currency:'SAR',cartTotal:50,ca
 test('nine stages enforce availability, payment and shipment details; closed orders are immutable',()=>{
  let o=order();assert.throws(()=>changeOrder(o,{action:'next'}));
  o=changeOrder(o,{action:'edit',lines:[{interestId:'line-1',quantity:6,unitPrice:9,availabilityConfirmed:true}]});assert.equal(o.cartTotal,54);
+ assert.throws(()=>changeOrder(o,{action:'next',paymentMessage:'Transfer the approved amount'}));
+ o=changeOrder(o,{action:'verify-availability'});assert.equal(o.orderStage,0);assert.ok(o.availabilityVerifiedAt);assert.equal(o.paymentAmount,undefined);
  o=changeOrder(o,{action:'next',paymentMessage:'Transfer the approved amount'});assert.equal(o.orderStage,1);assert.equal(o.paymentAmount,54);
  assert.throws(()=>changeOrder(o,{action:'next'}));assert.throws(()=>changeOrder(o,{action:'edit',lines:[]}));
  assert.throws(()=>changeOrder(o,{action:'confirm-payment',amount:55,currency:'SAR',reference:'bank-123'}));
@@ -55,6 +57,8 @@ test('cart → availability → payment → delivery uses atomic parent/line wri
  await assignSupplier(admin,{collection:'requests',id:row.id,version:row.version,supplierId:'supplier-1'});row=db.state.requests[0];
  await manageOrder(admin,{id:row.id,version:row.version,action:'edit',lines:row.data.cartItems.map(l=>({...l,availabilityConfirmed:true}))});row=db.state.requests[0];
  await assert.rejects(()=>manageOrder(admin,{id:row.id,version:1,action:'next'}),e=>e.status===409);
+ await assert.rejects(()=>manageOrder(admin,{id:row.id,version:row.version,action:'next',bankAccountId:'bank-1',paymentMessage:'Pay now'}),e=>e.status===409);
+ await manageOrder(admin,{id:row.id,version:row.version,action:'verify-availability'});row=db.state.requests[0];assert.equal(row.data.orderStage,0);assert.ok(row.data.availabilityVerifiedAt);assert.equal(row.data.proformaInvoice,undefined);assert.equal(db.invoices,0);
  await manageOrder(admin,{id:row.id,version:row.version,action:'next',bankAccountId:'bank-1',paymentMessage:'Pay now'});row=db.state.requests[0];assert.equal(row.data.orderStage,1);assert.ok(row.data.proformaInvoice);
  await manageOrder(admin,{id:row.id,version:row.version,action:'confirm-payment',amount:80,currency:'SAR',reference:'BANK-1'});row=db.state.requests[0];assert.equal(row.data.orderStage,2);assert.equal(db.state.interests[0].data.paymentStatus,'confirmed');assert.equal(row.data.finalInvoice.status,'PAID');
  for(let stage=3;stage<=8;stage++){if(stage===4){await manageOrder(admin,{id:row.id,version:row.version,action:'edit',carrier:'Carrier',trackingNumber:'X123'});row=db.state.requests[0];}await manageOrder(admin,{id:row.id,version:row.version,action:'next'});row=db.state.requests[0];assert.equal(row.data.orderStage,stage);assert.equal(db.state.interests[0].data.orderStage,stage);}
