@@ -46,32 +46,6 @@ async function gatewayRequest({apiKey,payload,timeoutMs}){
   }
   throw lastError||new Error('AI Gateway unavailable');
 }
-export async function aiGatewaySmokeTest(){
-  const apiKey=gatewayAuthToken();
-  if(!apiKey)return {ok:false,stage:'auth'};
-  try{
-    const textResult=await gatewayRequest({
-      apiKey,timeoutMs:15000,
-      payload:{model:String(process.env.AI_CHAT_MODEL||DEFAULT_MODEL),messages:[{role:'user',content:'Reply with OK only.'}],max_tokens:8,temperature:0,reasoning:{effort:'none'}}
-    });
-    const textData=await textResult.response.json().catch(()=>null);
-    const textOk=textResult.response.ok&&!!extractReply(textData);
-    const visionResult=await gatewayRequest({
-      apiKey,timeoutMs:18000,
-      payload:{
-        model:String(process.env.AI_CHAT_MODEL||DEFAULT_MODEL),
-        messages:[{role:'user',content:[
-          {type:'text',text:'Look at this image and reply with the single word OK.'},
-          {type:'image_url',image_url:{url:'https://assets.vercel.com/image/upload/v1662130559/nextjs/Icon_light_background.png',detail:'low'}}
-        ]}],
-        max_tokens:8,temperature:0,reasoning:{effort:'none'}
-      }
-    });
-    const visionData=await visionResult.response.json().catch(()=>null);
-    const visionOk=visionResult.response.ok&&!!extractReply(visionData);
-    return {ok:textOk&&visionOk,text:{ok:textOk,status:textResult.response.status,model:textResult.model},vision:{ok:visionOk,status:visionResult.response.status,model:visionResult.model}};
-  }catch{return {ok:false,status:0,stage:'network'};}
-}
 function safeImage(value){
   if(!value)return '';
   const text=String(value);
