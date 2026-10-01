@@ -63,10 +63,6 @@ export async function manageOrder(user,body){
   const row=await one('requests',body.id);assert(row&&!row.data.deletedAt,404);assert(row.version===body.version,409,'تغيّر الطلب؛ حدّث الصفحة');
   const now=new Date().toISOString(),data=changeOrder(row.data,body,now),children=await db('interests',`data->>cartOrderId=eq.${encodeURIComponent(row.id)}`);
   assert(children.length===data.cartItems.length,409,'منتجات الطلب غير متطابقة');
-  if(row.data.requiresAssignment&&['verify-availability','next'].includes(body.action)&&row.data.orderStage===0){
-    assert(children.every(c=>c.data.assignedSupplierId&&c.data.supplySourceId&&c.data.supplierOrderStatus!=='cannot_fulfill'),409,'حدد مصدر توريد قادرًا على التنفيذ لكل منتج');
-    for(const child of children){const line=data.cartItems.find(l=>l.interestId===child.id),terms=child.data.supplyTerms;assert(terms&&line.quantity>=terms.moq&&line.quantity<=terms.stock,409,'تحقق من كمية المنتج وحدود مصدر التوريد');const supplier=await one('profiles',child.data.assignedSupplierId);assert(supplier&&supplier.role==='supplier'&&!supplier.blocked_at&&!supplier.deleted_at,409,'المورد غير فعال');}
-  }
   const customer=await one('profiles',row.owner_id);
   if(row.data.orderStage===0&&data.orderStage===1){
     const settings=await one('settings','site'),account=(settings.data.bankAccounts||[]).find(a=>a.id===body.bankAccountId&&a.active!==false);assert(account&&String(account.currency).toUpperCase()===data.currency,400,'اختر حسابًا بنفس عملة الطلب');
