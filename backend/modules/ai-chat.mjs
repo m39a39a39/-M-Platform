@@ -18,6 +18,32 @@ function gatewayAuthToken(){
   }catch{}
   return process.env.VERCEL_OIDC_TOKEN||'';
 }
+export async function aiGatewaySmokeTest(){
+  const apiKey=gatewayAuthToken();
+  if(!apiKey)return {ok:false,stage:'auth'};
+  try{
+    const response=await fetch(GATEWAY_URL,{
+      method:'POST',
+      headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:String(process.env.AI_CHAT_MODEL||DEFAULT_MODEL),
+        messages:[{role:'user',content:'Reply with OK only.'}],
+        max_tokens:8,
+        temperature:0,
+        reasoning:{effort:'none'}
+      }),
+      signal:AbortSignal.timeout(15000)
+    });
+    if(!response.ok){
+      const failed=await response.json().catch(()=>null);
+      return {ok:false,stage:'gateway',status:response.status,type:String(failed?.type||failed?.error?.type||'').slice(0,120)};
+    }
+    const data=await response.json().catch(()=>null);
+    return {ok:!!extractReply(data),stage:'gateway',status:response.status};
+  }catch{
+    return {ok:false,stage:'network'};
+  }
+}
 function safeImage(value){
   if(!value)return '';
   const text=String(value);
