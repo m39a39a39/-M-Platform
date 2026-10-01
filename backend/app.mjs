@@ -18,7 +18,7 @@ import {submitPaymentReceipt,reviewPaymentReceipt} from './modules/payments.mjs'
 import {manageOrder} from './modules/order-management.mjs';
 import {saveStudio} from './modules/studio.mjs';
 import {createCartOrder} from './modules/cart-orders.mjs';
-import {aiChat,aiGatewayHealthCheck} from './modules/ai-chat.mjs';
+import {aiChat} from './modules/ai-chat.mjs';
 import {customerConversation,adminConversationList,adminConversationRead,adminConversationAction} from './modules/ai-conversations.mjs';
 
 const NATIVE_ORIGINS=new Set(['capacitor://localhost','http://localhost','https://localhost']);
@@ -68,9 +68,8 @@ export default async function handler(req,res){
     if(path.startsWith('/api/auth/')){
       assert(req.method==='POST',405);result=await authRoute(path.split('/').at(-1),req,res,body);
     }else{
-      const user=await identify(req,res,path==='/api/state'||path==='/api/ai-health'||path==='/api/ai-chat'||path==='/api/ai-conversation'&&req.method==='GET'||path.startsWith('/api/media/')&&req.method==='GET');
+      const user=await identify(req,res,path==='/api/state'||path==='/api/ai-chat'||path==='/api/ai-conversation'&&req.method==='GET'||path.startsWith('/api/media/')&&req.method==='GET');
       if(path==='/api/state'){assert(req.method==='GET',405);result=await snapshot(user);}
-      else if(path==='/api/ai-health'){assert(req.method==='GET',405);result=await aiGatewayHealthCheck();}
       else if(path==='/api/ai-chat'){assert(req.method==='POST',405);result=await aiChat(user,body,req);}
       else if(path==='/api/ai-conversation'){
         assert(req.method==='GET',405);result=await customerConversation(user,{conversationId:url.searchParams.get('conversationId')||'',guestKey:url.searchParams.get('guestKey')||'',language:url.searchParams.get('language')||'ar'});
