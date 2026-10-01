@@ -201,7 +201,7 @@ function reconcileCart(){
 function updateCartBadge(){
   const btn=$('headerCartBtn'),badge=$('headerCartCount'),client=currentUser?.role==='client';
   if(btn)btn.classList.toggle('hidden',!client||!homeConfig(platformState?.settings).showCart);
-  document.querySelectorAll('#customer-storefront [data-store-cart-count]').forEach(el=>el.textContent=String(cartItems.length));
+  document.querySelectorAll('#customer-storefront [data-store-cart-count], #site-header [data-store-cart-count]').forEach(el=>el.textContent=String(cartItems.length));
   const count=cartItems.length;
   if(badge){badge.textContent=count>99?'99+':String(count);badge.classList.toggle('hidden',!client||!count);}
 }
@@ -675,7 +675,7 @@ function renderHome(){
     const h=homeConfig(platformState.settings);
     const catalog=`<section class="ready-products-section">${h.showSearch?productSearchBar():''}<div id="readyProductFilters">${productFiltersHtml()}</div><div id="readyProductsGrid" class="public-offers-grid">${products.grid}</div><div id="readyProductsPagination">${products.pagination}</div></section>`;
     $('screen').innerHTML=`<div id="customer-storefront">${renderStorefront(platformState,Capacitor.isNativePlatform()?'app':'web',{money,chrome:false,client:true,catalog,cartCount:cartItems.length})}</div>`;
-    bindStorefront($('customer-storefront'),platformState,{chrome:false,money,hydrate:hydrateImages,product:openPublicOffer,add:id=>{try{const p=platformState.publicOffers.find(p=>p.id===id);addToCart(p,(Number(p.moq)||1)+(cartItems.find(x=>x.offerId===id)?.quantity||0));showToast(tr('تمت الإضافة إلى السلة','Added to cart'));}catch(e){showToast(e.message);}},page:(title,html)=>openModal(title,'',html),category:id=>{readyCategory=id;renderHome();},catalog:()=>document.getElementById('store-catalog')?.scrollIntoView({behavior:'smooth'}),action:action=>{if(action==='cart')openCart();if(action==='request')openNewRequest();}});
+    bindStorefront($('customer-storefront'),platformState,{chrome:false,observe:aiChatSignal,money,hydrate:hydrateImages,product:openPublicOffer,add:(id,quantity)=>{try{const p=platformState.publicOffers.find(p=>p.id===id);addToCart(p,(quantity??(Number(p.moq)||1))+(cartItems.find(x=>x.offerId===id)?.quantity||0));showToast(tr('تمت الإضافة إلى السلة','Added to cart'));}catch(e){showToast(e.message);}},page:(title,html)=>openModal(title,'',html),category:id=>{readyCategory=id;renderHome();},catalog:()=>document.getElementById('store-catalog')?.scrollIntoView({behavior:'smooth'}),action:action=>{if(action==='cart')openCart();if(action==='request')openNewRequest();}});
     updateCartBadge();
   }else if(role==='supplier'){
     const quotes=platformState.quotes||[],invites=(platformState.requests||[]).filter(r=>!supplierRequestAnswered(r,quotes));
@@ -744,7 +744,7 @@ function renderAccount(){
   $('screen').innerHTML=pageHeader(t('account'))+`<section class="profile-card"><div class="avatar">${esc((u.name||u.company||u.email||'M').charAt(0).toUpperCase())}</div><h2>${esc(u.name||u.company||'M Platform')}</h2><p>${esc(t(u.role))}</p><dl><div><dt>${esc(t('email'))}</dt><dd>${esc(u.email||'—')}</dd></div>${u.company?`<div><dt>${tr('الشركة','Company')}</dt><dd>${esc(u.company)}</dd></div>`:''}${u.country?`<div><dt>${esc(t('country'))}</dt><dd>${esc(u.country)}</dd></div>`:''}</dl>${settingsGroup}<p class="session-note">${esc(t('sessionNote'))}</p><button class="danger-btn" data-action="logout">${esc(t('logout'))}</button></section>`;
 }
 function renderAdminCollection(kind){const rows=kind==='requests'?(platformState.requests||[]):[...(platformState.quotes||[]),...(platformState.publicOffers||[])];$('screen').innerHTML=pageHeader(kind==='requests'?t('requests'):t('offers'),t('adminMobile'))+`<div class="list-stack">${rows.slice(0,50).map(x=>itemCard(x,{subtitle:descriptionOf(x),badge:cardBadge(x.status),meta:`#${ref(x)} · ${date(x.createdAt)}`})).join('')||empty()}</div>`;}
-function renderScreen(){if(!currentUser||!platformState)return;updateShell();const route=storeRoute();if(activeScreen==='home'&&(route.page||route.category)&&currentUser.role!=='client'){const isCatalog=route.category||route.page==='products';$('screen').innerHTML=renderStoreRoute(platformState,route,{chrome:false,money});if(isCatalog&&currentUser.role==='supplier'){const host=$('screen').querySelector('[data-store-catalog-slot]');mountSupplierCatalog(host,{state:platformState,request,language:lang,card:p=>itemCard(p,{subtitle:descriptionOf(p),action:`data-public-offer="${esc(p.id)}"`}),hydrate:hydrateImages,sourceButton:p=>`<button class="secondary-btn" data-supply-product="${esc(p.id)}">${tr('أستطيع توريد هذا المنتج','I can supply this product')}</button>`,fixedCategory:route.category});}else bindStorefront($('screen'),platformState,{chrome:false,money,hydrate:hydrateImages,product:openPublicOffer});hydrateImages($('screen'));return;}if(renderAdminScreen(activeScreen))return;if(activeScreen==='home')renderHome();else if(activeScreen==='orders')renderSupplierOrders();else if(activeScreen==='requests')renderRequests();else if(activeScreen==='offers')renderOffers();else if(activeScreen==='notifications')renderNotifications();else renderAccount();hydrateImages($('screen'));}
+function renderScreen(){if(!currentUser||!platformState)return;updateShell();const route=storeRoute();if(activeScreen==='home'&&(route.page||route.category||route.product||route.q)&&currentUser.role!=='client'){const isCatalog=route.category||route.page==='products';$('screen').innerHTML=renderStoreRoute(platformState,route,{chrome:false,money});if(isCatalog&&currentUser.role==='supplier'){const host=$('screen').querySelector('[data-store-catalog-slot]');mountSupplierCatalog(host,{state:platformState,request,language:lang,card:p=>itemCard(p,{subtitle:descriptionOf(p),action:`data-public-offer="${esc(p.id)}"`}),hydrate:hydrateImages,sourceButton:p=>`<button class="secondary-btn" data-supply-product="${esc(p.id)}">${tr('أستطيع توريد هذا المنتج','I can supply this product')}</button>`,fixedCategory:route.category});}else bindStorefront($('screen'),platformState,{chrome:false,money,hydrate:hydrateImages,product:openPublicOffer});hydrateImages($('screen'));return;}if(renderAdminScreen(activeScreen))return;if(activeScreen==='home')renderHome();else if(activeScreen==='orders')renderSupplierOrders();else if(activeScreen==='requests')renderRequests();else if(activeScreen==='offers')renderOffers();else if(activeScreen==='notifications')renderNotifications();else renderAccount();hydrateImages($('screen'));}
 
 function quoteTotal(q,r){
   const unit=Number(q?.unitPrice),quantity=Number(r?.quantity);
@@ -835,6 +835,7 @@ async function offerSupply(productId){
  $('supply-source-form').onsubmit=async e=>{e.preventDefault();const b=e.target.querySelector('button');b.disabled=true;try{await request('/api/v1/supply-sources/submit',{method:'POST',auth:true,body:{productId,...(source?{sourceId:source.id,version:source.version}:{}),terms:Object.fromEntries(new FormData(e.target))}});await loadData({render:false});closeModal();activeScreen='offers';activeSub='sources';renderScreen();showToast('تم إرسال عرض التوريد للمراجعة');}catch(error){$('supply-source-message').textContent=error.message;b.disabled=false;}};
 }
 async function openPublicOffer(offerId){
+  if(currentUser?.role==='client'){location.assign('/?product='+encodeURIComponent(offerId));return;}
   let o=(platformState.publicOffers||[]).find(x=>x.id===offerId);if(currentUser?.role==='supplier')try{o=await supplierProduct(offerId,request);}catch(error){showToast(error.message);return;}if(!o)return;
   if(currentUser?.role==='client')aiChatSignal('product_view',{productSku:o.sku||'',productTitle:titleOf(o),price:Number(o.unitPrice)||0,currency:o.currency||'',moq:Number(o.moq)||0});
   const cartItem=cartItems.find(x=>x.offerId===o.id);
@@ -1325,7 +1326,7 @@ async function logout(){
 async function enterWorkspace(){
   await loadData({render:false});
   if(!currentUser)return;
-  if(currentUser.role==='admin'&&!storeRoute().page&&!storeRoute().category&&!['account','notifications'].includes(new URLSearchParams(location.search).get('screen'))){location.replace('/studio.html');return;}
+  if(currentUser.role==='admin'&&!storeRoute().page&&!storeRoute().category&&!storeRoute().product&&!storeRoute().q&&!['account','notifications'].includes(new URLSearchParams(location.search).get('screen'))){location.replace('/studio.html');return;}
   const postAuth=takePostAuthAction();
   showView('appView');const requestedScreen=new URLSearchParams(location.search).get('screen');activeScreen=['account','notifications'].includes(requestedScreen)?requestedScreen:'home';activeSub='primary';renderScreen();syncClientAiChat();
   if(currentUser.role==='client'&&postAuth==='open-cart')setTimeout(()=>openCart(),0);
@@ -1464,3 +1465,4 @@ App.addListener('appStateChange',({isActive})=>{
   }
 });
 (async function boot(){await languageReady;lang=getLanguage();applyLanguage();setRegisterRole('client');applyResetLanguage();if(recoveryAccessToken()){showView('resetView');return;}if(new URLSearchParams(location.search).get('store')==='1'){showView('guestView');return;}await resumeSession();})();
+

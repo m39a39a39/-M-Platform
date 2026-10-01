@@ -1,6 +1,6 @@
 import {policyTemplates} from './catalog-controls.mjs';
 // The only homepage model. An empty sections array means an intentionally empty page.
-export const STORE_OPTIONS={showSearch:'البحث',showCategories:'فلاتر التصنيفات',showCountries:'فلاتر الدول',showCart:'السلة',showPrices:'الأسعار',showStock:'المخزون',showLogin:'تسجيل الدخول',showCustomerRegister:'تسجيل عميل',showSupplierRegister:'تسجيل مورد'};
+export const STORE_OPTIONS={showNavigation:'قوائم الهيدر',showSearch:'البحث',showCategories:'فلاتر التصنيفات',showCountries:'فلاتر الدول',showCart:'السلة',showPrices:'الأسعار',showStock:'المخزون',showLogin:'تسجيل الدخول',showCustomerRegister:'تسجيل عميل',showSupplierRegister:'تسجيل مورد'};
 export const defaultOptions=()=>Object.fromEntries(Object.keys(STORE_OPTIONS).map(k=>[k,true]));
 export const homeConfig=settings=>({...defaultOptions(),...settings?.storefront?.options});
 export const defaultSections=()=>[
@@ -18,6 +18,8 @@ export function selectSectionProducts(offers,s,collections=[]){
  else if(mode==='featured')rows=(s.productIds||[]).map(id=>rows.find(p=>p.id===id)).filter(Boolean);
  else if(mode==='collection'){const c=collections.find(c=>c.id===s.collectionId&&c.active);rows=(c?.productIds||[]).map(id=>rows.find(p=>p.id===id)).filter(Boolean);}
  else rows=[...rows].sort((a,b)=>String(b.createdAt||b.updatedAt||'').localeCompare(String(a.createdAt||a.updatedAt||''))||a.id.localeCompare(b.id));
+ if(s.productSort==='name')rows=[...rows].sort((a,b)=>(a.translation?.titleAr||a.product||'').localeCompare(b.translation?.titleAr||b.product||''));
+ if(s.productSort==='price')rows=[...rows].sort((a,b)=>String(a.currency).localeCompare(String(b.currency))||Number(a.unitPrice)-Number(b.unitPrice));
  return rows.slice(0,s.limit||6);
 }
 export function safeStoreLink(value){return typeof value==='string'&&(!value||/^https:\/\/[^\s<>"'\\]+$/i.test(value)||/^\/(?!\/)[^\s<>"'\\]*$/.test(value)||/^#[\w-]+$/.test(value));}

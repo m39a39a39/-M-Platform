@@ -2,12 +2,12 @@ export const CATALOG_CONTROLS={showProductImage:'صورة المنتج',showOrig
 export const catalogDefaults=()=>({...Object.fromEntries(Object.keys(CATALOG_CONTROLS).map(k=>[k,true])),categoryIds:[],subcategoryIds:[],countryIds:[],pageSize:20,sort:'newest',searchPosition:'before',filterLayout:'top'});
 export function catalogConfig(settings){const s=settings?.storefront?.sections?.find(s=>s.type==='catalog')||{};return {...catalogDefaults(),...settings?.storefront?.options,...s.catalog};}
 export function selectedTaxonomy(rows,ids){return (ids||[]).map(id=>(rows||[]).find(c=>c.id===id&&c.active!==false)).filter(Boolean);}
-export function catalogProducts(offers,filters={}){
+export function catalogProducts(offers,filters={},settings={}){
  let rows=offers.filter(p=>p.status==='published'&&!p.deletedAt&&!p.studioArchived);
  if(filters.category)rows=rows.filter(p=>p.categoryId===filters.category);
  if(filters.subcategory)rows=rows.filter(p=>p.subcategoryId===filters.subcategory);
  if(filters.country)rows=rows.filter(p=>p.country===filters.country);
- const q=String(filters.q||'').trim().toLowerCase();if(q)rows=rows.filter(p=>[p.product,p.sku,p.displayNo,p.translation?.titleAr,p.translation?.titleEn].join(' ').toLowerCase().includes(q));
+ const q=String(filters.q||'').trim().toLowerCase();if(q)rows=rows.filter(p=>[p.product,p.sku,p.displayNo,p.translation?.titleAr,p.translation?.titleEn,p.keywords,p.tags,p.shortDescription,...[...(settings.categories||[]),...(settings.subcategories||[])].filter(c=>[p.categoryId,p.subcategoryId].includes(c.id)).flatMap(c=>[c.nameAr,c.nameEn])].join(' ').toLowerCase().includes(q));
  const lang=filters.language||'ar',name=p=>p.translation?.[lang==='en'?'titleEn':'titleAr']||p.product||'';
  return [...rows].sort(filters.sort==='name'?(a,b)=>name(a).localeCompare(name(b),lang):filters.sort==='price-asc'?(a,b)=>String(a.currency).localeCompare(String(b.currency))||Number(a.unitPrice)-Number(b.unitPrice):filters.sort==='price-desc'?(a,b)=>String(a.currency).localeCompare(String(b.currency))||Number(b.unitPrice)-Number(a.unitPrice):(a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))||String(a.id).localeCompare(String(b.id)));
 }
