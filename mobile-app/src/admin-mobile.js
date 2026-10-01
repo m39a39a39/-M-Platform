@@ -9,7 +9,7 @@ let selectedProducts=new Set();
 const searches=new Map(),mediaCache=new Map(),mediaTasks=new Map();
 const MEDIA_CONCURRENCY=6;
 let reloadWorkspace=async()=>{},adapter=null;
-export function configureAdmin({reload,bridge=null}) { reloadWorkspace=reload; adapter=bridge; }
+export function configureAdmin({reload,bridge=null,modal:modalFn=null,close:closeFn=null,toast:toastFn=null,view:viewFn=null}) { reloadWorkspace=reload; adapter=bridge||((modalFn||closeFn||toastFn||viewFn)?{modal:modalFn,close:closeFn,toast:toastFn,view:viewFn}:null); }
 export function resetAdmin() {
   clearTimeout(timer);clearTimeout(chatTimer);chatTimer=null; state=null; revision++;
   requestFilter='all'; offerTab='pending'; chatRows=[]; searches.clear(); selectedProducts.clear();
