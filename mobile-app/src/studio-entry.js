@@ -11,6 +11,7 @@ window.MStudioImages={filesToCompressedSources};
 window.MStorefront=storefront;window.MAdmin=admin;
 import {session} from './session.js';
 window.MStudioSession=session;
+const STUDIO_ASSET_VERSION='20261001-order-availability-v2';
 for(const file of ['domain.js','app.js','studio.js','live.js','unified.js','supply-bulk.js','catalog-bulk.js','storefront-controls.js','advanced.js','theme-editor.js']){
-  await new Promise((resolve,reject)=>{const script=document.createElement('script');script.src='/studio/'+file;script.onload=resolve;script.onerror=reject;document.body.append(script);});
+  await new Promise((resolve,reject)=>{const script=document.createElement('script');script.src='/studio/'+file+'?v='+STUDIO_ASSET_VERSION;script.onload=resolve;script.onerror=reject;document.body.append(script);});
 }
