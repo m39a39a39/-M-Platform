@@ -121,3 +121,27 @@
 
 
 .sf-header-search{color:#193d43}.sf-header-search button{color:inherit!important}
+
+
+/* Product purchase bar refresh */
+.sf-product-purchase .sf-buy-bar{align-items:stretch;gap:16px}
+.sf-product-purchase .sf-buy-total{display:grid;gap:4px;align-content:center}
+.sf-product-purchase .sf-buy-total small{color:var(--store-muted,#65756f);font-weight:600}
+.sf-product-purchase .sf-buy-actions{display:flex;align-items:stretch;gap:8px;flex:1}
+.sf-product-purchase .sf-add-to-cart{flex:1;min-height:54px;margin:0!important;border-color:var(--store-accent)!important;border-radius:14px!important;background:var(--store-accent)!important;color:#fff!important;font-weight:800;box-shadow:0 10px 24px rgba(11,34,54,.14)}
+.sf-product-purchase .sf-add-to-cart:hover{filter:brightness(.96);background:var(--store-accent)!important}
+.sf-product-purchase .sf-add-to-cart.is-added{background:#177245!important;border-color:#177245!important}
+.sf-product-purchase .sf-add-to-cart:disabled{opacity:1;cursor:default}
+.sf-product-purchase .sf-view-cart{min-height:54px;border-radius:14px!important;padding-inline:18px;font-weight:700;background:#fff!important;border-color:#cbd7d2!important}
+.sf-product-purchase .sf-view-cart:not([hidden]){display:inline-flex}
+.sf-product-purchase [data-product-message]:empty{display:none}
+@media(max-width:650px){
+  .sf-product-page{padding-bottom:170px!important}
+  .sf-product-page .sf-buy-bar{position:fixed;inset-inline:0;bottom:0;z-index:1100;display:grid;grid-template-columns:1fr;gap:10px;padding:12px max(14px,env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left));background:rgba(255,255,255,.98);border-top:1px solid #dce6e2;box-shadow:0 -12px 34px rgba(11,34,54,.12);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+  .sf-product-page .sf-buy-total{display:flex;align-items:center;justify-content:space-between;gap:16px}
+  .sf-product-page .sf-buy-total strong{font-size:24px}
+  .sf-product-page .sf-buy-actions{width:100%;display:flex;gap:8px}
+  .sf-product-page .sf-buy-actions .sf-add-to-cart{min-height:56px}
+  .sf-product-page .sf-view-cart:not([hidden]){min-height:56px;flex:0 0 auto}
+  body:has(.sf-product-page) .m-ai-chat{bottom:calc(166px + var(--safe-bottom,0px))}
+}
