@@ -5,7 +5,7 @@ document.addEventListener('toggle',e=>{if(e.target.matches?.('[data-inspector-gr
 function parseSectionItems(value=''){
  return String(value||'').split('\n').filter(Boolean).map(line=>{const [title,...desc]=line.split('|');return {title:title||'',desc:desc.join('|')||''};});
 }
-function serializeSectionItems(rows){return rows.filter(r=>r.title.trim()||r.desc.trim()).map(r=>`${r.title.trim()}|${r.desc.trim()}`).join('\n');}
+function serializeSectionItems(rows){return rows.map(r=>`${r.title.trim()}|${r.desc.trim()}`).join('\n');}
 function sectionItemsEditor(s){
  const ar=parseSectionItems(s.items),en=parseSectionItems(s.itemsEn),count=Math.max(ar.length,en.length,1);
  while(ar.length<count)ar.push({title:'',desc:''});while(en.length<count)en.push({title:'',desc:''});
