@@ -2320,8 +2320,9 @@ body.image-viewer-open {
 }
 
 /* Global overlay stacking: keep feedback and active dialogs above refreshed page content */
-.modal{z-index:1000;isolation:isolate}
+.modal{z-index:2000;isolation:isolate}
 .modal-backdrop{z-index:0}
 .modal-sheet{z-index:1}
-.toast{z-index:1100}
+.toast{z-index:2100}
 body:has(.modal:not(.hidden)){overflow:hidden}
+body:has(#modal:not(.hidden)) .sf-product-page .sf-buy-bar{display:none!important}
