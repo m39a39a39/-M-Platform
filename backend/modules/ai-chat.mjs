@@ -3,20 +3,23 @@ import {assert,HttpError} from '../lib/supabase.mjs';
 import {createHash} from 'node:crypto';
 import {ensureConversation,saveCustomerMessage,saveAiMessage} from './ai-conversations.mjs';
 
-const GATEWAY_URL='https://ai-gateway.vercel.sh/v1/chat/completions';
-const DEFAULT_MODEL='openai/gpt-5.6-luna';
+const OPENAI_URL='https://api.openai.com/v1/chat/completions';
+const DEFAULT_MODEL='gpt-5.6-luna';
 const usageWindows=new Map();
 const RATE_WINDOW_MS=10*60*1000;
 const IMAGE_MAX_CHARS=700000;
 
-function gatewayAuthToken(){
-  if(process.env.AI_GATEWAY_API_KEY)return process.env.AI_GATEWAY_API_KEY;
-  try{
-    const requestContext=globalThis[Symbol.for('@vercel/request-context')]?.get?.();
-    const oidc=requestContext?.headers?.['x-vercel-oidc-token'];
-    if(oidc)return oidc;
-  }catch{}
-  return process.env.VERCEL_OIDC_TOKEN||'';
+function openAiApiKey(){
+  return String(process.env.OPENAI_API_KEY||'').trim();
+}
+async function openAiRequest({apiKey,payload,timeoutMs=26000}){
+  const response=await fetch(OPENAI_URL,{
+    method:'POST',
+    headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},
+    body:JSON.stringify(payload),
+    signal:AbortSignal.timeout(timeoutMs)
+  });
+  return {response};
 }
 function safeImage(value){
   if(!value)return '';
@@ -187,16 +190,15 @@ async function analyzeProductImage({image,message,language,apiKey,model,gatewayU
     },
     max_tokens:220,
     temperature:0.1,
-    reasoning:{effort:'none'},
-    providerOptions:{gateway:{tags:['feature:m-platform-image-search'],user:gatewayUser}}
+    reasoning:{effort:'none'}
   };
   let response;
   try{
-    ({response}=await gatewayRequest({apiKey,payload,timeoutMs:22000}));
+    ({response}=await openAiRequest({apiKey,payload,timeoutMs:22000}));
   }catch{
     throw new HttpError(502,'تعذر تحليل الصورة الآن. / Could not analyze the image.');
   }
-  if(!response.ok)throw gatewayError(response.status);
+  if(!response.ok)throw aiProviderError(response.status);
   let data;try{data=await response.json();}catch{throw new HttpError(502,'استجابة تحليل الصورة غير صالحة. / Invalid image analysis response.');}
   const raw=extractReply(data);
   const parsed=parseJsonObject(raw);
@@ -209,7 +211,7 @@ async function analyzeProductImage({image,message,language,apiKey,model,gatewayU
   };
 }
 
-function gatewayError(status){
+function aiProviderError(status){
   if(status===429)return new HttpError(429,'تم الوصول إلى حد الاستخدام مؤقتًا. حاول بعد قليل. / AI usage limit reached. Try again shortly.');
   if(status===402)return new HttpError(503,'خدمة المساعد الذكي متوقفة مؤقتًا بسبب حد الميزانية. / AI assistant budget limit reached.');
   if(status===401||status===403)return new HttpError(503,'إعداد خدمة الذكاء الاصطناعي يحتاج مراجعة. / AI service configuration needs review.');
@@ -218,9 +220,9 @@ function gatewayError(status){
 
 export async function aiChat(user,body={},req=null){
   assert(!user||user.role==='client',403,'المساعد الذكي متاح للعملاء والمتصفحين فقط / AI assistant is for customers and visitors only');
-  const image=safeImage(body.image);
+  const image='';
   const message=clamp(body.message,2000);
-  assert(message||image,400,'اكتب رسالتك أو أضف صورة / Enter a message or add an image');
+  assert(message,400,'اكتب رسالتك / Enter a message');
   const language=body.language==='en'?'en':'ar';
   const marketingSignal=safeMarketingSignal(body.marketingSignal);
   const proactive=!!marketingSignal;
@@ -233,9 +235,9 @@ export async function aiChat(user,body={},req=null){
     if(conversation.status==='human')return {conversationId:conversation.id,humanMode:true};
   }
   const gatewayUser=enforceRateLimit(user,req);
-  const apiKey=gatewayAuthToken();
-  if(!apiKey)throw new HttpError(503,'لم يتم تفعيل خدمة الذكاء الاصطناعي بعد. / AI service is not configured yet.');
-  const model=String(process.env.AI_CHAT_MODEL||DEFAULT_MODEL);
+  const apiKey=openAiApiKey();
+  if(!apiKey)throw new HttpError(503,'لم يتم تفعيل مفتاح OpenAI بعد. / OpenAI API key is not configured yet.');
+  const model=String(process.env.OPENAI_CHAT_MODEL||DEFAULT_MODEL).replace(/^openai\//,'');
   const imageSearch=image?await analyzeProductImage({image,message,language,apiKey,model,gatewayUser}):null;
   if(imageSearch?.confidence==='none'||imageSearch&&!imageSearch.query){
     const reply=language==='ar'
@@ -289,16 +291,15 @@ If PLATFORM_CONTEXT_JSON contains shoppingSignal, write a very short proactive m
     ],
     max_tokens:700,
     temperature:0.2,
-    reasoning:{effort:'none'},
-    providerOptions:{gateway:{tags:['feature:m-platform-ai-chat'],user:gatewayUser}}
+    reasoning:{effort:'none'}
   };
   let response;
   try{
-    ({response}=await gatewayRequest({apiKey,payload,timeoutMs:26000}));
+    ({response}=await openAiRequest({apiKey,payload,timeoutMs:26000}));
   }catch{
     throw new HttpError(502,'تعذر الاتصال بالمساعد الذكي. / Could not reach AI assistant.');
   }
-  if(!response.ok)throw gatewayError(response.status);
+  if(!response.ok)throw aiProviderError(response.status);
   let data;try{data=await response.json();}catch{throw new HttpError(502,'استجابة المساعد غير صالحة. / Invalid AI response.');}
   const reply=extractReply(data);
   if(!reply)throw new HttpError(502,'لم يصل رد من المساعد الذكي. / Empty AI response.');
