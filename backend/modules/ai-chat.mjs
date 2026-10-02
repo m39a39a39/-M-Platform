@@ -21,29 +21,6 @@ async function openAiRequest({apiKey,payload,timeoutMs=26000}){
   });
   return {response};
 }
-export async function openAiHealthCheck(){
-  const apiKey=openAiApiKey();
-  if(!apiKey)return {ok:false,stage:'key'};
-  try{
-    const {response}=await openAiRequest({
-      apiKey,
-      payload:{
-        model:DEFAULT_MODEL,
-        messages:[{role:'user',content:'Reply with OK only.'}],
-        max_tokens:8,
-        temperature:0,
-        reasoning:{effort:'none'}
-      },
-      timeoutMs:15000
-    });
-    if(!response.ok){
-      const failed=await response.json().catch(()=>null);
-      return {ok:false,stage:'openai',status:response.status,type:String(failed?.error?.type||'').slice(0,100),code:String(failed?.error?.code||'').slice(0,100),detail:String(failed?.error?.message||'').slice(0,240)};
-    }
-    const data=await response.json().catch(()=>null);
-    return {ok:!!extractReply(data),stage:'openai',status:response.status,model:DEFAULT_MODEL};
-  }catch{return {ok:false,stage:'network'};}
-}
 function safeImage(value){
   if(!value)return '';
   const text=String(value);
