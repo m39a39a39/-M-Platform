@@ -69,6 +69,6 @@ http.createServer(async(req,res)=>{try{
   else {res.statusCode=404;result={error:'هذا الإجراء خارج نطاق المعاينة'};}
   res.setHeader('Content-Type','application/json');res.end(JSON.stringify(result));return;
  }
- const name=url.pathname==='/'?'index.html':decodeURIComponent(url.pathname.slice(1));if(name.includes('..'))throw Error('Invalid path');
+ const aliases={'/customer':'customer.html','/supplier':'supplier.html','/admin':'admin.html'};const name=aliases[url.pathname]||(url.pathname==='/'?'index.html':decodeURIComponent(url.pathname.slice(1)));if(name.includes('..'))throw Error('Invalid path');
  const data=await readFile(root+name);res.setHeader('Content-Type',name.endsWith('.html')?'text/html':name.endsWith('.js')?'application/javascript':name.endsWith('.css')?'text/css':'application/octet-stream');res.end(name.endsWith('.js')?data.toString().replaceAll('https://m-platform-tan.vercel.app',origin):data);
 }catch(error){res.statusCode=error.status||500;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({error:error.message}));}}).listen(port,'127.0.0.1',()=>console.log(`Local supplier preview: ${origin}/studio.html — admin@example.test or other@example.test; any test password.`));

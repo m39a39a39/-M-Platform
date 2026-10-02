@@ -1,3 +1,4 @@
+import {Capacitor} from '@capacitor/core';
 import {mountSiteChrome} from './site-chrome.js';
 import {renderStorefront,bindStorefront,productExtras,tierPrice,homeConfig,storeProductCard} from './storefront.js';
 import { languageReady, getLanguage, onLanguageChange, toggleLanguage } from './language.js';
@@ -230,8 +231,8 @@ async function load(){
 }
 function ensureLoaded(){if(!state&&!loadTask)void load();}
 
-function showGuest(){showView('guestView');}
-function showLogin(){showView('loginView');}
+function showGuest(){if(location.pathname!=='/'){location.assign('/?store=1');return;}showView('guestView');}
+function showLogin(){if(Capacitor.isNativePlatform())showView('loginView');else location.assign('/customer.html');}
 function closeModal(){$('modal').classList.add('hidden');$('modalBody').innerHTML='';}
 function openOffer(id){location.assign('/?product='+encodeURIComponent(id));}
 function showGuestToast(message){
