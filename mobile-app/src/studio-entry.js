@@ -1,3 +1,5 @@
+import * as portalRoutes from './portal-routes.js';
+window.MPortal=portalRoutes;
 import {mountSiteChrome} from './site-chrome.js';
 import {languageReady,getLanguage,toggleLanguage} from './language.js';
 await languageReady;document.documentElement.lang=getLanguage();document.documentElement.dir=getLanguage()==='en'?'ltr':'rtl';
@@ -11,7 +13,7 @@ window.MStudioImages={filesToCompressedSources};
 window.MStorefront=storefront;window.MAdmin=admin;
 import {session} from './session.js';
 window.MStudioSession=session;
-const STUDIO_ASSET_VERSION='20261001-availability-dialog-v4';
+const STUDIO_ASSET_VERSION='20261002-role-portals-v1';
 for(const file of ['domain.js','app.js','studio.js','live.js','unified.js','supply-bulk.js','catalog-bulk.js','storefront-controls.js','advanced.js','theme-editor.js']){
   await new Promise((resolve,reject)=>{const script=document.createElement('script');script.src='/studio/'+file+'?v='+STUDIO_ASSET_VERSION;script.onload=resolve;script.onerror=reject;document.body.append(script);});
 }

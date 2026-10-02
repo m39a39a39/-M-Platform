@@ -1,3 +1,4 @@
+import {portalRole,portalPaths,portalScreen,portalUrl,portalRedirect} from './portal-routes.js';
 import {mountSupplierCatalog,supplierProduct,resetSupplierCatalog} from './supplier-catalog.js';
 import {mountSiteChrome} from './site-chrome.js';
 import './storefront.css';
@@ -768,7 +769,7 @@ function renderAccount(){
   $('screen').innerHTML=pageHeader(t('account'))+`<section class="profile-card"><div class="avatar">${esc((u.name||u.company||u.email||'M').charAt(0).toUpperCase())}</div><h2>${esc(u.name||u.company||'M Platform')}</h2><p>${esc(t(u.role))}</p><dl><div><dt>${esc(t('email'))}</dt><dd>${esc(u.email||'—')}</dd></div>${u.company?`<div><dt>${tr('الشركة','Company')}</dt><dd>${esc(u.company)}</dd></div>`:''}${u.country?`<div><dt>${esc(t('country'))}</dt><dd>${esc(u.country)}</dd></div>`:''}</dl>${settingsGroup}<p class="session-note">${esc(t('sessionNote'))}</p><button class="danger-btn" data-action="logout">${esc(t('logout'))}</button></section>`;
 }
 function renderAdminCollection(kind){const rows=kind==='requests'?(platformState.requests||[]):[...(platformState.quotes||[]),...(platformState.publicOffers||[])];$('screen').innerHTML=pageHeader(kind==='requests'?t('requests'):t('offers'),t('adminMobile'))+`<div class="list-stack">${rows.slice(0,50).map(x=>itemCard(x,{subtitle:descriptionOf(x),badge:cardBadge(x.status),meta:`#${ref(x)} · ${date(x.createdAt)}`})).join('')||empty()}</div>`;}
-function renderScreen(){if(!currentUser||!platformState)return;updateShell();const route=storeRoute();if(activeScreen==='home'&&(route.page||route.category||route.product||route.q)&&currentUser.role!=='client'){const isCatalog=route.category||route.page==='products';$('screen').innerHTML=renderStoreRoute(platformState,route,{chrome:false,money});if(isCatalog&&currentUser.role==='supplier'){const host=$('screen').querySelector('[data-store-catalog-slot]');mountSupplierCatalog(host,{state:platformState,request,language:lang,card:p=>itemCard(p,{subtitle:descriptionOf(p),action:`data-public-offer="${esc(p.id)}"`}),hydrate:hydrateImages,sourceButton:p=>`<button class="secondary-btn" data-supply-product="${esc(p.id)}">${tr('أستطيع توريد هذا المنتج','I can supply this product')}</button>`,fixedCategory:route.category});}else bindStorefront($('screen'),platformState,{chrome:false,money,hydrate:hydrateImages,product:openPublicOffer});hydrateImages($('screen'));return;}if(renderAdminScreen(activeScreen))return;if(activeScreen==='home')renderHome();else if(activeScreen==='orders')renderSupplierOrders();else if(activeScreen==='requests')renderRequests();else if(activeScreen==='offers')renderOffers();else if(activeScreen==='notifications')renderNotifications();else renderAccount();hydrateImages($('screen'));}
+function renderScreen(){if(!currentUser||!platformState)return;syncPortalScreen();updateShell();const route=storeRoute();if(activeScreen==='home'&&(route.page||route.category||route.product||route.q)&&currentUser.role!=='client'){const isCatalog=route.category||route.page==='products';$('screen').innerHTML=renderStoreRoute(platformState,route,{chrome:false,money});if(isCatalog&&currentUser.role==='supplier'){const host=$('screen').querySelector('[data-store-catalog-slot]');mountSupplierCatalog(host,{state:platformState,request,language:lang,card:p=>itemCard(p,{subtitle:descriptionOf(p),action:`data-public-offer="${esc(p.id)}"`}),hydrate:hydrateImages,sourceButton:p=>`<button class="secondary-btn" data-supply-product="${esc(p.id)}">${tr('أستطيع توريد هذا المنتج','I can supply this product')}</button>`,fixedCategory:route.category});}else bindStorefront($('screen'),platformState,{chrome:false,money,hydrate:hydrateImages,product:openPublicOffer});hydrateImages($('screen'));return;}if(renderAdminScreen(activeScreen))return;if(activeScreen==='home')renderHome();else if(activeScreen==='orders')renderSupplierOrders();else if(activeScreen==='requests')renderRequests();else if(activeScreen==='offers')renderOffers();else if(activeScreen==='notifications')renderNotifications();else renderAccount();hydrateImages($('screen'));}
 
 function quoteTotal(q,r){
   const unit=Number(q?.unitPrice),quantity=Number(r?.quantity);
@@ -1332,6 +1333,31 @@ async function handleAction(target){
   if(target.dataset.notification){const n=notifications.find(x=>String(x.id)===String(target.dataset.notification));if(!n)return;if(!n.readAt)await request('/api/v1/notifications/read',{method:'POST',auth:true,body:{id:Number(n.id)}}).catch(()=>{});await loadData({render:false});if(n.target?.screen==='supplierRequest')return openSupplierRequest(n.target.requestId);if(n.target?.screen==='supplierOrder'&&n.target?.entityType==='interest')return openSupplierOrder('public',n.target.entityId);if(n.target?.screen==='customerCartOrder')return openCartOrder(n.target.requestId);if(n.target?.screen==='customerRequest')return openClientRequest(n.target.requestId);if(n.target?.screen==='customerPayment'){if(n.target.entityType==='request')return openClientRequest(n.target.entityId);const interest=(platformState.interests||[]).find(i=>i.id===n.target.entityId);if(interest)return openReadyOrder(interest.id);}if(n.target?.screen==='adminPayment')return openAdminPayment(n.target.entityType,n.target.entityId);renderScreen();return;}
 }
 
+function syncPortalScreen(){
+  if(Capacitor.isNativePlatform())return;
+  if(!portalRole(location.pathname)){if(activeScreen!=='home')location.assign(portalUrl(currentUser.role,activeScreen));return;}
+  const next=portalUrl(currentUser.role,activeScreen);
+  if(location.pathname+location.search!==next)history.pushState(null,'',next);
+}
+window.addEventListener('popstate',()=>{
+  if(!portalRole(location.pathname))return;
+  if(!currentUser){showSignedOut();return;}
+  activeScreen=portalScreen(currentUser.role,location.search);closeModal();renderScreen();
+});
+function showSignedOut(){
+  const role=portalRole(location.pathname);
+  if(role&&new URLSearchParams(location.search).get('auth')==='register'){setRegisterRole(role);showView('registerView');}else showView(role?'loginView':'guestView');
+  applyPortalLogin();
+}
+function applyPortalLogin(){
+  const role=portalRole(location.pathname);
+  if(!role)return;
+  const name=role==='supplier'?tr('المورد','Supplier'):tr('العميل','Customer');
+  document.querySelector('[data-i18n=loginTitle]').textContent=tr('دخول '+name,name+' sign in');
+  document.querySelector('[data-i18n=loginSubtitle]').textContent=tr('سجّل الدخول إلى بوابة '+name+'.','Sign in to your '+name.toLowerCase()+' portal.');
+  $('loginCustomerRegister')?.classList.toggle('hidden',role!=='client');
+  $('loginSupplierRegister')?.classList.toggle('hidden',role!=='supplier');
+}
 function errorText(error,stage='data'){
   if(error.code==='network')return tr('تعذر الاتصال. تحقق من الإنترنت وحاول مجددًا.','Connection failed. Check your internet connection and try again.');
   if(error.code==='storage_failed')return tr('تعذر الوصول إلى التخزين الآمن للجلسة. أعد فتح التطبيق وحاول مجددًا.','Secure session storage is unavailable. Reopen the app and try again.');
@@ -1343,16 +1369,17 @@ function errorText(error,stage='data'){
 }
 async function logout(){
   if(busy)return;busy=true;
-  try{await session.logout();$('loginForm').reset();$('registerForm').reset();setMessage('');showView('guestView');}
+  try{await session.logout();$('loginForm').reset();$('registerForm').reset();setMessage('');showSignedOut();}
   catch(error){showView('sessionView');$('sessionMessage').textContent=errorText(error);}
   finally{busy=false;}
 }
 async function enterWorkspace(){
   await loadData({render:false});
   if(!currentUser)return;
-  if(currentUser.role==='admin'&&!storeRoute().page&&!storeRoute().category&&!storeRoute().product&&!storeRoute().q&&!['account','notifications'].includes(new URLSearchParams(location.search).get('screen'))){location.replace('/studio.html');return;}
+  const redirect=portalRedirect(currentUser.role,location.pathname,location.search,Capacitor.isNativePlatform());
+  if(redirect){location.replace(redirect);return;}
   const postAuth=takePostAuthAction();
-  showView('appView');const requestedScreen=new URLSearchParams(location.search).get('screen');activeScreen=['account','notifications'].includes(requestedScreen)?requestedScreen:'home';activeSub='primary';renderScreen();syncClientAiChat();
+  showView('appView');activeScreen=Capacitor.isNativePlatform()?(new URLSearchParams(location.search).get('screen')==='notifications'?'notifications':new URLSearchParams(location.search).get('screen')==='account'?'account':'home'):portalScreen(currentUser.role,location.search);activeSub='primary';renderScreen();syncClientAiChat();
   if(currentUser.role==='client'&&postAuth==='open-cart')setTimeout(()=>openCart(),0);
   else if(currentUser.role==='client'&&postAuth==='new-request')setTimeout(()=>openNewRequest(),0);
 }
@@ -1382,9 +1409,9 @@ $('appLangBtn').addEventListener('click',toggleLanguage);
 $('headerCartBtn')?.addEventListener('click',()=>{if(currentUser?.role==='client')openCart();});
 $('headerNotificationsBtn').addEventListener('click',()=>{if(!currentUser)return;activeScreen='notifications';renderScreen();$('screen').scrollTop=0;window.scrollTo(0,0);});
 $('headerAdminChatsBtn')?.addEventListener('click',()=>{if(currentUser?.role!=='admin')return;activeScreen='conversations';renderScreen();$('screen').scrollTop=0;window.scrollTo(0,0);});
-onLanguageChange(value=>{lang=value;applyLanguage();applyRegistrationLanguage();applyResetLanguage();if(currentUser?.role==='client')syncClientAiChat();});
+onLanguageChange(value=>{lang=value;applyLanguage();applyPortalLogin();applyRegistrationLanguage();applyResetLanguage();if(currentUser?.role==='client')syncClientAiChat();});
 $('refreshBtn').addEventListener('click',async()=>{if(busy)return;busy=true;$('refreshBtn').classList.add('spin');try{await loadData();showToast(t('refreshing'));}catch(e){showToast(errorText(e));}finally{busy=false;$('refreshBtn').classList.remove('spin');}});
-$('bottomNav').addEventListener('click',e=>{const b=e.target.closest('button[data-screen]');if(!b)return;history.replaceState(null,'',location.pathname);activeScreen=b.dataset.screen;if(activeScreen==='offers')activeSub='primary';if(activeScreen==='requests'&&currentUser?.role==='supplier')activeSub='pending';renderScreen();$('screen').scrollTop=0;window.scrollTo(0,0);});
+$('bottomNav').addEventListener('click',e=>{const b=e.target.closest('button[data-screen]');if(!b)return;activeScreen=b.dataset.screen;if(activeScreen==='offers')activeSub='primary';if(activeScreen==='requests'&&currentUser?.role==='supplier')activeSub='pending';renderScreen();$('screen').scrollTop=0;window.scrollTo(0,0);});
 $('screen').addEventListener('click',e=>{const sub=e.target.closest('[data-sub]');if(sub){activeSub=sub.dataset.sub;renderScreen();return;}const target=e.target.closest('[data-action],[data-save-client-currency],[data-category],[data-subcategory],[data-supply-country],[data-client-order-filter],[data-cart-order],[data-ready-order],[data-client-offers-request],[data-request],[data-supplier-request],[data-supplier-order-id],[data-public-offer],[data-supply-product],[data-edit-quote],[data-quote-request],[data-select-quote],[data-approve-cart-replacement],[data-reject-cart-replacement],[data-interest],[data-notification],[data-payment-notification],[data-payment-upload],[data-payment-document],[data-invoice-pdf],[data-copy-value]');if(target)handleAction(target);});
 $('screen').addEventListener('input',e=>{const input=e.target.closest('[data-product-search]');if(!input)return;readySearch=input.value;readyProductsPage=1;refreshProductResults();aiChatSignal('search',{query:readySearch,results:filteredReadyOffers().length});});
 $('modal').addEventListener('click',e=>{if(e.target.closest('[data-close-modal]')){closeModal();return;}const target=e.target.closest('[data-ready-order],[data-client-offers-request],[data-edit-quote],[data-quote-request],[data-select-quote],[data-approve-replacement-quote],[data-reject-replacement-quote],[data-approve-cart-replacement],[data-reject-cart-replacement],[data-interest],[data-supplier-order-status],[data-supplier-order-cannot],[data-payment-upload],[data-payment-document],[data-invoice-pdf],[data-copy-value]');if(target)handleAction(target);});
@@ -1429,15 +1456,15 @@ function setRegisterRole(role){
  $('registerCategory').required=registerRole==='supplier';$('registerCompany').required=registerRole==='supplier';
  applyRegistrationLanguage();
 }
-function showRegistration(role){if(busy)return;setRegisterRole(role);$('registerMessage').textContent='';showView('registerView');}
+function showRegistration(role){if(busy)return;const path=portalPaths[role];if(path&&location.pathname!==path&&!Capacitor.isNativePlatform()){location.assign(path+'?auth=register');return;}if(path&&!Capacitor.isNativePlatform())history.pushState(null,'',path+'?auth=register');setRegisterRole(role);$('registerMessage').textContent='';showView('registerView');}
 window.addEventListener('mplatform:register',e=>showRegistration(e.detail?.role==='supplier'?'supplier':'client'));
 
 $('loginCustomerRegister')?.addEventListener('click',()=>showRegistration('client'));
 $('loginSupplierRegister')?.addEventListener('click',()=>showRegistration('supplier'));
 $('registerLangBtn').addEventListener('click',toggleLanguage);
-document.querySelectorAll('[data-register-role]').forEach(b=>b.addEventListener('click',()=>{if(!busy)setRegisterRole(b.dataset.registerRole);}));
-$('registerBackBtn').addEventListener('click',()=>{if(!busy){$('registerPassword').value='';$('registerConfirm').value='';showView('guestView');}});
-$('registerLoginBtn').addEventListener('click',()=>{if(!busy){$('registerPassword').value='';$('registerConfirm').value='';setMessage('');showView('loginView');}});
+document.querySelectorAll('[data-register-role]').forEach(b=>b.addEventListener('click',()=>{if(!busy)showRegistration(b.dataset.registerRole);}));
+$('registerBackBtn').addEventListener('click',()=>{if(!busy)location.assign('/?store=1');});
+$('registerLoginBtn').addEventListener('click',()=>{if(!busy){history.replaceState(null,'',location.pathname);$('registerPassword').value='';$('registerConfirm').value='';setMessage('');showView('loginView');}});
 $('registerForm').addEventListener('submit',async e=>{
  e.preventDefault();if(busy)return;
  const f=e.currentTarget,message=$('registerMessage');
@@ -1477,7 +1504,7 @@ $('resetPasswordForm').addEventListener('submit',async e=>{
 async function resumeSession(){
  if(busy)return;busy=true;
  try{
-   if(session.active||await session.restore())await enterWorkspace();else showView('guestView');
+   if(session.active||await session.restore())await enterWorkspace();else showSignedOut();
  }catch(error){if(error.code==='session_expired'){showView('loginView');setMessage(errorText(error));}else if(error.code!=='session_changed')recovery(error);}
  finally{busy=false;}
 }
