@@ -2,8 +2,19 @@
 Object.assign(types,{imageBanner:['بنر صورة فقط','image'],catalog:['تصفح المنتجات والبحث والفلاتر','box'],footer:['الفوتر — الشركة والروابط والتواصل','text'],benefits:['مزايا وخدمات','grid'],steps:['خطوات العمل','layers'],faq:['أسئلة شائعة','file'],cta:['دعوة لاتخاذ إجراء','link'],image:['صورة مع وصف','image'],divider:['فاصل بصري','layers'],spacer:['مساحة فارغة','layers']});
 const sectionInspectorOpen=new Map();
 document.addEventListener('toggle',e=>{if(e.target.matches?.('[data-inspector-group]'))sectionInspectorOpen.set(e.target.dataset.inspectorGroup,e.target.open);},true);
+function parseSectionItems(value=''){
+ return String(value||'').split('\n').filter(Boolean).map(line=>{const [title,...desc]=line.split('|');return {title:title||'',desc:desc.join('|')||''};});
+}
+function serializeSectionItems(rows){return rows.filter(r=>r.title.trim()||r.desc.trim()).map(r=>`${r.title.trim()}|${r.desc.trim()}`).join('\n');}
+function sectionItemsEditor(s){
+ const ar=parseSectionItems(s.items),en=parseSectionItems(s.itemsEn),count=Math.max(ar.length,en.length,1);
+ while(ar.length<count)ar.push({title:'',desc:''});while(en.length<count)en.push({title:'',desc:''});
+ const labels=s.type==='faq'?['السؤال','الإجابة']:s.type==='steps'?['عنوان الخطوة','شرح الخطوة']:['عنوان الميزة','الوصف'];
+ const rowName=s.type==='faq'?'سؤال':s.type==='steps'?'خطوة':'ميزة';
+ return `<div class="section-repeater section-repeater-${s.type}">${Array.from({length:count},(_,i)=>`<article class="section-repeat-row"><header><strong>${rowName} ${i+1}</strong><div><button type="button" data-section-item-move="-1" data-index="${i}" ${i===0?'disabled':''}>↑</button><button type="button" data-section-item-move="1" data-index="${i}" ${i===count-1?'disabled':''}>↓</button><button type="button" data-section-item-remove data-index="${i}">×</button></div></header><div class="section-repeat-grid"><label class="field">${labels[0]} بالعربية<input data-section-item-key="items" data-section-item-index="${i}" data-section-item-part="title" value="${esc(ar[i].title)}"></label><label class="field">${labels[0]} بالإنجليزية<input dir="ltr" data-section-item-key="itemsEn" data-section-item-index="${i}" data-section-item-part="title" value="${esc(en[i].title)}"></label><label class="field">${labels[1]} بالعربية<textarea data-section-item-key="items" data-section-item-index="${i}" data-section-item-part="desc">${esc(ar[i].desc)}</textarea></label><label class="field">${labels[1]} بالإنجليزية<textarea dir="ltr" data-section-item-key="itemsEn" data-section-item-index="${i}" data-section-item-part="desc">${esc(en[i].desc)}</textarea></label></div></article>`).join('')}</div><button type="button" class="secondary-btn section-repeat-add" data-section-item-add>+ إضافة ${rowName}</button>`;
+}
 function sectionSettings(s){
- const hasText=!['divider','spacer','imageBanner'].includes(s.type),hasButton=['hero','image','text','cta','products','footer'].includes(s.type),hasGrid=['products','catalog','categories','banners','benefits','steps','faq'].includes(s.type),hasImage=['hero','image','categories','products','catalog','banners'].includes(s.type);
+ const hasText=!['divider','spacer','imageBanner'].includes(s.type),hasButton=['hero','image','cta','products','footer'].includes(s.type),hasGrid=['products','catalog','categories','banners','benefits','steps'].includes(s.type),hasImage=['hero','image','categories','products','catalog','banners'].includes(s.type);
  const value=k=>s[k]??window.MStorefront.sectionDefaults(s.type)[k];
  const text=(k,label,multi=false)=>`<label class="field">${label}${multi?`<textarea dir="${k.endsWith('En')?'ltr':'rtl'}" data-section-field="${k}">${esc(s[k]||'')}</textarea>`:`<input dir="${k.endsWith('En')?'ltr':'rtl'}" data-section-field="${k}" value="${esc(s[k]||'')}">`}</label>`;
  const num=(k,label,min,max)=>field(label,'layout-'+k,value(k),'number',`min="${min}" max="${max}" step="1" data-section-field="${k}"`);
@@ -18,7 +29,7 @@ function sectionSettings(s){
  if(['hero','image'].includes(s.type))html+=toggle('clickable','جعل البنر كاملًا قابلًا للنقر');
  if(['hero','image','products'].includes(s.type))html+=toggle('showAllProducts','إظهار زر عرض جميع المنتجات');
  const actions=html;html='';
- if(['benefits','steps','faq'].includes(s.type))html+=text('items','العناصر بالعربية: عنوان | وصف، عنصر لكل سطر',true)+text('itemsEn','English items: title | description',true);
+ if(['benefits','steps','faq'].includes(s.type))html+=sectionItemsEditor(s);
  if(['hero','image','imageBanner'].includes(s.type))html+=`<label class="field">صورة القسم — حتى 10 ميجابايت<input type="file" id="section-image" accept="image/png,image/jpeg,image/webp"></label>${s.image?`<img class="section-editor-image" src="${esc(s.image)}" alt="الصورة الحالية">${btn('إزالة الصورة','remove-section-image')}`:''}`;
  if(s.type==='categories')html+=state.draft.categories.map(c=>`<label class="field">صورة ${esc(c.name)} (1:1)<input type="file" data-category-image="${esc(c.id)}" accept="image/png,image/jpeg,image/webp"></label>${s.categoryImages?.[c.id]?`<img class="section-editor-image" src="${esc(s.categoryImages[c.id])}" alt="${esc(c.name)}"><button type="button" data-remove-category-image="${esc(c.id)}">إزالة الصورة</button>`:''}`).join('');
  if(s.type==='footer')html+=text('email','بريد التواصل')+text('phone','رقم التواصل');
@@ -44,7 +55,24 @@ function addSection(){
 }
 document.addEventListener('change',async e=>{const el=e.target,s=state.draft.sections.find(s=>s.id===selected);if(!s)return;if(el.dataset.sectionProduct){s.productIds||=[];s.productIds=el.checked?[...s.productIds,el.dataset.sectionProduct]:s.productIds.filter(id=>id!==el.dataset.sectionProduct);persist();$('#live-store').innerHTML=storeHtml(state.draft,device,true);}if(el.dataset.categoryImage){try{const src=await readImage(el.files[0]);if(src){s.categoryImages||={};s.categoryImages[el.dataset.categoryImage]=src;changed();}}catch(error){toast(error.message);}}});
 document.addEventListener('click',e=>{const el=e.target.closest('[data-remove-category-image]');if(el){const s=state.draft.sections.find(s=>s.id===selected);delete s.categoryImages[el.dataset.removeCategoryImage];changed();}});
-document.addEventListener('click',e=>{const block=e.target.closest('#live-store [data-layout-section]');if(block&&view==='design'&&!e.target.closest('button,a,input,select,textarea,summary')){e.preventDefault();e.stopImmediatePropagation();selected=block.dataset.layoutSection;render();}},true);
+document.addEventListener('click',e=>{const block=e.target.closest('#live-store [data-layout-section]');if(block&&view==='design'&&!e.target.closest('button,a,input,select,textarea,summary')){e.preventDefault();e.stopImmediatePropagation();selected=block.dataset.layoutSection;if(window.MThemeOpenInspector)window.MThemeOpenInspector();else render();}},true);
+document.addEventListener('input',e=>{
+ const el=e.target;if(!el.dataset.sectionItemPart)return;
+ const section=state.draft.sections.find(s=>s.id===selected);if(!section)return;
+ const key=el.dataset.sectionItemKey,index=Number(el.dataset.sectionItemIndex),rows=parseSectionItems(section[key]);
+ while(rows.length<=index)rows.push({title:'',desc:''});rows[index][el.dataset.sectionItemPart]=el.value;section[key]=serializeSectionItems(rows);persist();
+ const live=$('#live-store');if(live){live.innerHTML=storeHtml(state.draft,device,true);if(typeof bindThemePreview==='function')bindThemePreview();}
+});
+document.addEventListener('click',e=>{
+ const add=e.target.closest('[data-section-item-add]'),remove=e.target.closest('[data-section-item-remove]'),moveBtn=e.target.closest('[data-section-item-move]');
+ if(!add&&!remove&&!moveBtn)return;const section=state.draft.sections.find(s=>s.id===selected);if(!section)return;
+ let ar=parseSectionItems(section.items),en=parseSectionItems(section.itemsEn),count=Math.max(ar.length,en.length);
+ while(ar.length<count)ar.push({title:'',desc:''});while(en.length<count)en.push({title:'',desc:''});
+ if(add){ar.push({title:'',desc:''});en.push({title:'',desc:''});}
+ if(remove){const i=Number(remove.dataset.index);ar.splice(i,1);en.splice(i,1);}
+ if(moveBtn){const i=Number(moveBtn.dataset.index),j=i+Number(moveBtn.dataset.sectionItemMove);if(j>=0&&j<ar.length){[ar[i],ar[j]]=[ar[j],ar[i]];[en[i],en[j]]=[en[j],en[i]];}}
+ section.items=serializeSectionItems(ar);section.itemsEn=serializeSectionItems(en);changed();
+});
 const orderListView=ordersView;ordersView=function(){return orderListView().replace('<div class="actions">','<div class="actions">'+(permitted('requests.edit')&&permitted('accounts.read')?btn('إنشاء طلب جديد','admin-new-order','plus','primary'):''));};
 const focusedView=operationsView;operationsView=function(){let html=focusedView();if(view==='sourcing'&&permitted('requests.edit')&&permitted('accounts.read'))html=html.replace('<div class="actions">','<div class="actions">'+btn('إنشاء طلب توريد','admin-new-sourcing','plus','primary'));return ['customers','suppliers'].includes(view)&&permitted('accounts.manage')?html.replace('<div class="actions">','<div class="actions">'+btn(view==='customers'?'إضافة عميل':'إضافة مورد','admin-new-account','plus','primary',`data-role="${view==='customers'?'client':'supplier'}"`)):html;};
 function newAccount(role){formModal(role==='supplier'?'إضافة مورد جديد':'إضافة عميل جديد',`<p class="tip">يُنشأ الحساب دون إرسال رسالة تلقائية. يعيّن صاحبه كلمة المرور من «نسيت كلمة المرور» باستخدام بريده.</p><div class="form-grid">${field('الاسم','name','','text','required maxlength="200"')}${field('الشركة','company','','text','maxlength="200"')}${field('البريد الإلكتروني','email','','email','required maxlength="254" autocomplete="off"')}${field('رقم الهاتف','phone','','tel','required maxlength="200"')}${field('الدولة','country','','text','required maxlength="200"')}${field('مجال النشاط','category','','text','maxlength="200"')}</div>`,async fd=>{const result=await api('accounts/create',{role,...Object.fromEntries(fd)});closeModal();liveState=await window.MStudioSession.state();render();toast(result.auditPending?'تم إنشاء الحساب؛ سجل الإنشاء يحتاج مراجعة.':'تم إنشاء الحساب ويمكن ربط الطلبات به الآن');});}
