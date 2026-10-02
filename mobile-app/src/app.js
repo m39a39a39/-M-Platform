@@ -490,6 +490,7 @@ function renderModalLayer(layer){
   $('modalKicker').textContent=layer.kicker||'';
   $('modalBody').innerHTML=layer.html||'';
   $('modal').classList.remove('hidden');
+  document.body.classList.add('app-modal-open');
   hydrateImages($('modalBody'));
   requestAnimationFrame(()=>{$('modalBody').scrollTop=layer.scrollTop||0;});
 }
@@ -502,6 +503,7 @@ function closeModal({all=false}={}){
   if(!all&&modalStack.length){renderModalLayer(modalStack.pop());return;}
   modalStack.length=0;
   $('modal').classList.add('hidden');$('modalBody').innerHTML='';
+  document.body.classList.remove('app-modal-open');
 }
 
 function mediaImage(src,attrs=''){
