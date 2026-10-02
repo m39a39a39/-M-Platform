@@ -168,3 +168,6 @@
   .sf-product-page .sf-buy-quantity .sf-quantity-stepper input{width:42px}
   .sf-product-page .sf-buy-actions .sf-add-to-cart{padding-inline:8px;font-size:13px}
 }
+
+/* Hide sticky product purchase bar while an app modal such as the cart is open. */
+body.app-modal-open .sf-product-page .sf-buy-bar{display:none!important}
