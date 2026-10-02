@@ -127,14 +127,12 @@
 .sf-product-purchase .sf-buy-bar{align-items:stretch;gap:16px}
 .sf-product-purchase .sf-buy-total{display:grid;gap:3px;align-content:center}
 .sf-product-purchase .sf-buy-total small{color:var(--store-muted,#65756f);font-weight:600}
-.sf-product-purchase .sf-buy-actions{display:flex;align-items:stretch;gap:8px;flex:1}
-.sf-product-purchase .sf-add-to-cart{flex:1;min-height:54px;margin:0!important;border-color:var(--store-accent,#0b2236)!important;border-radius:14px!important;background:var(--store-accent,#0b2236)!important;color:#fff!important;font-weight:800;box-shadow:0 10px 24px rgba(11,34,54,.16)}
+.sf-product-purchase .sf-buy-actions{display:flex;align-items:stretch;flex:1;min-width:0}
+.sf-product-purchase .sf-add-to-cart{flex:1;min-width:0;min-height:54px;margin:0!important;border-color:var(--store-accent,#0b2236)!important;border-radius:14px!important;background:var(--store-accent,#0b2236)!important;color:#fff!important;font-weight:800;white-space:nowrap;box-shadow:0 10px 24px rgba(11,34,54,.16)}
 .sf-product-purchase .sf-add-to-cart svg{width:21px;height:21px}
 .sf-product-purchase .sf-add-to-cart:hover{filter:brightness(.96);background:var(--store-accent,#0b2236)!important}
 .sf-product-purchase .sf-add-to-cart.is-added{background:#177245!important;border-color:#177245!important}
 .sf-product-purchase .sf-add-to-cart:disabled{opacity:1;cursor:default}
-.sf-product-purchase .sf-view-cart{min-height:54px;border-radius:14px!important;padding-inline:14px;font-weight:700;background:#fff!important;border-color:#cbd7d2!important}
-.sf-product-purchase .sf-view-cart:not([hidden]){display:inline-flex}
 .sf-product-purchase [data-product-message]:empty{display:none}
 @media(max-width:650px){
   .sf-product-page{padding-bottom:118px!important}
@@ -142,8 +140,7 @@
   .sf-product-page .sf-buy-total{min-width:118px}
   .sf-product-page .sf-buy-total small{font-size:12px}
   .sf-product-page .sf-buy-total strong{font-size:22px;line-height:1.2}
-  .sf-product-page .sf-buy-actions{width:100%;display:flex;gap:7px}
-  .sf-product-page .sf-buy-actions .sf-add-to-cart{min-height:56px;padding-inline:14px}
-  .sf-product-page .sf-view-cart:not([hidden]){min-height:56px;flex:0 0 auto}
+  .sf-product-page .sf-buy-actions{width:100%;display:flex;min-width:0}
+  .sf-product-page .sf-buy-actions .sf-add-to-cart{width:100%;min-height:56px;padding-inline:16px;font-size:16px}
   body:has(.sf-product-page) .m-ai-chat{bottom:calc(116px + var(--safe-bottom,0px))}
 }
