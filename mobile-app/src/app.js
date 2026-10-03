@@ -525,6 +525,7 @@ function syncPublicMediaSources(){
   for(const offer of platformState?.publicOffers||[])if(offer.status==='published')for(const src of offer.images||[])if(src)publicMediaSources.add(src);
 }
 async function mediaUrl(src){
+  if(/^https:\/\/ueeshop\.ly200-cdn\.com\//i.test(src||''))return src;
   if(mediaCache.has(src))return mediaCache.get(src);
   if(mediaTasks.has(src))return mediaTasks.get(src);
   const epoch=session.epoch;
