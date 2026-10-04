@@ -15,7 +15,7 @@ const PAGE_SIZE=20;
 const MEDIA_CONCURRENCY=6;
 const mediaTasks=new Map();
 const PUBLIC_STATE_CACHE_KEY='m-platform.public-state.v3';
-const PUBLIC_STATE_CACHE_MAX_AGE=5*60*1000;
+const PUBLIC_STATE_CACHE_MAX_AGE=0;
 function readCachedPublicState(){
   try{
     const raw=sessionStorage.getItem(PUBLIC_STATE_CACHE_KEY);
