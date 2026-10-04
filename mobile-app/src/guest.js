@@ -15,7 +15,7 @@ const POST_AUTH_KEY='m-platform.post-auth-action.v1';
 const PAGE_SIZE=20;
 const MEDIA_CONCURRENCY=6;
 const mediaTasks=new Map();
-const PUBLIC_STATE_CACHE_KEY='m-platform.public-state.v2';
+const PUBLIC_STATE_CACHE_KEY='m-platform.public-state.v3';
 const PUBLIC_STATE_CACHE_MAX_AGE=5*60*1000;
 function readCachedPublicState(){
   try{
@@ -246,7 +246,16 @@ async function load(){
   if(!state)renderLoading();
   loadTask=(async()=>{
     try{
-      const next=await api('/api/v1/state');
+      const route=new URLSearchParams(location.search),productId=route.get('product')||'',pageId=route.get('page')||'';
+      const detailTask=productId?api('/api/v1/storefront-product?id='+encodeURIComponent(productId)):pageId&&!['products','search'].includes(pageId)?api('/api/v1/storefront-page?id='+encodeURIComponent(pageId)):Promise.resolve(null);
+      const [next,detail]=await Promise.all([api('/api/v1/storefront'),detailTask]);
+      if(productId&&detail){
+        const index=(next.publicOffers||[]).findIndex(p=>p.id===productId);
+        if(index>=0)next.publicOffers[index]=detail;else next.publicOffers.push(detail);
+      }else if(pageId&&detail&&next.settings?.storefront){
+        const pages=next.settings.storefront.pages||[],index=pages.findIndex(p=>p.id===pageId);
+        if(index>=0)pages[index]={...pages[index],...detail};else pages.push(detail);
+      }
       state=next;lastLoadedAt=Date.now();writeCachedPublicState(next);
       const valid=new Set(publishedOffers().map(o=>o.id));cartItems=cartItems.filter(x=>valid.has(x.offerId));saveCart();
       offersPage=1;renderOffers();
