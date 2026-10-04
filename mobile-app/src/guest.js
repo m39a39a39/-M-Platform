@@ -15,8 +15,8 @@ const POST_AUTH_KEY='m-platform.post-auth-action.v1';
 const PAGE_SIZE=20;
 const MEDIA_CONCURRENCY=6;
 const mediaTasks=new Map();
-const PUBLIC_STATE_CACHE_KEY='m-platform.public-state.v2';
-const PUBLIC_STATE_CACHE_MAX_AGE=5*60*1000;
+const PUBLIC_STATE_CACHE_KEY='m-platform.public-state.v3';
+const PUBLIC_STATE_CACHE_MAX_AGE=0;
 function readCachedPublicState(){
   try{
     const raw=sessionStorage.getItem(PUBLIC_STATE_CACHE_KEY);
@@ -246,7 +246,10 @@ async function load(){
   if(!state)renderLoading();
   loadTask=(async()=>{
     try{
-      const next=await api('/api/v1/state');
+      const route=new URLSearchParams(location.search),query=new URLSearchParams();
+      if(route.get('product'))query.set('product',route.get('product'));
+      if(route.get('page'))query.set('page',route.get('page'));
+      const next=await api('/api/v1/state'+(query.size?'?'+query.toString():''));
       state=next;lastLoadedAt=Date.now();writeCachedPublicState(next);
       const valid=new Set(publishedOffers().map(o=>o.id));cartItems=cartItems.filter(x=>valid.has(x.offerId));saveCart();
       offersPage=1;renderOffers();
@@ -333,6 +336,9 @@ window.addEventListener('mplatform:view',e=>{
 
 (async()=>{
   await languageReady;lang=getLanguage();loadCart();apply();
+  let hasWebSession=false;try{hasWebSession=!!sessionStorage.getItem('m-platform.session.v1');}catch{}
+  const publicWeb=!Capacitor.isNativePlatform()&&!hasWebSession&&!['/customer','/customer.html','/supplier','/supplier.html','/login.html','/reset-password.html','/register-customer.html','/register-supplier.html'].includes(location.pathname);
+  if(publicWeb)showView('guestView');
   if(!$('guestView').classList.contains('hidden')){ensureLoaded();mountGuestAiChat();}
 })();
 

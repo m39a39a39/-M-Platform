@@ -69,7 +69,7 @@ export default async function handler(req,res){
       assert(req.method==='POST',405);result=await authRoute(path.split('/').at(-1),req,res,body);
     }else{
       const user=await identify(req,res,path==='/api/state'||path==='/api/ai-chat'||path==='/api/ai-conversation'&&req.method==='GET'||path.startsWith('/api/media/')&&req.method==='GET');
-      if(path==='/api/state'){assert(req.method==='GET',405);result=await snapshot(user);}
+      if(path==='/api/state'){assert(req.method==='GET',405);result=await snapshot(user,{productId:url.searchParams.get('product')||'',pageId:url.searchParams.get('page')||''});}
       else if(path==='/api/ai-chat'){assert(req.method==='POST',405);result=await aiChat(user,body,req);}
       else if(path==='/api/ai-conversation'){
         assert(req.method==='GET',405);result=await customerConversation(user,{conversationId:url.searchParams.get('conversationId')||'',guestKey:url.searchParams.get('guestKey')||'',language:url.searchParams.get('language')||'ar'});
