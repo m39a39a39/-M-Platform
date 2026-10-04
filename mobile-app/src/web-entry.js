@@ -12,5 +12,6 @@ if(!accountRoute&&!nativeRuntime&&!hasWebSession){
     location.assign((role==='supplier'?'/supplier.html':'/customer.html')+'?auth=register');
   });
 }else{
+  await import('./styles.css');
   await import('./app.js');
 }
