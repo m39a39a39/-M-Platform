@@ -26,7 +26,8 @@ for(const [engine,launcher] of Object.entries({chromium,webkit})){
  const home=async()=>{await page.goto('http://127.0.0.1:4173/');await page.locator('.published-storefront .sf-product').first().waitFor();};
  await home();
  assert.ok(await page.locator('#site-header [data-store-action="cart"]').count()>=1);
- assert.ok(imageRequests.some(url=>url.includes('x-oss-process=image/resize')),'Responsive MOXOM image variant expected');
+ const responsiveMarkup=await page.locator('.published-storefront .sf-product img[data-media^="https://ueeshop.ly200-cdn.com/"]').first().evaluate(img=>({src:img.getAttribute('src')||'',srcset:img.getAttribute('srcset')||''}));
+ assert.ok((responsiveMarkup.src+' '+responsiveMarkup.srcset).includes('x-oss-process=image/resize'),'Responsive MOXOM image variant expected');
  const add=page.locator('.published-storefront [data-store-add]').first();await add.click();
  assert.equal((await page.locator('#site-header [data-store-cart-count]').first().textContent()).trim(),'1');
  await page.locator('#site-header [data-store-action="cart"]').first().click();await page.locator('#guestCartForm').waitFor();
