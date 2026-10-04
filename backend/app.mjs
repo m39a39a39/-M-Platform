@@ -52,32 +52,6 @@ export default async function handler(req,res){
     if(path==='/api/health'){
       assert(req.method==='GET',405);config();res.setHeader('Content-Type','application/json');res.end(JSON.stringify({ok:true,configured:true,apiVersion:1,nativeAuth:true,pushApiPrepared:true,capacitorCors:true}));return;
     }
-    if(path==='/api/psi-audit'){
-      assert(req.method==='GET',405);
-      const target=url.searchParams.get('url')||'https://m-platform-tan.vercel.app/';
-      const strategy=url.searchParams.get('strategy')==='desktop'?'desktop':'mobile';
-      const psi=new URL('https://www.googleapis.com/pagespeedonline/v5/runPagespeed');
-      psi.searchParams.set('url',target);psi.searchParams.set('strategy',strategy);psi.searchParams.append('category','performance');
-      const upstream=await fetch(psi,{headers:{accept:'application/json'}}),payload=await upstream.text();
-      res.statusCode=upstream.status;res.setHeader('Content-Type','application/json; charset=utf-8');res.end(payload);return;
-    }
-    if(path==='/api/image-probe'){
-      assert(req.method==='GET',405);
-      const src=url.searchParams.get('url')||'';
-      assert(src.startsWith('https://ueeshop.ly200-cdn.com/'),400,'Invalid image URL');
-      const candidates=[
-        ['original',src],
-        ['oss480webp',src+(src.includes('?')?'&':'?')+'x-oss-process=image/resize,w_480/format,webp'],
-        ['oss240webp',src+(src.includes('?')?'&':'?')+'x-oss-process=image/resize,w_240/format,webp']
-      ];
-      const checks=[];
-      for(const [name,target] of candidates){
-        const response=await fetch(target,{headers:{accept:'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'}});
-        const bytes=(await response.arrayBuffer()).byteLength;
-        checks.push({name,target,status:response.status,type:response.headers.get('content-type'),bytes,cache:response.headers.get('cache-control'),etag:response.headers.get('etag')});
-      }
-      res.setHeader('Content-Type','application/json; charset=utf-8');res.end(JSON.stringify({checks}));return;
-    }
     const c=config();
     if(path==='/api/app-config'){
       assert(req.method==='GET',405);res.setHeader('Content-Type','application/json; charset=utf-8');res.end(JSON.stringify(publicAppConfig(c.origin)));return;
