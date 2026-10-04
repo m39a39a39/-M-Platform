@@ -1,22 +1,22 @@
 {
-  "fetchTime": "2026-10-04T10:36:39.269Z",
+  "fetchTime": "2026-10-04T10:38:42.834Z",
   "finalUrl": "https://m-platform-tan.vercel.app/",
-  "performance": 0.5,
+  "performance": 0.47,
   "metrics": {
     "FCP": {
-      "score": 0.89,
-      "displayValue": "1.8 s",
-      "numericValue": 1817.38
+      "score": 0.86,
+      "displayValue": "1.9 s",
+      "numericValue": 1932.4560000000001
     },
     "LCP": {
-      "score": 0.17,
+      "score": 0.16,
       "displayValue": "5.7 s",
-      "numericValue": 5665.348000000002
+      "numericValue": 5692.583499999999
     },
     "TBT": {
-      "score": 0.37,
-      "displayValue": "780 ms",
-      "numericValue": 784
+      "score": 0.3,
+      "displayValue": "930 ms",
+      "numericValue": 931
     },
     "CLS": {
       "score": 0.66,
@@ -24,9 +24,9 @@
       "numericValue": 0.1859052247873633
     },
     "SI": {
-      "score": 0.95,
-      "displayValue": "2.9 s",
-      "numericValue": 2872.9737525896144
+      "score": 0.86,
+      "displayValue": "3.7 s",
+      "numericValue": 3652.9296290156726
     }
   },
   "opportunities": [
@@ -35,7 +35,7 @@
       "title": "Properly size images",
       "displayValue": "Est savings of 2,608 KiB",
       "score": 0,
-      "savingsMs": 3060,
+      "savingsMs": 3140,
       "savingsBytes": 2670552
     },
     {
@@ -43,15 +43,15 @@
       "title": "Serve images in next-gen formats",
       "displayValue": "Est savings of 2,037 KiB",
       "score": 0,
-      "savingsMs": 2100,
+      "savingsMs": 2040,
       "savingsBytes": 2085973.5
     },
     {
       "id": "uses-rel-preconnect",
       "title": "Preconnect to required origins",
-      "displayValue": "Est savings of 300 ms",
+      "displayValue": "Est savings of 310 ms",
       "score": 0,
-      "savingsMs": 300.072,
+      "savingsMs": 314.486,
       "savingsBytes": 0
     },
     {
@@ -59,33 +59,33 @@
       "title": "Efficiently encode images",
       "displayValue": "Est savings of 400 KiB",
       "score": 0,
-      "savingsMs": 300,
+      "savingsMs": 310,
       "savingsBytes": 409705
     }
   ],
   "diagnostics": {
     "server-response-time": {
       "score": 1,
-      "displayValue": "Root document took 0 ms",
-      "numericValue": 2.847999999999999,
+      "displayValue": "Root document took 20 ms",
+      "numericValue": 19.745999999999995,
       "detailsType": "opportunity"
     },
     "total-byte-weight": {
       "score": 0.5,
       "displayValue": "Total size was 2,910 KiB",
-      "numericValue": 2979802,
+      "numericValue": 2979393,
       "detailsType": "table"
     },
     "mainthread-work-breakdown": {
       "score": 0,
-      "displayValue": "2.6 s",
-      "numericValue": 2596.7239999999842,
+      "displayValue": "2.8 s",
+      "numericValue": 2813.207999999993,
       "detailsType": "table"
     },
     "bootup-time": {
       "score": 1,
-      "displayValue": "0.8 s",
-      "numericValue": 820.6239999999993,
+      "displayValue": "0.7 s",
+      "numericValue": 719.056,
       "detailsType": "table"
     },
     "unused-javascript": {
