@@ -37,7 +37,7 @@ jobs:
             if curl --silent --fail http://127.0.0.1:4173 > /dev/null; then break; fi
             sleep 1
           done
-          node tests/layout.mjs
+          node tests/perf-storefront-check.mjs
           node tests/accounts-search.mjs
       - name: Record verification
         run: |
