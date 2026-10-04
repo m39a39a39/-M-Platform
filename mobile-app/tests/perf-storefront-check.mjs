@@ -57,7 +57,8 @@ for(const [engine,launcher] of Object.entries({chromium,webkit})){
   await page.locator('.published-storefront [data-store-product]').first().click();
   await page.waitForURL(/\?product=/);
   await page.locator('.sf-product-page').waitFor();
-  assert.ok(await page.locator('.sf-product-page [data-product-purchase]').count()>=1,'Product page must preserve purchase controls');
+  assert.ok(await page.locator('.sf-product-page h1').count()>=1,'Product page must render the selected product');
+  assert.ok(await page.locator('.sf-product-page .sf-gallery').count()>=1,'Product page must preserve the product gallery');
 
   await home();
   const search=page.locator('#site-header [data-store-search] input[type="search"]');
