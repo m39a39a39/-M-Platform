@@ -9,6 +9,22 @@ export const open=r=>r&&!r.data.deletedAt&&!r.data.suspendedAt;
 export function unpack(row,kind){return {...row.data,id:row.id,displayNo:row.display_no,version:row.version,createdAt:row.created_at,...(kind==='requests'||kind==='interests'?{customerId:row.owner_id}:{supplierId:row.owner_id}),...(row.request_id?{requestId:row.request_id}:{}),...(row.offer_id?{offerId:row.offer_id}:{})};}
 export function ownRecord(row,kind){const item=unpack(row,kind);delete item.supplierIds;delete item.moderationHistory;delete item.reviewedAt;delete item.internalNotes;delete item.orderAudit;delete item.supplierAssignmentHistory;delete item.assignedSupplierId;delete item.createdByAdmin;delete item.supplyTerms;delete item.supplySourceId;return item;}
 function publicSettings(data={}){const safe={...data};delete safe.bankAccounts;delete safe.studioDraft;return safe;}
+function compactPublicValue(value){
+  if(Array.isArray(value)){
+    const rows=value.map(compactPublicValue).filter(item=>item!==undefined);
+    return rows.length?rows:undefined;
+  }
+  if(value&&typeof value==='object'){
+    const out={};
+    for(const [key,item] of Object.entries(value)){
+      const next=compactPublicValue(item);
+      if(next!==undefined)out[key]=next;
+    }
+    return Object.keys(out).length?out:undefined;
+  }
+  if(value===''||value===null||value===undefined)return undefined;
+  return value;
+}
 function publicSectionForView(section={}){
   const next={...section},type=String(section.type||'');
   if(!['benefits','steps','faq'].includes(type)){delete next.items;delete next.itemsEn;}
@@ -21,7 +37,7 @@ function publicSectionForView(section={}){
     delete next.href;delete next.button;delete next.buttonEn;delete next.buttonTarget;delete next.showButton;delete next.clickable;
   }
   if(!['hero','image','products'].includes(type)){delete next.showAllProducts;delete next.showImage;}
-  return next;
+  return compactPublicValue(next)||{id:section.id,type};
 }
 function publicSettingsForView(data={},route={}){
   const {pageId='',productId='',category='',q=''}=route,safe=publicSettings(upgradeSettings(data));
@@ -42,11 +58,11 @@ function publicSettingsForView(data={},route={}){
   return safe;
 }
 function publicProductSummary(row){
-  const d=row.data||{},translation=d.translation||{};
-  return {id:row.id,displayNo:row.display_no,createdAt:row.created_at,updatedAt:d.updatedAt||d.publishedAt||row.created_at,status:'published',
+  const d=row.data||{},translation=d.translation||{},item={id:row.id,displayNo:row.display_no,createdAt:row.created_at,status:'published',
     sku:d.sku||'',translation:{titleAr:translation.titleAr||'',titleEn:translation.titleEn||''},images:Array.isArray(d.images)?d.images.filter(Boolean).slice(0,1):[],
-    country:d.country||'',categoryId:d.categoryId||'',subcategoryId:d.subcategoryId||'',unitPrice:d.unitPrice??'',currency:d.currency||'',moq:d.moq??'',stock:d.stock??'',
-    tiers:Array.isArray(d.tiers)?d.tiers:[]};
+    country:d.country||'',categoryId:d.categoryId||'',subcategoryId:d.subcategoryId||'',unitPrice:d.unitPrice??'',currency:d.currency||'',moq:d.moq??'',stock:d.stock??''};
+  if(Array.isArray(d.tiers)&&d.tiers.length)item.tiers=d.tiers;
+  return compactPublicValue(item)||item;
 }
 export function supplierInterest(row){
   const d=row.data||{},snapshot=d.offerSnapshot||{},terms=d.supplyTerms||{};
