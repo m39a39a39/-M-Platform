@@ -1,6 +1,5 @@
 import {Capacitor} from '@capacitor/core';
 import './public-shell.css';
-import './storefront.css';
 import {mountSiteChrome} from './site-chrome.js';
 import {renderStorefront,bindStorefront,productExtras,tierPrice,homeConfig,storeProductCard} from './storefront.js';
 import { languageReady, getLanguage, onLanguageChange, toggleLanguage } from './language.js';
@@ -9,6 +8,7 @@ import { categoryRows, subcategoryRows, supplyCountryRows, taxonomyLabel } from 
 
 const browserOrigin=typeof location!=='undefined'&&/^https?:$/.test(location.protocol)&&!['localhost','127.0.0.1','::1','[::1]'].includes(location.hostname)?location.origin:'';
 const API=String(import.meta.env?.VITE_API_ORIGIN||browserOrigin||'https://m-platform-tan.vercel.app').replace(/\/$/,'');
+const storefrontStylesReady=import('./storefront-styles.js');
 const $=id=>document.getElementById(id);
 const mediaCache=new Map();
 const GUEST_CART_KEY='m-platform.guest-cart.v1';
@@ -277,6 +277,7 @@ async function load(){
       const route=new URLSearchParams(location.search),query=new URLSearchParams();
       for(const key of ['product','page','category','q'])if(route.get(key))query.set(key,route.get(key));
       const next=await api('/api/v1/state'+(query.size?'?'+query.toString():''));
+      await storefrontStylesReady;
       state=next;lastLoadedAt=Date.now();writeCachedPublicState(next);
       const valid=new Set(publishedOffers().map(o=>o.id));cartItems=cartItems.filter(x=>valid.has(x.offerId));saveCart();
       offersPage=1;renderOffers();
