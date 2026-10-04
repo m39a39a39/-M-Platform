@@ -9,7 +9,21 @@
 </head>
 <body>
   <div id="app" class="app-shell">
-    <section id="bootView"><div class="sf-loading" role="status"><strong>M Platform</strong><p data-auth-copy="loading">جارٍ التحقق من الجلسة...</p></div></section>
+    <section id="bootView">
+      <div class="boot-shell" aria-busy="true">
+        <span class="sr-only" role="status" data-auth-copy="loading">جارٍ التحقق من الجلسة...</span>
+        <header class="boot-shell-header">
+          <span class="boot-skeleton boot-brand"></span>
+          <span class="boot-shell-actions"><i class="boot-skeleton"></i><i class="boot-skeleton"></i></span>
+        </header>
+        <main class="boot-shell-main">
+          <div class="boot-skeleton boot-hero"></div>
+          <div class="boot-card-grid">
+            <article class="boot-card"><span class="boot-skeleton boot-card-image"></span><span class="boot-skeleton boot-card-line"></span><span class="boot-skeleton boot-card-line short"></span></article><article class="boot-card"><span class="boot-skeleton boot-card-image"></span><span class="boot-skeleton boot-card-line"></span><span class="boot-skeleton boot-card-line short"></span></article><article class="boot-card"><span class="boot-skeleton boot-card-image"></span><span class="boot-skeleton boot-card-line"></span><span class="boot-skeleton boot-card-line short"></span></article><article class="boot-card"><span class="boot-skeleton boot-card-image"></span><span class="boot-skeleton boot-card-line"></span><span class="boot-skeleton boot-card-line short"></span></article><article class="boot-card"><span class="boot-skeleton boot-card-image"></span><span class="boot-skeleton boot-card-line"></span><span class="boot-skeleton boot-card-line short"></span></article><article class="boot-card"><span class="boot-skeleton boot-card-image"></span><span class="boot-skeleton boot-card-line"></span><span class="boot-skeleton boot-card-line short"></span></article>
+          </div>
+        </main>
+      </div>
+    </section>
     <section id="guestView" class="hidden"><main id="guest-storefront" aria-live="polite"></main></section>
 
     <section id="loginView" class="hidden auth-wrap">
