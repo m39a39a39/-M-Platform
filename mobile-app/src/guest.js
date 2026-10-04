@@ -236,6 +236,10 @@ async function imageUrl(src){
 }
 async function hydrateImages(root=catalogNode('guestOffers'),attribute='data-media'){
   const images=[...root.querySelectorAll(`img[${attribute}]:not([data-loaded])`)];
+  if(!Capacitor.isNativePlatform()){
+    for(const img of images)img.dataset.loaded='1';
+    return;
+  }
   let cursor=0;
   const worker=async()=>{while(cursor<images.length){const img=images[cursor++];img.dataset.loaded='1';const src=img.getAttribute(attribute),url=await imageUrl(src);if(url&&img.isConnected)img.src=url;}};
   await Promise.all(Array.from({length:Math.min(MEDIA_CONCURRENCY,images.length)},worker));
