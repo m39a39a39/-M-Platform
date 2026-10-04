@@ -1,6 +1,8 @@
 import {chromium,webkit} from 'playwright';
 import assert from 'node:assert/strict';
 import {mkdir,writeFile} from 'node:fs/promises';
+import {defaultStore} from '../../shared/storefront-model.mjs';
+import {ensureThemePages} from '../../shared/theme-pages.mjs';
 
 await mkdir('layout-results',{recursive:true});
 const report=[];
@@ -13,6 +15,7 @@ for(const [engine,type] of Object.entries({chromium,webkit}))for(const language 
  const requests=[{id:'admin-private',displayNo:501,product:'SecretAdmin',status:'review',customerId:'client',supplierIds:['supplier'],images:[],version:1}];
  const quotes=[{id:'offer1',displayNo:601,product:'Quoted Alpha',status:'pending',supplierId:'supplier',requestId:'admin-private',images:[]}];
 const publicOffers=[{id:'product1',displayNo:701,sku:'ALPHA-SKU',product:'Alpha',specs:'Search fixture product',status:'pending',supplierId:'supplier',images:[],version:1}];
+ const settings={storefront:ensureThemePages(defaultStore()),categories:[],subcategories:[],supplyCountries:[],_version:1};
  page.on('pageerror',e=>errors.push(e.message));
  await page.addInitScript(lang=>localStorage.setItem('CapacitorStorage.language',lang),language);
  await page.route('https://m-platform-tan.vercel.app/**',async route=>{
@@ -24,7 +27,7 @@ const publicOffers=[{id:'product1',displayNo:701,sku:'ALPHA-SKU',product:'Alpha'
    else if(path.endsWith('/auth/logout'))body={ok:true};
    else if(path.endsWith('/state')){
      if(role&&failState)return route.fulfill({status:503,json:{error:'Unavailable'}});
-     body={user:users[role]||null,requests:role==='admin'?requests:[],quotes:role==='admin'?quotes:[],publicOffers:role==='admin'?publicOffers:[],interests:[],accounts:role==='admin'?Object.values(users):[]};
+     body={user:users[role]||null,requests:role==='admin'?requests:[],quotes:role==='admin'?quotes:[],publicOffers:role==='admin'?publicOffers:[],interests:[],accounts:role==='admin'?Object.values(users):[],settings};
    }else if(path.endsWith('/notifications'))body=[];
    else if(path.endsWith('/app-config'))body={apiVersion:1};
    else {errors.push(`Unexpected endpoint ${path}`);return route.fulfill({status:500,json:{error:'Unexpected fixture call'}});}
