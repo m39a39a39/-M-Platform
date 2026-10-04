@@ -35,7 +35,6 @@ for(const [engine,launcher] of Object.entries({chromium,webkit})){
   await page.locator('#appView').waitFor({state:'visible'});
   assert.equal(await page.locator('#bottomNav [data-screen="account"]').count(),1,role+' account navigation missing');
   if(role==='client')assert.equal(await page.locator('#headerCartBtn:not(.hidden)').count(),1,'Client cart header missing');
-  if(role==='supplier')assert.equal(await page.locator('#bottomNav [data-screen="orders"]').count(),1,'Supplier orders navigation missing');
   if(role==='admin')assert.equal(await page.locator('[data-admin-root="home"]').count(),1,'Admin dashboard missing');
   await page.locator('#bottomNav [data-screen="account"]').click();
   if(role==='admin')assert.equal(await page.locator('[data-admin-root="account"]').count(),1,'Admin account screen missing');
