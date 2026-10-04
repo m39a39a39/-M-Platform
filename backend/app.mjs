@@ -61,6 +61,23 @@ export default async function handler(req,res){
       const upstream=await fetch(psi,{headers:{accept:'application/json'}}),payload=await upstream.text();
       res.statusCode=upstream.status;res.setHeader('Content-Type','application/json; charset=utf-8');res.end(payload);return;
     }
+    if(path==='/api/image-probe'){
+      assert(req.method==='GET',405);
+      const src=url.searchParams.get('url')||'';
+      assert(/^https:\/\/ueeshop\\.ly200-cdn\\.com\//i.test(src),400,'Invalid image URL');
+      const candidates=[
+        ['original',src],
+        ['oss480webp',src+(src.includes('?')?'&':'?')+'x-oss-process=image/resize,w_480/format,webp'],
+        ['oss240webp',src+(src.includes('?')?'&':'?')+'x-oss-process=image/resize,w_240/format,webp']
+      ];
+      const checks=[];
+      for(const [name,target] of candidates){
+        const response=await fetch(target,{headers:{accept:'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'}});
+        const bytes=(await response.arrayBuffer()).byteLength;
+        checks.push({name,target,status:response.status,type:response.headers.get('content-type'),bytes,cache:response.headers.get('cache-control'),etag:response.headers.get('etag')});
+      }
+      res.setHeader('Content-Type','application/json; charset=utf-8');res.end(JSON.stringify({checks}));return;
+    }
     const c=config();
     if(path==='/api/app-config'){
       assert(req.method==='GET',405);res.setHeader('Content-Type','application/json; charset=utf-8');res.end(JSON.stringify(publicAppConfig(c.origin)));return;
