@@ -9,6 +9,20 @@ export const open=r=>r&&!r.data.deletedAt&&!r.data.suspendedAt;
 export function unpack(row,kind){return {...row.data,id:row.id,displayNo:row.display_no,version:row.version,createdAt:row.created_at,...(kind==='requests'||kind==='interests'?{customerId:row.owner_id}:{supplierId:row.owner_id}),...(row.request_id?{requestId:row.request_id}:{}),...(row.offer_id?{offerId:row.offer_id}:{})};}
 export function ownRecord(row,kind){const item=unpack(row,kind);delete item.supplierIds;delete item.moderationHistory;delete item.reviewedAt;delete item.internalNotes;delete item.orderAudit;delete item.supplierAssignmentHistory;delete item.assignedSupplierId;delete item.createdByAdmin;delete item.supplyTerms;delete item.supplySourceId;return item;}
 function publicSettings(data={}){const safe={...data};delete safe.bankAccounts;delete safe.studioDraft;return safe;}
+function publicSectionForView(section={}){
+  const next={...section},type=String(section.type||'');
+  if(!['benefits','steps','faq'].includes(type)){delete next.items;delete next.itemsEn;}
+  if(type!=='footer'){delete next.email;delete next.phone;delete next.footerGroups;delete next.footerTitles;}
+  if(!['categories','categoryNav','productCategories'].includes(type)){delete next.categoryIds;delete next.categoryImages;}
+  if(type!=='products'){delete next.productIds;delete next.productSource;delete next.productSort;delete next.categoryId;delete next.collectionId;}
+  if(type!=='catalog')delete next.catalog;
+  if(!['imageBanner','hero','image'].includes(type))delete next.image;
+  if(!['imageBanner','hero','image','text','cta','products'].includes(type)){
+    delete next.href;delete next.button;delete next.buttonEn;delete next.buttonTarget;delete next.showButton;delete next.clickable;
+  }
+  if(!['hero','image','products'].includes(type)){delete next.showAllProducts;delete next.showImage;}
+  return next;
+}
 function publicSettingsForView(data={},route={}){
   const {pageId='',productId='',category='',q=''}=route,safe=publicSettings(upgradeSettings(data));
   if(safe.storefront){
@@ -16,10 +30,7 @@ function publicSettingsForView(data={},route={}){
     const sections=(safe.storefront.sections||[]).filter(section=>{
       const page=section.page||(['header','footer'].includes(section.type)?'global':'home');
       return page==='global'||(routePage&&page===routePage);
-    }).map(section=>{
-      if(section.type==='catalog')return section;
-      const next={...section};delete next.catalog;return next;
-    });
+    }).map(publicSectionForView);
     safe.storefront={...safe.storefront,
       pages:(safe.storefront.pages||[]).map(page=>{
         if(page.id===pageId)return page;
