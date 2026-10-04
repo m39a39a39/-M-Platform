@@ -342,6 +342,9 @@ window.addEventListener('mplatform:view',e=>{
 
 (async()=>{
   await languageReady;lang=getLanguage();loadCart();apply();
+  let hasWebSession=false;try{hasWebSession=!!sessionStorage.getItem('m-platform.session.v1');}catch{}
+  const publicWeb=!Capacitor.isNativePlatform()&&!hasWebSession&&!['/customer','/customer.html','/supplier','/supplier.html','/login.html','/reset-password.html','/register-customer.html','/register-supplier.html'].includes(location.pathname);
+  if(publicWeb)showView('guestView');
   if(!$('guestView').classList.contains('hidden')){ensureLoaded();mountGuestAiChat();}
 })();
 
