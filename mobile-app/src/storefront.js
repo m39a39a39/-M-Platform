@@ -12,8 +12,13 @@ const title=(p,lang=document.documentElement.lang)=>p.translation?.[lang==='en'?
 const OFFICIAL_MOXOM_IMAGE=/^https:\/\/ueeshop\.ly200-cdn\.com\//i;
 const media=src=>(/^\/api\/media\/[a-f0-9-]{36}$/.test(src||'')||OFFICIAL_MOXOM_IMAGE.test(src||''))?src:'';
 const LOCAL_MEDIA=/^\/api\/media\/[a-f0-9-]{36}$/;
-const imageVariant=(src,width,quality=78)=>LOCAL_MEDIA.test(src||'')?`${src}?width=${Math.round(width)}&quality=${Math.round(quality)}`:src;
-const imageSrcset=(src,widths,quality=78)=>LOCAL_MEDIA.test(src||'')?widths.map(width=>`${imageVariant(src,width,quality)} ${width}w`).join(', '):'';
+const imageVariant=(src,width,quality=78)=>{
+ const w=Math.round(width);
+ if(LOCAL_MEDIA.test(src||''))return `${src}?width=${w}&quality=${Math.round(quality)}`;
+ if(OFFICIAL_MOXOM_IMAGE.test(src||''))return `${src}${src.includes('?')?'&':'?'}x-oss-process=image/resize,w_${w}/format,webp`;
+ return src;
+};
+const imageSrcset=(src,widths,quality=78)=>(LOCAL_MEDIA.test(src||'')||OFFICIAL_MOXOM_IMAGE.test(src||''))?widths.map(width=>`${imageVariant(src,width,quality)} ${width}w`).join(', '):'';
 const responsiveAttrs=(src,widths,sizes,quality=78)=>{
  const set=imageSrcset(src,widths,quality);
  return set?`srcset="${esc(set)}" sizes="${esc(sizes)}"`:'';
