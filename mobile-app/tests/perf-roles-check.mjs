@@ -29,19 +29,27 @@ for(const [engine,launcher] of Object.entries({chromium,webkit})){
   });
 
   await page.goto('http://127.0.0.1:4173'+pathFor[role]);
-  await page.locator('#loginView').waitFor({state:'visible'});
-  await page.locator('#email').fill(role+'@example.test');
-  await page.locator('#password').fill('fixture-password');
-  await page.locator('#loginBtn').click();
-  await page.locator('#appView').waitFor({state:'visible'});
-  assert.equal(await page.locator('#bottomNav [data-screen="account"]').count(),1,role+' account navigation missing');
-  if(role==='client')assert.equal(await page.locator('#headerCartBtn:not(.hidden)').count(),1,'Client cart header missing');
-  if(role==='admin')assert.equal(await page.locator('[data-admin-root="home"]').count(),1,'Admin dashboard missing');
-  await page.locator('#bottomNav [data-screen="account"]').click();
-  if(role==='admin')assert.equal(await page.locator('[data-admin-root="account"]').count(),1,'Admin account screen missing');
-  else assert.ok((await page.locator('#screen').textContent()).includes(role+' PERSON'),role+' account screen did not render identity');
-  await page.locator('#screen [data-action="logout"]').click();
-  await page.locator('#loginView').waitFor({state:'visible'});
+  if(role==='admin'){
+    await page.locator('#studio-login').waitFor({state:'visible'});
+    await page.locator('#studio-login input[name="email"]').fill(role+'@example.test');
+    await page.locator('#studio-login input[name="password"]').fill('fixture-password');
+    await page.locator('#studio-login button[type="submit"]').click();
+    await page.locator('#content').waitFor({state:'visible'});
+    assert.ok(await page.locator('.side').count()===1,'Admin dashboard shell missing');
+    assert.ok((await page.locator('#content').textContent()).length>0,'Admin dashboard content missing');
+  }else{
+    await page.locator('#loginView').waitFor({state:'visible'});
+    await page.locator('#email').fill(role+'@example.test');
+    await page.locator('#password').fill('fixture-password');
+    await page.locator('#loginBtn').click();
+    await page.locator('#appView').waitFor({state:'visible'});
+    assert.equal(await page.locator('#bottomNav [data-screen="account"]').count(),1,role+' account navigation missing');
+    if(role==='client')assert.equal(await page.locator('#headerCartBtn:not(.hidden)').count(),1,'Client cart header missing');
+    await page.locator('#bottomNav [data-screen="account"]').click();
+    assert.ok((await page.locator('#screen').textContent()).includes(role+' PERSON'),role+' account screen did not render identity');
+    await page.locator('#screen [data-action="logout"]').click();
+    await page.locator('#loginView').waitFor({state:'visible'});
+  }
   assert.deepEqual(errors,[],role+' '+engine+' page errors: '+errors.join(' | '));
   await context.close();
  }
