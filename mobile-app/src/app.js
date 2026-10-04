@@ -1,3 +1,4 @@
+import './styles.css';
 import {portalRole,portalPaths,portalScreen,portalUrl,portalRedirect} from './portal-routes.js';
 import {mountSupplierCatalog,supplierProduct,resetSupplierCatalog} from './supplier-catalog.js';
 import {mountSiteChrome} from './site-chrome.js';
