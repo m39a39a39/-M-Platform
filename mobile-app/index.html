@@ -4,6 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#0b2236" />
+  <style>
+    /* Critical startup styles are inline so Safari never flashes the session-check text before CSS loads. */
+    #bootView [data-auth-copy="loading"]{display:none!important}
+    #bootView{min-height:100vh;background:#fafbf8}
+    .boot-shell{min-height:100vh;background:#fafbf8}
+  </style>
   <title>M Platform</title>
   <link rel="stylesheet" href="/src/styles.css" />
 </head>
@@ -11,7 +17,7 @@
   <div id="app" class="app-shell">
     <section id="bootView">
       <div class="boot-shell" aria-busy="true">
-        <span class="sr-only" role="status" data-auth-copy="loading">جارٍ التحقق من الجلسة...</span>
+        <span hidden aria-hidden="true" data-auth-copy="loading">جارٍ التحقق من الجلسة...</span>
         <header class="boot-shell-header">
           <span class="boot-skeleton boot-brand"></span>
           <span class="boot-shell-actions"><i class="boot-skeleton"></i><i class="boot-skeleton"></i></span>
