@@ -385,18 +385,33 @@ function syncClientAiChat(){
 }
 async function mutate(collection,itemId,version,patch){return request('/api/v1/mutations',{method:'POST',auth:true,body:{collection,id:itemId,version:Number(version||0),patch}});}
 
-async function loadData({render=true}={}){
+async function loadData({render=true,includeNotifications=true}={}){
   const epoch=session.epoch;
-  const [next,nextNotifications]=await Promise.all([
-    session.state(),
-    request('/api/v1/notifications').catch(error=>{if(error.code==='session_expired'||error.code==='session_changed')throw error;return [];})
-  ]);
+  let next,nextNotifications=notifications;
+  if(includeNotifications){
+    [next,nextNotifications]=await Promise.all([
+      session.state(),
+      request('/api/v1/notifications').catch(error=>{if(error.code==='session_expired'||error.code==='session_changed')throw error;return [];})
+    ]);
+  }else next=await session.state();
   if(epoch!==session.epoch)return;
-  platformState=next;currentUser=next.user;notifications=nextNotifications;lastDataLoadedAt=Date.now();
+  platformState=next;currentUser=next.user;notifications=Array.isArray(nextNotifications)?nextNotifications:[];lastDataLoadedAt=Date.now();
   syncPublicMediaSources();setTimeout(()=>warmPublicMedia(),30);
   if(currentUser?.role==='client'){loadCart();mergeGuestCart();reconcileCart();loadClientOrderSeen();}else{cartItems=[];clientOrderSeen={};updateCartBadge();updateClientNavBadges();}
   updateAdminState(next);updateShell();
   if(render)renderScreen();
+}
+async function refreshNotifications(){
+  const epoch=session.epoch;
+  try{
+    const next=await request('/api/v1/notifications');
+    if(epoch!==session.epoch||!currentUser)return;
+    notifications=Array.isArray(next)?next:[];
+    updateShell();
+    if(activeScreen==='notifications')renderNotifications();
+  }catch(error){
+    if(error.code!=='session_expired'&&error.code!=='session_changed')console.warn('notifications_refresh_failed',error);
+  }
 }
 configureAdmin({reload:()=>loadData({render:false}),modal:openModal,close:closeModal,toast:showToast,view:()=>activeScreen});
 session.onReset(reason=>{
@@ -1377,12 +1392,13 @@ async function logout(){
   finally{busy=false;}
 }
 async function enterWorkspace(){
-  await loadData({render:false});
+  await loadData({render:false,includeNotifications:false});
   if(!currentUser)return;
   const redirect=portalRedirect(currentUser.role,location.pathname,location.search,Capacitor.isNativePlatform());
   if(redirect){location.replace(redirect);return;}
   const postAuth=takePostAuthAction();
   showView('appView');activeScreen=Capacitor.isNativePlatform()?(new URLSearchParams(location.search).get('screen')==='notifications'?'notifications':new URLSearchParams(location.search).get('screen')==='account'?'account':'home'):portalScreen(currentUser.role,location.search);activeSub='primary';renderScreen();syncClientAiChat();
+  void refreshNotifications();
   if(currentUser.role==='client'&&postAuth==='open-cart')setTimeout(()=>openCart(),0);
   else if(currentUser.role==='client'&&postAuth==='new-request')setTimeout(()=>openNewRequest(),0);
 }

@@ -15,10 +15,27 @@ const POST_AUTH_KEY='m-platform.post-auth-action.v1';
 const PAGE_SIZE=20;
 const MEDIA_CONCURRENCY=6;
 const mediaTasks=new Map();
+const PUBLIC_STATE_CACHE_KEY='m-platform.public-state.v2';
+const PUBLIC_STATE_CACHE_MAX_AGE=5*60*1000;
+function readCachedPublicState(){
+  try{
+    const raw=sessionStorage.getItem(PUBLIC_STATE_CACHE_KEY);
+    if(!raw)return null;
+    const parsed=JSON.parse(raw);
+    if(!parsed?.state||typeof parsed.state!=='object'||!Array.isArray(parsed.state.publicOffers))return null;
+    if(!Number.isFinite(parsed.savedAt)||Date.now()-parsed.savedAt>PUBLIC_STATE_CACHE_MAX_AGE)return null;
+    return parsed;
+  }catch{return null;}
+}
+function writeCachedPublicState(value){
+  try{sessionStorage.setItem(PUBLIC_STATE_CACHE_KEY,JSON.stringify({savedAt:Date.now(),state:value}));}catch{}
+}
+const cachedPublicState=readCachedPublicState();
 
 let lang='ar';
-let state=null;
+let state=cachedPublicState?.state||null;
 let loadTask=null;
+let lastLoadedAt=cachedPublicState?.savedAt||0;
 let offersPage=1;
 let category='all';
 let subcategory='all';
@@ -157,7 +174,15 @@ const register=role=>window.dispatchEvent(new CustomEvent('mplatform:register',{
 const catalog=document.createElement('section');catalog.id='guestOffersSection';
 catalog.innerHTML=`<label class="product-search-bar guest-product-search"><input id="guestProductSearch" type="search"></label><div id="guestCategoryFilters" class="category-filter-bar"></div><div id="guestSubcategoryFilters" class="category-filter-bar"></div><div id="guestSupplyCountryFilters" class="supply-country-filter"></div><div id="guestOffers" class="sf-products"></div><nav id="guestOffersPagination" class="product-pagination"><button id="guestPrevPage"></button><span id="guestPageInfo"></span><button id="guestNextPage"></button></nav>`;
 const catalogNode=id=>catalog.querySelector('#'+id);
-function renderLoading(error=false){$('guest-storefront').innerHTML=`<div class="sf-loading" role="status"><strong>M Platform</strong><p>${esc(error?t('error'):t('loading'))}</p>${error?`<button id="guestRetry">${esc(t('reload'))}</button>`:''}</div>`;document.getElementById('guestRetry')?.addEventListener('click',()=>void load());}
+function loadingSkeleton(){
+  const cards=Array.from({length:6},()=>`<article class="catalog-skeleton-card"><span class="catalog-skeleton-piece catalog-skeleton-image"></span><span class="catalog-skeleton-piece catalog-skeleton-line"></span><span class="catalog-skeleton-piece catalog-skeleton-line short"></span></article>`).join('');
+  return `<div class="sf-loading-shell" aria-busy="true"><span class="sr-only" role="status">${esc(t('loading'))}</span><div class="boot-skeleton boot-hero"></div><div class="catalog-skeleton-grid">${cards}</div></div>`;
+}
+function renderLoading(error=false){
+  if(!error){$('guest-storefront').innerHTML=loadingSkeleton();return;}
+  $('guest-storefront').innerHTML=`<div class="sf-loading" role="alert"><strong>M Platform</strong><p>${esc(t('error'))}</p><button id="guestRetry">${esc(t('reload'))}</button></div>`;
+  document.getElementById('guestRetry')?.addEventListener('click',()=>void load());
+}
 
 async function api(path){
   const r=await fetch(API+path,{credentials:'omit',headers:{'X-M-Client':'native'}});if(!r.ok)throw new Error(`HTTP ${r.status}`);return r.json();
@@ -218,18 +243,24 @@ function mountGuestStore(){
 }
 async function load(){
   if(loadTask)return loadTask;
-  renderLoading();
+  if(!state)renderLoading();
   loadTask=(async()=>{
     try{
-      state=await api('/api/v1/state');
+      const next=await api('/api/v1/state');
+      state=next;lastLoadedAt=Date.now();writeCachedPublicState(next);
       const valid=new Set(publishedOffers().map(o=>o.id));cartItems=cartItems.filter(x=>valid.has(x.offerId));saveCart();
       offersPage=1;renderOffers();
-    }catch(error){console.error(error);renderLoading(true);}
-    finally{loadTask=null;}
+    }catch(error){
+      console.error(error);
+      if(!state)renderLoading(true);
+    }finally{loadTask=null;}
   })();
   return loadTask;
 }
-function ensureLoaded(){if(!state&&!loadTask)void load();}
+function ensureLoaded(){
+  if(loadTask)return;
+  if(!state||Date.now()-lastLoadedAt>30000)void load();
+}
 
 function showGuest(){if(location.pathname!=='/'){location.assign('/?store=1');return;}showView('guestView');}
 function showLogin(){if(Capacitor.isNativePlatform())showView('loginView');else location.assign('/customer.html');}

@@ -171,3 +171,34 @@
 
 /* Hide sticky product purchase bar while an app modal such as the cart is open. */
 body.app-modal-open .sf-product-page .sf-buy-bar{display:none!important}
+
+
+/* Progressive loading: keep the page structure stable while session/data checks run. */
+.sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
+@keyframes m-loading-shimmer{0%{background-position:180% 0}100%{background-position:-180% 0}}
+.boot-shell{min-height:100vh;background:#fafbf8;color:#193d43}
+.boot-shell-header{height:72px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;border-bottom:1px solid #e7ece9;background:#fff}
+.boot-shell-main{max-width:1200px;margin:auto;padding:28px 24px 56px}
+.boot-shell-actions{display:flex;gap:10px}
+.boot-shell-actions i{display:block;width:38px;height:38px;border-radius:12px}
+.boot-skeleton,.catalog-skeleton-piece{display:block;background:linear-gradient(100deg,#edf1ef 20%,#f7f9f8 40%,#edf1ef 60%);background-size:220% 100%;animation:m-loading-shimmer 1.15s ease-in-out infinite}
+.boot-brand{width:142px;height:28px;border-radius:9px}
+.boot-hero{height:210px;border-radius:20px;margin-bottom:24px}
+.boot-card-grid,.catalog-skeleton-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+.boot-card,.catalog-skeleton-card{border:1px solid #e7ece9;border-radius:16px;background:#fff;padding:12px}
+.boot-card-image,.catalog-skeleton-image{width:100%;aspect-ratio:1;border-radius:12px}
+.boot-card-line,.catalog-skeleton-line{height:13px;border-radius:7px;margin-top:12px}
+.boot-card-line.short,.catalog-skeleton-line.short{width:58%}
+.sf-loading-shell{max-width:1200px;margin:auto;padding:24px;min-height:70vh}
+.sf-loading-shell .boot-hero{height:190px}
+.supplier-catalog-results[aria-busy="true"]{opacity:.82;transition:opacity .15s ease}
+.catalog-refresh-note{display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 0;color:#667085;font-size:13px}
+@media(max-width:700px){
+  .boot-shell-header{height:62px;padding-inline:16px}
+  .boot-shell-main,.sf-loading-shell{padding:18px 14px 44px}
+  .boot-hero,.sf-loading-shell .boot-hero{height:150px;border-radius:16px}
+  .boot-card-grid,.catalog-skeleton-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  .boot-card,.catalog-skeleton-card{padding:8px;border-radius:13px}
+  .boot-brand{width:116px;height:24px}
+}
+@media(prefers-reduced-motion:reduce){.boot-skeleton,.catalog-skeleton-piece{animation:none}}
