@@ -31,7 +31,7 @@ const publicOffers=[{id:'product1',displayNo:701,sku:'ALPHA-SKU',product:'Alpha'
    await route.fulfill({json:body});
  });
  const nav=async screen=>{await page.locator(`#bottomNav [data-screen="${screen}"]`).click();};
- const login=async role=>{await page.locator('#guestLoginBtn').click();await page.locator('#email').fill(`${role}@example.test`);await page.locator('#password').fill('fixture-password');await page.locator('#loginBtn').click();await page.locator('#appView').waitFor({state:'visible'});};
+ const login=async role=>{await page.locator('#site-header [data-store-action="login"],#guestLoginBtn').first().click();await page.locator('#email').fill(`${role}@example.test`);await page.locator('#password').fill('fixture-password');await page.locator('#loginBtn').click();await page.locator('#appView').waitFor({state:'visible'});};
  const logout=async()=>{await nav('account');await page.locator('#screen [data-action="logout"]').click();await page.locator('#guestView').waitFor({state:'visible'});assert.equal(await page.locator('#screen').innerText(),'');};
  try{
   await page.goto('http://127.0.0.1:4173');await login('admin');await nav('offers');
@@ -80,7 +80,7 @@ const publicOffers=[{id:'product1',displayNo:701,sku:'ALPHA-SKU',product:'Alpha'
     assert.equal(context.pages().length,1);assert.equal(page.url(),'http://127.0.0.1:4173/');await logout();
   }
   // Successful login + data outage must allow retry without submitting credentials again.
-  failState=true;await page.locator('#guestLoginBtn').click();await page.locator('#email').fill('client@example.test');await page.locator('#password').fill('fixture-password');await page.locator('#loginBtn').click();
+  failState=true;await page.locator('#site-header [data-store-action="login"],#guestLoginBtn').first().click();await page.locator('#email').fill('client@example.test');await page.locator('#password').fill('fixture-password');await page.locator('#loginBtn').click();
   await page.locator('#sessionView').waitFor({state:'visible'});const loginCount=logins;
   assert.equal(await page.locator('#password').inputValue(),'');
   failState=false;await page.locator('#sessionRetryBtn').click();await page.locator('#appView').waitFor({state:'visible'});assert.equal(logins,loginCount);await logout();
