@@ -33,7 +33,7 @@ for(const [engine,launcher] of Object.entries({chromium,webkit})){
     await page.locator('#studio-login').waitFor({state:'visible'});
     await page.locator('#studio-login input[name="email"]').fill(role+'@example.test');
     await page.locator('#studio-login input[name="password"]').fill('fixture-password');
-    await page.locator('#studio-login button[type="submit"]').click();
+    await page.locator('#studio-login button').click();
     await page.locator('#content').waitFor({state:'visible'});
     assert.ok(await page.locator('.side').count()===1,'Admin dashboard shell missing');
     assert.ok((await page.locator('#content').textContent()).length>0,'Admin dashboard content missing');
