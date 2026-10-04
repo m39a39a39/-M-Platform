@@ -1,0 +1,49 @@
+name: Temporary production Lighthouse audit
+on:
+  push:
+    branches: [perf/next-bottleneck]
+    paths-ignore:
+      - perf-audit-summary.json
+permissions:
+  contents: write
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+      - name: Run Lighthouse mobile against production
+        run: |
+          export CHROME_PATH="$(which google-chrome-stable || which google-chrome || which chromium-browser || which chromium)"
+          npx -y lighthouse@12.8.2 https://m-platform-tan.vercel.app/ \
+            --only-categories=performance \
+            --output=json \
+            --output-path=/tmp/lhr.json \
+            --chrome-flags="--headless --no-sandbox --disable-dev-shm-usage"
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const l=JSON.parse(fs.readFileSync('/tmp/lhr.json','utf8'));
+          const a=l.audits;
+          const metric=id=>({score:a[id]?.score,displayValue:a[id]?.displayValue,numericValue:a[id]?.numericValue});
+          const opportunities=Object.entries(a)
+            .filter(([,v])=>v?.details?.type==='opportunity' && Number(v.details.overallSavingsMs||0)>0)
+            .map(([id,v])=>({id,title:v.title,displayValue:v.displayValue||'',score:v.score,savingsMs:v.details.overallSavingsMs||0,savingsBytes:v.details.overallSavingsBytes||0}))
+            .sort((x,y)=>y.savingsMs-x.savingsMs||y.savingsBytes-x.savingsBytes)
+            .slice(0,12);
+          const diagnostics={};
+          for(const id of ['server-response-time','total-byte-weight','mainthread-work-breakdown','bootup-time','unused-javascript','unused-css-rules','render-blocking-resources','network-dependency-tree-insight','lcp-discovery-insight','lcp-breakdown-insight','image-delivery-insight','render-blocking-insight','cache-insight']){
+            const v=a[id]; if(v) diagnostics[id]={score:v.score,displayValue:v.displayValue||'',numericValue:v.numericValue??null,detailsType:v.details?.type||null};
+          }
+          const out={fetchTime:l.fetchTime,finalUrl:l.finalDisplayedUrl||l.finalUrl,performance:l.categories.performance.score,metrics:{FCP:metric('first-contentful-paint'),LCP:metric('largest-contentful-paint'),TBT:metric('total-blocking-time'),CLS:metric('cumulative-layout-shift'),SI:metric('speed-index')},opportunities,diagnostics};
+          fs.writeFileSync('perf-audit-summary.json',JSON.stringify(out,null,2)+'\n');
+          NODE
+      - name: Commit audit summary
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add perf-audit-summary.json
+          git commit -m "Record temporary Lighthouse audit" || exit 0
+          git push
