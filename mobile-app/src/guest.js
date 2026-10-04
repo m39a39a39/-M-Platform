@@ -1,4 +1,5 @@
 import {Capacitor} from '@capacitor/core';
+import './storefront.css';
 import {mountSiteChrome} from './site-chrome.js';
 import {renderStorefront,bindStorefront,productExtras,tierPrice,homeConfig,storeProductCard} from './storefront.js';
 import { languageReady, getLanguage, onLanguageChange, toggleLanguage } from './language.js';
