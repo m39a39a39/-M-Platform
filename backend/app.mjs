@@ -64,7 +64,7 @@ export default async function handler(req,res){
     if(path==='/api/image-probe'){
       assert(req.method==='GET',405);
       const src=url.searchParams.get('url')||'';
-      assert(/^https:\/\/ueeshop\\.ly200-cdn\\.com\//i.test(src),400,'Invalid image URL');
+      assert(src.startsWith('https://ueeshop.ly200-cdn.com/'),400,'Invalid image URL');
       const candidates=[
         ['original',src],
         ['oss480webp',src+(src.includes('?')?'&':'?')+'x-oss-process=image/resize,w_480/format,webp'],
