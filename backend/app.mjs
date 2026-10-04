@@ -52,6 +52,15 @@ export default async function handler(req,res){
     if(path==='/api/health'){
       assert(req.method==='GET',405);config();res.setHeader('Content-Type','application/json');res.end(JSON.stringify({ok:true,configured:true,apiVersion:1,nativeAuth:true,pushApiPrepared:true,capacitorCors:true}));return;
     }
+    if(path==='/api/psi-audit'){
+      assert(req.method==='GET',405);
+      const target=url.searchParams.get('url')||'https://m-platform-tan.vercel.app/';
+      const strategy=url.searchParams.get('strategy')==='desktop'?'desktop':'mobile';
+      const psi=new URL('https://www.googleapis.com/pagespeedonline/v5/runPagespeed');
+      psi.searchParams.set('url',target);psi.searchParams.set('strategy',strategy);psi.searchParams.append('category','performance');
+      const upstream=await fetch(psi,{headers:{accept:'application/json'}}),payload=await upstream.text();
+      res.statusCode=upstream.status;res.setHeader('Content-Type','application/json; charset=utf-8');res.end(payload);return;
+    }
     const c=config();
     if(path==='/api/app-config'){
       assert(req.method==='GET',405);res.setHeader('Content-Type','application/json; charset=utf-8');res.end(JSON.stringify(publicAppConfig(c.origin)));return;
