@@ -351,6 +351,7 @@ catalogNode('guestSubcategoryFilters')?.addEventListener('click',e=>{const b=e.t
 catalogNode('guestSupplyCountryFilters').addEventListener('click',e=>{const b=e.target.closest('[data-guest-country]');if(!b)return;supplyCountry=b.dataset.guestCountry;offersPage=1;renderOffers();});
 catalogNode('guestOffers').addEventListener('click',e=>{const card=e.target.closest('[data-guest-offer]');if(card)openOffer(card.dataset.guestOffer);});
 $('modal').addEventListener('click',e=>{
+  if(e.target.closest('[data-close-modal]')){closeModal();return;}
   if(e.target.closest('[data-guest-auth-login]')){closeModal();showLogin();return;}
   if(e.target.closest('[data-guest-auth-register]')){closeModal();register('client');return;}
 });
