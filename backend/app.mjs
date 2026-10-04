@@ -7,7 +7,7 @@ import {assignSupplier} from './modules/fulfillment.mjs';
 import {createAccount} from './modules/admin-create.mjs';
 import {config,HttpError,assert} from './lib/supabase.mjs';
 import {identify,authRoute,isNativeClient,updateOwnCurrency} from './modules/auth.mjs';
-import {snapshot,publicStorefrontSnapshot,publicStorefrontProduct,publicStorefrontPage} from './modules/records.mjs';
+import {snapshot} from './modules/records.mjs';
 import {mutate,moderate,saveSettings,updateAccount,bulkUpdatePublicOffers} from './modules/mutations.mjs';
 import {upload,media} from './modules/media.mjs';
 import {team} from './modules/team.mjs';
@@ -68,11 +68,8 @@ export default async function handler(req,res){
     if(path.startsWith('/api/auth/')){
       assert(req.method==='POST',405);result=await authRoute(path.split('/').at(-1),req,res,body);
     }else{
-      const user=await identify(req,res,path==='/api/state'||path==='/api/storefront'||path==='/api/storefront-product'||path==='/api/storefront-page'||path==='/api/ai-chat'||path==='/api/ai-conversation'&&req.method==='GET'||path.startsWith('/api/media/')&&req.method==='GET');
-      if(path==='/api/state'){assert(req.method==='GET',405);result=await snapshot(user);}
-      else if(path==='/api/storefront'){assert(req.method==='GET',405);result=await publicStorefrontSnapshot();}
-      else if(path==='/api/storefront-product'){assert(req.method==='GET',405);result=await publicStorefrontProduct(url.searchParams.get('id')||'');}
-      else if(path==='/api/storefront-page'){assert(req.method==='GET',405);result=await publicStorefrontPage(url.searchParams.get('id')||'');}
+      const user=await identify(req,res,path==='/api/state'||path==='/api/ai-chat'||path==='/api/ai-conversation'&&req.method==='GET'||path.startsWith('/api/media/')&&req.method==='GET');
+      if(path==='/api/state'){assert(req.method==='GET',405);result=await snapshot(user,{productId:url.searchParams.get('product')||'',pageId:url.searchParams.get('page')||''});}
       else if(path==='/api/ai-chat'){assert(req.method==='POST',405);result=await aiChat(user,body,req);}
       else if(path==='/api/ai-conversation'){
         assert(req.method==='GET',405);result=await customerConversation(user,{conversationId:url.searchParams.get('conversationId')||'',guestKey:url.searchParams.get('guestKey')||'',language:url.searchParams.get('language')||'ar'});
