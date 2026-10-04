@@ -134,4 +134,46 @@ export async function snapshot(user){
     publicOffers:publicOffers.map(r=>anonymous(r,'publicOffers',user)),
     interests:user?.role==='supplier'?interests.map(supplierInterest):interests.map(r=>r.owner_id===user?.id?ownRecord(r,'interests'):{id:r.id,offerId:r.offer_id,status:r.data.status,createdAt:r.created_at})};
 }
+
+function leanPublicSettings(data={}){
+  const safe=publicSettings(upgradeSettings(data));
+  if(safe.storefront?.pages){
+    safe.storefront={...safe.storefront,pages:safe.storefront.pages.map(page=>{
+      const next={...page};delete next.content;delete next.contentEn;return next;
+    })};
+  }
+  return safe;
+}
+function publicOfferSummary(row){
+  const d=row.data||{};
+  return {
+    id:row.id,displayNo:row.display_no,createdAt:row.created_at,updatedAt:d.updatedAt||d.publishedAt||d.reviewedAt||row.created_at,
+    status:'published',sku:d.sku||'',translation:d.translation||{},images:Array.isArray(d.images)?d.images.filter(Boolean).slice(0,1):[],
+    country:d.country||'',categoryId:d.categoryId||'',subcategoryId:d.subcategoryId||'',unitPrice:d.unitPrice??'',currency:d.currency||'',
+    moq:d.moq??'',stock:d.stock??'',tiers:Array.isArray(d.tiers)?d.tiers:[],studioArchived:false
+  };
+}
+async function publicOfferRows(){
+  const offers=await rows('public_offers','data->>status=eq.published&data->>deletedAt=is.null');
+  const ownerIds=[...new Set(offers.filter(r=>!r.data?.storeOwned).map(r=>r.owner_id).filter(Boolean))];
+  const owners=ownerIds.length?await rows('profiles',`id=in.(${inIds(ownerIds)})`):[];
+  const ownerActive=id=>active(owners.find(p=>p.id===id));
+  return offers.filter(row=>open(row)&&(row.data?.storeOwned||ownerActive(row.owner_id)));
+}
+export async function publicStorefrontSnapshot(){
+  const [settings,offers]=await Promise.all([one('settings','site'),publicOfferRows()]);
+  return {user:null,supplySources:[],accounts:[],settings:{...leanPublicSettings(settings.data),_version:settings.version},requests:[],quotes:[],publicOffers:offers.map(publicOfferSummary),interests:[]};
+}
+export async function publicStorefrontProduct(id){
+  assert(typeof id==='string'&&id.length>=8,400,'Invalid product');
+  const row=await one('public_offers',id);assert(open(row)&&row.data?.status==='published',404,'Product not found');
+  if(!row.data?.storeOwned){const owner=await one('profiles',row.owner_id);assert(active(owner),404,'Product not found');}
+  return anonymous(row,'publicOffers',null);
+}
+export async function publicStorefrontPage(id){
+  assert(typeof id==='string'&&id.length>0,400,'Invalid page');
+  const settings=await one('settings','site'),upgraded=upgradeSettings(settings.data);
+  const page=(upgraded.storefront?.pages||[]).find(page=>page.id===id&&page.active);assert(page,404,'Page not found');
+  return page;
+}
 export async function assertOpenRequest(id){const r=await one('requests',id);assert(open(r)&&active(await one('profiles',r?.owner_id)),409,'الطلب غير متاح / Request unavailable');return r;}
