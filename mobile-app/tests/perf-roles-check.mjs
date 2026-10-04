@@ -13,6 +13,7 @@ for(const [engine,launcher] of Object.entries({chromium,webkit})){
   const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
   const page=await context.newPage();page.setDefaultTimeout(15000);
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.route(/http:\/\/127\.0\.0\.1:4173\/(?:customer|supplier|admin)$/,async route=>{const response=await route.fetch({url:'http://127.0.0.1:4173/'});await route.fulfill({response});});
   await page.route('https://m-platform-tan.vercel.app/**',async route=>{
     const req=route.request(),path=new URL(req.url()).pathname;
     const bearer=(req.headers().authorization||'').replace('Bearer ','');
