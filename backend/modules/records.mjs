@@ -9,18 +9,23 @@ export const open=r=>r&&!r.data.deletedAt&&!r.data.suspendedAt;
 export function unpack(row,kind){return {...row.data,id:row.id,displayNo:row.display_no,version:row.version,createdAt:row.created_at,...(kind==='requests'||kind==='interests'?{customerId:row.owner_id}:{supplierId:row.owner_id}),...(row.request_id?{requestId:row.request_id}:{}),...(row.offer_id?{offerId:row.offer_id}:{})};}
 export function ownRecord(row,kind){const item=unpack(row,kind);delete item.supplierIds;delete item.moderationHistory;delete item.reviewedAt;delete item.internalNotes;delete item.orderAudit;delete item.supplierAssignmentHistory;delete item.assignedSupplierId;delete item.createdByAdmin;delete item.supplyTerms;delete item.supplySourceId;return item;}
 function publicSettings(data={}){const safe={...data};delete safe.bankAccounts;delete safe.studioDraft;return safe;}
-function publicSettingsForView(data={},pageId=''){
-  const safe=publicSettings(upgradeSettings(data));
+function publicSettingsForView(data={},route={}){
+  const {pageId='',productId='',category='',q=''}=route,safe=publicSettings(upgradeSettings(data));
   if(safe.storefront){
+    const routePage=productId?'product':category?'category':(q||['products','search'].includes(pageId))?'search':pageId?'':'home';
+    const sections=(safe.storefront.sections||[]).filter(section=>{
+      const page=section.page||(['header','footer'].includes(section.type)?'global':'home');
+      return page==='global'||(routePage&&page===routePage);
+    }).map(section=>{
+      if(section.type==='catalog')return section;
+      const next={...section};delete next.catalog;return next;
+    });
     safe.storefront={...safe.storefront,
       pages:(safe.storefront.pages||[]).map(page=>{
         if(page.id===pageId)return page;
         const next={...page};delete next.content;delete next.contentEn;return next;
       }),
-      sections:(safe.storefront.sections||[]).map(section=>{
-        if(section.type==='catalog')return section;
-        const next={...section};delete next.catalog;return next;
-      })
+      sections
     };
   }
   return safe;
@@ -99,6 +104,26 @@ async function homepageOfferRows(settingsData={}){
   const rows=(await Promise.all(tasks)).flat();
   return [...new Map(rows.map(row=>[row.id,row])).values()];
 }
+async function productPageOfferRows(productId){
+  const current=await one('public_offers',productId);
+  if(!open(current)||current.data?.status!=='published')return [];
+  const base='data->>status=eq.published&data->>deletedAt=is.null',categoryId=String(current.data?.categoryId||''),tasks=[];
+  if(categoryId){
+    tasks.push(db('public_offers',`${base}&data->>categoryId=eq.${encodeURIComponent(categoryId)}&order=created_at.desc&limit=16`));
+    tasks.push(db('public_offers',`${base}&data->>categoryId=neq.${encodeURIComponent(categoryId)}&order=created_at.desc&limit=16`));
+  }else tasks.push(db('public_offers',`${base}&order=created_at.desc&limit=24`));
+  const extras=(await Promise.all(tasks)).flat();
+  return [...new Map([current,...extras].map(row=>[row.id,row])).values()];
+}
+async function categoryPageOfferRows(settingsData,categoryId){
+  const upgraded=upgradeSettings(settingsData),main=(upgraded.categories||[]).find(item=>item.id===categoryId&&item.active!==false);
+  const sub=(upgraded.subcategories||[]).find(item=>item.id===categoryId&&item.active!==false);
+  const resolvedMain=sub?.parentId||main?.id||'';
+  if(!resolvedMain)return [];
+  let query=`data->>status=eq.published&data->>deletedAt=is.null&data->>categoryId=eq.${encodeURIComponent(resolvedMain)}`;
+  if(sub)query+=`&data->>subcategoryId=eq.${encodeURIComponent(sub.id)}`;
+  return rows('public_offers',query);
+}
 export async function snapshot(user,{productId='',pageId='',category='',q=''}={}){
   let requests=[],quotes=[],publicOffers=[],interests=[],accounts=[],settings,selectedSupplierQuotes=[],supplySources=[];
   if(user?.role==='supplier')supplySources=(await rows('supply_sources',`owner_id=eq.${user.id}`)).filter(open).map(ownSource);
@@ -149,9 +174,12 @@ export async function snapshot(user,{productId='',pageId='',category='',q=''}={}
   }else{
     settings=await one('settings','site');
     const homepageOnly=!productId&&!pageId&&!category&&!q;
-    publicOffers=homepageOnly
-      ?await homepageOfferRows(settings.data)
-      :await rows('public_offers','data->>status=eq.published&data->>deletedAt=is.null');
+    const policyOnly=!!pageId&&!['products','search'].includes(pageId)&&!productId&&!category&&!q;
+    if(homepageOnly)publicOffers=await homepageOfferRows(settings.data);
+    else if(productId)publicOffers=await productPageOfferRows(productId);
+    else if(category)publicOffers=await categoryPageOfferRows(settings.data,category);
+    else if(policyOnly)publicOffers=[];
+    else publicOffers=await rows('public_offers','data->>status=eq.published&data->>deletedAt=is.null');
   }
 
   interests=interests.filter(open);
@@ -178,7 +206,7 @@ export async function snapshot(user,{productId='',pageId='',category='',q=''}={}
     }
     return item;
   });
-  const responseSettings=user?publicSettings(upgradeSettings(settings.data)):publicSettingsForView(settings.data,pageId);
+  const responseSettings=user?publicSettings(upgradeSettings(settings.data)):publicSettingsForView(settings.data,{pageId,productId,category,q});
   let responseOffers=publicOffers.map(r=>!user&&r.id!==productId?publicProductSummary(r):anonymous(r,'publicOffers',user));
   if(!user&&!productId&&!pageId&&!category&&!q){
     const storefront=responseSettings.storefront||{},sections=(storefront.sections||[]).filter(section=>section?.visible!==false);
