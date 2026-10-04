@@ -10,10 +10,18 @@ export function ownRecord(row,kind){const item=unpack(row,kind);delete item.supp
 function publicSettings(data={}){const safe={...data};delete safe.bankAccounts;delete safe.studioDraft;return safe;}
 function publicSettingsForView(data={},pageId=''){
   const safe=publicSettings(upgradeSettings(data));
-  if(safe.storefront?.pages)safe.storefront={...safe.storefront,pages:safe.storefront.pages.map(page=>{
-    if(page.id===pageId)return page;
-    const next={...page};delete next.content;delete next.contentEn;return next;
-  })};
+  if(safe.storefront){
+    safe.storefront={...safe.storefront,
+      pages:(safe.storefront.pages||[]).map(page=>{
+        if(page.id===pageId)return page;
+        const next={...page};delete next.content;delete next.contentEn;return next;
+      }),
+      sections:(safe.storefront.sections||[]).map(section=>{
+        if(section.type==='catalog')return section;
+        const next={...section};delete next.catalog;return next;
+      })
+    };
+  }
   return safe;
 }
 function publicProductSummary(row){
