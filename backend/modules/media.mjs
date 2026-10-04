@@ -140,7 +140,7 @@ export async function uploadProductImages(user,sources){
 }
 
 export async function uploadPaymentReceipt(user,source){return storeMedia(user,decodePaymentReceipt(source),'تعذر رفع إيصال الدفع / Receipt upload failed');}
-export async function media(user,id,res){
+export async function media(user,id,res,{width=0,quality=78}={}){
   assert(/^[a-f0-9-]{36}$/.test(id),404);const m=await one('media',id);assert(m,404);
   const src=`/api/media/${id}`;
   let publicImage=false,permitted=user?.id===m.owner_id;
@@ -155,8 +155,13 @@ export async function media(user,id,res){
       (user?.role==='admin'&&[...(s.requests||[]),...(s.interests||[])].some(r=>r.paymentReceipt?.src===src));
   }
   assert(permitted,404);
-  const c=config(),r=await fetch(`${c.url}/storage/v1/object/authenticated/m-private/${m.path}`,{headers:{apikey:c.service,Authorization:`Bearer ${c.service}`},signal:AbortSignal.timeout(15000)});
-  assert(r.ok,502);res.setHeader('Content-Type',m.mime);
+  const c=config(),w=Math.max(0,Math.min(2500,Number(width)||0)),q=Math.max(20,Math.min(100,Number(quality)||78));
+  const storagePath=w
+    ? `${c.url}/storage/v1/render/image/authenticated/m-private/${m.path}?width=${Math.round(w)}&quality=${Math.round(q)}&resize=contain`
+    : `${c.url}/storage/v1/object/authenticated/m-private/${m.path}`;
+  let r=await fetch(storagePath,{headers:{apikey:c.service,Authorization:`Bearer ${c.service}`,Accept:'image/avif,image/webp,image/*,*/*;q=0.8'},signal:AbortSignal.timeout(15000)});
+  if(w&&!r.ok)r=await fetch(`${c.url}/storage/v1/object/authenticated/m-private/${m.path}`,{headers:{apikey:c.service,Authorization:`Bearer ${c.service}`},signal:AbortSignal.timeout(15000)});
+  assert(r.ok,502);res.setHeader('Content-Type',r.headers.get('content-type')||m.mime);
   if(m.mime==='application/pdf')res.setHeader('Content-Disposition','inline; filename="payment-receipt.pdf"');
   if(publicImage){
     res.setHeader('Cache-Control','public, max-age=31536000, immutable');

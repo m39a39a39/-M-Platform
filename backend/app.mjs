@@ -85,7 +85,7 @@ export default async function handler(req,res){
         assert(req.method==='GET',405);result=url.searchParams.get('conversationId')?await adminConversationRead(user,url.searchParams.get('conversationId')):await adminConversationList(user);
       }
       else if(path==='/api/supplier-catalog'){assert(req.method==='GET',405);result=await supplierCatalog(user,url.searchParams);}
-      else if(path.startsWith('/api/media/')){assert(req.method==='GET',405);await media(user,path.split('/').at(-1),res);return;}
+      else if(path.startsWith('/api/media/')){assert(req.method==='GET',405);await media(user,path.split('/').at(-1),res,{width:url.searchParams.get('width'),quality:url.searchParams.get('quality')});return;}
       else if(path==='/api/notifications'){
         assert(user,401);assert(req.method==='GET',405);result=await listNotifications(user);
       }else{
