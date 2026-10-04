@@ -15,6 +15,18 @@ const POST_AUTH_KEY='m-platform.post-auth-action.v1';
 const PAGE_SIZE=20;
 const MEDIA_CONCURRENCY=6;
 const mediaTasks=new Map();
+let shellStylesTask=null,shellStylesIdle=null;
+function ensureShellStyles(){
+  if(!shellStylesTask)shellStylesTask=import('./styles.css').catch(error=>{console.warn('shell_styles_failed',error);shellStylesTask=null;});
+  return shellStylesTask;
+}
+function scheduleShellStyles(){
+  if(shellStylesTask||shellStylesIdle)return;
+  const warm=()=>{shellStylesIdle=null;void ensureShellStyles();};
+  if('requestIdleCallback' in window)shellStylesIdle=requestIdleCallback(warm,{timeout:2800});
+  else shellStylesIdle=setTimeout(warm,2200);
+}
+window.addEventListener('pointerdown',()=>void ensureShellStyles(),{once:true,passive:true});
 const PUBLIC_STATE_CACHE_KEY='m-platform.public-state.v3';
 const PUBLIC_STATE_CACHE_MAX_AGE=0;
 function readCachedPublicState(){
@@ -363,7 +375,7 @@ window.addEventListener('mplatform:view',e=>{
   let hasWebSession=false;try{hasWebSession=!!sessionStorage.getItem('m-platform.session.v1');}catch{}
   const publicWeb=!Capacitor.isNativePlatform()&&!hasWebSession&&!['/customer','/customer.html','/supplier','/supplier.html','/login.html','/reset-password.html','/register-customer.html','/register-supplier.html'].includes(location.pathname);
   if(publicWeb)showView('guestView');
-  if(!$('guestView').classList.contains('hidden')){ensureLoaded();scheduleGuestAiChat();}
+  if(!$('guestView').classList.contains('hidden')){ensureLoaded();scheduleGuestAiChat();scheduleShellStyles();}
 })();
 
 function guestChromeAction(action){if(action==='cart')openGuestCart();if(action==='login')showLogin();if(action==='register-supplier')register('supplier');if(action==='register-client')register('client');if(action==='language')toggleLanguage();}
