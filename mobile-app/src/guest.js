@@ -1,4 +1,5 @@
 import {Capacitor} from '@capacitor/core';
+import './public-shell.css';
 import './storefront.css';
 import {mountSiteChrome} from './site-chrome.js';
 import {renderStorefront,bindStorefront,productExtras,tierPrice,homeConfig,storeProductCard} from './storefront.js';
@@ -35,6 +36,8 @@ const cachedPublicState=readCachedPublicState();
 let lang='ar';
 let state=cachedPublicState?.state||null;
 let loadTask=null;
+let guestUiStylesTask=null;
+const ensureGuestUiStyles=()=>guestUiStylesTask||(guestUiStylesTask=import('./guest-ui.js').catch(error=>{guestUiStylesTask=null;throw error;}));
 let lastLoadedAt=cachedPublicState?.savedAt||0;
 let offersPage=1;
 let category='all';
@@ -296,14 +299,16 @@ function openOffer(id){location.assign('/?product='+encodeURIComponent(id));}
 function showGuestToast(message){
   const toast=$('toast');if(!toast)return;toast.textContent=message;toast.classList.remove('hidden');clearTimeout(showGuestToast.t);showGuestToast.t=setTimeout(()=>toast.classList.add('hidden'),2200);
 }
-function requireCustomerAuth(action){
+async function requireCustomerAuth(action){
+  await ensureGuestUiStyles();
   const isCart=action==='open-cart';
   try{localStorage.setItem(POST_AUTH_KEY,action);}catch{}
   $('modalKicker').textContent='M Platform';$('modalTitle').textContent=isCart?t('authCartTitle'):t('authRequestTitle');
   $('modalBody').innerHTML=`<section class="guest-auth-required"><p>${esc(isCart?t('authCartText'):t('authRequestText'))}</p><div class="guest-auth-required-actions"><button class="secondary-btn" type="button" data-guest-auth-login>${esc(t('continueLogin'))}</button><button class="primary-btn" type="button" data-guest-auth-register>${esc(t('createClient'))}</button></div></section>`;
   $('modal').classList.remove('hidden');
 }
-function openGuestCart(){
+async function openGuestCart(){
+  await ensureGuestUiStyles();
   const rows=cartRows();
   aiChatSignal('cart_open',{cartCount:rows.length,cartTotal:rows.reduce((sum,row)=>sum+Number(row.total||0),0),currency:rows[0]?.currency||''});
   $('modalKicker').textContent=rows.length?`${rows.length} ${t('products')} · ${rows[0].currency}`:'M Platform';$('modalTitle').textContent=t('cart');
