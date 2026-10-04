@@ -223,6 +223,7 @@ export async function snapshot(user,{productId='',pageId='',category='',q='',car
   });
   const responseSettings=user?publicSettings(upgradeSettings(settings.data)):publicSettingsForView(settings.data,{pageId,productId,category,q});
   let responseOffers=publicOffers.map(r=>!user&&r.id!==productId?publicProductSummary(r):anonymous(r,'publicOffers',user));
+  const cartResponseOffers=!user&&cartIds.length?responseOffers.filter(item=>cartIds.includes(item.id)):[];
   if(!user&&!productId&&!pageId&&!category&&!q){
     const storefront=responseSettings.storefront||{},sections=(storefront.sections||[]).filter(section=>section?.visible!==false);
     const collections=storefront.collections||[],selected=new Map();
@@ -237,6 +238,7 @@ export async function snapshot(user,{productId='',pageId='',category='',q='',car
     }
     responseOffers=[...selected.values()];
   }
+  if(cartResponseOffers.length)responseOffers=[...new Map([...responseOffers,...cartResponseOffers].map(item=>[item.id,item])).values()];
   return {user:profile(user),supplySources,accounts:user?[profile(user)]:[],settings:{...responseSettings,_version:settings.version},
     requests:projectedRequests,
     quotes:quotes.map(r=>{if(r.owner_id===user?.id)return ownRecord(r,'quotes');const item=anonymous(r,'quotes',user);if(user?.role==='supplier'){for(const key of ['unitPrice','currency','moq','leadTime','sampleCost'])delete item[key];if(r.data.assignedSupplierId===user.id)Object.assign(item,{supplierOrderStatus:r.data.supplierOrderStatus,supplierOrderNote:r.data.supplierOrderNote,supplierOrderUpdatedAt:r.data.supplierOrderUpdatedAt});}return item;}),
