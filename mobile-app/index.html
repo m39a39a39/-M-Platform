@@ -5,13 +5,31 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#0b2236" />
   <style>
-    /* Critical startup styles are inline so Safari never flashes the session-check text before CSS loads. */
+    /* Critical shell only; the large account/workspace stylesheet is loaded after first paint when needed. */
+    :root{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#0b2236;background:#fafbf8;--safe-top:env(safe-area-inset-top,0px);--safe-bottom:env(safe-area-inset-bottom,0px);--safe-left:env(safe-area-inset-left,0px);--safe-right:env(safe-area-inset-right,0px)}
+    *{box-sizing:border-box;min-inline-size:0}
+    html,body,#app{margin:0;min-height:100%;background:#fafbf8}
+    body{min-height:100%;overflow-wrap:anywhere}
+    .hidden{display:none!important}
+    button,input,textarea,select{font:inherit}
+    button{cursor:pointer}
+    .app-shell{min-height:100%}
     #bootView [data-auth-copy="loading"]{display:none!important}
-    #bootView{min-height:100vh;background:#fafbf8}
-    .boot-shell{min-height:100vh;background:#fafbf8}
+    #bootView,.boot-shell{min-height:100vh;background:#fafbf8}
+    .boot-shell-header{height:72px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;border-bottom:1px solid #e7ece9;background:#fff}
+    .boot-shell-main{max-width:1200px;margin:auto;padding:28px 24px 56px}
+    .boot-shell-actions{display:flex;gap:10px}
+    .boot-shell-actions i{display:block;width:38px;height:38px;border-radius:12px}
+    .boot-skeleton{display:block;background:#edf1ef;border-radius:9px}
+    .boot-brand{width:142px;height:28px}
+    .boot-hero{height:210px;border-radius:20px;margin-bottom:24px}
+    .boot-card-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+    .boot-card{border:1px solid #e7ece9;border-radius:16px;background:#fff;padding:12px}
+    .boot-card-image{width:100%;aspect-ratio:1;border-radius:12px}
+    .boot-card-line{height:13px;border-radius:7px;margin-top:12px}.boot-card-line.short{width:58%}
+    @media(max-width:700px){.boot-shell-header{height:62px;padding-inline:16px}.boot-shell-main{padding:18px 14px 44px}.boot-hero{height:150px;border-radius:16px}.boot-card-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.boot-card{padding:8px;border-radius:13px}.boot-brand{width:116px;height:24px}}
   </style>
   <title>M Platform</title>
-  <link rel="stylesheet" href="/src/styles.css" />
 </head>
 <body>
   <div id="app" class="app-shell">
