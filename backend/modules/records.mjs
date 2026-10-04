@@ -135,7 +135,7 @@ async function categoryPageOfferRows(settingsData,categoryId){
   if(sub)query+=`&data->>subcategoryId=eq.${encodeURIComponent(sub.id)}`;
   return rows('public_offers',query);
 }
-export async function snapshot(user,{productId='',pageId='',category='',q=''}={}){
+export async function snapshot(user,{productId='',pageId='',category='',q='',cartIds=[]}={}){
   let requests=[],quotes=[],publicOffers=[],interests=[],accounts=[],settings,selectedSupplierQuotes=[],supplySources=[];
   if(user?.role==='supplier')supplySources=(await rows('supply_sources',`owner_id=eq.${user.id}`)).filter(open).map(ownSource);
   else if(user?.role==='admin'&&(can(user,'offers.read')||can(user,'offers.edit')||can(user,'publish')||can(user,'requests.edit')))supplySources=(await rows('supply_sources')).filter(open).map(r=>({...ownSource(r),supplierId:r.owner_id}));
@@ -191,6 +191,10 @@ export async function snapshot(user,{productId='',pageId='',category='',q=''}={}
     else if(category)publicOffers=await categoryPageOfferRows(settings.data,category);
     else if(policyOnly)publicOffers=[];
     else publicOffers=await rows('public_offers','data->>status=eq.published&data->>deletedAt=is.null');
+    if(cartIds.length){
+      const cartRows=await db('public_offers',`id=in.(${inIds(cartIds)})&data->>status=eq.published&data->>deletedAt=is.null&limit=${cartIds.length}`);
+      publicOffers=[...new Map([...publicOffers,...cartRows].map(row=>[row.id,row])).values()];
+    }
   }
 
   interests=interests.filter(open);
