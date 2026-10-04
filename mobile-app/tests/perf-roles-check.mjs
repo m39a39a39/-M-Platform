@@ -5,7 +5,7 @@ import {ensureThemePages} from '../../shared/theme-pages.mjs';
 
 const settings={storefront:ensureThemePages(defaultStore()),categories:[],subcategories:[],supplyCountries:[],_version:1};
 const users=Object.fromEntries(['admin','client','supplier'].map(role=>[role,{id:role,role,name:`${role} PERSON`,company:`${role} COMPANY`,email:`${role}@example.test`,isOwner:role==='admin'}]));
-const pathFor={admin:'/admin',client:'/customer',supplier:'/supplier'};
+const pathFor={admin:'/admin.html',client:'/customer.html',supplier:'/supplier.html'};
 
 for(const [engine,launcher] of Object.entries({chromium,webkit})){
  const browser=await launcher.launch({headless:true});
