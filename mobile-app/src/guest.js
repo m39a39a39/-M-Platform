@@ -4,7 +4,6 @@ import {renderStorefront,bindStorefront,productExtras,tierPrice,homeConfig,store
 import { languageReady, getLanguage, onLanguageChange, toggleLanguage } from './language.js';
 import { showView } from './views.js';
 import { categoryRows, subcategoryRows, supplyCountryRows, taxonomyLabel } from './catalog-taxonomy.js';
-import { mountAiChat, unmountAiChat, aiChatSignal } from './ai-chat.js';
 
 const browserOrigin=typeof location!=='undefined'&&/^https?:$/.test(location.protocol)&&!['localhost','127.0.0.1','::1','[::1]'].includes(location.hostname)?location.origin:'';
 const API=String(import.meta.env?.VITE_API_ORIGIN||browserOrigin||'https://m-platform-tan.vercel.app').replace(/\/$/,'');
@@ -200,8 +199,29 @@ async function aiConversation(params={}){
   if(!r.ok)throw new Error(data?.error||t('error'));
   return data;
 }
-function mountGuestAiChat(){
-  mountAiChat({mode:'guest',language:()=>lang,send:aiSend,fetchConversation:aiConversation});
+let aiModule=null,aiTask=null,aiIdleHandle=null;
+function loadAiModule(){
+  if(aiModule)return Promise.resolve(aiModule);
+  if(!aiTask)aiTask=import('./ai-chat.js').then(mod=>(aiModule=mod)).finally(()=>{aiTask=null;});
+  return aiTask;
+}
+function aiChatSignal(...args){aiModule?.aiChatSignal(...args);}
+async function mountGuestAiChat(){
+  const mod=await loadAiModule();
+  if(!$('guestView').classList.contains('hidden'))mod.mountAiChat({mode:'guest',language:()=>lang,send:aiSend,fetchConversation:aiConversation});
+}
+function scheduleGuestAiChat(){
+  if(aiIdleHandle)return;
+  const start=()=>{aiIdleHandle=null;void mountGuestAiChat();};
+  if('requestIdleCallback' in window)aiIdleHandle=requestIdleCallback(start,{timeout:2200});
+  else aiIdleHandle=setTimeout(start,1400);
+}
+function unmountGuestAiChat(){
+  if(aiIdleHandle){
+    if('cancelIdleCallback' in window)cancelIdleCallback(aiIdleHandle);else clearTimeout(aiIdleHandle);
+    aiIdleHandle=null;
+  }
+  aiModule?.unmountAiChat();
 }
 async function imageUrl(src){
   if(mediaCache.has(src))return mediaCache.get(src);
@@ -316,7 +336,7 @@ $('backToGuestBtn').addEventListener('click',showGuest);
 catalogNode('guestPrevPage').addEventListener('click',()=>{if(offersPage>1){offersPage--;renderOffers();catalog.scrollIntoView({behavior:'smooth',block:'start'});}});
 catalogNode('guestNextPage').addEventListener('click',()=>{const total=Math.max(1,Math.ceil(filteredOffers().length/PAGE_SIZE));if(offersPage<total){offersPage++;renderOffers();catalog.scrollIntoView({behavior:'smooth',block:'start'});}});
 catalogNode('guestProductSearch').addEventListener('input',e=>{searchText=e.target.value;offersPage=1;renderOffers();aiChatSignal('search',{query:searchText,results:filteredOffers().length});});
-onLanguageChange(value=>{lang=value;apply();if(!$('guestView').classList.contains('hidden'))mountGuestAiChat();});
+onLanguageChange(value=>{lang=value;apply();if(!$('guestView').classList.contains('hidden'))scheduleGuestAiChat();});
 catalogNode('guestCategoryFilters').addEventListener('click',e=>{const b=e.target.closest('[data-guest-category]');if(!b)return;category=b.dataset.guestCategory;subcategory='all';offersPage=1;renderOffers();});
 catalogNode('guestSubcategoryFilters')?.addEventListener('click',e=>{const b=e.target.closest('[data-guest-subcategory]');if(!b)return;subcategory=b.dataset.guestSubcategory;offersPage=1;renderOffers();});
 catalogNode('guestSupplyCountryFilters').addEventListener('click',e=>{const b=e.target.closest('[data-guest-country]');if(!b)return;supplyCountry=b.dataset.guestCountry;offersPage=1;renderOffers();});
@@ -330,8 +350,8 @@ window.addEventListener('mplatform:view',e=>{
   if(['guestView','loginView','registerView','resetView','sessionView'].includes(view)){
     loadCart();ensureLoaded();if(state)mountSiteChrome(state,{cartCount:cartItems.length},{hydrate:hydrateImages,action:guestChromeAction});
   }
-  if(view==='guestView')mountGuestAiChat();
-  else if(['loginView','registerView','resetView','sessionView'].includes(view))unmountAiChat();
+  if(view==='guestView')scheduleGuestAiChat();
+  else if(['loginView','registerView','resetView','sessionView'].includes(view))unmountGuestAiChat();
 });
 
 (async()=>{
@@ -339,7 +359,7 @@ window.addEventListener('mplatform:view',e=>{
   let hasWebSession=false;try{hasWebSession=!!sessionStorage.getItem('m-platform.session.v1');}catch{}
   const publicWeb=!Capacitor.isNativePlatform()&&!hasWebSession&&!['/customer','/customer.html','/supplier','/supplier.html','/login.html','/reset-password.html','/register-customer.html','/register-supplier.html'].includes(location.pathname);
   if(publicWeb)showView('guestView');
-  if(!$('guestView').classList.contains('hidden')){ensureLoaded();mountGuestAiChat();}
+  if(!$('guestView').classList.contains('hidden')){ensureLoaded();scheduleGuestAiChat();}
 })();
 
 function guestChromeAction(action){if(action==='cart')openGuestCart();if(action==='login')showLogin();if(action==='register-supplier')register('supplier');if(action==='register-client')register('client');if(action==='language')toggleLanguage();}
