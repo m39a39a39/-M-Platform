@@ -104,6 +104,26 @@ async function homepageOfferRows(settingsData={}){
   const rows=(await Promise.all(tasks)).flat();
   return [...new Map(rows.map(row=>[row.id,row])).values()];
 }
+async function productPageOfferRows(productId){
+  const current=await one('public_offers',productId);
+  if(!open(current)||current.data?.status!=='published')return [];
+  const base='data->>status=eq.published&data->>deletedAt=is.null',categoryId=String(current.data?.categoryId||''),tasks=[];
+  if(categoryId){
+    tasks.push(db('public_offers',`${base}&data->>categoryId=eq.${encodeURIComponent(categoryId)}&order=created_at.desc&limit=16`));
+    tasks.push(db('public_offers',`${base}&data->>categoryId=neq.${encodeURIComponent(categoryId)}&order=created_at.desc&limit=16`));
+  }else tasks.push(db('public_offers',`${base}&order=created_at.desc&limit=24`));
+  const extras=(await Promise.all(tasks)).flat();
+  return [...new Map([current,...extras].map(row=>[row.id,row])).values()];
+}
+async function categoryPageOfferRows(settingsData,categoryId){
+  const upgraded=upgradeSettings(settingsData),main=(upgraded.categories||[]).find(item=>item.id===categoryId&&item.active!==false);
+  const sub=(upgraded.subcategories||[]).find(item=>item.id===categoryId&&item.active!==false);
+  const resolvedMain=sub?.parentId||main?.id||'';
+  if(!resolvedMain)return [];
+  let query=`data->>status=eq.published&data->>deletedAt=is.null&data->>categoryId=eq.${encodeURIComponent(resolvedMain)}`;
+  if(sub)query+=`&data->>subcategoryId=eq.${encodeURIComponent(sub.id)}`;
+  return rows('public_offers',query);
+}
 export async function snapshot(user,{productId='',pageId='',category='',q=''}={}){
   let requests=[],quotes=[],publicOffers=[],interests=[],accounts=[],settings,selectedSupplierQuotes=[],supplySources=[];
   if(user?.role==='supplier')supplySources=(await rows('supply_sources',`owner_id=eq.${user.id}`)).filter(open).map(ownSource);
@@ -154,9 +174,12 @@ export async function snapshot(user,{productId='',pageId='',category='',q=''}={}
   }else{
     settings=await one('settings','site');
     const homepageOnly=!productId&&!pageId&&!category&&!q;
-    publicOffers=homepageOnly
-      ?await homepageOfferRows(settings.data)
-      :await rows('public_offers','data->>status=eq.published&data->>deletedAt=is.null');
+    const policyOnly=!!pageId&&!['products','search'].includes(pageId)&&!productId&&!category&&!q;
+    if(homepageOnly)publicOffers=await homepageOfferRows(settings.data);
+    else if(productId)publicOffers=await productPageOfferRows(productId);
+    else if(category)publicOffers=await categoryPageOfferRows(settings.data,category);
+    else if(policyOnly)publicOffers=[];
+    else publicOffers=await rows('public_offers','data->>status=eq.published&data->>deletedAt=is.null');
   }
 
   interests=interests.filter(open);
