@@ -159,8 +159,8 @@ export async function media(user,id,res){
   assert(r.ok,502);res.setHeader('Content-Type',m.mime);
   if(m.mime==='application/pdf')res.setHeader('Content-Disposition','inline; filename="payment-receipt.pdf"');
   if(publicImage){
-    res.setHeader('Cache-Control','public, max-age=86400');
-    res.setHeader('CDN-Cache-Control','public, max-age=86400, stale-while-revalidate=604800');
+    res.setHeader('Cache-Control','public, max-age=31536000, immutable');
+    res.setHeader('CDN-Cache-Control','public, max-age=31536000, stale-while-revalidate=31536000');
   }else res.setHeader('Cache-Control','private, no-store');
   res.end(Buffer.from(await r.arrayBuffer()));
 }
