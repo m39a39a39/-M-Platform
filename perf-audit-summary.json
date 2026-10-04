@@ -1,0 +1,146 @@
+{
+  "fetchTime": "2026-10-04T10:36:39.269Z",
+  "finalUrl": "https://m-platform-tan.vercel.app/",
+  "performance": 0.5,
+  "metrics": {
+    "FCP": {
+      "score": 0.89,
+      "displayValue": "1.8 s",
+      "numericValue": 1817.38
+    },
+    "LCP": {
+      "score": 0.17,
+      "displayValue": "5.7 s",
+      "numericValue": 5665.348000000002
+    },
+    "TBT": {
+      "score": 0.37,
+      "displayValue": "780 ms",
+      "numericValue": 784
+    },
+    "CLS": {
+      "score": 0.66,
+      "displayValue": "0.186",
+      "numericValue": 0.1859052247873633
+    },
+    "SI": {
+      "score": 0.95,
+      "displayValue": "2.9 s",
+      "numericValue": 2872.9737525896144
+    }
+  },
+  "opportunities": [
+    {
+      "id": "uses-responsive-images",
+      "title": "Properly size images",
+      "displayValue": "Est savings of 2,608 KiB",
+      "score": 0,
+      "savingsMs": 3060,
+      "savingsBytes": 2670552
+    },
+    {
+      "id": "modern-image-formats",
+      "title": "Serve images in next-gen formats",
+      "displayValue": "Est savings of 2,037 KiB",
+      "score": 0,
+      "savingsMs": 2100,
+      "savingsBytes": 2085973.5
+    },
+    {
+      "id": "uses-rel-preconnect",
+      "title": "Preconnect to required origins",
+      "displayValue": "Est savings of 300 ms",
+      "score": 0,
+      "savingsMs": 300.072,
+      "savingsBytes": 0
+    },
+    {
+      "id": "uses-optimized-images",
+      "title": "Efficiently encode images",
+      "displayValue": "Est savings of 400 KiB",
+      "score": 0,
+      "savingsMs": 300,
+      "savingsBytes": 409705
+    }
+  ],
+  "diagnostics": {
+    "server-response-time": {
+      "score": 1,
+      "displayValue": "Root document took 0 ms",
+      "numericValue": 2.847999999999999,
+      "detailsType": "opportunity"
+    },
+    "total-byte-weight": {
+      "score": 0.5,
+      "displayValue": "Total size was 2,910 KiB",
+      "numericValue": 2979802,
+      "detailsType": "table"
+    },
+    "mainthread-work-breakdown": {
+      "score": 0,
+      "displayValue": "2.6 s",
+      "numericValue": 2596.7239999999842,
+      "detailsType": "table"
+    },
+    "bootup-time": {
+      "score": 1,
+      "displayValue": "0.8 s",
+      "numericValue": 820.6239999999993,
+      "detailsType": "table"
+    },
+    "unused-javascript": {
+      "score": 1,
+      "displayValue": "",
+      "numericValue": 0,
+      "detailsType": "opportunity"
+    },
+    "unused-css-rules": {
+      "score": 1,
+      "displayValue": "",
+      "numericValue": 0,
+      "detailsType": "opportunity"
+    },
+    "render-blocking-resources": {
+      "score": 1,
+      "displayValue": "",
+      "numericValue": 0,
+      "detailsType": "opportunity"
+    },
+    "network-dependency-tree-insight": {
+      "score": 0,
+      "displayValue": "",
+      "numericValue": null,
+      "detailsType": "list"
+    },
+    "lcp-discovery-insight": {
+      "score": 0,
+      "displayValue": "",
+      "numericValue": null,
+      "detailsType": "list"
+    },
+    "lcp-breakdown-insight": {
+      "score": 1,
+      "displayValue": "",
+      "numericValue": null,
+      "detailsType": "list"
+    },
+    "image-delivery-insight": {
+      "score": 0,
+      "displayValue": "Est savings of 2,733 KiB",
+      "numericValue": null,
+      "detailsType": "table"
+    },
+    "render-blocking-insight": {
+      "score": 0.5,
+      "displayValue": "",
+      "numericValue": null,
+      "detailsType": "table"
+    },
+    "cache-insight": {
+      "score": 1,
+      "displayValue": "",
+      "numericValue": null,
+      "detailsType": "table"
+    }
+  }
+}
