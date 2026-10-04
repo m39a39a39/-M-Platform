@@ -272,8 +272,7 @@ async function load(){
   loadTask=(async()=>{
     try{
       const route=new URLSearchParams(location.search),query=new URLSearchParams();
-      if(route.get('product'))query.set('product',route.get('product'));
-      if(route.get('page'))query.set('page',route.get('page'));
+      for(const key of ['product','page','category','q'])if(route.get(key))query.set(key,route.get(key));
       const next=await api('/api/v1/state'+(query.size?'?'+query.toString():''));
       state=next;lastLoadedAt=Date.now();writeCachedPublicState(next);
       const valid=new Set(publishedOffers().map(o=>o.id));cartItems=cartItems.filter(x=>valid.has(x.offerId));saveCart();

@@ -75,7 +75,7 @@ export default async function handler(req,res){
           res.setHeader('Cache-Control','public, max-age=0, s-maxage=30, stale-while-revalidate=300');
           res.setHeader('CDN-Cache-Control','public, max-age=30, stale-while-revalidate=300');
         }
-        result=await snapshot(user,{productId:url.searchParams.get('product')||'',pageId:url.searchParams.get('page')||''});
+        result=await snapshot(user,{productId:url.searchParams.get('product')||'',pageId:url.searchParams.get('page')||'',category:url.searchParams.get('category')||'',q:url.searchParams.get('q')||''});
       }
       else if(path==='/api/ai-chat'){assert(req.method==='POST',405);result=await aiChat(user,body,req);}
       else if(path==='/api/ai-conversation'){

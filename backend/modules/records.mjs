@@ -1,4 +1,5 @@
 import {upgradeSettings} from './storefront-upgrade.mjs';
+import {selectSectionProducts} from '../../shared/storefront-model.mjs';
 import {db,one,assert} from '../lib/supabase.mjs';
 import {ownSource} from './supply-sources.mjs';
 import {can,profile} from './auth.mjs';
@@ -73,7 +74,7 @@ export async function rows(table,query=''){
   assert(false,413,'هذه القائمة كبيرة؛ يلزم تفعيل التقسيم إلى صفحات / Pagination required');
 }
 const inIds=ids=>ids.map(x=>`"${x}"`).join(',');
-export async function snapshot(user,{productId='',pageId=''}={}){
+export async function snapshot(user,{productId='',pageId='',category='',q=''}={}){
   let requests=[],quotes=[],publicOffers=[],interests=[],accounts=[],settings,selectedSupplierQuotes=[],supplySources=[];
   if(user?.role==='supplier')supplySources=(await rows('supply_sources',`owner_id=eq.${user.id}`)).filter(open).map(ownSource);
   else if(user?.role==='admin'&&(can(user,'offers.read')||can(user,'offers.edit')||can(user,'publish')||can(user,'requests.edit')))supplySources=(await rows('supply_sources')).filter(open).map(r=>({...ownSource(r),supplierId:r.owner_id}));
@@ -152,10 +153,24 @@ export async function snapshot(user,{productId='',pageId=''}={}){
     return item;
   });
   const responseSettings=user?publicSettings(upgradeSettings(settings.data)):publicSettingsForView(settings.data,pageId);
+  let responseOffers=publicOffers.map(r=>!user&&r.id!==productId?publicProductSummary(r):anonymous(r,'publicOffers',user));
+  if(!user&&!productId&&!pageId&&!category&&!q){
+    const storefront=responseSettings.storefront||{},sections=(storefront.sections||[]).filter(section=>section?.visible!==false);
+    const collections=storefront.collections||[],selected=new Map();
+    const add=product=>{if(product?.id)selected.set(product.id,product);};
+    const latest=[...responseOffers].sort((a,b)=>String(b.createdAt||b.updatedAt||'').localeCompare(String(a.createdAt||a.updatedAt||''))||String(a.id).localeCompare(String(b.id)));
+    latest.slice(0,40).forEach(add);
+    for(const section of sections){
+      if(section.type!=='products'&&section.type!=='catalog')continue;
+      const limit=section.type==='catalog'?Math.max(20,Number(section.catalog?.pageSize)||20):Math.max(1,Number(section.limit)||6);
+      selectSectionProducts(responseOffers,{...section,limit},collections).forEach(add);
+    }
+    responseOffers=[...selected.values()];
+  }
   return {user:profile(user),supplySources,accounts:user?[profile(user)]:[],settings:{...responseSettings,_version:settings.version},
     requests:projectedRequests,
     quotes:quotes.map(r=>{if(r.owner_id===user?.id)return ownRecord(r,'quotes');const item=anonymous(r,'quotes',user);if(user?.role==='supplier'){for(const key of ['unitPrice','currency','moq','leadTime','sampleCost'])delete item[key];if(r.data.assignedSupplierId===user.id)Object.assign(item,{supplierOrderStatus:r.data.supplierOrderStatus,supplierOrderNote:r.data.supplierOrderNote,supplierOrderUpdatedAt:r.data.supplierOrderUpdatedAt});}return item;}),
-    publicOffers:publicOffers.map(r=>!user&&r.id!==productId?publicProductSummary(r):anonymous(r,'publicOffers',user)),
+    publicOffers:responseOffers,
     interests:user?.role==='supplier'?interests.map(supplierInterest):interests.map(r=>r.owner_id===user?.id?ownRecord(r,'interests'):{id:r.id,offerId:r.offer_id,status:r.data.status,createdAt:r.created_at})};
 }
 
