@@ -3,7 +3,7 @@ on:
   pull_request:
     paths: ['mobile-app/**', 'backend/**', 'tests/**', 'package.json', 'package-lock.json', 'scripts/**', '.github/workflows/mobile-layout.yml']
   push:
-    branches: [main, development, fix/mobile-layout-single-shell, fix/mobile-accounts-search, fix/mobile-bulk-editor-20260920]
+    branches: [main, development, codex/customer-account, fix/mobile-layout-single-shell, fix/mobile-accounts-search, fix/mobile-bulk-editor-20260920]
     paths: ['mobile-app/**', 'backend/**', 'tests/backend.test.mjs', 'package.json', 'scripts/**', '.github/workflows/mobile-layout.yml']
   workflow_dispatch:
 permissions:
