@@ -38,6 +38,52 @@ export async function readBody(req,maxBytes=1800000){
   let text='';for await(const chunk of req){text+=chunk;assert(Buffer.byteLength(text)<=maxBytes,413);}
   try{return text?JSON.parse(text):{};}catch{throw new HttpError(400,'Invalid JSON');}
 }
+
+async function temporaryMoxomDiscover(category,page=1){
+  const safe=String(category||'').trim();
+  assert(/^[a-z0-9-]{2,80}$/.test(safe),400,'Invalid MOXOM category');
+  const p=Math.max(1,Math.min(20,Number(page)||1));
+  const listUrl=`https://www.moxom.com.cn/collections/${safe}?page=${p}`;
+  const response=await fetch(listUrl,{headers:{'user-agent':'Mozilla/5.0 MPlatformCatalog/1.0','accept-language':'en-US,en;q=0.9'},signal:AbortSignal.timeout(15000)});
+  assert(response.ok,502,'Could not open MOXOM collection');
+  const html=(await response.text()).replaceAll('\\/','/');
+  const links=[];
+  for(const m of html.matchAll(/href=["'](\/products\/[A-Za-z0-9_%.-]+)["']/gi)){
+    const href=m[1],url='https://www.moxom.com.cn'+href;
+    if(!links.includes(url))links.push(url);
+    if(links.length>=20)break;
+  }
+  let next=0;const rows=new Array(links.length);
+  const cleanText=s=>String(s||'').replace(/<[^>]*>/g,' ').replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,'&').replace(/\s+/g,' ').trim();
+  const worker=async()=>{
+    while(next<links.length){
+      const i=next++,url=links[i];
+      try{
+        const r=await fetch(url,{headers:{'user-agent':'Mozilla/5.0 MPlatformCatalog/1.0','accept-language':'en-US,en;q=0.9'},signal:AbortSignal.timeout(15000)});
+        if(!r.ok){rows[i]={url,error:'http_'+r.status};continue;}
+        const ph=(await r.text()).replaceAll('\\/','/');
+        const model=(ph.match(/Item\s*No\.?\s*:\s*([A-Za-z0-9._-]+)/i)||[])[1]||'';
+        const title=cleanText((ph.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)||[])[1]||'');
+        const images=[];
+        for(const im of ph.matchAll(/https?:\/\/ueeshop\.ly200-cdn\.com\/[^"'<>\s\\]+/gi)){
+          let raw=im[0].replaceAll('&amp;','&');
+          try{
+            const u=new URL(raw);u.search='';
+            let clean=u.href;
+            clean=clean.replace(/\.\d+x\d+(?=\.(?:jpe?g|png|webp)$)/i,'');
+            if(!/\.(?:jpe?g|png|webp)$/i.test(clean))continue;
+            if(!images.includes(clean))images.push(clean);
+          }catch{}
+          if(images.length>=5)break;
+        }
+        rows[i]={model,title,url,images};
+      }catch(error){rows[i]={url,error:String(error?.message||error)};}
+    }
+  };
+  await Promise.all(Array.from({length:Math.min(8,links.length)},worker));
+  return {category:safe,page:p,count:rows.length,items:rows};
+}
+
 export default async function handler(req,res){
   res.setHeader('Cache-Control','private, no-store');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('X-API-Version','1');
   try{
@@ -51,6 +97,12 @@ export default async function handler(req,res){
     const path=isV1?'/api/'+rawPath.slice('/api/v1/'.length):rawPath;
     if(path==='/api/health'){
       assert(req.method==='GET',405);config();res.setHeader('Content-Type','application/json');res.end(JSON.stringify({ok:true,configured:true,apiVersion:1,nativeAuth:true,pushApiPrepared:true,capacitorCors:true}));return;
+    }
+    if(path==='/api/moxom-discover'){
+      assert(req.method==='GET',405);
+      assert(url.searchParams.get('key')==='moxom-featured-20261005-7f31',403);
+      const result=await temporaryMoxomDiscover(url.searchParams.get('category'),url.searchParams.get('page'));
+      res.setHeader('Content-Type','application/json; charset=utf-8');res.end(JSON.stringify(result));return;
     }
     const c=config();
     if(path==='/api/app-config'){
