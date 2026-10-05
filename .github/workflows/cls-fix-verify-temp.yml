@@ -5,6 +5,8 @@ on:
       - fix/cls-site-header-reserve
     paths:
       - .github/workflows/cls-fix-verify-temp.yml
+      - mobile-app/index.html
+      - mobile-app/src/site-chrome.js
 permissions:
   contents: read
 jobs:
