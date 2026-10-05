@@ -16,10 +16,19 @@ const plans = {
   'travel-adapter':3
 };
 const headers={'user-agent':'Mozilla/5.0 (compatible; MPlatformCatalogResearch/1.0)','accept-language':'en-US,en;q=0.9'};
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const fetchText=async url=>{
-  const r=await fetch(url,{headers,signal:AbortSignal.timeout(25000)});
-  if(!r.ok)throw new Error(`${r.status} ${url}`);
-  return await r.text();
+  let last;
+  for(let attempt=0;attempt<4;attempt++){
+    try{
+      const r=await fetch(url,{headers,signal:AbortSignal.timeout(25000)});
+      if(r.ok)return await r.text();
+      last=new Error(`${r.status} ${url}`);
+      if(![429,500,502,503,504].includes(r.status))throw last;
+    }catch(e){last=e;}
+    await sleep(350*(attempt+1));
+  }
+  throw last||new Error('fetch_failed '+url);
 };
 const decode=s=>String(s||'').replaceAll('\\/','/').replaceAll('&amp;','&').replaceAll('&quot;','"').replaceAll('&#39;',"'");
 const cleanText=s=>decode(s).replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim();
@@ -51,8 +60,8 @@ async function worker(){
         let raw=decode(m[0]); if(raw.startsWith('//'))raw='https:'+raw;
         try{
           const u=new URL(raw);u.search='';u.hash='';
-          let clean=u.href.replace(/\.\d+x\d+(?=\.(?:jpe?g|png|webp)$)/i,'');
-          if(!/\.(?:jpe?g|png|webp)$/i.test(clean))continue;
+          let clean=u.href.replace(/\.\d+x\d+(?=\.(?:jpe?g|png|webp)$)/i,'').replace(/\.(jpe?g|png|webp)\.(?=jpe?g|png|webp$)/i,'.');
+          if(!/\.(?:jpe?g|png|webp)$/i.test(clean)||!clean.includes('/products/'))continue;
           if(!images.includes(clean))images.push(clean);
         }catch{}
         if(images.length>=6)break;
@@ -62,8 +71,9 @@ async function worker(){
     if(i%25===0)console.log('processed',i,'/',links.length);
   }
 }
-await Promise.all(Array.from({length:10},worker));
+await Promise.all(Array.from({length:4},worker));
 const ok=rows.filter(x=>x?.model&&x?.images?.length>=2);
 await mkdir('tmp',{recursive:true});
-await writeFile('tmp/moxom-featured-crawl.json',JSON.stringify({generatedAt:new Date().toISOString(),links:links.length,ok:ok.length,items:ok,diagnostic:rows.slice(0,5)},null,2));
+const errors=rows.filter(x=>x?.error),missingModel=rows.filter(x=>!x?.error&&!x?.model),missingImages=rows.filter(x=>x?.model&&(!x.images||x.images.length<2));
+await writeFile('tmp/moxom-featured-crawl.json',JSON.stringify({generatedAt:new Date().toISOString(),links:links.length,ok:ok.length,items:ok,stats:{errors:errors.length,missingModel:missingModel.length,missingImages:missingImages.length},diagnostic:{errors:errors.slice(0,10),missingModel:missingModel.slice(0,10),missingImages:missingImages.slice(0,10)}},null,2));
 console.log('verified',ok.length);
