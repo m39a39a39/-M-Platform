@@ -1,0 +1,86 @@
+name: Verify production CLS
+on:
+  push:
+    branches:
+      - audit/production-cls-postfix
+    paths:
+      - .github/workflows/production-cls-postfix.yml
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Browser smoke and CLS
+        run: |
+          npm install --no-save playwright@1.55.0 lighthouse@12.8.2
+          npx playwright install --with-deps chromium
+          node <<'NODE'
+          const {chromium}=require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true});
+            const page=await browser.newPage({viewport:{width:412,height:915}});
+            const errors=[],consoleErrors=[];
+            page.on('pageerror',e=>errors.push(String(e)));
+            page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text())});
+            await page.addInitScript(()=>{
+              window.__cls=0;window.__shifts=[];
+              new PerformanceObserver(list=>{
+                for(const e of list.getEntries()) if(!e.hadRecentInput){
+                  window.__cls+=e.value;
+                  window.__shifts.push({value:e.value});
+                }
+              }).observe({type:'layout-shift',buffered:true});
+            });
+            await page.goto('https://m-platform-tan.vercel.app/',{waitUntil:'domcontentloaded'});
+            await page.waitForTimeout(8000);
+            const info=await page.evaluate(()=>({
+              cls:window.__cls,
+              headerParent:document.getElementById('site-header')?.parentElement?.id||'',
+              headerHeight:document.getElementById('site-header')?.getBoundingClientRect().height||0,
+              products:document.querySelectorAll('.sf-product').length,
+              hasSearch:!!document.querySelector('.sf-header-search input[type=search]'),
+              hasCategory:!!document.querySelector('[data-store-category]'),
+              guestVisible:!document.getElementById('guestView')?.classList.contains('hidden'),
+              shifts:window.__shifts
+            }));
+            const cart=page.locator('#site-header [data-store-action="cart"]');
+            let cartOk=true;
+            if(await cart.count()){
+              await cart.first().click();
+              await page.waitForSelector('#modal:not(.hidden)',{timeout:10000});
+              await page.locator('#modal [data-close-modal]').last().click();
+              await page.waitForSelector('#modal.hidden',{timeout:10000});
+            } else cartOk=false;
+            console.log('BROWSER_RESULT '+JSON.stringify({...info,cartOk,errors,consoleErrors}));
+            if(info.headerParent!=='app') throw new Error('header parent mismatch');
+            if(info.cls>0.05) throw new Error('CLS too high: '+info.cls);
+            if(!info.products||!info.hasSearch||!info.hasCategory||!info.guestVisible||!cartOk||errors.length) throw new Error('storefront smoke failed');
+            await browser.close();
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
+      - name: Lighthouse mobile 3-run median
+        run: |
+          for n in 1 2 3; do
+            npx lighthouse 'https://m-platform-tan.vercel.app/'               --only-categories=performance               --output=json --output-path="/tmp/lh-$n.json"               --chrome-flags="--headless --no-sandbox --disable-dev-shm-usage"               --form-factor=mobile --screenEmulation.mobile=true               --throttling-method=simulate --quiet
+          done
+          node <<'NODE'
+          const fs=require('fs');
+          const rows=[1,2,3].map(n=>{
+            const d=JSON.parse(fs.readFileSync('/tmp/lh-'+n+'.json','utf8')),a=d.audits;
+            return {
+              performance:Math.round(d.categories.performance.score*100),
+              fcp:a['first-contentful-paint'].numericValue,
+              lcp:a['largest-contentful-paint'].numericValue,
+              tbt:a['total-blocking-time'].numericValue,
+              cls:a['cumulative-layout-shift'].numericValue,
+              speedIndex:a['speed-index'].numericValue,
+              bytes:a['total-byte-weight'].numericValue
+            };
+          });
+          const median=k=>rows.map(x=>x[k]).sort((a,b)=>a-b)[1];
+          const out={runs:rows,performance:median('performance'),fcp:median('fcp'),lcp:median('lcp'),tbt:median('tbt'),cls:median('cls'),speedIndex:median('speedIndex'),bytes:median('bytes')};
+          console.log('LIGHTHOUSE_RESULT '+JSON.stringify(out));
+          if(out.cls>0.05) process.exit(2);
+          NODE
