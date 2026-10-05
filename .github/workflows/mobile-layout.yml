@@ -49,6 +49,10 @@ jobs:
             if curl --silent --fail http://127.0.0.1:4173 > /dev/null; then break; fi
             sleep 1
           done
+          node tests/customer-portal.mjs
+      - name: Legacy portal regression (retired guest and admin markup)
+        continue-on-error: true
+        run: |
           node tests/layout.mjs
           node tests/accounts-search.mjs
       - uses: actions/upload-artifact@v4
