@@ -1,0 +1,26 @@
+name: MOXOM Cards 21-35 Only
+on:
+  push:
+    branches:
+      - temp/moxom-cards2135-only
+permissions:
+  contents: write
+jobs:
+  crawl:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: temp/moxom-cards2135-only
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node scripts/moxom-cards-21-35.mjs
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tmp/moxom-cards-21-35.json
+          git commit -m "Save MOXOM cards 21-35" || exit 0
+          git push
