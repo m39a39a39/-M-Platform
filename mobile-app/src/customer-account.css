@@ -1,0 +1,42 @@
+/* Customer account and order overview. Shared by web and native clients. */
+.client-account-layout{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:24px;align-items:start}
+.client-account-overview{min-width:0;display:grid;gap:20px}
+.client-account-welcome{padding:28px;border-radius:20px;background:linear-gradient(120deg,#163e43,#235963);color:#fff}
+.client-account-welcome>span{font-size:12px;color:#c4e3df}
+.client-account-welcome h2{margin:8px 0;font-size:26px;line-height:1.5;overflow-wrap:anywhere}
+.client-account-welcome p{color:#d8e8e8;line-height:1.8;margin:0 0 22px}
+.client-account-links{display:flex;gap:10px;flex-wrap:wrap}
+.client-account-links .primary-small{background:#fff;color:#173f43}
+.client-account-links .secondary-btn{background:transparent;border-color:#a0c1c3;color:#fff}
+.client-account-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.client-account-stats button{font:inherit;text-align:start;border:1px solid #dbe5e7;border-radius:16px;background:#fff;padding:20px;color:#25414b;cursor:pointer}
+.client-account-stats strong{display:block;font-size:28px;margin-bottom:8px}
+.client-account-stats span{font-size:13px}
+.client-account-stats button:nth-child(2){background:#fff9ed;border-color:#ecdab1;color:#795019}
+.client-account-layout .profile-card{padding:22px;min-width:0}
+.client-account-layout .profile-card dd{overflow-wrap:anywhere}
+.client-account-layout .account-setting-row{flex-wrap:wrap;text-align:start}
+.client-account-layout .account-currency-controls{width:100%;flex-wrap:wrap}
+.client-account-layout .account-currency-controls select{min-width:0;width:100%}
+.client-account-overview .section-block{margin:0}
+.client-account-overview .section-title h2{font-size:18px}
+.client-order-toolbar{display:grid;gap:8px;margin:0 0 18px}
+.client-order-toolbar label{font-weight:700;font-size:13px}
+.client-order-toolbar input{font:inherit;min-height:48px;border:1px solid #cddce1;border-radius:12px;padding:12px 16px;background:#fff;color:#173d47;width:100%;box-sizing:border-box}
+.client-order-filters{display:flex;flex-wrap:wrap;gap:6px}
+.client-order-filters button{flex:1 1 auto;padding:10px 14px}
+.client-result-count{font-size:13px;color:#526673;margin:12px 0}
+.client-order-card{grid-template-columns:64px minmax(0,1fr);padding:18px;gap:16px;cursor:default}
+.client-order-head h3{white-space:normal;line-height:1.6}
+.client-order-title{font:inherit;font-weight:800;color:inherit;background:none;border:0;text-align:start;padding:0;cursor:pointer;overflow-wrap:anywhere}
+.client-order-title:hover{text-decoration:underline}
+.client-order-head .status-pill{flex-shrink:0}
+.client-order-actions{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:12px;margin-top:12px}
+.client-next-action{margin-inline-end:auto;border:1px solid #ead6a9;background:#fff8e8;color:#775013;border-radius:9px;padding:8px 12px;font:inherit;font-size:12px;font-weight:700;cursor:pointer;line-height:1.7;text-align:start}
+html[dir=ltr] .client-next-action span{display:inline-block;transform:rotate(180deg)}
+.client-order-meta{gap:8px}
+.client-empty h2{font-size:18px;color:#234551}
+.client-empty p{line-height:1.8}
+.client-account-layout button:focus-visible,.client-order-card button:focus-visible,.client-order-filters button:focus-visible,.client-order-toolbar input:focus-visible{outline:3px solid #357c87;outline-offset:3px}
+@media(max-width:900px){.client-account-layout{grid-template-columns:minmax(0,1fr)}.client-account-layout .profile-card{width:100%;box-sizing:border-box}.client-account-welcome{padding:22px}}
+@media(max-width:480px){.client-account-stats{gap:8px}.client-account-stats button{padding:14px 10px}.client-account-stats strong{font-size:24px}.client-account-stats span{font-size:12px}.client-order-card{grid-template-columns:44px minmax(0,1fr);padding:12px;gap:10px}.client-order-thumb{width:44px;height:44px}.client-order-head{display:grid}.client-order-head .status-pill{justify-self:start}.client-order-filters button{font-size:12px;padding:8px}.client-account-welcome h2{font-size:23px}}
