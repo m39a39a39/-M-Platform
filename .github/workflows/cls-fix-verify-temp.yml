@@ -19,7 +19,7 @@ jobs:
           npm test
           npm ci --prefix mobile-app
           npm test --prefix mobile-app
-          npm run build --prefix mobile-app
+          VITE_API_ORIGIN=http://127.0.0.1:4173 npm run build --prefix mobile-app
       - name: Browser and Lighthouse against local build with production API
         run: |
           npm install --no-save playwright@1.55.0 lighthouse@12.8.2
