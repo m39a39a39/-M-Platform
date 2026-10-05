@@ -1,4 +1,6 @@
 import './styles.css';
+import './customer-account.css';
+import {filterClientOrders, clientOrderCounts, isClosedClientOrder} from './client-orders.js';
 import {portalRole,portalPaths,portalScreen,portalUrl,portalRedirect} from './portal-routes.js';
 import {mountSupplierCatalog,supplierProduct,resetSupplierCatalog} from './supplier-catalog.js';
 import {mountSiteChrome} from './site-chrome.js';
@@ -33,6 +35,7 @@ const POST_AUTH_KEY='m-platform.post-auth-action.v1';
 let cartItems=[];
 let clientOrderSeen={};
 let clientRequestFilter='all';
+let clientOrderSearch='';
 let bulkImportRows=[];
 let bulkImportFileName='';
 let busy=false;
@@ -115,9 +118,10 @@ function trackingLabel(status){
   return row?(lang==='ar'?row[1]:row[2]):ex?(lang==='ar'?ex[0]:ex[1]):statusLabel(status);
 }
 function requestTrackingStatus(item){
-  return item?.trackingStatus||(item?.status==='completed'?'completed':item?.selectedQuoteId?'quote_selected':item?.status==='sent'?'sourcing':'received');
+  return item?.cancelledAt||item?.status==='cancelled'?'cancelled':item?.trackingStatus||(item?.status==='completed'?'completed':item?.selectedQuoteId?'quote_selected':item?.status==='sent'?'sourcing':'received');
 }
 function readyTrackingStatus(item){
+  if(item?.cancelledAt||item?.status==='cancelled')return 'cancelled';
   if(item?.trackingStatus)return item.trackingStatus;
   return item?.status==='completed'?'completed':item?.status==='cancelled'?'cancelled':['coordinating','accepted'].includes(item?.status)?'payment_confirmation':'received';
 }
@@ -416,7 +420,7 @@ async function refreshNotifications(){
 }
 configureAdmin({reload:()=>loadData({render:false}),modal:openModal,close:closeModal,toast:showToast,view:()=>activeScreen});
 session.onReset(reason=>{
-  resetSupplierCatalog();currentUser=null;platformState=null;notifications=[];activeScreen='home';activeSub='primary';readyProductsPage=1;readyCategory='all';readySubcategory='all';readyCountry='all';readySearch='';cartItems=[];clientOrderSeen={};clientRequestFilter='all';
+  resetSupplierCatalog();currentUser=null;platformState=null;notifications=[];activeScreen='home';activeSub='primary';readyProductsPage=1;readyCategory='all';readySubcategory='all';readyCountry='all';readySearch='';cartItems=[];clientOrderSeen={};clientRequestFilter='all';clientOrderSearch='';
   resetAdmin();closeModal({all:true});unmountAiChat();
   for(const url of mediaCache.values())URL.revokeObjectURL(url);
   mediaCache.clear();mediaTasks.clear();publicMediaSources.clear();lastDataLoadedAt=0;$('screen').replaceChildren();$('headerRole').textContent='';
@@ -648,6 +652,7 @@ function clientOrders(){
   return [...custom,...cart,...ready].sort((a,b)=>(Date.parse(b.updatedAt||0)||0)-(Date.parse(a.updatedAt||0)||0));
 }
 function clientOrderNeedsAction(order){
+  if(isClosedClientOrder(order))return null;
   if(order.type==='custom'||order.type==='cart'){
     const r=order.item;
     if(r.paymentStatus==='reupload_requested')return {key:'reupload',label:tr('أعد رفع إيصال الدفع','Upload payment receipt again'),action:order.type==='cart'?`data-cart-order="${esc(r.id)}"`:`data-request="${esc(r.id)}"`,tone:'payment'};
@@ -672,12 +677,14 @@ function clientOrderCard(order){
   const image=(order.images||[])[0],typeLabel=order.type==='custom'?tr('طلب عرض سعر','RFQ order'):order.type==='cart'?tr('طلب منتجات','Product order'):tr('منتج جاهز','Ready product');
   const action=order.type==='custom'?`data-request="${esc(order.id)}"`:order.type==='cart'?`data-cart-order="${esc(order.id)}"`:`data-ready-order="${esc(order.id)}"`;
   const total=order.total!==null&&order.total!==undefined?frozenOrderMoney(order.item,order.total,order.currency):'',countLabel=order.type==='cart'?tr('المنتجات','Products'):tr('الكمية','Quantity');
-  return `<article class="client-order-card" ${action}>
+  const needed=clientOrderNeedsAction(order);
+  return `<article class="client-order-card">
     <div class="client-order-thumb">${image?`<img alt="" data-media="${esc(image)}">`:'<div>M</div>'}</div>
     <div class="client-order-main">
-      <div class="client-order-head"><div><small>#${esc(ref(order.refItem))} · ${esc(typeLabel)}</small><h3>${esc(order.title)}</h3></div>${order.item?.orderFlowVersion===2&&!order.item.cancelledAt?`<span class="status-pill">${esc(stageLabel(order.item.orderStage))}</span>`:cardBadge(order.status)}</div>
+      <div class="client-order-head"><div><small>#${esc(ref(order.refItem))} · ${esc(typeLabel)}</small><h3><button type="button" class="client-order-title" ${action}>${esc(order.title)}</button></h3></div>${order.item?.orderFlowVersion===2&&order.status!=='cancelled'?`<span class="status-pill">${esc(stageLabel(order.item.orderStage))}</span>`:cardBadge(order.status)}</div>
       <div class="client-order-meta"><span>${esc(countLabel)}: ${esc(order.quantity||'—')}</span>${total?`<span>${esc(tr('الإجمالي','Total'))}: ${total}</span>`:''}<span>${esc(tr('آخر تحديث','Last update'))}: ${esc(date(order.updatedAt))}</span></div>
-    </div><span class="chevron">›</span>
+      <div class="client-order-actions">${needed?`<button type="button" class="client-next-action" ${needed.action}>${esc(needed.label)} <span aria-hidden="true">←</span></button>`:''}<button type="button" class="text-btn" ${action}>${esc(tr('عرض التفاصيل','View details'))}</button></div>
+    </div>
   </article>`;
 }
 function clientQuoteGroups(){
@@ -737,15 +744,14 @@ function renderHome(){
 
 function renderRequests(){
   if(currentUser.role==='client'){
-    const all=clientOrders();markClientOrdersSeen(all);
-    const active=all.filter(o=>!['completed','cancelled'].includes(o.status)),completed=all.filter(o=>['completed','cancelled'].includes(o.status));
-    if(!['all','active','completed'].includes(clientRequestFilter))clientRequestFilter='all';
-    const rows=clientRequestFilter==='active'?active:clientRequestFilter==='completed'?completed:all;
-    const tabs=`<div class="client-order-filters"><button class="${clientRequestFilter==='all'?'active':''}" data-client-order-filter="all">${esc(tr('الكل','All'))} <span>${all.length}</span></button><button class="${clientRequestFilter==='active'?'active':''}" data-client-order-filter="active">${esc(tr('النشطة','Active'))} <span>${active.length}</span></button><button class="${clientRequestFilter==='completed'?'active':''}" data-client-order-filter="completed">${esc(tr('المكتملة','Completed'))} <span>${completed.length}</span></button></div>`;
-    $('screen').innerHTML=
-      pageHeader(tr('طلباتي','My orders'),tr('كل طلباتك الخاصة وطلبات المنتجات الجاهزة في مكان واحد.','All custom and ready-product orders in one place.'),`<button class="primary-small" data-action="new-request">+ ${esc(tr('طلب جديد','New request'))}</button>`)+
-      tabs+
-      `<div class="client-orders-list">${rows.map(clientOrderCard).join('')||empty()}</div>`;
+    const all=clientOrders(),counts=clientOrderCounts(all,clientOrderNeedsAction);
+    if(!Object.hasOwn(counts,clientRequestFilter))clientRequestFilter='all';
+    const filters=[['all',tr('الكل','All')],['action',tr('يتطلب إجراء','Needs action')],['active',tr('النشطة','Active')],['completed',tr('المكتملة','Completed')],['cancelled',tr('الملغاة','Cancelled')]];
+    const tabs=`<div class="client-order-filters" role="group" aria-label="${esc(tr('تصفية الطلبات','Filter orders'))}">${filters.map(([key,label])=>`<button type="button" class="${clientRequestFilter===key?'active':''}" aria-pressed="${clientRequestFilter===key}" data-client-order-filter="${key}">${esc(label)} <span>${counts[key]}</span></button>`).join('')}</div>`;
+    $('screen').innerHTML=pageHeader(tr('طلباتي','My orders'),tr('تابع طلباتك واعرف الخطوة التالية لكل طلب.','Track your orders and see what to do next.'),`<button class="primary-small" data-action="new-request">+ ${esc(tr('طلب جديد','New request'))}</button>`)+
+      `<div class="client-order-toolbar"><label for="clientOrderSearch">${esc(tr('ابحث في طلباتك','Search your orders'))}</label><input id="clientOrderSearch" type="search" data-client-order-search value="${esc(clientOrderSearch)}" placeholder="${esc(tr('اسم المنتج أو رقم الطلب','Product name or order number'))}"></div>`+tabs+
+      `<p id="clientOrderResultCount" class="client-result-count" role="status" aria-live="polite"></p><div id="clientOrderResults" class="client-orders-list"></div>`;
+    refreshClientOrderResults(all);
   }else if(currentUser.role==='supplier'){
     if(!['pending','submitted'].includes(activeSub))activeSub='pending';
     const quotes=(platformState.quotes||[]).slice().sort((a,b)=>(Date.parse(b.updatedAt||b.createdAt||0)||0)-(Date.parse(a.updatedAt||a.createdAt||0)||0));
@@ -762,6 +768,18 @@ function renderRequests(){
       $('screen').innerHTML=pageHeader(tr('طلبات الأسعار','Quote requests'),tr('العروض التي قدمتها على طلبات العملاء، ويمكنك فتح العرض لمراجعته أو تعديله عندما يكون التعديل متاحًا.','Quotes you submitted for customer requests. Open a quote to review or edit it when editing is available.'))+tabs+`<div class="list-stack">${submitted.map(q=>{const r=(platformState.requests||[]).find(x=>x.id===q.requestId),editable=!r?.orderType||r.orderType!=='cart_replacement'||q.replacementInterestId===r.replacementInterestId;return itemCard(q,{subtitle:q.notes||descriptionOf(r)||descriptionOf(q),meta:`${money(q.unitPrice,q.currency)} · MOQ ${q.moq||'—'} · ${date(q.updatedAt||q.createdAt)}`,badge:cardBadge(q.status),action:editable?`data-edit-quote="${esc(q.id)}"`:'',images:true});}).join('')||empty()}</div>`;
     }
   }else renderAdminCollection('requests');
+}
+
+function refreshClientOrderResults(all=clientOrders()){
+  const rows=filterClientOrders(all,{filter:clientRequestFilter,query:clientOrderSearch,needsAction:clientOrderNeedsAction,reference:o=>ref(o.refItem)});
+  $('clientOrderResultCount').textContent=tr(`${rows.length} من ${all.length} طلب`,`${rows.length} of ${all.length} orders`);
+  $('clientOrderResults').innerHTML=rows.map(clientOrderCard).join('')||`<div class="empty-state client-empty"><h2>${esc(all.length?tr('لا توجد طلبات مطابقة','No matching orders'):tr('تبدأ رحلتك بطلبك الأول','Your first order starts here'))}</h2><p>${esc(all.length?tr('جرّب اسمًا أو رقمًا آخر، أو اعرض كل الطلبات.','Try another name or number, or view all orders.'):tr('تصفح المنتجات أو أرسل طلبًا خاصًا، وتابع جميع خطواته هنا.','Browse products or send a custom request, then follow its progress here.'))}</p><button type="button" class="secondary-btn" data-action="${all.length?'reset-order-filters':'home'}">${esc(all.length?tr('عرض كل الطلبات','View all orders'):tr('تصفح المتجر','Browse store'))}</button></div>`;
+  markClientOrdersSeen(rows);hydrateImages($('clientOrderResults'));
+}
+function clientAccountOverview(){
+  const orders=clientOrders(),counts=clientOrderCounts(orders,clientOrderNeedsAction),needed=orders.filter(o=>clientOrderNeedsAction(o));
+  const stats=[['active',tr('طلبات نشطة','Active orders')],['action',tr('تحتاج إجراء منك','Need your action')],['completed',tr('طلبات مكتملة','Completed orders')]];
+  return `<div class="client-account-overview"><section class="client-account-welcome"><span>${esc(tr('حساب العميل','Customer account'))}</span><h2>${esc(tr('مرحبًا، ','Welcome, ')+(currentUser.name||currentUser.company||tr('عميلنا','customer')))}</h2><p>${esc(tr('طلباتك وعروض الأسعار والخطوات القادمة، في مكان واحد.','Your orders, quotes and next steps, together in one place.'))}</p><div class="client-account-links"><button type="button" class="primary-small" data-action="new-request">+ ${esc(tr('طلب جديد','New request'))}</button><button type="button" class="secondary-btn" data-action="offers">${esc(tr('عروض الأسعار','View quotes'))}</button></div></section><div class="client-account-stats">${stats.map(([key,label])=>`<button type="button" data-client-order-filter="${key}"><strong>${counts[key]}</strong><span>${esc(label)}</span></button>`).join('')}</div><section class="section-block"><div class="section-title"><h2>${esc(needed.length?tr('الخطوة التالية','Your next step'):tr('آخر الطلبات','Recent orders'))}</h2><button type="button" class="text-btn" data-client-order-filter="all">${esc(tr('عرض الكل','View all'))}</button></div><div class="client-orders-list">${(needed.length?needed:orders).slice(0,3).map(clientOrderCard).join('')||`<div class="empty-state client-empty"><p>${esc(tr('لا توجد طلبات بعد. تصفح المنتجات لبدء طلبك الأول.','No orders yet. Browse products to start your first order.'))}</p><button type="button" class="secondary-btn" data-action="home">${esc(tr('تصفح المتجر','Browse store'))}</button></div>`}</div></section></div>`;
 }
 
 function segment(buttons){return `<div class="segmented">${buttons.map(([key,label])=>`<button data-sub="${key}" class="${activeSub===key?'active':''}">${esc(label)}</button>`).join('')}</div>`;}
@@ -785,7 +803,7 @@ function renderAccount(){
   const u=currentUser,languageControl=u.role==='client'?`<div class="account-setting-row account-language-setting"><div class="account-setting-copy"><small>${esc(tr('اللغة','Language'))}</small><strong>${esc(lang==='ar'?tr('العربية','Arabic'):tr('الإنجليزية','English'))}</strong></div><button type="button" class="secondary-btn" data-action="toggle-language">${esc(lang==='ar'?'English':'العربية')}</button></div>`:'';
   const currencyControl=u.role==='client'?`<div class="account-setting-row account-currency-setting"><div class="account-setting-copy"><small>${esc(tr('العملة','Currency'))}</small><strong>${esc(tr('العملة الحالية','Current currency'))}: ${esc(preferredCurrency())}</strong></div><div class="account-currency-controls"><select data-client-currency aria-label="${esc(tr('العملة','Currency'))}">${activeCurrencies().map(x=>`<option value="${esc(x.code)}" ${x.code===preferredCurrency()?'selected':''}>${esc(x.code+' — '+(lang==='ar'?x.nameAr:x.nameEn))}</option>`).join('')}</select><button type="button" class="secondary-btn" data-save-client-currency>${esc(tr('حفظ العملة','Save currency'))}</button></div></div>`:'';
   const settingsGroup=u.role==='client'?`<div class="account-settings-group">${languageControl}${currencyControl}</div>`:'';
-  $('screen').innerHTML=pageHeader(t('account'))+`<section class="profile-card"><div class="avatar">${esc((u.name||u.company||u.email||'M').charAt(0).toUpperCase())}</div><h2>${esc(u.name||u.company||'M Platform')}</h2><p>${esc(t(u.role))}</p><dl><div><dt>${esc(t('email'))}</dt><dd>${esc(u.email||'—')}</dd></div>${u.company?`<div><dt>${tr('الشركة','Company')}</dt><dd>${esc(u.company)}</dd></div>`:''}${u.country?`<div><dt>${esc(t('country'))}</dt><dd>${esc(u.country)}</dd></div>`:''}</dl>${settingsGroup}<p class="session-note">${esc(t('sessionNote'))}</p><button class="danger-btn" data-action="logout">${esc(t('logout'))}</button></section>`;
+  $('screen').innerHTML=pageHeader(t('account'),u.role==='client'?tr('إدارة طلباتك وتفضيلات حسابك.','Manage your orders and account preferences.'):'')+`<div class="${u.role==='client'?'client-account-layout':''}">${u.role==='client'?clientAccountOverview():''}<section class="profile-card"><div class="avatar">${esc((u.name||u.company||u.email||'M').charAt(0).toUpperCase())}</div><h2>${esc(u.name||u.company||'M Platform')}</h2><p>${esc(t(u.role))}</p><dl><div><dt>${esc(t('email'))}</dt><dd>${esc(u.email||'—')}</dd></div>${u.company?`<div><dt>${tr('الشركة','Company')}</dt><dd>${esc(u.company)}</dd></div>`:''}${u.country?`<div><dt>${esc(t('country'))}</dt><dd>${esc(u.country)}</dd></div>`:''}</dl>${settingsGroup}<p class="session-note">${esc(t('sessionNote'))}</p><button class="danger-btn" data-action="logout">${esc(t('logout'))}</button></section></div>`;
 }
 function renderAdminCollection(kind){const rows=kind==='requests'?(platformState.requests||[]):[...(platformState.quotes||[]),...(platformState.publicOffers||[])];$('screen').innerHTML=pageHeader(kind==='requests'?t('requests'):t('offers'),t('adminMobile'))+`<div class="list-stack">${rows.slice(0,50).map(x=>itemCard(x,{subtitle:descriptionOf(x),badge:cardBadge(x.status),meta:`#${ref(x)} · ${date(x.createdAt)}`})).join('')||empty()}</div>`;}
 function renderScreen(){if(!currentUser||!platformState)return;syncPortalScreen();updateShell();const route=storeRoute();if(activeScreen==='home'&&(route.page||route.category||route.product||route.q)&&currentUser.role!=='client'){const isCatalog=route.category||route.page==='products';$('screen').innerHTML=renderStoreRoute(platformState,route,{chrome:false,money});if(isCatalog&&currentUser.role==='supplier'){const host=$('screen').querySelector('[data-store-catalog-slot]');mountSupplierCatalog(host,{state:platformState,request,language:lang,card:p=>itemCard(p,{subtitle:descriptionOf(p),action:`data-public-offer="${esc(p.id)}"`}),hydrate:hydrateImages,sourceButton:p=>`<button class="secondary-btn" data-supply-product="${esc(p.id)}">${tr('أستطيع توريد هذا المنتج','I can supply this product')}</button>`,fixedCategory:route.category});}else bindStorefront($('screen'),platformState,{chrome:false,money,hydrate:hydrateImages,product:openPublicOffer});hydrateImages($('screen'));return;}if(renderAdminScreen(activeScreen))return;if(activeScreen==='home')renderHome();else if(activeScreen==='orders')renderSupplierOrders();else if(activeScreen==='requests')renderRequests();else if(activeScreen==='offers')renderOffers();else if(activeScreen==='notifications')renderNotifications();else renderAccount();hydrateImages($('screen'));}
@@ -1317,13 +1335,14 @@ async function handleAction(target){
     return;
   }
   if(target.matches?.('[data-client-currency]'))return;
+  if(target.dataset.action==='reset-order-filters'){clientRequestFilter='all';clientOrderSearch='';renderRequests();$('clientOrderSearch')?.focus();return;}
   if(target.dataset.action==='logout')return logout();
   if(target.dataset.action==='mark-all'){await request('/api/v1/notifications/read',{method:'POST',auth:true,body:{all:true}});await loadData();return;}
   if(['home','orders','requests','offers','notifications','account'].includes(target.dataset.action)){activeScreen=target.dataset.action;if(activeScreen==='offers')activeSub='primary';if(activeScreen==='requests'&&currentUser?.role==='supplier')activeSub='pending';renderScreen();return;}
   if(target.dataset.cartOrder)return openCartOrder(target.dataset.cartOrder);
   if(target.dataset.readyOrder)return openReadyOrder(target.dataset.readyOrder);
   if(target.dataset.clientOffersRequest)return openClientOffers(target.dataset.clientOffersRequest);
-  if(target.dataset.clientOrderFilter){clientRequestFilter=target.dataset.clientOrderFilter;renderRequests();$('screen').scrollTop=0;return;}
+  if(target.dataset.clientOrderFilter){if(activeScreen!=='requests')clientOrderSearch='';clientRequestFilter=target.dataset.clientOrderFilter;activeScreen='requests';renderScreen();$('screen').scrollTop=0;return;}
   if(target.dataset.request)return openClientRequest(target.dataset.request);
   if(target.dataset.supplierRequest)return openSupplierRequest(target.dataset.supplierRequest);
   if(target.dataset.supplierOrderId&&target.dataset.supplierOrderType&&!target.dataset.supplierOrderStatus&&!target.hasAttribute('data-supplier-order-cannot'))return openSupplierOrder(target.dataset.supplierOrderType,target.dataset.supplierOrderId);
@@ -1433,7 +1452,7 @@ onLanguageChange(value=>{lang=value;applyLanguage();applyPortalLogin();applyRegi
 $('refreshBtn').addEventListener('click',async()=>{if(busy)return;busy=true;$('refreshBtn').classList.add('spin');try{await loadData();showToast(t('refreshing'));}catch(e){showToast(errorText(e));}finally{busy=false;$('refreshBtn').classList.remove('spin');}});
 $('bottomNav').addEventListener('click',e=>{const b=e.target.closest('button[data-screen]');if(!b)return;activeScreen=b.dataset.screen;if(activeScreen==='offers')activeSub='primary';if(activeScreen==='requests'&&currentUser?.role==='supplier')activeSub='pending';renderScreen();$('screen').scrollTop=0;window.scrollTo(0,0);});
 $('screen').addEventListener('click',e=>{const sub=e.target.closest('[data-sub]');if(sub){activeSub=sub.dataset.sub;renderScreen();return;}const target=e.target.closest('[data-action],[data-save-client-currency],[data-category],[data-subcategory],[data-supply-country],[data-client-order-filter],[data-cart-order],[data-ready-order],[data-client-offers-request],[data-request],[data-supplier-request],[data-supplier-order-id],[data-public-offer],[data-supply-product],[data-edit-quote],[data-quote-request],[data-select-quote],[data-approve-cart-replacement],[data-reject-cart-replacement],[data-interest],[data-notification],[data-payment-notification],[data-payment-upload],[data-payment-document],[data-invoice-pdf],[data-copy-value]');if(target)handleAction(target);});
-$('screen').addEventListener('input',e=>{const input=e.target.closest('[data-product-search]');if(!input)return;readySearch=input.value;readyProductsPage=1;refreshProductResults();aiChatSignal('search',{query:readySearch,results:filteredReadyOffers().length});});
+$('screen').addEventListener('input',e=>{if(e.target.matches('[data-client-order-search]')){clientOrderSearch=e.target.value;refreshClientOrderResults();return;}const input=e.target.closest('[data-product-search]');if(!input)return;readySearch=input.value;readyProductsPage=1;refreshProductResults();aiChatSignal('search',{query:readySearch,results:filteredReadyOffers().length});});
 $('modal').addEventListener('click',e=>{if(e.target.closest('[data-close-modal]')){closeModal();return;}const target=e.target.closest('[data-ready-order],[data-client-offers-request],[data-edit-quote],[data-quote-request],[data-select-quote],[data-approve-replacement-quote],[data-reject-replacement-quote],[data-approve-cart-replacement],[data-reject-cart-replacement],[data-interest],[data-supplier-order-status],[data-supplier-order-cannot],[data-payment-upload],[data-payment-document],[data-invoice-pdf],[data-copy-value]');if(target)handleAction(target);});
 
 App.addListener('appUrlOpen',async event=>{const url=event.url||'';if(!currentUser)return;if(url.includes('/notifications')){activeScreen='notifications';renderScreen();return;}const supplierOrder=url.match(/\/supplier\/orders\/interest\/([^?]+)/);if(supplierOrder&&currentUser.role==='supplier'){activeScreen='orders';renderScreen();openSupplierOrder('public',decodeURIComponent(supplierOrder[1]));return;}const cartOrder=url.match(/\/customer\/cart-orders\/([^?]+)/);if(cartOrder&&currentUser.role==='client'){activeScreen='requests';renderScreen();openCartOrder(decodeURIComponent(cartOrder[1]));return;}const m=url.match(/\/requests\/([^?]+)/);if(m){if(currentUser.role==='supplier'){activeScreen='requests';activeSub='pending';openSupplierRequest(decodeURIComponent(m[1]));}else openClientRequest(decodeURIComponent(m[1]));}});

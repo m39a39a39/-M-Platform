@@ -521,13 +521,13 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
           interestMutation=null;
         }
         if(role==='client'){
-          assert.equal(await page.locator('#screen .client-order-filters button').count(),3,'My orders must include All, Active, and Completed filters');
+          assert.equal(await page.locator('#screen .client-order-filters button').count(),5,'My orders must include All, Needs action, Active, Completed, and Cancelled filters');
           assert.equal(await page.locator('#navOrdersBadge:not(.hidden)').textContent(),'1','Action-required order badge must remain until the action is resolved');
           assert.equal(await page.locator('#screen .client-order-card').count(),102,'My orders must combine RFQs, one cart order, and legacy ready-product orders');
-          assert.equal(await page.locator('#screen [data-request]').count(),100,'RFQ requests must remain accessible inside My orders');
-           assert.equal(await page.locator('#screen [data-cart-order]').count(),1,'Cart products must appear as one customer order');
-          assert.equal(await page.locator('#screen [data-ready-order]').count(),1,'Ready-product orders must open dedicated order details inside My orders');
-          await page.locator('#screen [data-ready-order]').click();
+          assert.equal(await page.locator('#screen .client-order-title[data-request]').count(),100,'RFQ requests must remain accessible inside My orders');
+           assert.equal(await page.locator('#screen .client-order-title[data-cart-order]').count(),1,'Cart products must appear as one customer order');
+          assert.equal(await page.locator('#screen .client-order-title[data-ready-order]').count(),1,'Ready-product orders must open dedicated order details inside My orders');
+          await page.locator('#screen .client-order-title[data-ready-order]').click();
           await page.locator('#modal .client-order-summary').waitFor();
           assert.equal(await page.locator('#modal .tracking-timeline').count(),1,'Ready-product order details must preserve tracking inside My orders');
           assert.equal(await page.locator('#modal .payment-card').count(),1,'Ready-product order details must preserve payment inside My orders');
@@ -535,6 +535,10 @@ for (const [engine,type] of Object.entries({chromium,webkit})) {
           await page.locator('#screen [data-client-order-filter="active"]').click();
           assert.ok(await page.locator('#screen .client-order-card').count()>0,'Active filter must show active orders');
           await page.locator('#screen [data-client-order-filter="all"]').click();
+          await page.locator('#clientOrderSearch').fill('no-matching-order-xyz');
+          assert.equal(await page.locator('#screen .client-order-card').count(),0,'Order search must filter the visible list');
+          await page.locator('[data-action="reset-order-filters"]').click();
+          assert.equal(await page.locator('#screen .client-order-card').count(),102,'Clearing search must restore all orders');
         }
         await page.screenshot({path:`${output}/${label}-requests.png`});
         const card=role==='admin'?page.locator('[data-admin-open="request"][data-admin-id="r2"]'):role==='supplier'?page.locator('[data-supplier-request]').first():page.locator('[data-request]').first();
