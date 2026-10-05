@@ -20,10 +20,34 @@ jobs:
           npm ci --prefix mobile-app
           npm test --prefix mobile-app
           npm run build --prefix mobile-app
-      - name: Browser smoke
+      - name: Browser and Lighthouse against local build with production API
         run: |
-          npm install --no-save playwright@1.55.0
+          npm install --no-save playwright@1.55.0 lighthouse@12.8.2
           npx playwright install --with-deps chromium
+          cat >/tmp/store-proxy.cjs <<'NODE'
+          const http=require('http'),fs=require('fs'),path=require('path');
+          const root=path.resolve('mobile-app/dist');
+          const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.json':'application/json; charset=utf-8'};
+          function file(res,p){
+            try{
+              const data=fs.readFileSync(p);res.writeHead(200,{'content-type':types[path.extname(p)]||'application/octet-stream'});res.end(data);
+            }catch{res.writeHead(404);res.end('not found');}
+          }
+          http.createServer(async(req,res)=>{
+            try{
+              if(req.url.startsWith('/api/')){
+                const upstream=await fetch('https://m-platform-tan.vercel.app'+req.url,{headers:{'x-m-client':'native'}});
+                const headers={};for(const [k,v] of upstream.headers)if(!['content-encoding','content-length','transfer-encoding'].includes(k.toLowerCase()))headers[k]=v;
+                res.writeHead(upstream.status,headers);res.end(Buffer.from(await upstream.arrayBuffer()));return;
+              }
+              const u=new URL(req.url,'http://localhost'),rel=decodeURIComponent(u.pathname).replace(/^\/+/,''),candidate=path.join(root,rel||'index.html');
+              if(rel&&fs.existsSync(candidate)&&fs.statSync(candidate).isFile())return file(res,candidate);
+              return file(res,path.join(root,'index.html'));
+            }catch(e){console.error(e);res.writeHead(502);res.end('proxy error');}
+          }).listen(4173,'127.0.0.1',()=>console.log('READY 4173'));
+          NODE
+          node /tmp/store-proxy.cjs >/tmp/store-proxy.log 2>&1 &
+          for i in {1..30}; do curl -fsS http://127.0.0.1:4173/ >/dev/null && break; sleep 1; done
           node <<'NODE'
           const {chromium}=require('playwright');
           (async()=>{
@@ -37,7 +61,7 @@ jobs:
                 for(const e of list.getEntries()) if(!e.hadRecentInput) window.__cls+=e.value;
               }).observe({type:'layout-shift',buffered:true});
             });
-            await page.goto('https://m-platform-hom7p8dfo-m-162e1.vercel.app/',{waitUntil:'networkidle'});
+            await page.goto('http://127.0.0.1:4173/',{waitUntil:'networkidle'});
             await page.waitForSelector('#site-header .sf-header',{timeout:15000});
             await page.waitForSelector('.sf-product',{timeout:15000});
             const info=await page.evaluate(()=>({
@@ -64,11 +88,8 @@ jobs:
             await browser.close();
           })().catch(e=>{console.error(e);process.exit(1)});
           NODE
-      - name: Lighthouse mobile
-        run: |
-          npm install -g lighthouse@12.8.2
           for n in 1 2 3; do
-            lighthouse 'https://m-platform-hom7p8dfo-m-162e1.vercel.app/'               --only-categories=performance               --output=json --output-path="/tmp/lh-$n.json"               --chrome-flags="--headless --no-sandbox --disable-dev-shm-usage"               --form-factor=mobile --screenEmulation.mobile=true               --throttling-method=simulate --quiet
+            npx lighthouse 'http://127.0.0.1:4173/'               --only-categories=performance               --output=json --output-path="/tmp/lh-$n.json"               --chrome-flags="--headless --no-sandbox --disable-dev-shm-usage"               --form-factor=mobile --screenEmulation.mobile=true               --throttling-method=simulate --quiet
           done
           node <<'NODE'
           const fs=require('fs');
@@ -86,6 +107,7 @@ jobs:
             };
           });
           const median=k=>rows.map(x=>x[k]).sort((a,b)=>a-b)[1];
-          console.log('LIGHTHOUSE_RESULT '+JSON.stringify({runs:rows,performance:median('performance'),fcp:median('fcp'),lcp:median('lcp'),tbt:median('tbt'),cls:median('cls'),speedIndex:median('speedIndex'),bytes:median('bytes')}));
-          if(median('cls')>0.05) process.exit(2);
+          const out={runs:rows,performance:median('performance'),fcp:median('fcp'),lcp:median('lcp'),tbt:median('tbt'),cls:median('cls'),speedIndex:median('speedIndex'),bytes:median('bytes')};
+          console.log('LIGHTHOUSE_RESULT '+JSON.stringify(out));
+          if(out.cls>0.05) process.exit(2);
           NODE
