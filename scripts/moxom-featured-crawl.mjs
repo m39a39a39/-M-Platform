@@ -6,14 +6,16 @@ const plans = {
   'bluetooth-earphone-22':4,
   'stands':7,
   'power-banks-11':5,
-  'wireless-chargers':4,
+  'wireless-chargers-12':3,
   'mouse':3,
   'hub':3,
   'air-pump':2,
   'phone-cooler':2,
-  'car-chargers':4,
+  'car-chargers-10':3,
   'pen':2,
-  'travel-adapter':3
+  'travel-adapter':1,
+  'ows-or-tws-wireless-earphone':1,
+  'socket':4
 };
 const headers={'user-agent':'Mozilla/5.0 (compatible; MPlatformCatalogResearch/1.0)','accept-language':'en-US,en;q=0.9'};
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
