@@ -1,0 +1,26 @@
+name: Temporary MOXOM Featured Crawl
+on:
+  push:
+    branches:
+      - temp/moxom-featured-crawl-20261005
+permissions:
+  contents: write
+jobs:
+  crawl:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: temp/moxom-featured-crawl-20261005
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node scripts/moxom-featured-crawl.mjs
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tmp/moxom-featured-crawl.json
+          git commit -m "Save temporary MOXOM crawl results" || exit 0
+          git push
