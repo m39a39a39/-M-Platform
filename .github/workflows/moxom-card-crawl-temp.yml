@@ -1,0 +1,26 @@
+name: Temporary MOXOM Card Crawl
+on:
+  push:
+    branches:
+      - temp/moxom-cards-20261005
+permissions:
+  contents: write
+jobs:
+  crawl:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: temp/moxom-cards-20261005
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node scripts/moxom-card-crawl.mjs
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tmp/moxom-cards.json
+          git commit -m "Save temporary MOXOM card crawl" || exit 0
+          git push
