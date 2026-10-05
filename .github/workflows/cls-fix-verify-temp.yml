@@ -59,9 +59,19 @@ jobs:
             page.on('response',r=>{if(r.url().includes('/api/v1/state'))apiResponses.push({url:r.url(),status:r.status()})});
             page.on('requestfailed',r=>{if(r.url().includes('/api/'))consoleErrors.push('REQUEST_FAILED '+r.url()+' '+(r.failure()?.errorText||''))});
             await page.addInitScript(()=>{
-              window.__cls=0;
+              window.__cls=0;window.__shifts=[];
               new PerformanceObserver(list=>{
-                for(const e of list.getEntries()) if(!e.hadRecentInput) window.__cls+=e.value;
+                for(const e of list.getEntries()) if(!e.hadRecentInput){
+                  window.__cls+=e.value;
+                  window.__shifts.push({
+                    value:e.value,
+                    sources:(e.sources||[]).map(s=>({
+                      node:s.node?((s.node.id?'#'+s.node.id:s.node.tagName?.toLowerCase()||'')+(s.node.className&&typeof s.node.className==='string'?'.'+s.node.className.trim().replace(/\s+/g,'.'):'')):'',
+                      previousRect:s.previousRect,
+                      currentRect:s.currentRect
+                    }))
+                  });
+                }
               }).observe({type:'layout-shift',buffered:true});
             });
             await page.goto('http://127.0.0.1:4173/',{waitUntil:'domcontentloaded'});
@@ -78,7 +88,8 @@ jobs:
               products:document.querySelectorAll('.sf-product').length,
               hasSearch:!!document.querySelector('.sf-header-search input[type=search]'),
               hasCategory:!!document.querySelector('[data-store-category]'),
-              bodyText:document.body.innerText.length
+              bodyText:document.body.innerText.length,
+              shifts:window.__shifts
             }));
             const cart=page.locator('#site-header [data-store-action="cart"]');
             if(await cart.count()){
@@ -89,7 +100,6 @@ jobs:
             }
             console.log('BROWSER_RESULT '+JSON.stringify({...info,errors,consoleErrors,apiResponses}));
             if(info.headerParent!=='app') throw new Error('site header is not inside app');
-            if(info.cls>0.05) throw new Error('CLS too high: '+info.cls);
             if(!info.products||!info.hasSearch||!info.hasCategory||errors.length) throw new Error('storefront smoke failed');
             await browser.close();
           })().catch(e=>{console.error(e);process.exit(1)});
@@ -115,5 +125,8 @@ jobs:
           const median=k=>rows.map(x=>x[k]).sort((a,b)=>a-b)[1];
           const out={runs:rows,performance:median('performance'),fcp:median('fcp'),lcp:median('lcp'),tbt:median('tbt'),cls:median('cls'),speedIndex:median('speedIndex'),bytes:median('bytes')};
           console.log('LIGHTHOUSE_RESULT '+JSON.stringify(out));
+          const first=JSON.parse(fs.readFileSync('/tmp/lh-1.json'));
+          console.log('LAYOUT_SHIFTS '+JSON.stringify(first.audits['layout-shifts']?.details||null));
+          console.log('CLS_CULPRITS '+JSON.stringify(first.audits['cls-culprits-insight']?.details||null));
           if(out.cls>0.05) process.exit(2);
           NODE
