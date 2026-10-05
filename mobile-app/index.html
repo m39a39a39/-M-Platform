@@ -9,11 +9,16 @@
     #bootView [data-auth-copy="loading"]{display:none!important}
     #bootView{min-height:100vh;background:#fafbf8}
     .boot-shell{min-height:100vh;background:#fafbf8}
+    @media(max-width:600px){
+      #site-header.site-header-reserve{height:153px;background:#07182d}
+      #site-header.site-header-reserve + #bootView .boot-shell-header{display:none}
+    }
   </style>
   <title>M Platform</title>
 </head>
 <body>
   <div id="app" class="app-shell">
+    <div id="site-header" class="site-header-reserve"></div>
     <section id="bootView">
       <div class="boot-shell" aria-busy="true">
         <span hidden aria-hidden="true" data-auth-copy="loading">جارٍ التحقق من الجلسة...</span>
