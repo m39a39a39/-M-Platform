@@ -43,7 +43,8 @@ async function worker(){
     const i=next++, item=links[i];
     try{
       const html=decode(await fetchText(item.url));
-      const model=cleanText((html.match(/Item\s*No\.?\s*:\s*([A-Za-z0-9._ -]+)/i)||[])[1]||'').split(/\s{2,}/)[0].trim();
+      const plain=cleanText(html);
+      const model=(plain.match(/Item\s*No\.?\s*:\s*([A-Za-z0-9._-]+(?:\s+(?:Air|GM))?)/i)||[])[1]?.trim()||'';
       const title=cleanText((html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)||[])[1]||'');
       const images=[];
       for(const m of html.matchAll(/(?:https?:)?\/\/ueeshop\.ly200-cdn\.com\/[^"'<>\s\\]+/gi)){
@@ -64,5 +65,5 @@ async function worker(){
 await Promise.all(Array.from({length:10},worker));
 const ok=rows.filter(x=>x?.model&&x?.images?.length>=2);
 await mkdir('tmp',{recursive:true});
-await writeFile('tmp/moxom-featured-crawl.json',JSON.stringify({generatedAt:new Date().toISOString(),links:links.length,ok:ok.length,items:ok},null,2));
+await writeFile('tmp/moxom-featured-crawl.json',JSON.stringify({generatedAt:new Date().toISOString(),links:links.length,ok:ok.length,items:ok,diagnostic:rows.slice(0,5)},null,2));
 console.log('verified',ok.length);
