@@ -16,19 +16,19 @@ const copy={
     title:'مساعد M الذكي',subtitle:'مستشار مشتريات وتوريد',humanSubtitle:'فريق M يتولى المحادثة الآن',team:'فريق M',
     placeholder:'اكتب ماذا تبحث عنه...',send:'إرسال',close:'إغلاق',photo:'إضافة صورة من الكاميرا أو الاستديو',imageReady:'الصورة جاهزة للبحث',imageError:'تعذر قراءة الصورة. اختر صورة أخرى.',imageSearch:'📷 بحث بصورة',
     guestHello:'مرحبًا 👋 أخبرني ماذا تريد شراءه، وسأساعدك في اختيار الأنسب من المنتجات المتاحة.',
-    clientHello:'مرحبًا 👋 أخبرني ماذا تحتاج، وسأساعدك في المنتجات والعروض وحالة طلباتك.',
+    clientHello:'مرحبًا 👋 أخبرني ماذا تحتاج، وسأساعدك في مشترياتك وطلبات التوريد.',
     error:'تعذر الحصول على رد الآن. حاول مرة أخرى.',thinking:'جاري البحث...',
     chipsGuest:['أبحث عن أفضل منتج لسوقي','قارن لي بين المنتجات المناسبة','لم أجد المنتج الذي أريده'],
-    chipsClient:['اقترح لي منتجًا مناسبًا','هل لدي عروض جديدة؟','أين وصل طلبي؟']
+    chipsClient:['اقترح لي منتجًا مناسبًا','ما حالة طلب التوريد؟','أين وصل طلبي؟']
   },
   en:{
     title:'M AI Assistant',subtitle:'Smart buying & sourcing advisor',humanSubtitle:'M Team is handling this conversation',team:'M Team',
     placeholder:'Tell me what you are looking for...',send:'Send',close:'Close',photo:'Add image from camera or photo library',imageReady:'Image ready to search',imageError:'Could not read this image. Choose another image.',imageSearch:'📷 Image search',
     guestHello:'Hi 👋 Tell me what you want to buy and I will help you choose the best fit from available products.',
-    clientHello:'Hi 👋 Tell me what you need and I can help with products, quotes, and your order status.',
+    clientHello:'Hi 👋 Tell me what you need and I can help with your purchases and sourcing requests.',
     error:'I could not get a response right now. Please try again.',thinking:'Searching...',
     chipsGuest:['Find the best product for my market','Compare suitable products','I cannot find the product I need'],
-    chipsClient:['Recommend a suitable product','Do I have new quotes?','Where is my order?']
+    chipsClient:['Recommend a suitable product','What is my sourcing request status?','Where is my order?']
   }
 };
 
