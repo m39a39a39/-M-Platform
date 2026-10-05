@@ -1,90 +1,40 @@
-name: Production PageSpeed audit
+name: Production CLS audit
 on:
   push:
     branches:
       - audit/pagespeed-2026-10-05
     paths:
       - .github/workflows/pagespeed-audit-temp.yml
-
 permissions:
   contents: read
-
 jobs:
   audit:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
-      - name: Try official PageSpeed Insights API
-        id: psi
-        shell: bash
-        run: |
-          set +e
-          URL='https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=https%3A%2F%2Fm-platform-tan.vercel.app%2F&strategy=mobile&category=performance'
-          code=$(curl -L -sS -o /tmp/psi.json -w '%{http_code}' "$URL")
-          echo "http_code=$code" >> "$GITHUB_OUTPUT"
-          if [ "$code" = "200" ]; then
-            node <<'NODE'
-          const fs=require('fs');
-          const d=JSON.parse(fs.readFileSync('/tmp/psi.json','utf8'));
-          const l=d.lighthouseResult;
-          const a=l.audits;
-          const out={
-            source:'PageSpeed Insights API',
-            performance:Math.round((l.categories.performance.score||0)*100),
-            fcp:a['first-contentful-paint']?.numericValue,
-            lcp:a['largest-contentful-paint']?.numericValue,
-            tbt:a['total-blocking-time']?.numericValue,
-            cls:a['cumulative-layout-shift']?.numericValue,
-            speedIndex:a['speed-index']?.numericValue,
-            totalByteWeight:a['total-byte-weight']?.numericValue,
-            mainThread:a['mainthread-work-breakdown']?.numericValue,
-            unusedJs:a['unused-javascript']?.details?.overallSavingsBytes||0,
-            unusedCss:a['unused-css-rules']?.details?.overallSavingsBytes||0,
-            imageSavings:a['uses-responsive-images']?.details?.overallSavingsBytes||0,
-            nextGenImageSavings:a['modern-image-formats']?.details?.overallSavingsBytes||0,
-            renderBlockingSavings:a['render-blocking-resources']?.details?.overallSavingsMs||0,
-            serverResponse:a['server-response-time']?.numericValue
-          };
-          console.log('PAGESPEED_RESULT '+JSON.stringify(out));
-          NODE
-          else
-            echo "PSI API unavailable with HTTP $code"
-            head -c 1000 /tmp/psi.json || true
-          fi
-
-      - name: Run Lighthouse mobile fallback
-        if: steps.psi.outputs.http_code != '200'
+      - name: Inspect Lighthouse CLS details
         run: |
           npm install -g lighthouse@12.8.2
-          for n in 1 2 3; do
-            lighthouse 'https://m-platform-tan.vercel.app/'               --only-categories=performance               --output=json               --output-path="/tmp/lh-$n.json"               --chrome-flags="--headless --no-sandbox --disable-dev-shm-usage"               --form-factor=mobile               --screenEmulation.mobile=true               --throttling-method=simulate               --quiet
-          done
+          lighthouse 'https://m-platform-tan.vercel.app/'             --only-categories=performance             --output=json             --output-path=/tmp/lh.json             --chrome-flags="--headless --no-sandbox --disable-dev-shm-usage"             --form-factor=mobile             --screenEmulation.mobile=true             --throttling-method=simulate             --quiet
           node <<'NODE'
           const fs=require('fs');
-          const runs=[1,2,3].map(n=>JSON.parse(fs.readFileSync('/tmp/lh-'+n+'.json','utf8')));
-          const metric=(d,id)=>d.audits[id]?.numericValue ?? null;
-          const one=d=>({
-            performance:Math.round((d.categories.performance.score||0)*100),
-            fcp:metric(d,'first-contentful-paint'),
-            lcp:metric(d,'largest-contentful-paint'),
-            tbt:metric(d,'total-blocking-time'),
-            cls:metric(d,'cumulative-layout-shift'),
-            speedIndex:metric(d,'speed-index'),
-            totalByteWeight:metric(d,'total-byte-weight'),
-            mainThread:metric(d,'mainthread-work-breakdown'),
-            unusedJs:d.audits['unused-javascript']?.details?.overallSavingsBytes||0,
-            unusedCss:d.audits['unused-css-rules']?.details?.overallSavingsBytes||0,
-            imageSavings:d.audits['uses-responsive-images']?.details?.overallSavingsBytes||0,
-            nextGenImageSavings:d.audits['modern-image-formats']?.details?.overallSavingsBytes||0,
-            renderBlockingSavings:d.audits['render-blocking-resources']?.details?.overallSavingsMs||0,
-            serverResponse:metric(d,'server-response-time')
-          });
-          const vals=runs.map(one);
-          const med=k=>{
-            const a=vals.map(v=>v[k]).filter(v=>v!==null).sort((x,y)=>x-y);
-            return a[Math.floor(a.length/2)] ?? null;
-          };
-          const out={source:'Lighthouse mobile 3-run median',runs:vals};
-          for(const k of Object.keys(vals[0])) out[k]=med(k);
-          console.log('PAGESPEED_RESULT '+JSON.stringify(out));
+          const d=JSON.parse(fs.readFileSync('/tmp/lh.json','utf8'));
+          const ids=Object.keys(d.audits).filter(id=>/layout|cls|lcp|largest-contentful|font|image/.test(id));
+          for(const id of ids){
+            const a=d.audits[id];
+            if(a.score===1 && !['layout-shifts','largest-contentful-paint-element'].includes(id)) continue;
+            console.log('AUDIT '+id+' '+JSON.stringify({
+              title:a.title,
+              score:a.score,
+              numericValue:a.numericValue,
+              displayValue:a.displayValue,
+              details:a.details
+            }));
+          }
+          const opp=Object.entries(d.audits)
+            .filter(([id,a])=>a.details && (a.details.overallSavingsMs||a.details.overallSavingsBytes))
+            .map(([id,a])=>({id,title:a.title,score:a.score,ms:a.details.overallSavingsMs||0,bytes:a.details.overallSavingsBytes||0}))
+            .sort((a,b)=>(b.ms-a.ms)||(b.bytes-a.bytes))
+            .slice(0,12);
+          console.log('OPPORTUNITIES '+JSON.stringify(opp));
           NODE
