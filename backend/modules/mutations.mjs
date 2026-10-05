@@ -1,3 +1,4 @@
+import {customerQuote,canRespondToQuote} from '../../shared/customer-quote.mjs';
 import {one,db,rpc,assert,sb} from '../lib/supabase.mjs';
 import {can} from './auth.mjs';
 import {tables,assertOpenRequest,active,open} from './records.mjs';
@@ -277,7 +278,7 @@ export async function mutate(user,body){
     }
   }else if(!isAdmin){
     if(collection==='requests'&&user.role==='client'&&original.owner_id===user.id){
-      assert(changes.length===1&&['selectedQuoteId','lastSeenQuoteAt','approveReplacementQuoteId','rejectReplacementQuoteId','approveCartReplacementQuoteId','rejectCartReplacementQuoteId'].includes(changes[0]));
+      assert(changes.length===1&&['selectedQuoteId','rejectedQuoteId','lastSeenQuoteAt','approveReplacementQuoteId','rejectReplacementQuoteId','approveCartReplacementQuoteId','rejectCartReplacementQuoteId'].includes(changes[0]));
       if(changes[0]==='approveCartReplacementQuoteId'){
         const pending=data.pendingCartReplacement,quoteId=String(patch.approveCartReplacementQuoteId||'');
         assert(data.orderType==='cart'&&pending?.quoteId===quoteId&&pending?.interestId,409,'العرض البديل غير متاح / Replacement quote unavailable');
@@ -325,11 +326,19 @@ export async function mutate(user,body){
         data.supplierAssignmentHistory=[...(Array.isArray(data.supplierAssignmentHistory)?data.supplierAssignmentHistory:[]),{rejectedReplacementQuoteId:q.id,rejectedAt:now,rejectedBy:'customer'}].slice(-100);
         delete data.pendingReplacementQuoteId;
         setTracking(data,'supplier_confirmation',now,'رفض العميل العرض البديل؛ يلزم اختيار مورد آخر / Customer rejected the replacement quote; choose another supplier');
-      }else if(changes[0]==='selectedQuoteId'){
-        const r=await assertOpenRequest(id),q=await one('quotes',patch.selectedQuoteId);
+      }else if(changes[0]==='selectedQuoteId'||changes[0]==='rejectedQuoteId'){
+        const r=await assertOpenRequest(id),quoteId=patch[changes[0]],q=await one('quotes',quoteId);
+        const published=await db('quotes',`request_id=eq.${encodeURIComponent(id)}&data->>status=eq.published&data->>deletedAt=is.null`);
+        const visible=customerQuote({...r.data,id:r.id},published.map(row=>({...row.data,id:row.id,requestId:row.request_id,createdAt:row.created_at})));
+        assert(r.data.orderType!=='cart'&&visible?.id===quoteId&&canRespondToQuote(r.data,visible),409,'عرض السعر غير متاح للرد / Quote is no longer available for a response');
         assert(!r.data.selectedQuoteId&&r.data.status==='sent'&&open(q)&&q.request_id===id&&q.data.status==='published'&&active(await one('profiles',q.owner_id)),409,'العرض غير متاح أو سبق اختيار عرض / Quote unavailable or already selected');
-        data.selectedQuoteId=q.id;setTracking(data,'supplier_confirmation',now,'');
-        if(!data.proformaInvoice)data.proformaInvoice=await issueQuoteProforma(user,r,q,now);
+        if(changes[0]==='rejectedQuoteId'){
+          data.rejectedQuoteId=q.id;data.quoteRejectedAt=now;
+          setTracking(data,'reviewing',now,'رفض العميل عرض السعر / Customer declined the price quote');
+        }else{
+          data.selectedQuoteId=q.id;setTracking(data,'supplier_confirmation',now,'');
+          if(!data.proformaInvoice)data.proformaInvoice=await issueQuoteProforma(user,r,q,now);
+        }
       }else{
         const published=await db('quotes',`request_id=eq.${encodeURIComponent(id)}&data->>status=eq.published&data->>deletedAt=is.null`);
         const latest=published.map(q=>q.data.publishedAt||q.data.updatedAt||q.data.reviewedAt||q.created_at).filter(Boolean).sort().at(-1);

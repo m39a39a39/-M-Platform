@@ -47,3 +47,26 @@ test('shipment details and new stage save together; whitespace and missing track
 test('legacy sourcing and ready-product orders can move from ready_to_ship to shipped',()=>fixture(async(s)=>{
  for(const collection of ['requests','interests']){s[collection].push({id:collection,owner_id:'client',version:1,data:{status:collection==='requests'?'sent':'active',trackingStatus:'ready_to_ship',images:[]}});await mutate(admin,{collection,id:collection,version:1,patch:{trackingStatus:'shipped',trackingNote:''}});assert.equal(s[collection][0].data.trackingStatus,'shipped');}
 }));
+
+test('customer receives one current admin-published quote and historical accepted price stays fixed',()=>fixture(async s=>{
+ s.requests.push({id:'rfq',owner_id:'client',version:1,data:{status:'sent'}});
+ for(const [id,publishedAt] of [['earlier','2026-10-01'],['current','2026-10-02']])s.quotes.push({id,owner_id:'old',request_id:'rfq',version:1,data:{status:'published',publishedAt,unitPrice:25,currency:'SAR'}});
+ let view=await snapshot({id:'client',role:'client',data:{}});assert.deepEqual(view.quotes.map(q=>q.id),['current']);assert.equal(s.quotes.length,2,'Old records must remain intact');
+ s.requests[0].data.selectedQuoteId='earlier';view=await snapshot({id:'client',role:'client',data:{}});assert.deepEqual(view.quotes.map(q=>q.id),['earlier']);
+}));
+test('customer can decline current sourcing quote, cannot accept stale/rejected quotes or another customer request',()=>fixture(async s=>{
+ s.requests.push({id:'rfq',owner_id:'client',version:1,data:{status:'sent',trackingStatus:'quotes_available'}});
+ for(const [id,publishedAt] of [['earlier','2026-10-01'],['current','2026-10-02']])s.quotes.push({id,owner_id:'old',request_id:'rfq',version:1,data:{status:'published',publishedAt,unitPrice:25,currency:'SAR'}});
+ const customer={id:'client',role:'client'},body={collection:'requests',id:'rfq',version:1};
+ await assert.rejects(()=>mutate(customer,{...body,patch:{selectedQuoteId:'earlier'}}),e=>e.status===409);
+ await assert.rejects(()=>mutate({id:'intruder',role:'client'},{...body,patch:{rejectedQuoteId:'current'}}));
+ await mutate(customer,{...body,patch:{rejectedQuoteId:'current'}});assert.equal(s.requests[0].data.rejectedQuoteId,'current');assert.equal(s.requests[0].data.trackingStatus,'reviewing');assert.equal(s.requests[0].data.selectedQuoteId,undefined);
+ await assert.rejects(()=>mutate(customer,{...body,version:2,patch:{selectedQuoteId:'current'}}),e=>e.status===409);
+}));
+test('accepting current sourcing quote retains quoted price and prevents a second decision',()=>fixture(async s=>{
+ s.requests.push({id:'rfq',owner_id:'client',version:1,data:{status:'sent',quantity:2,proformaInvoice:{id:'existing'}}});
+ s.quotes.push({id:'current',owner_id:'old',request_id:'rfq',version:1,data:{status:'published',unitPrice:25,currency:'SAR'}});
+ const customer={id:'client',role:'client'},body={collection:'requests',id:'rfq',version:1};
+ await mutate(customer,{...body,patch:{selectedQuoteId:'current'}});assert.equal(s.requests[0].data.selectedQuoteId,'current');assert.equal(s.requests[0].data.trackingStatus,'supplier_confirmation');assert.equal(s.quotes[0].data.unitPrice,25);
+ await assert.rejects(()=>mutate(customer,{...body,version:2,patch:{rejectedQuoteId:'current'}}),e=>e.status===409);
+}));
