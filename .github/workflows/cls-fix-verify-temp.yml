@@ -85,7 +85,7 @@ jobs:
               await cart.first().click();
               await page.waitForSelector('#modal:not(.hidden)');
               await page.locator('#modal [data-close-modal]').last().click();
-              await page.waitForSelector('#modal.hidden');
+              await page.locator('#modal').waitFor({state:'hidden'});
             }
             console.log('BROWSER_RESULT '+JSON.stringify({...info,errors,consoleErrors,apiResponses}));
             if(info.headerParent!=='app') throw new Error('site header is not inside app');
