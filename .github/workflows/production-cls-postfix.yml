@@ -51,7 +51,7 @@ jobs:
               await cart.first().click();
               await page.waitForSelector('#modal:not(.hidden)',{timeout:10000});
               await page.locator('#modal [data-close-modal]').last().click();
-              await page.waitForSelector('#modal.hidden',{timeout:10000});
+              await page.waitForFunction(()=>document.getElementById('modal')?.classList.contains('hidden'),null,{timeout:10000});
             } else cartOk=false;
             console.log('BROWSER_RESULT '+JSON.stringify({...info,cartOk,errors,consoleErrors}));
             if(info.headerParent!=='app') throw new Error('header parent mismatch');
