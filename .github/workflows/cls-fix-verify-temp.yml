@@ -53,17 +53,23 @@ jobs:
           (async()=>{
             const browser=await chromium.launch({headless:true});
             const page=await browser.newPage({viewport:{width:412,height:915}});
-            const errors=[];
+            const errors=[],consoleErrors=[],apiResponses=[];
             page.on('pageerror',e=>errors.push(String(e)));
+            page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text())});
+            page.on('response',r=>{if(r.url().includes('/api/v1/state'))apiResponses.push({url:r.url(),status:r.status()})});
+            page.on('requestfailed',r=>{if(r.url().includes('/api/'))consoleErrors.push('REQUEST_FAILED '+r.url()+' '+(r.failure()?.errorText||''))});
             await page.addInitScript(()=>{
               window.__cls=0;
               new PerformanceObserver(list=>{
                 for(const e of list.getEntries()) if(!e.hadRecentInput) window.__cls+=e.value;
               }).observe({type:'layout-shift',buffered:true});
             });
-            await page.goto('http://127.0.0.1:4173/',{waitUntil:'networkidle'});
-            await page.waitForSelector('#site-header .sf-header',{timeout:15000});
-            await page.waitForSelector('.sf-product',{timeout:15000});
+            await page.goto('http://127.0.0.1:4173/',{waitUntil:'domcontentloaded'});
+            await page.waitForTimeout(8000);
+            const diagnostics=await page.evaluate(()=>({url:location.href,title:document.title,body:document.body.innerText.slice(0,800),guestHidden:document.getElementById('guestView')?.classList.contains('hidden'),bootHidden:document.getElementById('bootView')?.classList.contains('hidden'),headerExists:!!document.getElementById('site-header'),storeHtml:document.getElementById('guest-storefront')?.innerHTML.slice(0,500)||''}));
+            console.log('DIAGNOSTICS '+JSON.stringify({diagnostics,errors,consoleErrors,apiResponses}));
+            await page.waitForSelector('#site-header .sf-header',{timeout:5000});
+            await page.waitForSelector('.sf-product',{timeout:5000});
             const info=await page.evaluate(()=>({
               cls:window.__cls,
               headerParent:document.getElementById('site-header')?.parentElement?.id||'',
@@ -81,7 +87,7 @@ jobs:
               await page.locator('#modal [data-close-modal]').last().click();
               await page.waitForSelector('#modal.hidden');
             }
-            console.log('BROWSER_RESULT '+JSON.stringify({...info,errors}));
+            console.log('BROWSER_RESULT '+JSON.stringify({...info,errors,consoleErrors,apiResponses}));
             if(info.headerParent!=='app') throw new Error('site header is not inside app');
             if(info.cls>0.05) throw new Error('CLS too high: '+info.cls);
             if(!info.products||!info.hasSearch||!info.hasCategory||errors.length) throw new Error('storefront smoke failed');
