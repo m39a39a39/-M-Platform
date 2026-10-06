@@ -56,13 +56,13 @@ for(const [engine,type] of Object.entries({chromium,webkit})){
    await page.locator('.sf-header [data-store-action="cart"]').click();
    await page.locator('#guestCartForm .cart-line').waitFor();
    await close();
-   await page.locator('.sf-header [data-store-action="login"]').click();
+   await page.locator('.sf-header [data-store-action="login"]').click();await page.waitForURL(url=>url.pathname==='/customer.html'&&url.searchParams.has('returnTo'));
    await page.locator('#email').fill(user.email);await page.locator('#password').fill('fixture-password');await page.locator('#loginBtn').click();
    await page.locator('#customer-storefront [data-product-purchase]').waitFor();assert.equal(new URL(page.url()).searchParams.get('product'),'p1');assert.deepEqual(await signature(),guestProduct);
    await page.locator('.sf-header [data-store-action="cart"]').click();await page.locator('#cartCheckoutForm .cart-line').waitFor();assert.equal(await page.locator('#cartCheckoutForm .cart-line').count(),1);await close();
    await page.goto(baseURL+'/?category=cat1');await page.locator('#customer-storefront .sf-product').waitFor();assert.deepEqual(await signature(),guestCategory);
    await page.goto(baseURL+'/');await page.locator('#customer-storefront .published-storefront').waitFor();assert.equal(new URL(page.url()).pathname,'/');assert.deepEqual(await signature(),guestHome);await geometry();
-   await page.locator('.sf-header [data-store-action="account"]').click();
+   await page.locator('.sf-header [data-store-action="account"]').click();await page.waitForURL(url=>url.pathname==='/customer.html'&&url.searchParams.get('screen')==='account');
    await page.locator('.client-account-layout .profile-card').waitFor();
    assert.equal(await page.locator('#site-header .sf-header').count(),1);assert.equal(await page.locator('.portal-header').count(),0);assert.equal(await page.locator('#site-header form[data-store-search]').count(),1);
    assert.equal(await page.locator('.client-account-overview,.client-account-stats').count(),0);
