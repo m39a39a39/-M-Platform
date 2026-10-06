@@ -341,7 +341,8 @@ export async function aiChat(user,body={},req=null){
   }
   const gatewayUser=enforceRateLimit(user,req);
   const model=String(process.env.OPENAI_CHAT_MODEL||DEFAULT_MODEL).replace(/^openai\//,'');
-  const state=await snapshot(user||null);
+  const policySignal=qHas(message.toLowerCase(),['سياسة','الشحن','شحن','إرجاع','استرجاع','إلغاء','خصوصية','ضمان','policy','shipping','return','refund','cancel','privacy','warranty']);
+  const state=await snapshot(user||null,!user&&!policySignal?{q:message}:{});
   if(!proactive&&!image){
     const direct=directCustomerAnswer(state,user,message,language);
     if(direct){
