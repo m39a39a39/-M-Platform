@@ -68,17 +68,47 @@ const descriptionPair=item=>{
   return {ar:clamp(t.descriptionAr||t.descriptionEn||item?.specs||item?.shortDescription||'',900),en:clamp(t.descriptionEn||t.descriptionAr||item?.specs||item?.shortDescription||'',900)};
 };
 const terms=text=>clean(text).toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(x=>x.length>=2).slice(0,24);
-function productScore(item,needles){
-  if(!needles.length)return 0;
+function productIntent(query=''){
+  const q=clean(query).toLowerCase();
+  const personalAudio=/(سماع|earbud|earphone|headphone|headset|tws)/u.test(q)&&!/(مكبر|سبيكر|speaker|soundbar)/u.test(q);
+  const speaker=/(مكبر|سبيكر|speaker|soundbar)/u.test(q);
+  const wireless=/(بلوتوث|bluetooth|لاسلك|wireless)/u.test(q);
+  return {personalAudio,speaker,wireless};
+}
+function productIntentScore(item,intent){
+  const sub=String(item?.subcategoryId||'').toLowerCase();
+  const title=titlePair(item);
+  const hay=clean([item?.product,title.ar,title.en].filter(Boolean).join(' ')).toLowerCase();
+  let score=0;
+  const isSpeaker=sub==='sub-bluetooth-speakers'||/(مكبر|سبيكر|speaker|soundbar)/u.test(hay);
+  const isTws=sub==='sub-tws-earbuds'||/(tws|earbud)/u.test(hay);
+  const isHeadphone=sub==='sub-headphones-gaming'||/(headphone|headset|سماعة رأس)/u.test(hay);
+  const isWired=sub==='sub-wired-earphones'||/(wired|سلكي|earphone)/u.test(hay);
+  if(intent.personalAudio){
+    if(isSpeaker)score-=30;
+    if(isTws)score+=20;
+    else if(isHeadphone)score+=14;
+    else if(isWired)score+=intent.wireless?-8:8;
+    if(/(سماع|earbud|earphone|headphone|headset|tws)/u.test(hay))score+=6;
+    if(intent.wireless&&/(لاسلك|wireless|bluetooth|tws)/u.test(hay))score+=6;
+  }else if(intent.speaker){
+    if(isSpeaker)score+=22;
+    if(isTws||isHeadphone||isWired)score-=16;
+  }
+  return score;
+}
+function productScore(item,needles,intent){
+  if(!needles.length)return productIntentScore(item,intent);
   const title=titlePair(item),description=descriptionPair(item);
   const hay=clean([item?.sku,title.ar,title.en,description.ar,description.en,item?.country,item?.categoryId,item?.subcategoryId].filter(Boolean).join(' ')).toLowerCase();
-  return needles.reduce((score,term)=>score+(hay.includes(term)?(String(item?.sku||'').toLowerCase().includes(term)?5:2):0),0);
+  const lexical=needles.reduce((score,term)=>score+(hay.includes(term)?(String(item?.sku||'').toLowerCase().includes(term)?5:2):0),0);
+  return lexical+productIntentScore(item,intent);
 }
 function rankedProductItems(state,query){
   const rows=(state?.publicOffers||[]).filter(x=>x?.status==='published'&&!x?.deletedAt&&!x?.studioArchived);
-  const needles=terms(query);
+  const needles=terms(query),intent=productIntent(query);
   const cheapest=qHas(clean(query).toLowerCase(),['أرخص','ارخص','cheapest','lowest price']);
-  return rows.map(item=>({item,score:productScore(item,needles)})).sort((a,b)=>{
+  return rows.map(item=>({item,score:productScore(item,needles,intent)})).sort((a,b)=>{
     if(a.score!==b.score)return b.score-a.score;
     if(cheapest&&Number.isFinite(Number(a.item?.unitPrice))&&Number.isFinite(Number(b.item?.unitPrice)))return Number(a.item.unitPrice)-Number(b.item.unitPrice);
     return String(b.item?.createdAt||'').localeCompare(String(a.item?.createdAt||''));
@@ -106,7 +136,7 @@ function productContext(state,query){
     };
   });
 }
-function productCards(state,query,language){
+export function customerProductRecommendations(state,query,language='ar'){
   return rankedProductItems(state,query).filter(x=>x.score>0).slice(0,6).map(({item})=>{
     const titles=titlePair(item),image=Array.isArray(item.images)?String(item.images[0]||''):'';
     return {
@@ -131,7 +161,7 @@ function quickRepliesFor(query,cards,language){
   return language==='en'?['Cheapest option','Compare these','Show more']:['أرخص خيار','قارن بينها','عرض المزيد'];
 }
 function chatUiMetadata(state,query,language){
-  const products=productCards(state,query,language);
+  const products=customerProductRecommendations(state,query,language);
   return {products,quickReplies:quickRepliesFor(query,products,language)};
 }
 function requestTitle(item){
@@ -487,7 +517,7 @@ export async function aiChat(user,body={},req=null){
     return {reply,source:'openai',usage:null,...(conversation?{conversationId:conversation.id,humanMode:false}:{})};
   }
   const history=normalizeHistory(body.history);
-  const recentSearchContext=history.slice(-4).map(x=>x.content).join(' ');
+  const recentSearchContext=history.filter(x=>x.role==='user').slice(-2).map(x=>x.content).join(' ');
   const productQuery=[imageSearch?.query,imageSearch?.productType,imageSearch?.visibleText,marketingSignal?.query,marketingSignal?.productSku,marketingSignal?.productTitle,recentSearchContext,message].filter(Boolean).join(' ');
   const personalContextNeeded=!!user&&qHas(message.toLowerCase(),['طلبي','الطلب','الدفع','فاتورة','عرض','تتبع','order','payment','invoice','quote','tracking']);
   const policyPage=policyPageId?selectedPolicyPage(state,policyPageId):null;
