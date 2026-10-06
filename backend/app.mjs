@@ -19,6 +19,7 @@ import {manageOrder} from './modules/order-management.mjs';
 import {saveStudio,saveStudioProduct} from './modules/studio.mjs';
 import {createCartOrder} from './modules/cart-orders.mjs';
 import {aiChat} from './modules/ai-chat.mjs';
+import {adminAi,adminAiOverview} from './modules/admin-ai.mjs';
 import {customerConversation,adminConversationList,adminConversationRead,adminConversationAction} from './modules/ai-conversations.mjs';
 
 const NATIVE_ORIGINS=new Set(['capacitor://localhost','http://localhost','https://localhost']);
@@ -79,6 +80,7 @@ export default async function handler(req,res){
         result=await snapshot(user,{productId:url.searchParams.get('product')||'',pageId:url.searchParams.get('page')||'',category:url.searchParams.get('category')||'',q:url.searchParams.get('q')||''});
       }
       else if(path==='/api/ai-chat'){assert(req.method==='POST',405);result=await aiChat(user,body,req);}
+      else if(path==='/api/admin-ai'){result=req.method==='GET'?await adminAiOverview(user):await adminAi(user,body);}
       else if(path==='/api/ai-conversation'){
         assert(req.method==='GET',405);result=await customerConversation(user,{conversationId:url.searchParams.get('conversationId')||'',guestKey:url.searchParams.get('guestKey')||'',language:url.searchParams.get('language')||'ar'});
       }
