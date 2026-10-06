@@ -1,7 +1,7 @@
 import {snapshot} from './records.mjs';
 import {assert,HttpError,db} from '../lib/supabase.mjs';
 import {createHash} from 'node:crypto';
-import {ensureConversation,saveCustomerMessage,saveAiMessage} from './ai-conversations.mjs';
+import {ensureConversation,saveCustomerMessage,saveAiMessage,requestHumanHandoff} from './ai-conversations.mjs';
 import {recordAiUsage} from './ai-usage.mjs';
 
 const OPENAI_URL='https://api.openai.com/v1/chat/completions';
@@ -198,6 +198,53 @@ function directProductFact(state,message,language){
   if(!facts.length)return null;
   return title+' — '+facts.join(' · ');
 }
+function wantsHumanSupport(message=''){
+  const q=clean(message).toLowerCase();
+  return qHas(q,[
+    'خدمة العملاء','موظف','موظفه','موظفة','موظفين','شخص حقيقي','انسان','إنسان','بشري',
+    'حولني','حوّلني','حولني لموظف','اكلم موظف','أكلم موظف','اتكلم مع موظف','أتكلم مع موظف',
+    'customer service','human agent','human support','live agent','talk to a person','speak to an agent','representative'
+  ]);
+}
+function policyPageIdForMessage(message=''){
+  const q=clean(message).toLowerCase();
+  if(qHas(q,['الشحن','شحن','التوصيل','توصيل','ناقل','shipping','delivery','freight','carrier']))return 'policy-shipping';
+  if(qHas(q,['استرجاع','استرداد','ارجاع','إرجاع','refund','return']))return 'policy-returns';
+  if(qHas(q,['إلغاء','الغاء','cancel','cancellation']))return 'policy-cancellation';
+  if(qHas(q,['الدفع','تحويل','عربون','payment','deposit','bank transfer']))return 'policy-payments';
+  if(qHas(q,['خصوصية','privacy']))return 'policy-privacy';
+  if(qHas(q,['ملفات الارتباط','كوكيز','cookies','cookie']))return 'policy-cookies';
+  if(qHas(q,['الشروط','الأحكام','terms','conditions']))return 'policy-terms';
+  return '';
+}
+function selectedPolicyPage(state,pageId){
+  return (state?.settings?.storefront?.pages||[]).find(page=>page?.id===pageId&&page?.active!==false)||null;
+}
+function directShippingAnswer(state,message,language){
+  const page=selectedPolicyPage(state,'policy-shipping');
+  if(!page)return '';
+  const content=clean(language==='en'?(page.contentEn||page.content):(page.content||page.contentEn));
+  const q=clean(message).toLowerCase();
+  if(!content)return '';
+  const saudi=language==='en'?/saudi arabia/i.test(content):content.includes('السعودية');
+  if(saudi&&qHas(q,['السعودية','saudi','ksa'])){
+    const asksCost=qHas(q,['كم','تكلفة','السعر','رسوم','cost','price','charge','fee']);
+    if(language==='en'){
+      return asksCost
+        ?'Yes. We currently deliver to Saudi Arabia. Shipping is quoted separately after the goods are prepared, based on weight, volume and shipping method. Our approved shipping quote includes transport, customs duties, taxes, clearance and delivery to the agreed address.'
+        :'Yes. We currently deliver to Saudi Arabia. We can arrange air or sea freight, and the shipping quote is confirmed separately after the goods are prepared.';
+    }
+    return asksCost
+      ?'نعم، نوفر التوصيل حاليًا إلى السعودية. تُحدد تكلفة الشحن بشكل منفصل بعد تجهيز البضاعة ومعرفة الوزن والحجم وطريقة الشحن، ويشمل عرض الشحن المعتمد النقل والجمارك والضرائب والتخليص والتوصيل إلى العنوان المتفق عليه.'
+      :'نعم، نوفر التوصيل حاليًا إلى السعودية. يمكن ترتيب الشحن الجوي أو البحري، وتُحدد تكلفة الشحن بشكل منفصل بعد تجهيز البضاعة ومعرفة الوزن والحجم.';
+  }
+  if(qHas(q,['شركة شحن أخرى','ناقل آخر','carrier','own carrier','another carrier'])){
+    return language==='en'
+      ?'Yes. You may appoint another carrier to collect the prepared goods after the goods value is fully paid.'
+      :'نعم، يمكنك اختيار شركة شحن أخرى لاستلام البضاعة بعد تجهيزها وسداد كامل قيمة البضاعة.';
+  }
+  return '';
+}
 function directPolicyAnswer(state,message,language){
   const pages=state?.settings?.storefront?.pages||[];
   if(!pages.length)return null;
@@ -230,7 +277,7 @@ export function directCustomerAnswer(state,user,message,language='ar'){
       if(parts.length)return (language==='en'?'Order ':'الطلب ')+(number||'')+' — '+parts.join(' · ');
     }
   }
-  return directProductFact(state,normalized,language)||directPolicyAnswer(state,normalized,language);
+  return directProductFact(state,normalized,language)||directShippingAnswer(state,normalized,language)||directPolicyAnswer(state,normalized,language);
 }
 function cacheKeyFor(language,message,context){
   const compact={language,message:clean(message).toLowerCase(),products:context?.products||[],shoppingSignal:context?.shoppingSignal||null};
@@ -358,11 +405,21 @@ export async function aiChat(user,body={},req=null){
     const saved=await saveCustomerMessage(conversation,savedText);
     conversation=saved.conversation;
     if(conversation.status==='human')return {conversationId:conversation.id,humanMode:true};
+    if(wantsHumanSupport(message)){
+      const reply=language==='en'
+        ?'Done. I have transferred this conversation to the M Platform customer service team. You can continue writing here and a team member can reply in the same chat.'
+        :'تم. حولت المحادثة الآن إلى فريق خدمة عملاء M Platform. يمكنك متابعة الكتابة هنا، وسيتمكن الموظف من الرد عليك في نفس المحادثة.';
+      conversation=await requestHumanHandoff(conversation);
+      await saveAiMessage(conversation,reply);
+      await recordAiUsage({surface:'customer',source:'database',user,conversationId:conversation.id,model:''});
+      return {reply,source:'database',conversationId:conversation.id,humanMode:true};
+    }
   }
   const gatewayUser=enforceRateLimit(user,req);
   const model=String(process.env.OPENAI_CHAT_MODEL||DEFAULT_MODEL).replace(/^openai\//,'');
-  const policySignal=qHas(message.toLowerCase(),['سياسة','الشحن','شحن','إرجاع','استرجاع','إلغاء','خصوصية','ضمان','policy','shipping','return','refund','cancel','privacy','warranty']);
-  const state=await snapshot(user||null,!user&&!policySignal?{q:message}:{});
+  const policyPageId=policyPageIdForMessage(message);
+  const policySignal=!!policyPageId||qHas(message.toLowerCase(),['سياسة','ضمان','policy','warranty']);
+  const state=await snapshot(user||null,!user?(policyPageId?{pageId:policyPageId}:policySignal?{}:{q:message}):{});
   if(!proactive&&!image){
     const direct=directCustomerAnswer(state,user,message,language);
     if(direct){
@@ -384,9 +441,11 @@ export async function aiChat(user,body={},req=null){
   }
   const productQuery=[imageSearch?.query,imageSearch?.productType,imageSearch?.visibleText,marketingSignal?.query,marketingSignal?.productSku,marketingSignal?.productTitle,message].filter(Boolean).join(' ');
   const personalContextNeeded=!!user&&qHas(message.toLowerCase(),['طلبي','الطلب','الدفع','فاتورة','عرض','تتبع','order','payment','invoice','quote','tracking']);
+  const policyPage=policyPageId?selectedPolicyPage(state,policyPageId):null;
   const context={
     viewer:user?{signedIn:true}:{signedIn:false},
     products:productContext(state,productQuery),
+    ...(policyPage?{policy:{id:policyPage.id,title:language==='en'?(policyPage.titleEn||policyPage.title):(policyPage.title||policyPage.titleEn),content:clamp(language==='en'?(policyPage.contentEn||policyPage.content):(policyPage.content||policyPage.contentEn),1800)}}:{}),
     ...(imageSearch?{imageSearch}:{}),
     ...(marketingSignal?{shoppingSignal:marketingSignal}:{}),
     ...(personalContextNeeded?clientContext(state):{})
@@ -404,7 +463,7 @@ export async function aiChat(user,body={},req=null){
   }
   const system=language==='ar'
     ?`أنت مستشار مبيعات وتوريد محترف داخل M Platform. هدفك فهم ما يحتاجه العميل ومساعدته على اتخاذ قرار شراء مناسب، بدون ضغط أو مبالغة.
-اعتمد على PLATFORM_CONTEXT_JSON في معلومات المنتجات والأسعار والمخزون والطلبات والعروض. لا تخترع أي سعر أو خصم أو مخزون أو حالة أو ميزة غير موجودة.
+اعتمد على PLATFORM_CONTEXT_JSON في معلومات المنتجات والأسعار والمخزون والطلبات والعروض والسياسات. إذا احتوى السياق على policy فاعتبره المصدر الرسمي للسؤال المتعلق بالسياسة، وأجب منه مباشرة وباختصار. لا تخترع أي سعر أو خصم أو مخزون أو حالة أو ميزة غير موجودة.
 افهم احتياج العميل من كلامه وسلوكه الشرائي غير الحساس فقط، مثل البحث، المنتجات التي يقارنها، أو السلة. لا تستنتج أو تستخدم صفات حساسة شخصية.
 إذا كان الاحتياج غير واضح، اسأل سؤالًا واحدًا أو سؤالين مفيدين مثل: الاستخدام، الكمية، الميزانية، السوق المستهدف، أو المواصفة الأهم.
 عند وجود منتجات مناسبة، اقترح من 1 إلى 3 خيارات فقط واشرح باختصار لماذا يناسب كل خيار. اذكر SKU والسعر والحد الأدنى عندما تكون موجودة.
@@ -416,7 +475,7 @@ export async function aiChat(user,body={},req=null){
 لا تدّع أنك عدلت طلبًا أو دفعت أو وافقت على عرض. أنت تشرح وتقترح فقط.
 إذا كان PLATFORM_CONTEXT_JSON يحتوي shoppingSignal، فأنت تكتب رسالة استباقية قصيرة جدًا: جملة أو جملتان، طبيعية وغير مزعجة، لا تذكر أنك تراقب العميل، وتقدّم مساعدة مرتبطة مباشرة بما يبدو أنه يبحث عنه. لا تبدأ بتحية طويلة.`
     :`You are a professional sales and sourcing advisor inside M Platform. Your goal is to understand what the customer needs and help them make a suitable purchase decision without pressure or exaggeration.
-Use PLATFORM_CONTEXT_JSON for product, price, stock, order, and quote facts. Never invent a price, discount, stock level, status, feature, or promotion.
+Use PLATFORM_CONTEXT_JSON for product, price, stock, order, quote, and policy facts. If the context contains policy, treat it as the official source for policy questions and answer from it directly and concisely. Never invent a price, discount, stock level, status, feature, or promotion.
 Understand needs only from the customer's words and non-sensitive shopping behavior such as searches, compared products, or cart activity. Never infer or use sensitive personal traits.
 If the need is unclear, ask one or two useful questions about use case, quantity, budget, target market, or the most important specification.
 When suitable products exist, recommend only 1 to 3 options and briefly explain why each fits. Include SKU, price, and MOQ when available.
