@@ -3,7 +3,7 @@ import {can} from './auth.mjs';
 import {assert,HttpError} from '../lib/supabase.mjs';
 
 const OPENAI_URL='https://api.openai.com/v1/chat/completions';
-const DEFAULT_MODEL='gpt-5.6-luna';
+const DEFAULT_MODEL='gpt-6-luna';
 const usage=new Map();
 const WINDOW_MS=10*60*1000;
 
@@ -127,9 +127,9 @@ function enforceRateLimit(user){
 
 function normalizeHistory(value){
   if(!Array.isArray(value))return [];
-  return value.slice(-8).map(row=>({
+  return value.slice(-6).map(row=>({
     role:row?.role==='assistant'?'assistant':'user',
-    content:clamp(row?.content,1400)
+    content:clamp(row?.content,900)
   })).filter(row=>row.content);
 }
 
@@ -226,9 +226,9 @@ async function generateProductDraft(user,body,{apiKey,model,state}){
         }
       }
     },
-    max_tokens:1300,
+    max_tokens:950,
     temperature:0.15,
-    reasoning:{effort:'none'}
+    reasoning_effort:'none'
   };
   let response;
   try{
@@ -313,9 +313,9 @@ export async function adminAi(user,body={}){
       ...history,
       {role:'user',content:message}
     ],
-    max_tokens:1000,
+    max_tokens:600,
     temperature:0.25,
-    reasoning:{effort:'none'}
+    reasoning_effort:'none'
   };
 
   let response;
