@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {buildAdminAiContext} from '../backend/modules/admin-ai.mjs';
+import {buildAdminAiContext,buildProductDraftReference} from '../backend/modules/admin-ai.mjs';
 
 test('MG AI admin context is read-only, aggregated and excludes customer PII',()=>{
   const state={
@@ -29,4 +29,25 @@ test('MG AI admin context is read-only, aggregated and excludes customer PII',()
   assert.equal(context.topPurchasedProducts[0].quantity,20);
   const serialized=JSON.stringify(context);
   for(const secret of ['Secret Customer','secret@example.test','+966500000000'])assert.equal(serialized.includes(secret),false);
+});
+
+
+test('MG AI product draft reference exposes only active taxonomy and valid parent links',()=>{
+  const reference=buildProductDraftReference({settings:{
+    categories:[
+      {id:'cases',nameAr:'كفرات',nameEn:'Cases',active:true},
+      {id:'hidden',nameAr:'مخفي',nameEn:'Hidden',active:false}
+    ],
+    subcategories:[
+      {id:'iphone',parentId:'cases',nameAr:'آيفون',nameEn:'iPhone',active:true},
+      {id:'bad-parent',parentId:'hidden',nameAr:'قديم',nameEn:'Old',active:true}
+    ],
+    supplyCountries:[
+      {id:'China',nameAr:'الصين',nameEn:'China',active:true},
+      {id:'Disabled',nameAr:'متوقف',nameEn:'Disabled',active:false}
+    ]
+  }});
+  assert.deepEqual(reference.categories.map(x=>x.id),['cases']);
+  assert.deepEqual(reference.subcategories.map(x=>x.id),['iphone']);
+  assert.deepEqual(reference.supplyCountries.map(x=>x.id),['China']);
 });
