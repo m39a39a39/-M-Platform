@@ -4,10 +4,12 @@ import {createHash} from 'node:crypto';
 import {ensureConversation,saveCustomerMessage,saveAiMessage} from './ai-conversations.mjs';
 
 const OPENAI_URL='https://api.openai.com/v1/chat/completions';
-const DEFAULT_MODEL='gpt-5.6-luna';
+const DEFAULT_MODEL='gpt-6-luna';
 const usageWindows=new Map();
 const RATE_WINDOW_MS=10*60*1000;
 const IMAGE_MAX_CHARS=700000;
+const responseCache=new Map();
+const RESPONSE_CACHE_TTL_MS=6*60*60*1000;
 
 function openAiApiKey(){
   return String(process.env.OPENAI_API_KEY||'').trim();
@@ -74,8 +76,8 @@ function productContext(state,query){
   const rows=(state?.publicOffers||[]).filter(x=>x?.status==='published');
   const needles=terms(query);
   const ranked=rows.map(item=>({item,score:productScore(item,needles)})).sort((a,b)=>b.score-a.score||String(b.item?.createdAt||'').localeCompare(String(a.item?.createdAt||'')));
-  const positive=ranked.filter(x=>x.score>0).slice(0,20);
-  const selected=positive.length?positive:ranked.slice(0,16);
+  const positive=ranked.filter(x=>x.score>0).slice(0,6);
+  const selected=positive.length?positive:ranked.slice(0,4);
   return selected.map(({item})=>{
     const title=titlePair(item),description=descriptionPair(item);
     return {
@@ -99,7 +101,7 @@ function requestTitle(item){
   return title.ar||title.en||clamp(item?.product,240)||'';
 }
 function clientContext(state){
-  const requests=[...(state?.requests||[])].sort((a,b)=>(Date.parse(b?.trackingUpdatedAt||b?.updatedAt||b?.createdAt||0)||0)-(Date.parse(a?.trackingUpdatedAt||a?.updatedAt||a?.createdAt||0)||0)).slice(0,12).map(item=>({
+  const requests=[...(state?.requests||[])].sort((a,b)=>(Date.parse(b?.trackingUpdatedAt||b?.updatedAt||b?.createdAt||0)||0)-(Date.parse(a?.trackingUpdatedAt||a?.updatedAt||a?.createdAt||0)||0)).slice(0,6).map(item=>({
     number:item.displayNo||'',
     type:clamp(item.orderType||'custom',40),
     title:requestTitle(item),
@@ -111,7 +113,7 @@ function clientContext(state){
     paymentStatus:clamp(item.paymentStatus,80),
     selectedQuoteNumber:(state?.quotes||[]).find(q=>q.id===item.selectedQuoteId)?.displayNo||''
   }));
-  const interests=[...(state?.interests||[])].sort((a,b)=>(Date.parse(b?.trackingUpdatedAt||b?.updatedAt||b?.createdAt||0)||0)-(Date.parse(a?.trackingUpdatedAt||a?.updatedAt||a?.createdAt||0)||0)).slice(0,12).map(item=>({
+  const interests=[...(state?.interests||[])].sort((a,b)=>(Date.parse(b?.trackingUpdatedAt||b?.updatedAt||b?.createdAt||0)||0)-(Date.parse(a?.trackingUpdatedAt||a?.updatedAt||a?.createdAt||0)||0)).slice(0,6).map(item=>({
     number:item.displayNo||'',
     status:clamp(item.status,80),
     trackingStatus:clamp(item.trackingStatus,80),
@@ -121,7 +123,7 @@ function clientContext(state){
     total:Number.isFinite(Number(item.total))?Number(item.total):null,
     currency:clamp(item.currency,12)
   }));
-  const quotes=[...(state?.quotes||[])].slice(0,24).map(item=>({
+  const quotes=[...(state?.quotes||[])].slice(0,8).map(item=>({
     number:item.displayNo||'',
     requestNumber:(state?.requests||[]).find(r=>r.id===item.requestId)?.displayNo||'',
     status:clamp(item.status,80),
@@ -134,9 +136,9 @@ function clientContext(state){
 }
 function normalizeHistory(value){
   if(!Array.isArray(value))return[];
-  return value.slice(-10).map(row=>({
+  return value.slice(-6).map(row=>({
     role:row?.role==='assistant'?'assistant':'user',
-    content:clamp(row?.content,1600)
+    content:clamp(row?.content,900)
   })).filter(row=>row.content);
 }
 function extractReply(data){
@@ -190,7 +192,7 @@ async function analyzeProductImage({image,message,language,apiKey,model,gatewayU
     },
     max_tokens:220,
     temperature:0.1,
-    reasoning:{effort:'none'}
+    reasoning_effort:'none'
   };
   let response;
   try{
@@ -289,9 +291,9 @@ If PLATFORM_CONTEXT_JSON contains shoppingSignal, write a very short proactive m
       ...history,
       {role:'user',content:message}
     ],
-    max_tokens:700,
+    max_tokens:320,
     temperature:0.2,
-    reasoning:{effort:'none'}
+    reasoning_effort:'none'
   };
   let response;
   try{
