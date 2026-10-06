@@ -2,7 +2,7 @@ import {assignSupplier} from '../backend/modules/fulfillment.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {changeOrder,checkoutDetails,manageOrder} from '../backend/modules/order-management.mjs';
-import {normalizeStore,normalizeTiers,priceForQuantity,saveStudio} from '../backend/modules/studio.mjs';
+import {normalizeStore,normalizeTiers,priceForQuantity,saveStudio,saveStudioProduct} from '../backend/modules/studio.mjs';
 import {createCartOrder} from '../backend/modules/cart-orders.mjs';
 import {ownRecord,anonymous,snapshot} from '../backend/modules/records.mjs';
 const order=()=>({orderFlowVersion:2,orderStage:0,currency:'SAR',cartTotal:50,cartItems:[{interestId:'line-1',moq:2,quantity:5,unitPrice:10,total:50}],orderHistory:[{at:'2026-09-22',stage:0}]});
@@ -37,7 +37,7 @@ test('store config cannot accept executable asset URLs or arbitrary fields',()=>
 const admin={id:'admin-1',role:'admin',is_owner:true},client={id:'client-1',role:'client',data:{name:'Customer',preferredCurrency:'SAR'}};
 const settings={id:'site',version:1,data:{categories:[{id:'cat-1',nameAr:'منتجات',nameEn:'Products',active:true}],subcategories:[],bankAccounts:[{id:'bank-1',currency:'SAR',active:true}],currencies:[{code:'SAR',nameAr:'ريال',nameEn:'Riyal',rate:1,active:true}]}};
 async function withDB(fn){
- const state={supply_sources:[{id:'source-1',owner_id:'supplier-1',version:1,data:{productId:'offer-1',status:'approved',terms:{unitPrice:5,currency:'SAR',moq:2,stock:50,leadTime:7,country:'China'}}}],settings:[structuredClone(settings)],profiles:[client,{id:'supplier-1',role:'supplier',data:{}}],public_offers:[{id:'offer-1',owner_id:'supplier-1',version:1,data:{status:'published',unitPrice:10,currency:'SAR',moq:2,stock:'50',product:'Product',translation:{titleAr:'منتج',titleEn:'Product'},tiers:[{min:10,price:8}]}}],requests:[],interests:[],quotes:[]};
+ const state={supply_sources:[{id:'source-1',owner_id:'supplier-1',version:1,data:{productId:'offer-1',status:'approved',terms:{unitPrice:5,currency:'SAR',moq:2,stock:50,leadTime:7,country:'China'}}}],settings:[structuredClone(settings)],profiles:[client,{id:'supplier-1',role:'supplier',data:{}}],public_offers:[{id:'offer-1',owner_id:'supplier-1',version:1,data:{status:'published',unitPrice:10,currency:'SAR',moq:2,stock:'50',product:'Product',translation:{titleAr:'منتج',titleEn:'Product'},tiers:[{min:10,price:8}]}}],media:[{id:'11111111-1111-1111-1111-111111111111',owner_id:'admin-1',data:{},version:1}],requests:[],interests:[],quotes:[]};
  const fetchOriginal=global.fetch,env={...process.env};Object.assign(process.env,{SUPABASE_URL:'https://test.invalid',SUPABASE_ANON_KEY:'test',SUPABASE_SERVICE_ROLE_KEY:'test',APP_ORIGIN:'https://test.invalid'});
  let invoice=0,commits=[];
  global.fetch=async(url,options={})=>{const u=new URL(url),table=u.pathname.split('/').at(-1),body=options.body?JSON.parse(options.body):null;
@@ -70,6 +70,17 @@ test('studio requires permission and settings version; draft is private and publ
  await saveStudio(admin,{action:'draft',version:1,store,products:[]});assert.ok(db.state.settings[0].data.studioDraft);assert.equal(db.state.settings[0].data.storefront,undefined);
  const publicState=await snapshot(null);assert.equal(publicState.settings.studioDraft,undefined);assert.equal(publicState.settings.bankAccounts,undefined);
  await saveStudio(admin,{action:'publish',version:2,store,products:[]});assert.equal(db.state.settings[0].data.studioDraft,undefined);assert.equal(db.state.settings[0].data.storefront.theme.name,'M');
+}));
+
+test('single product save persists draft images and publication across refreshes',()=>withDB(async db=>{
+ const image='/api/media/11111111-1111-1111-1111-111111111111';
+ db.state.settings[0].data.studioDraft={marker:'keep-design-draft',products:[{id:'offer-1',version:1,status:'draft'}]};
+ const draft={id:'offer-1',version:1,name:'منتج تجريبي',nameEn:'',sku:'TEST-1',description:'',descriptionEn:'',price:10,currency:'SAR',moq:2,stock:50,leadDays:7,country:'China',categoryId:'cat-1',subcategoryId:'',images:[image],shortDescription:'',notes:'',options:'',technicalSpecs:'',tiers:[],status:'draft'};
+ await saveStudioProduct(admin,{product:draft,redactionConfirmed:false});
+ let row=db.state.public_offers[0];assert.equal(row.data.status,'review');assert.deepEqual(row.data.images,[image]);assert.equal(db.state.settings[0].data.studioDraft.marker,'keep-design-draft');assert.deepEqual(db.state.settings[0].data.studioDraft.products,[]);
+ const published={...draft,version:row.version,nameEn:'Test product',description:'وصف المنتج',descriptionEn:'Product description',status:'active'};
+ await saveStudioProduct(admin,{product:published,redactionConfirmed:true});
+ row=db.state.public_offers[0];assert.equal(row.data.status,'published');assert.equal(row.data.translation.titleEn,'Test product');assert.deepEqual(row.data.images,[image]);
 }));
 
 test('homepage visibility and bilingual content survive normalization with strict validation',()=>{
