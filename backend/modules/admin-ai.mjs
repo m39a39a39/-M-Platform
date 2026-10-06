@@ -1,6 +1,7 @@
 import {snapshot} from './records.mjs';
 import {can} from './auth.mjs';
 import {assert,HttpError} from '../lib/supabase.mjs';
+import {recordAiUsage,aiUsageSummary} from './ai-usage.mjs';
 
 const OPENAI_URL='https://api.openai.com/v1/chat/completions';
 const DEFAULT_MODEL='gpt-6-luna';
@@ -299,6 +300,7 @@ async function generateProductDraft(user,body,{apiKey,model,state}){
   };
   const needsMoreImages=parsed.needsMoreImages===true;
   assert(draft.name,502,'لم يتمكن MG AI من تحديد المنتج بوضوح. أضف صورًا أوضح أو ملاحظة قصيرة. / MG AI could not identify the product clearly.');
+  await recordAiUsage({surface:'product_draft',source:'openai',user,model,usage:data?.usage});
   return {draft,taxonomy:reference,mode:'draft-proposal',needsMoreImages,usage:data?.usage||null};
 }
 
@@ -306,9 +308,11 @@ export async function adminAiOverview(user){
   assert(can(user,'settings'),403,'لا تملك صلاحية MG AI / MG AI permission required');
   const state=await snapshot(user);
   const context=buildAdminAiContext(state);
+  let usage=null;try{usage=await aiUsageSummary();}catch(error){console.warn('AI usage summary failed',error?.message||'unknown');}
   return {
     mode:'proposal',
     overview:context.overview,
+    usage,
     taxonomy:buildProductDraftReference(state),
     productDraftEnabled:can(user,'offers.edit'),
     quickPrompts:[
@@ -336,7 +340,10 @@ export async function adminAi(user,body={}){
   const history=normalizeHistory(body.history);
   const language=body.language==='en'?'en':'ar';
   const direct=directAdminAnswer(context,message,language);
-  if(direct)return {reply:direct,mode:'database',overview:context.overview,behaviorTrackingAvailable:false};
+  if(direct){
+    await recordAiUsage({surface:'admin',source:'database',user,model});
+    return {reply:direct,mode:'database',overview:context.overview,behaviorTrackingAvailable:false};
+  }
   const llmContext=leanAdminContext(context,message);
 
   const system=language==='en'
@@ -372,5 +379,6 @@ export async function adminAi(user,body={}){
   try{data=await response.json();}catch{throw new HttpError(502,'استجابة MG AI غير صالحة. / Invalid MG AI response.');}
   const reply=extractReply(data);
   if(!reply)throw new HttpError(502,'لم يصل رد صالح من MG AI. / MG AI returned an empty response.');
+  await recordAiUsage({surface:'admin',source:'openai',user,model,usage:data?.usage});
   return {reply,mode:'readonly',usage:data?.usage||null,overview:context.overview,behaviorTrackingAvailable:false};
 }
