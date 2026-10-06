@@ -1,7 +1,7 @@
 'use strict';
 let settingsVersion=0,liveState=null,publishing=false,orderQuery='',orderFilter='all';
 const api=(path,body)=>window.MStudioSession.request('/api/v1/'+path,{auth:true,...(body?{method:'POST',body}:{})});
-const permitted=p=>liveState?.user?.isOwner||liveState?.user?.permissions?.includes(p);
+const permitted=p=>!p||liveState?.user?.isOwner||liveState?.user?.permissions?.includes(p);
 const stageNames=['التحقق من توفر البضاعة','بانتظار الدفع','قيد التجهيز','جاهز للفحص والشحن','تم الشحن','في الطريق','التخليص الجمركي','قيد التوصيل','تم التسليم'];
 const orderStageName=o=>o?.orderStage===0&&o?.availabilityVerifiedAt?'تم التحقق من توفر البضاعة':stageNames[o?.orderStage]||'مسار سابق';
 const bankCountryKey=value=>String(value||'').trim().toLowerCase();
