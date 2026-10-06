@@ -1,7 +1,7 @@
 import {Capacitor} from '@capacitor/core';
 import './public-shell.css';
 import {mountSiteChrome} from './site-chrome.js';
-import {renderStorefront,bindStorefront,productExtras,tierPrice,homeConfig,storeProductCard} from './storefront.js';
+import {formatStoreMoney,renderStorefront,bindStorefront,productExtras,tierPrice,homeConfig,storeProductCard} from './storefront.js';
 import { languageReady, getLanguage, onLanguageChange, toggleLanguage } from './language.js';
 import { showView } from './views.js';
 import { categoryRows, subcategoryRows, supplyCountryRows, taxonomyLabel } from './catalog-taxonomy.js';
@@ -87,7 +87,7 @@ const esc=v=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const ref=o=>o?.displayNo||String(o?.id||'').slice(0,8)||'—';
 const title=o=>{const x=o?.translation||{};return (lang==='ar'?(x.titleAr||x.titleEn):(x.titleEn||x.titleAr))||o?.product||o?.title||`#${ref(o)}`;};
 const description=o=>{const x=o?.translation||{};return (lang==='ar'?(x.descriptionAr||x.descriptionEn):(x.descriptionEn||x.descriptionAr))||o?.specs||'';};
-const money=(value,currency)=>{const n=Number(value);if(!Number.isFinite(n))return `${currency||''} —`.trim();return `${String(currency||'').toUpperCase()} ${n.toLocaleString(lang==='ar'?'en-US':'en-US',{maximumFractionDigits:4})}`.trim();};
+const money=(value,currency)=>formatStoreMoney(value,currency,lang);
 const categories=()=>categoryRows(state?.settings);
 const subcategories=(parentId='')=>subcategoryRows(state?.settings,{parentId});
 const countries=()=>supplyCountryRows(state?.settings);
@@ -294,7 +294,7 @@ function ensureLoaded(){
 }
 
 function showGuest(){if(location.pathname!=='/'){location.assign('/?store=1');return;}showView('guestView');}
-function showLogin(){if(Capacitor.isNativePlatform())showView('loginView');else location.assign('/customer.html');}
+function showLogin(){if(Capacitor.isNativePlatform())showView('loginView');else location.assign('/customer.html?returnTo='+encodeURIComponent(location.pathname+location.search));}
 function closeModal(){$('modal').classList.add('hidden');$('modalBody').innerHTML='';}
 function openOffer(id){location.assign('/?product='+encodeURIComponent(id));}
 function showGuestToast(message){

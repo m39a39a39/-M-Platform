@@ -21,8 +21,15 @@ export function portalRedirect(role,pathname,search='',native=false){
   if(native||!portalPaths[role])return null;
   const requested=portalRole(pathname),query=new URLSearchParams(search);
   if(requested&&requested!==role)return portalPaths[role];
+  if(role==='client'&&requested==='client'&&portalScreen(role,search)==='home'&&!query.has('returnTo'))return '/'+(search||'');
   if(requested===role)return pathname===portalPaths[role]?null:portalPaths[role]+search;
   const shopping=['product','category','page','q'].some(key=>query.has(key));
-  if(role==='client'&&shopping)return null;
+  if(role==='client'&&(shopping||!query.has('screen')))return null;
   return portalUrl(role,portalScreen(role,search));
+}
+
+// Only store routes may be used as a post-login destination.
+export function storeReturnUrl(value){
+  if(!value||!value.startsWith('/')||value.startsWith('//'))return null;
+  try{const url=new URL(value,'https://store.invalid');return url.origin==='https://store.invalid'&&url.pathname==='/'&&!url.searchParams.has('screen')?url.pathname+url.search:null;}catch{return null;}
 }
