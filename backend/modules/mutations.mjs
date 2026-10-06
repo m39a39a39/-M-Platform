@@ -197,9 +197,12 @@ function cartReplacementChildData(child,quote,previousSupplierId,now,termsChange
 export async function checkImages(images,user,old=[]){
   assert(Array.isArray(images)&&images.length<=5,400,'الحد الأقصى خمس صور / Maximum five images');
   for(const src of images){
+    // Legacy catalog rows may contain older image URLs. They are safe to keep unchanged,
+    // but every newly added image must be a platform-owned media reference.
+    if(old.includes(src))continue;
     assert(typeof src==='string'&&/^\/api\/media\/[a-f0-9-]{36}$/.test(src),400,'صورة غير صالحة / Invalid image');
     const m=await one('media',src.split('/').at(-1));
-    assert(m&&(m.owner_id===user.id||old.includes(src)),403);
+    assert(m&&m.owner_id===user.id,403);
   }
 }
 export async function mutate(user,body){

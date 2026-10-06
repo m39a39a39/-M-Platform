@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {changeOrder,checkoutDetails,manageOrder} from '../backend/modules/order-management.mjs';
 import {normalizeStore,normalizeTiers,priceForQuantity,saveStudio,saveStudioProduct} from '../backend/modules/studio.mjs';
 import {createCartOrder} from '../backend/modules/cart-orders.mjs';
+import {checkImages} from '../backend/modules/mutations.mjs';
 import {ownRecord,anonymous,snapshot} from '../backend/modules/records.mjs';
 const order=()=>({orderFlowVersion:2,orderStage:0,currency:'SAR',cartTotal:50,cartItems:[{interestId:'line-1',moq:2,quantity:5,unitPrice:10,total:50}],orderHistory:[{at:'2026-09-22',stage:0}]});
 test('nine stages enforce availability, payment and shipment details; closed orders are immutable',()=>{
@@ -70,6 +71,12 @@ test('studio requires permission and settings version; draft is private and publ
  await saveStudio(admin,{action:'draft',version:1,store,products:[]});assert.ok(db.state.settings[0].data.studioDraft);assert.equal(db.state.settings[0].data.storefront,undefined);
  const publicState=await snapshot(null);assert.equal(publicState.settings.studioDraft,undefined);assert.equal(publicState.settings.bankAccounts,undefined);
  await saveStudio(admin,{action:'publish',version:2,store,products:[]});assert.equal(db.state.settings[0].data.studioDraft,undefined);assert.equal(db.state.settings[0].data.storefront.theme.name,'M');
+}));
+
+test('legacy product images can be kept unchanged but cannot be newly introduced',()=>withDB(async()=>{
+ const legacy='https://legacy.example.test/product.png';
+ await checkImages([legacy],admin,[legacy]);
+ await assert.rejects(()=>checkImages([legacy],admin,[]),e=>e.status===400);
 }));
 
 test('single product save persists draft images and publication across refreshes',()=>withDB(async db=>{
