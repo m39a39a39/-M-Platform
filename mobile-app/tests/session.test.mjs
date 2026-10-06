@@ -82,8 +82,18 @@ test('secure storage failure prevents entering a partially saved session',async(
   const f=fixture(()=>loginReply('client'));f.storage.set=async()=>{throw new Error('Keychain locked');};
   await assert.rejects(f.session.login({}),{code:'storage_failed'});assert.equal(f.session.active,false);assert.equal(f.saved,null);
 });
-test('local logout does not wait for the remote logout endpoint',async()=>{
-  let release;
-  const f=fixture(async path=>path.endsWith('/login')?loginReply('client'):new Promise(r=>{release=()=>r(reply({ok:true}));}));
-  await f.session.login({});await f.session.logout();assert.equal(f.saved,null);assert.equal(f.session.active,false);release();
+test('local logout is immediate while detached revocation survives navigation and re-login',async()=>{
+  let release,logoutOptions;
+  const f=fixture(async(path,o)=>path.endsWith('/login')?loginReply('client'):new Promise(r=>{
+    logoutOptions=o;release=()=>r(reply({ok:true}));
+  }));
+  await f.session.login({});
+  await f.session.logout();
+  assert.equal(f.saved,null);assert.equal(f.session.active,false);
+  assert.equal(logoutOptions.keepalive,true);
+  assert.equal(JSON.parse(logoutOptions.body).refreshToken,'refresh-client');
+  assert.equal(logoutOptions.signal.aborted,false);
+  await f.session.login({});
+  assert.equal(logoutOptions.signal.aborted,false);
+  release();
 });
