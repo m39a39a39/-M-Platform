@@ -219,7 +219,7 @@ async function generateProductDraft(user,body,{apiKey,model,state}){
   const suppliedSku=clamp(body.sku,80);
   assert(!suppliedSku||/^[A-Za-z0-9._-]{1,80}$/.test(suppliedSku),400,'تحقق من SKU / Check SKU');
   const reference=buildProductDraftReference(state);
-  const system=`You create wholesale product catalog drafts for M Platform from product images and optional admin notes. Return only facts visible in the images or explicitly supplied by the admin. Do not invent brand, model, material, wattage, ports, compatibility, certifications, colors, capacity, dimensions, warranty, or other specifications. Write persuasive but factual B2B copy in Arabic and English. Select categoryId and subcategoryId only from TAXONOMY_JSON, otherwise use empty strings. Do not decide price, MOQ, stock, lead time, currency, or supply country. SKU may be copied only when clearly visible in the image or explicitly supplied. Never include phone numbers, emails, URLs, social handles, supplier identity, or contact details.`;
+  const system=`You create wholesale product catalog drafts for M Platform from product images and optional admin notes. Return only facts visible in the images or explicitly supplied by the admin. Do not invent brand, model, material, wattage, ports, compatibility, certifications, colors, capacity, dimensions, warranty, or other specifications. Write persuasive but factual B2B copy in Arabic and English. Select categoryId and subcategoryId only from TAXONOMY_JSON, otherwise use empty strings. Do not decide price, MOQ, stock, lead time, currency, or supply country. SKU may be copied only when clearly visible in the image or explicitly supplied. Never include phone numbers, emails, URLs, social handles, supplier identity, or contact details. Set needsMoreImages=true only when the supplied image(s) are not enough to identify the product or important visible specifications with reasonable confidence; otherwise false.`;
   const adminText=[
     'ADMIN_NOTES: '+(notes||'(none)'),
     'SUPPLIED_SKU: '+(suppliedSku||'(none)'),
@@ -252,9 +252,10 @@ async function generateProductDraft(user,body,{apiKey,model,state}){
             options:{type:'string'},
             categoryId:{type:'string'},
             subcategoryId:{type:'string'},
-            reviewNotes:{type:'string'}
+            reviewNotes:{type:'string'},
+            needsMoreImages:{type:'boolean'}
           },
-          required:['name','nameEn','sku','shortDescription','description','descriptionEn','technicalSpecs','options','categoryId','subcategoryId','reviewNotes'],
+          required:['name','nameEn','sku','shortDescription','description','descriptionEn','technicalSpecs','options','categoryId','subcategoryId','reviewNotes','needsMoreImages'],
           additionalProperties:false
         }
       }
@@ -296,8 +297,9 @@ async function generateProductDraft(user,body,{apiKey,model,state}){
     subcategoryId,
     reviewNotes:clamp(parsed.reviewNotes,1000)
   };
+  const needsMoreImages=parsed.needsMoreImages===true;
   assert(draft.name,502,'لم يتمكن MG AI من تحديد المنتج بوضوح. أضف صورًا أوضح أو ملاحظة قصيرة. / MG AI could not identify the product clearly.');
-  return {draft,taxonomy:reference,mode:'draft-proposal'};
+  return {draft,taxonomy:reference,mode:'draft-proposal',needsMoreImages,usage:data?.usage||null};
 }
 
 export async function adminAiOverview(user){
