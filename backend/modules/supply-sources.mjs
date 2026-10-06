@@ -30,7 +30,7 @@ export async function reviewSupplySource(user,body={}){
    const salePrice=Number(body.salePrice);assert(Number.isFinite(salePrice)&&salePrice>0&&salePrice<=1e9,400,'حدد سعر البيع للمتجر');
    const sameSku=await db('public_offers',`data->>sku=eq.${encodeURIComponent(p.sku||'')}&data->>status=eq.published&data->>deletedAt=is.null`);assert(!sameSku.length,409,'يوجد منتج بهذا الرمز؛ اربط العرض بالمنتج الموجود بدل إنشاء منتج مكرر');
    const proposed=Object.fromEntries(['sku','images','categoryId','subcategoryId'].map(k=>[k,p[k]??(k==='images'?[]:'')]));
-   const t=row.data.terms,d={...proposed,product:tr.titleAr,specs:tr.descriptionAr,translation:tr,country:t.country,unitPrice:salePrice,currency:body.currency||t.currency,moq:t.moq,stock:String(t.stock),leadTime:String(t.leadTime),status:'published',storeOwned:true,createdAt:now};validateContent('publicOffers',d);await assertProductTaxonomy(d,{required:true,activeOnly:true});
+   const t=row.data.terms,d={...proposed,product:tr.titleAr,specs:tr.descriptionAr,translation:tr,country:t.country,unitPrice:salePrice,currency:body.currency||t.currency,moq:t.moq,stock:String(t.stock),stockUnlimited:true,leadTime:String(t.leadTime),status:'published',storeOwned:true,createdAt:now};validateContent('publicOffers',d);await assertProductTaxonomy(d,{required:true,activeOnly:true});
    const legacy=row.data.legacyProductId?await one('public_offers',row.data.legacyProductId):null;assert(!legacy||legacy.data.status==='source_review',409,'المنتج السابق تغير');productId=legacy?.id||randomUUID();changes.push({table:'public_offers',id:productId,version:legacy?.version||0,ownerId:null,data:d,action:'store_product_create'});
   }
   data.productId=productId;

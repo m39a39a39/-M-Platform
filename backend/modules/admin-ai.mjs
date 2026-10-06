@@ -2,6 +2,7 @@ import {snapshot} from './records.mjs';
 import {can} from './auth.mjs';
 import {assert,HttpError} from '../lib/supabase.mjs';
 import {recordAiUsage,aiUsageSummary} from './ai-usage.mjs';
+import {isUnlimitedStock} from '../../shared/inventory.mjs';
 
 const OPENAI_URL='https://api.openai.com/v1/chat/completions';
 const DEFAULT_MODEL='gpt-6-luna';
@@ -60,7 +61,7 @@ export function buildAdminAiContext(state={}){
   }
 
   const lowStock=published
-    .filter(x=>x.stock!==null&&x.stock!==undefined&&Number.isFinite(Number(x.stock))&&Number(x.stock)<=Math.max(10,num(x.moq)))
+    .filter(x=>!isUnlimitedStock(x)&&x.stock!==null&&x.stock!==undefined&&Number.isFinite(Number(x.stock))&&Number(x.stock)<=Math.max(10,num(x.moq)))
     .slice(0,12)
     .map(x=>({sku:clamp(x.sku,80),title:titleOf(x),stock:num(x.stock),moq:num(x.moq)}));
 
@@ -71,7 +72,9 @@ export function buildAdminAiContext(state={}){
     price:Number.isFinite(Number(item.unitPrice))?Number(item.unitPrice):null,
     currency:clamp(item.currency||'SAR',12),
     moq:item.moq??null,
-    stock:item.stock??null,
+    stock:isUnlimitedStock(item)?null:(item.stock??null),
+    stockUnlimited:isUnlimitedStock(item),
+    inventoryMode:isUnlimitedStock(item)?'unlimited':'tracked',
     categoryId:clamp(item.categoryId,100),
     subcategoryId:clamp(item.subcategoryId,100),
     country:clamp(item.country,100),

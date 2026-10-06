@@ -5,7 +5,7 @@ import {buildAdminAiContext,buildProductDraftReference} from '../backend/modules
 test('MG AI admin context is read-only, aggregated and excludes customer PII',()=>{
   const state={
     publicOffers:[
-      {id:'p1',sku:'MG-20W',status:'published',unitPrice:25,currency:'SAR',moq:10,stock:8,categoryId:'chargers',translation:{titleAr:'شاحن 20 واط'}},
+      {id:'p1',sku:'MG-20W',status:'published',unitPrice:25,currency:'SAR',moq:10,stock:8,stockUnlimited:false,categoryId:'chargers',translation:{titleAr:'شاحن 20 واط'}},
       {id:'p2',sku:'MG-CABLE',status:'review',unitPrice:10,currency:'SAR',moq:20,stock:100,translation:{titleAr:'كيبل'}}
     ],
     accounts:[

@@ -3,6 +3,7 @@ import {assert,HttpError,db} from '../lib/supabase.mjs';
 import {createHash} from 'node:crypto';
 import {ensureConversation,saveCustomerMessage,saveAiMessage,requestHumanHandoff} from './ai-conversations.mjs';
 import {recordAiUsage} from './ai-usage.mjs';
+import {isUnlimitedStock} from '../../shared/inventory.mjs';
 
 const OPENAI_URL='https://api.openai.com/v1/chat/completions';
 const DEFAULT_MODEL='gpt-6-luna';
@@ -89,7 +90,8 @@ function productContext(state,query){
       price:Number.isFinite(Number(item.unitPrice))?Number(item.unitPrice):null,
       currency:clamp(item.currency,12),
       moq:item.moq??null,
-      stock:item.stock??null,
+      stock:isUnlimitedStock(item)?null:(item.stock??null),
+      stockUnlimited:isUnlimitedStock(item),
       leadTime:item.leadTime??null,
       country:clamp(item.country,120),
       categoryId:clamp(item.categoryId,120),
@@ -193,7 +195,10 @@ function directProductFact(state,message,language){
   const facts=[];
   if(wantsPrice&&Number.isFinite(Number(first.price)))facts.push((language==='en'?'Price: ':'السعر: ')+Number(first.price)+' '+(first.currency||'SAR'));
   if(wantsMoq&&first.moq!==undefined&&first.moq!==null&&first.moq!=='')facts.push((language==='en'?'MOQ: ':'الحد الأدنى: ')+first.moq+(language==='en'?'':' قطعة'));
-  if(wantsStock&&first.stock!==undefined&&first.stock!==null&&first.stock!=='')facts.push((language==='en'?'Stock: ':'المخزون: ')+first.stock);
+  if(wantsStock){
+    if(first.stockUnlimited)facts.push(language==='en'?'Availability: Available to order':'التوفر: متوفر للطلب');
+    else if(first.stock!==undefined&&first.stock!==null&&first.stock!=='')facts.push((language==='en'?'Stock: ':'المخزون: ')+first.stock);
+  }
   if(wantsLead&&first.leadTime!==undefined&&first.leadTime!==null&&first.leadTime!=='')facts.push((language==='en'?'Lead time: ':'مدة التجهيز: ')+first.leadTime+(language==='en'?' days':' يوم'));
   if(!facts.length)return null;
   return title+' — '+facts.join(' · ');
