@@ -93,7 +93,16 @@ test('published product with stock zero is described as available to order',()=>
   }],settings:{}};
   const reply=directCustomerAnswer(state,null,'هل شاحن MG-20W متوفر؟','ar');
   assert.match(reply,/متوفر للطلب/);
-  assert.doesNotMatch(reply,/0/);
+  assert.doesNotMatch(reply,/المخزون:\\s*0\\b/);
+});
+
+test('explicit tracked inventory reports its real quantity',()=>{
+  const state={publicOffers:[{
+    id:'p2',status:'published',sku:'TRACK-1',unitPrice:25,currency:'SAR',moq:10,stock:7,stockUnlimited:false,
+    translation:{titleAr:'شاحن متتبع',titleEn:'Tracked Charger'}
+  }],settings:{}};
+  const reply=directCustomerAnswer(state,null,'هل TRACK-1 متوفر؟','ar');
+  assert.match(reply,/المخزون: 7/);
 });
 
 test('shipping duration question stays concise and does not dump policy text',()=>{
