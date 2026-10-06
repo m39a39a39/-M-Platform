@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {directCustomerAnswer} from '../backend/modules/ai-chat.mjs';
+import {directCustomerAnswer,customerProductRecommendations} from '../backend/modules/ai-chat.mjs';
 import {buildAdminAiContext,directAdminAnswer} from '../backend/modules/admin-ai.mjs';
 import {normalizeAiUsage,estimateAiCostUsd} from '../backend/modules/ai-usage.mjs';
 
@@ -112,4 +112,27 @@ test('shipping duration question stays concise and does not dump policy text',()
   }]}}};
   const reply=directCustomerAnswer(state,null,'كم مدة الشحن؟','ar');
   assert.equal(reply,'مدة الشحن غير محددة حاليًا في سياسة المتجر، ويتم تأكيد المدة المتوقعة لك قبل الشحن.');
+});
+
+
+test('Bluetooth earphone intent excludes Bluetooth speakers',()=>{
+  const state={publicOffers:[
+    {id:'speaker',status:'published',sku:'MX-SK100',unitPrice:30,currency:'SAR',categoryId:'cat-audio',subcategoryId:'sub-bluetooth-speakers',translation:{titleAr:'مكبر صوت لاسلكي',titleEn:'Bluetooth Wireless Speaker'},images:['/api/media/00000000-0000-0000-0000-000000000001']},
+    {id:'earbuds',status:'published',sku:'MX-TW80',unitPrice:35,currency:'SAR',categoryId:'cat-audio',subcategoryId:'sub-tws-earbuds',translation:{titleAr:'سماعات TWS لاسلكية',titleEn:'TWS Wireless Earbuds'},images:['/api/media/00000000-0000-0000-0000-000000000002']},
+    {id:'headphones',status:'published',sku:'MX-WL109',unitPrice:40,currency:'SAR',categoryId:'cat-audio',subcategoryId:'sub-headphones-gaming',translation:{titleAr:'سماعة رأس لاسلكية',titleEn:'Wireless Headphones'},images:['/api/media/00000000-0000-0000-0000-000000000003']}
+  ]};
+  const rows=customerProductRecommendations(state,'اريد سماعه بلوتوث','ar');
+  assert.equal(rows[0]?.id,'earbuds');
+  assert.ok(rows.some(x=>x.id==='headphones'));
+  assert.ok(!rows.some(x=>x.id==='speaker'));
+});
+
+test('explicit Bluetooth speaker intent prefers speakers over earbuds',()=>{
+  const state={publicOffers:[
+    {id:'speaker',status:'published',sku:'MX-SK100',unitPrice:30,currency:'SAR',categoryId:'cat-audio',subcategoryId:'sub-bluetooth-speakers',translation:{titleAr:'مكبر صوت لاسلكي',titleEn:'Bluetooth Wireless Speaker'}},
+    {id:'earbuds',status:'published',sku:'MX-TW80',unitPrice:35,currency:'SAR',categoryId:'cat-audio',subcategoryId:'sub-tws-earbuds',translation:{titleAr:'سماعات TWS لاسلكية',titleEn:'TWS Wireless Earbuds'}}
+  ]};
+  const rows=customerProductRecommendations(state,'اريد مكبر صوت بلوتوث','ar');
+  assert.equal(rows[0]?.id,'speaker');
+  assert.ok(!rows.some(x=>x.id==='earbuds'));
 });
