@@ -2,6 +2,7 @@ const MAX_FILES=5;
 const MAX_INPUT_BYTES=10*1024*1024;
 const TARGET_BYTES=900*1024;
 const MAX_DIMENSION=2200;
+const SAFE_PASSTHROUGH_BYTES=2*1024*1024;
 
 const readAsDataUrl=blob=>new Promise((resolve,reject)=>{
   const reader=new FileReader();
@@ -33,13 +34,18 @@ async function loadImage(file){
 }
 
 const canvasBlob=(canvas,quality)=>new Promise((resolve,reject)=>{
-  canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('compress_failed')),'image/webp',quality);
+  canvas.toBlob(webp=>{
+    if(webp)return resolve(webp);
+    // Some Safari/WebKit builds can decode WebP but cannot encode it through canvas.
+    // Fall back to PNG rather than rejecting a perfectly valid selected image.
+    canvas.toBlob(png=>png?resolve(png):reject(new Error('compress_failed')),'image/png');
+  },'image/webp',quality);
 });
 
 async function compressFile(file,{targetBytes=TARGET_BYTES,maxDimension=MAX_DIMENSION}={}){
   if(!(file instanceof Blob)||!String(file.type||'').startsWith('image/'))throw new Error('unsupported');
   if(file.size>MAX_INPUT_BYTES)throw new Error('too_large');
-  const passThrough=['image/jpeg','image/png','image/webp'].includes(file.type)&&file.size<=targetBytes&&Math.max(1,Number(maxDimension)||MAX_DIMENSION)>=MAX_DIMENSION;
+  const passThrough=['image/jpeg','image/png','image/webp'].includes(file.type)&&file.size<=Math.max(targetBytes,SAFE_PASSTHROUGH_BYTES)&&Math.max(1,Number(maxDimension)||MAX_DIMENSION)>=MAX_DIMENSION;
   if(passThrough)return readAsDataUrl(file);
 
   const loaded=await loadImage(file);
