@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {directCustomerAnswer} from '../backend/modules/ai-chat.mjs';
 import {buildAdminAiContext,directAdminAnswer} from '../backend/modules/admin-ai.mjs';
+import {normalizeAiUsage,estimateAiCostUsd} from '../backend/modules/ai-usage.mjs';
 
 test('customer price and MOQ questions are answered from catalog without an AI call',()=>{
   const state={publicOffers:[
@@ -35,4 +36,16 @@ test('admin count questions are answered locally from aggregated context',()=>{
   });
   assert.equal(directAdminAnswer(context,'كم عدد المنتجات؟','ar'),'إجمالي المنتجات: 2');
   assert.equal(directAdminAnswer(context,'كم عدد العملاء؟','ar'),'عدد العملاء: 1');
+});
+
+
+test('GPT-6 Luna usage cost separates cached and uncached input',()=>{
+  const usage={prompt_tokens:1000000,completion_tokens:100000,prompt_tokens_details:{cached_tokens:400000}};
+  assert.deepEqual(normalizeAiUsage(usage),{promptTokens:1000000,cachedTokens:400000,completionTokens:100000,totalTokens:1100000});
+  assert.equal(estimateAiCostUsd('gpt-6-luna',usage),0.114);
+});
+
+test('database and cache paths can report zero token cost safely',()=>{
+  assert.equal(estimateAiCostUsd('gpt-6-luna',{}),0);
+  assert.equal(estimateAiCostUsd('unknown-model',{prompt_tokens:1000,completion_tokens:1000}),0);
 });
