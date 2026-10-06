@@ -90,9 +90,30 @@ export async function saveAiMessage(row,content,metadata={}){
 }
 export async function requestHumanHandoff(row){
   assert(row?.id,400,'المحادثة غير صالحة / Invalid conversation');
+  let productSku=row.lead_product_sku||'',quantity=row.lead_quantity||'',country=row.lead_country||'';
+  try{
+    const recent=await db('ai_messages',`conversation_id=eq.${encodeURIComponent(row.id)}&order=id.desc&limit=16`);
+    for(const message of recent){
+      if(!productSku&&message?.metadata?.products?.[0]?.sku)productSku=clean(message.metadata.products[0].sku,100);
+      if(message?.sender==='customer'){
+        const text=clean(message.content,500);
+        if(!quantity){
+          const match=text.match(/(?:كمية|عدد|احتاج|أحتاج|اريد|أريد|qty|quantity)\s*[:：-]?\s*(\d{1,7})/i);
+          if(match)quantity=match[1];
+        }
+        if(!country){
+          if(/السعودية|saudi|ksa/i.test(text))country='Saudi Arabia';
+          else if(/الإمارات|الامارات|uae|dubai/i.test(text))country='United Arab Emirates';
+        }
+      }
+    }
+  }catch{}
   return updateConversation(row,{
     status:'ai',
     handoff_requested_at:row.handoff_requested_at||now(),
+    lead_product_sku:productSku||null,
+    lead_quantity:quantity||null,
+    lead_country:country||null,
     lead_followup_needed:row.customer_id?false:true,
     last_message_at:now()
   });
@@ -114,7 +135,11 @@ export async function captureGuestLead(user,body={}){
     lead_followup_needed:true,
     unread_admin:Number(row.unread_admin||0)+1
   });
-  return {conversation:publicConversation(updated),leadCaptured:true};
+  const reply=updated.language==='en'
+    ?'Thanks. Your contact details were saved for the customer service team.'
+    :'شكرًا، تم حفظ وسيلة التواصل لفريق خدمة العملاء.';
+  await insertMessage(updated.id,'ai',reply);
+  return {conversation:publicConversation(updated),leadCaptured:true,reply};
 }
 export async function listConversationMessages(conversationId,limit=200){
   return db('ai_messages',`conversation_id=eq.${encodeURIComponent(conversationId)}&order=id.asc&limit=${Math.max(1,Math.min(300,Number(limit)||200))}`);
@@ -133,6 +158,7 @@ function publicConversation(row){
     id:row.id,status:row.status,language:row.language,lastMessageAt:row.last_message_at,
     unreadCustomer:Number(row.unread_customer||0),createdAt:row.created_at,
     waitingHuman:row.status==='ai'&&!!row.handoff_requested_at,
+    waitingSince:row.handoff_requested_at||'',
     leadCaptured:!!row.lead_contact
   };
 }
