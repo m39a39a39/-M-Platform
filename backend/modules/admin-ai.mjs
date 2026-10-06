@@ -64,7 +64,7 @@ export function buildAdminAiContext(state={}){
     .slice(0,12)
     .map(x=>({sku:clamp(x.sku,80),title:titleOf(x),stock:num(x.stock),moq:num(x.moq)}));
 
-  const products=published.slice(0,120).map(item=>({
+  const products=published.map(item=>({
     id:clamp(item.id,100),
     sku:clamp(item.sku,80),
     title:titleOf(item),
