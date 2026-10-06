@@ -1,9 +1,9 @@
 import './guest.js';
 
 let hasWebSession=false;
-for(const store of [globalThis.localStorage,globalThis.sessionStorage]){
-  if(hasWebSession||!store)continue;
-  try{hasWebSession=!!store.getItem('m-platform.session.v1');}catch{}
+for(const name of ['localStorage','sessionStorage']){
+  if(hasWebSession)break;
+  try{hasWebSession=!!globalThis[name]?.getItem('m-platform.session.v1');}catch{}
 }
 
 const accountRoute=['/customer','/customer.html','/supplier','/supplier.html','/login.html','/reset-password.html','/register-customer.html','/register-supplier.html'].includes(location.pathname);
