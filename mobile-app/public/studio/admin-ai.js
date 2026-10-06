@@ -29,6 +29,23 @@
     </div>`;
   }
 
+
+  function usagePanel(){
+    const m=overview?.usage?.month;
+    if(!m)return '';
+    const free=Number(m.database||0)+Number(m.cache||0);
+    const cost=Number(m.costUsd||0);
+    return `<section class="mg-ai-usage">
+      <div class="mg-ai-usage-head"><div><strong>${esc(tr('استهلاك الذكاء الاصطناعي هذا الشهر','AI usage this month'))}</strong><small>${esc(tr('يُحسب من الاستخدام الفعلي، ولا يتم حفظ نص الأسئلة هنا.','Calculated from actual usage; prompt text is not stored here.'))}</small></div><span>${esc(tr('نسبة بدون OpenAI','No-OpenAI rate'))}: ${Number(m.freeRate||0).toFixed(1)}%</span></div>
+      <div class="mg-ai-usage-grid">
+        <article><small>${esc(tr('إجمالي الطلبات','Total requests'))}</small><strong>${number(m.requests)}</strong></article>
+        <article><small>${esc(tr('بدون تكلفة OpenAI','No OpenAI call'))}</small><strong>${number(free)}</strong><span>${number(m.database)} DB · ${number(m.cache)} Cache</span></article>
+        <article><small>${esc(tr('طلبات OpenAI','OpenAI calls'))}</small><strong>${number(m.openai)}</strong><span>${number(m.totalTokens)} tokens</span></article>
+        <article><small>${esc(tr('التكلفة المقدرة','Estimated cost'))}</small><strong>${cost<0.01?cost.toFixed(4):cost.toFixed(2)}</strong><span>GPT‑6 Luna</span></article>
+      </div>
+    </section>`;
+  }
+
   function quickPrompts(){
     const prompts=overview?.quickPrompts||[
       tr('حلل أداء المتجر واقترح أهم الإجراءات الآن','Analyze store performance and suggest the most important actions now'),
@@ -154,6 +171,7 @@
         <div class="mg-ai-safety">${esc(tr('آمن: الاعتماد مطلوب قبل الحفظ','Safe: approval required before saving'))}</div>
       </header>
       ${overview?cards():`<div class="mg-ai-loading">${esc(loadingOverview?tr('جاري تحميل ملخص المتجر…','Loading store overview…'):tr('تعذر تحميل ملخص المتجر','Could not load store overview'))}</div>`}
+      ${usagePanel()}
       ${creatorIntro()}
       <section class="mg-ai-panel">
         <div class="mg-ai-panel-head">
