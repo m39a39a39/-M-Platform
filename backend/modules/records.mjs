@@ -61,7 +61,7 @@ function publicSettingsForView(data={},route={}){
 function publicProductSummary(row){
   const d=row.data||{},translation=d.translation||{},item={id:row.id,displayNo:row.display_no,createdAt:row.created_at,status:'published',
     sku:d.sku||'',translation:{titleAr:translation.titleAr||'',titleEn:translation.titleEn||''},images:Array.isArray(d.images)?d.images.filter(Boolean).slice(0,1):[],
-    country:d.country||'',categoryId:d.categoryId||'',subcategoryId:d.subcategoryId||'',unitPrice:d.unitPrice??'',currency:d.currency||'',moq:d.moq??'',stock:d.stock??''};
+    country:d.country||'',categoryId:d.categoryId||'',subcategoryId:d.subcategoryId||'',unitPrice:d.unitPrice??'',currency:d.currency||'',moq:d.moq??'',stock:d.stock??'',stockUnlimited:d.stockUnlimited!==false};
   if(Array.isArray(d.tiers)&&d.tiers.length)item.tiers=d.tiers;
   return compactPublicValue(item)||item;
 }
@@ -77,7 +77,7 @@ export function supplierInterest(row){
 export function anonymous(row,kind,user){
   const d=row.data;
   const result={id:row.id,displayNo:row.display_no,version:row.version,createdAt:row.created_at,status:d.status,translation:d.translation||{},images:d.images||[],country:d.country||''};
-  const fields=kind==='requests'?['quantity','neededDate']:['sku','subcategoryId','unitPrice','currency','moq','leadTime','sampleCost','stock','validUntil','categoryId','shortDescription','productNotes','options','technicalSpecs','tiers'];
+  const fields=kind==='requests'?['quantity','neededDate']:['sku','subcategoryId','unitPrice','currency','moq','leadTime','sampleCost','stock','stockUnlimited','validUntil','categoryId','shortDescription','productNotes','options','technicalSpecs','tiers'];
   for(const key of fields)if(d[key]!==undefined)result[key]=d[key];
   if(kind==='requests'){result.supplierIds=[user.id];result.quoteSelected=!!d.selectedQuoteId;result.paymentConfirmed=d.paymentStatus==='confirmed';}
   if(kind==='quotes')result.publishedAt=d.publishedAt||d.updatedAt||d.reviewedAt||row.created_at;
