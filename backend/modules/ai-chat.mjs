@@ -292,7 +292,7 @@ async function analyzeProductImage({image,message,language,apiKey,model,gatewayU
         }
       }
     },
-    max_tokens:220,
+    max_completion_tokens:220,
     temperature:0.1,
     reasoning_effort:'none'
   };
@@ -410,7 +410,7 @@ If PLATFORM_CONTEXT_JSON contains shoppingSignal, write a very short proactive m
       ...history,
       {role:'user',content:message}
     ],
-    max_tokens:320,
+    max_completion_tokens:320,
     temperature:0.2,
     reasoning_effort:'none'
   };
