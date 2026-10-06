@@ -111,7 +111,30 @@ document.addEventListener('click',async e=>{
     if(a==='order-receipt'){const response=await window.MStudioSession.raw(o.paymentReceipt.src,{auth:true});if(!response.ok)throw Error('تعذر عرض الإيصال');const url=URL.createObjectURL(await response.blob());const link=document.createElement('a');link.href=url;link.download='payment-receipt';link.click();setTimeout(()=>URL.revokeObjectURL(url),60000);}
   }catch(error){toast(error.message);}
 });
-async function bootStudio(){try{await window.MStudioSession.restore();await loadLive();if(!permitted('settings')){view='orders';render();}}catch(error){try{const publicState=await window.MStudioSession.request('/api/v1/state',{auth:false});window.MStudioChrome(publicState,{}, {hydrate:()=>hydrateStudioImages(),action:()=>location.assign('/')});}catch{}$('#app').innerHTML=`<main class="login-panel panel"><h1>M Platform</h1><h2>إدارة المتجر</h2><p>${esc(error.message==='session_expired'?'سجّل الدخول بحساب الإدارة':error.message)}</p><form id="studio-login"><label>البريد الإلكتروني<input name="email" type="email" autocomplete="username" required></label><label>كلمة المرور<input name="password" type="password" autocomplete="current-password" required></label><button class="primary">تسجيل الدخول</button><p id="login-error" role="alert"></p></form><a href="/">العودة إلى المنصة</a></main>`;$('#studio-login').onsubmit=async e=>{e.preventDefault();const b=e.target.querySelector('button');b.disabled=true;try{const f=new FormData(e.target);await window.MStudioSession.login({email:f.get('email'),password:f.get('password')});await loadLive();}catch(err){$('#login-error').textContent=err.message;b.disabled=false;}};}}
+async function bootStudio(){
+ try{
+  await window.MStudioSession.restore();
+  await loadLive();
+  if(!permitted('settings')){view='orders';render();}
+ }catch(error){
+  try{
+   const publicState=await window.MStudioSession.request('/api/v1/state',{auth:false});
+   window.MStudioChrome(publicState,{}, {hydrate:()=>hydrateStudioImages(),action:()=>location.assign('/')});
+  }catch{}
+  if(window.MStudioSession.active&&error.code!=='session_expired'){
+   $('#app').innerHTML=`<main class="login-panel panel"><h1>M Platform</h1><h2>إدارة المتجر</h2><p>تعذر التحقق من الجلسة الحالية. قد يكون الاتصال مؤقتًا غير متاح.</p><button id="studio-session-retry" class="primary">إعادة المحاولة</button><button id="studio-session-logout">تسجيل الخروج</button><a href="/">العودة إلى المنصة</a></main>`;
+   $('#studio-session-retry').onclick=()=>bootStudio();
+   $('#studio-session-logout').onclick=async()=>{await window.MStudioSession.logout();liveState=null;await bootStudio();};
+   return;
+  }
+  $('#app').innerHTML=`<main class="login-panel panel"><h1>M Platform</h1><h2>إدارة المتجر</h2><p>${esc(error.code==='session_expired'||error.message==='session_expired'?'سجّل الدخول بحساب الإدارة':error.message)}</p><form id="studio-login"><label>البريد الإلكتروني<input name="email" type="email" autocomplete="username" required></label><label>كلمة المرور<input name="password" type="password" autocomplete="current-password" required></label><button class="primary">تسجيل الدخول</button><p id="login-error" role="alert"></p></form><a href="/">العودة إلى المنصة</a></main>`;
+  $('#studio-login').onsubmit=async e=>{
+   e.preventDefault();const b=e.target.querySelector('button');b.disabled=true;
+   try{const f=new FormData(e.target);await window.MStudioSession.login({email:f.get('email'),password:f.get('password')});await loadLive();}
+   catch(err){$('#login-error').textContent=err.message;b.disabled=false;}
+  };
+ }
+}
 window.addEventListener('beforeunload',e=>{if(liveState&&StoreRules.differences(committedState.draft,state.draft).length){e.preventDefault();e.returnValue='';}});
 
 function orderLineSource(line){const child=(liveState.interests||[]).find(i=>i.id===line.interestId),account=(liveState.accounts||[]).find(a=>a.id===child?.assignedSupplierId);return account?esc(account.company||account.name||account.id)+'<small style="display:block">'+fmt(child.supplyTerms?.unitPrice||0)+' '+esc(child.supplyTerms?.currency||'')+' · '+esc(child.supplierOrderStatus||'pending_confirmation')+'</small>':'لم يسند بعد';}
