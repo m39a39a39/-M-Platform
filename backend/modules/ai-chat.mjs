@@ -2,6 +2,7 @@ import {snapshot} from './records.mjs';
 import {assert,HttpError} from '../lib/supabase.mjs';
 import {createHash} from 'node:crypto';
 import {ensureConversation,saveCustomerMessage,saveAiMessage} from './ai-conversations.mjs';
+import {recordAiUsage} from './ai-usage.mjs';
 
 const OPENAI_URL='https://api.openai.com/v1/chat/completions';
 const DEFAULT_MODEL='gpt-6-luna';
@@ -345,6 +346,7 @@ export async function aiChat(user,body={},req=null){
     const direct=directCustomerAnswer(state,user,message,language);
     if(direct){
       if(conversation)await saveAiMessage(conversation,direct);
+      await recordAiUsage({surface:'customer',source:'database',user,conversationId:conversation?.id,model});
       return {reply:direct,source:'database',...(conversation?{conversationId:conversation.id,humanMode:false}:{})};
     }
   }
@@ -356,7 +358,8 @@ export async function aiChat(user,body={},req=null){
       ?'لم أستطع تحديد المنتج بوضوح من هذه الصورة. جرّب صورة أوضح للمنتج من الأمام أو أضف اسمه أو مواصفته.'
       :'I could not identify the product clearly from this image. Try a clearer front view or add the product name or specification.';
     if(conversation)await saveAiMessage(conversation,reply);
-    return {reply,source:'openai',usage:data?.usage||null,...(conversation?{conversationId:conversation.id,humanMode:false}:{})};
+    await recordAiUsage({surface:'customer',source:'openai',user,conversationId:conversation?.id,model,usage:data?.usage});
+  return {reply,source:'openai',usage:data?.usage||null,...(conversation?{conversationId:conversation.id,humanMode:false}:{})};
   }
   const productQuery=[imageSearch?.query,imageSearch?.productType,imageSearch?.visibleText,marketingSignal?.query,marketingSignal?.productSku,marketingSignal?.productTitle,message].filter(Boolean).join(' ');
   const personalContextNeeded=!!user&&qHas(message.toLowerCase(),['طلبي','الطلب','الدفع','فاتورة','عرض','تتبع','order','payment','invoice','quote','tracking']);
@@ -374,6 +377,7 @@ export async function aiChat(user,body={},req=null){
     const cached=getCachedReply(cacheKey);
     if(cached){
       if(conversation)await saveAiMessage(conversation,cached);
+      await recordAiUsage({surface:'customer',source:'cache',user,conversationId:conversation?.id,model});
       return {reply:cached,source:'cache',...(conversation?{conversationId:conversation.id,humanMode:false}:{})};
     }
   }
