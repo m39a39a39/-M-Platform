@@ -35,7 +35,18 @@ async function loadLive(){
   render();
 }
 const baseRender=render;
-render=function(){if(!liveState)return;baseRender();window.MStudioChrome(liveState,{role:'admin'},{hydrate:()=>hydrateStudioImages(),action:action=>{if(action==='refresh')loadLive();else if(action==='language'){window.MStudioToggleLanguage().then(()=>render());}else location.assign(window.MPortal.portalUrl('admin',action==='account'?'settings':action));}});$$('[data-action=history]').forEach(b=>b.hidden=true);const top=$('.top-actions');if(top)top.insertAdjacentHTML('beforeend','<a href="/?store=1" target="_blank" rel="noopener" class="button">فتح المتجر</a>');hydrateStudioImages();};
+render=function(){
+  if(!liveState)return;
+  baseRender();
+  // Studio has its own sidebar/topbar. Do not mount the shared portal chrome here:
+  // it becomes an extra squeezed column beside the fixed admin sidebar on desktop.
+  document.getElementById('site-header')?.remove();
+  document.getElementById('site-footer')?.remove();
+  document.body.classList.remove('has-site-chrome');
+  $('[data-action=history]').forEach(b=>b.hidden=true);
+  const top=$('.top-actions');if(top)top.insertAdjacentHTML('beforeend','<a href="/?store=1" target="_blank" rel="noopener" class="button">فتح المتجر</a>');
+  hydrateStudioImages();
+};
 settingsView=function(){return heading('الربط بالمشروع','تستخدم اللوحة حسابات وصلاحيات وبيانات M Platform.')+`<section class="panel panel-body"><p>المستخدم: ${esc(liveState.user.name||liveState.user.id)}</p><p>التعديلات محفوظة كمسودة حتى تضغط نشر. الطلبات تُحفظ مباشرة بعد تنفيذ الإجراء.</p><p>تتوقف العملية عند تعديل البيانات من مسؤول آخر لتجنب فقدان التغييرات.</p><a href="/">إدارة الحسابات والفواتير والإعدادات المالية</a></section>`;};
 async function snapshot(kind){if(publishing)return;publishing=true;try{if(edits().length>19)throw Error('يمكن نشر 19 تعديل منتج في العملية الواحدة؛ قلل عدد التعديلات ثم انشر.');await api('studio',{action:kind.includes('نشر')?'publish':'draft',version:settingsVersion,store:state.draft,products:edits(),redactionConfirmed:kind.includes('نشر')});await loadLive();toast(kind.includes('نشر')?'تم نشر التغييرات على المتجر':'تم حفظ المسودة على الخادم');}catch(e){toast(e.message)}finally{publishing=false}};
 const originalReview=reviewChanges;reviewChanges=function(){originalReview();$('#dialog .review-summary p').textContent='سيتم تحديث المتجر الحقيقي. بنشرك تؤكد مراجعة الترجمة وإزالة هوية المورد وبيانات التواصل من المحتوى العام.';};
