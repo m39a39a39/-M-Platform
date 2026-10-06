@@ -203,6 +203,12 @@ async function aiConversation(params={}){
   if(!r.ok)throw new Error(data?.error||t('error'));
   return data;
 }
+async function aiLead(body){
+  const r=await fetch(API+'/api/v1/ai-conversation',{method:'POST',credentials:'omit',headers:{'Content-Type':'application/json','X-M-Client':'native'},body:JSON.stringify(body)});
+  let data={};try{data=await r.json();}catch{}
+  if(!r.ok)throw new Error(data?.error||t('error'));
+  return data;
+}
 let aiModule=null,aiTask=null,aiIdleHandle=null;
 function loadAiModule(){
   if(aiModule)return Promise.resolve(aiModule);
@@ -212,7 +218,7 @@ function loadAiModule(){
 function aiChatSignal(...args){aiModule?.aiChatSignal(...args);}
 async function mountGuestAiChat(){
   const mod=await loadAiModule();
-  if(!$('guestView').classList.contains('hidden'))mod.mountAiChat({mode:'guest',language:()=>lang,send:aiSend,fetchConversation:aiConversation});
+  if(!$('guestView').classList.contains('hidden'))mod.mountAiChat({mode:'guest',language:()=>lang,send:aiSend,fetchConversation:aiConversation,captureLead:aiLead});
 }
 function scheduleGuestAiChat(){
   if(aiIdleHandle)return;
