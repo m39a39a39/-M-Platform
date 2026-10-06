@@ -49,3 +49,38 @@ test('database and cache paths can report zero token cost safely',()=>{
   assert.equal(estimateAiCostUsd('gpt-6-luna',{}),0);
   assert.equal(estimateAiCostUsd('unknown-model',{prompt_tokens:1000,completion_tokens:1000}),0);
 });
+
+
+test('customer shipping-to-Saudi question is answered directly from store policy',()=>{
+  const state={
+    publicOffers:[],
+    settings:{storefront:{pages:[{
+      id:'policy-shipping',active:true,title:'سياسة الشحن والتوصيل',titleEn:'Shipping and delivery',
+      content:'وجهات الخدمة\nنوفر التوصيل حاليًا داخل السعودية.\nالطريقة والتكلفة\nنرتب الشحن الجوي أو البحري وفق اختيار العميل والخيارات المناسبة للبضاعة.\nبعد تجهيز البضاعة ومعرفة وزنها وحجمها نرسل عرض الشحن بشكل منفصل عن قيمة المنتجات.',
+      contentEn:'Destinations\nDelivery currently serves Saudi Arabia.\nMethod and charges\nWe arrange air or sea freight. Shipping is quoted separately after preparation.'
+    }]}}
+  };
+  const reply=directCustomerAnswer(state,null,'هل لديكم شحن إلى السعودية؟','ar');
+  assert.match(reply,/نعم/);
+  assert.match(reply,/السعودية/);
+  assert.match(reply,/الجوي أو البحري/);
+});
+
+test('shipping cost question returns the separate-quote rule without confusing لديكم with كم',()=>{
+  const state={publicOffers:[],settings:{storefront:{pages:[{
+    id:'policy-shipping',active:true,title:'سياسة الشحن والتوصيل',
+    content:'نوفر التوصيل حاليًا داخل السعودية. بعد تجهيز البضاعة ومعرفة وزنها وحجمها نرسل عرض الشحن بشكل منفصل. يشمل عرض الشركة النقل والجمارك والضرائب والتخليص والتوصيل.'
+  }]}}};
+  const availability=directCustomerAnswer(state,null,'هل لديكم شحن إلى السعودية؟','ar');
+  assert.doesNotMatch(availability,/الجمارك والضرائب/);
+  const cost=directCustomerAnswer(state,null,'كم تكلفة الشحن إلى السعودية؟','ar');
+  assert.match(cost,/تحدد تكلفة الشحن|تُحدد تكلفة الشحن/);
+  assert.match(cost,/الجمارك والضرائب/);
+});
+
+test('generic unrelated question is not falsely answered as a shipping policy fact',()=>{
+  const state={publicOffers:[],settings:{storefront:{pages:[{
+    id:'policy-shipping',active:true,title:'سياسة الشحن والتوصيل',content:'نوفر التوصيل حاليًا داخل السعودية.'
+  }]}}};
+  assert.equal(directCustomerAnswer(state,null,'هل عندكم سماعات؟','ar'),null);
+});

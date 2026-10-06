@@ -67,6 +67,10 @@ export async function saveAiMessage(row,content){
   const updated=await updateConversation(row,{last_message_at:now()});
   return {message,conversation:updated};
 }
+export async function requestHumanHandoff(row){
+  assert(row?.id,400,'المحادثة غير صالحة / Invalid conversation');
+  return updateConversation(row,{status:'human',last_message_at:now()});
+}
 export async function listConversationMessages(conversationId,limit=200){
   return db('ai_messages',`conversation_id=eq.${encodeURIComponent(conversationId)}&order=id.asc&limit=${Math.max(1,Math.min(300,Number(limit)||200))}`);
 }
