@@ -133,6 +133,7 @@ export async function captureGuestLead(user,body={}){
     lead_product_sku:clean(body.productSku,100)||row.lead_product_sku||null,
     lead_quantity:clean(body.quantity,80)||row.lead_quantity||null,
     lead_followup_needed:true,
+    last_message_at:now(),
     unread_admin:Number(row.unread_admin||0)+1
   });
   const reply=updated.language==='en'
@@ -203,14 +204,14 @@ export async function adminConversationAction(user,body={}){
     return {conversation:adminConversation(updated)};
   }
   if(action==='close'){
-    const updated=await updateConversation(row,{status:'closed',unread_admin:0});
+    const updated=await updateConversation(row,{status:'closed',lead_followup_needed:false,unread_admin:0});
     return {conversation:adminConversation(updated)};
   }
   if(action==='reply'){
     const text=clean(body.message,4000);assert(text,400,'اكتب الرد أولًا / Enter a reply');
     const current=row.status==='human'?row:await updateConversation(row,{status:'human',claimed_by:user.id,claimed_at:now()});
     const message=await insertMessage(current.id,'admin',text);
-    const updated=await updateConversation(current,{last_message_at:now(),unread_admin:0,unread_customer:Number(current.unread_customer||0)+1});
+    const updated=await updateConversation(current,{last_message_at:now(),lead_followup_needed:false,unread_admin:0,unread_customer:Number(current.unread_customer||0)+1});
     return {conversation:adminConversation(updated),message:publicMessage(message)};
   }
   throw Object.assign(new Error('إجراء غير صالح / Invalid action'),{status:400});
