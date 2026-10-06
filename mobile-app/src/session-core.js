@@ -33,24 +33,27 @@ export function createSession({ storage, fetchImpl = (...args) => fetch(...args)
     catch (error) { guard(version); throw new SessionError('storage_failed'); }
     guard(version); tokens = next;
   }
-  async function send(path, { method = 'GET', body, token } = {}, version = epoch) {
+  async function send(path, { method = 'GET', body, token, keepalive = false, detached = false } = {}, version = epoch) {
     guard(version);
     const requestController = new AbortController(), signal = controller.signal;
     const cancel = () => requestController.abort();
-    signal.addEventListener('abort', cancel, { once: true });
+    if (!detached) signal.addEventListener('abort', cancel, { once: true });
     const timeout = setTimeout(cancel, 30000);
     try {
       const headers = { 'X-M-Client': 'native' };
       if (body !== undefined) headers['Content-Type'] = 'application/json';
       if (token) headers.Authorization = `Bearer ${token}`;
-      const response = await fetchImpl(API + path, { method, headers, credentials: 'omit',
+      const response = await fetchImpl(API + path, { method, headers, credentials: 'omit', keepalive,
         body: body === undefined ? undefined : JSON.stringify(body), signal: requestController.signal });
       guard(version); return response;
     } catch (error) {
       guard(version);
       if (error instanceof SessionError) throw error;
       throw new SessionError('network');
-    } finally { clearTimeout(timeout); signal.removeEventListener('abort', cancel); }
+    } finally {
+      clearTimeout(timeout);
+      if (!detached) signal.removeEventListener('abort', cancel);
+    }
   }
   async function read(response, version) {
     let data;
@@ -138,10 +141,17 @@ export function createSession({ storage, fetchImpl = (...args) => fetch(...args)
     const old = tokens;
     await clear('logout');
     if (old?.accessToken) {
-      // Logout must never refresh a session that the user has just discarded.
-      // Local sign-out must not wait for an unavailable network. A subsequent login
-      // aborts this old request along with all other work from the previous epoch.
-      void send('/api/v1/auth/logout',{method:'POST',body:{},token:old.accessToken}).catch(()=>{});
+      // Local sign-out is immediate. The detached keepalive request can survive
+      // navigation and a fast re-login long enough to revoke only the discarded
+      // server session; it never refreshes or restores local credentials.
+      const version = epoch;
+      void send('/api/v1/auth/logout',{
+        method:'POST',
+        body:{refreshToken:old.refreshToken||''},
+        token:old.accessToken,
+        keepalive:true,
+        detached:true
+      },version).catch(()=>{});
     }
   }
   return { raw, request, state, restore, logout, clear,
