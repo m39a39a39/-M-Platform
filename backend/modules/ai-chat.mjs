@@ -322,7 +322,7 @@ export function directCustomerAnswer(state,user,message,language='ar'){
       if(parts.length)return (language==='en'?'Order ':'الطلب ')+(number||'')+' — '+parts.join(' · ');
     }
   }
-  return directProductFact(state,normalized,language)||directShippingAnswer(state,normalized,language);
+  return directProductFact(state,normalized,language)||directShippingAnswer(state,normalized,language)||null;
 }
 function cacheKeyFor(language,message,context){
   const compact={language,message:clean(message).toLowerCase(),products:context?.products||[],shoppingSignal:context?.shoppingSignal||null};
