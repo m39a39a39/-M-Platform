@@ -4,6 +4,7 @@ import {one,rpc,assert} from '../lib/supabase.mjs';
 import {active,open} from './records.mjs';
 import {checkoutDetails} from './order-management.mjs';
 import {priceForQuantity} from './studio.mjs';
+import {isUnlimitedStock,stockAllows} from '../../shared/inventory.mjs';
 
 const MAX_CART_ITEMS=10;
 const SUPPORTED_CURRENCIES=new Set(['USD','SAR','AED','CNY','EUR']);
@@ -34,9 +35,9 @@ export async function createCartOrder(user,body={}){
     const offer=await one('public_offers',offerId);
     assert(offer&&open(offer)&&offer.data.status==='published',409,'أحد المنتجات لم يعد متاحًا / A product is no longer available');
     // Availability is reviewed by the store; a product is independent of its sources.
-    const d=offer.data||{},moq=Number(d.moq),stock=Number(d.stock),unitPrice=priceForQuantity(d,quantity),currency=String(d.currency||'').toUpperCase();
+    const d=offer.data||{},moq=Number(d.moq),unitPrice=priceForQuantity(d,quantity),currency=String(d.currency||'').toUpperCase();
     assert(Number.isFinite(unitPrice)&&unitPrice>0&&Number.isFinite(moq)&&quantity>=moq,400,'تحقق من الكمية والحد الأدنى للطلب / Check quantity and MOQ');
-    if(Number.isFinite(stock)&&stock>0)assert(quantity<=stock,400,'الكمية المطلوبة أكبر من المخزون المتاح / Requested quantity exceeds available stock');
+    if(!isUnlimitedStock(d))assert(stockAllows(d,quantity),400,'الكمية المطلوبة أكبر من المخزون المتاح / Requested quantity exceeds available stock');
     assert(SUPPORTED_CURRENCIES.has(currency),400,'عملة المنتج غير مدعومة / Unsupported product currency');
     assert(!d.validUntil||String(d.validUntil)>=new Date().toISOString().slice(0,10),409,'انتهت صلاحية أحد المنتجات / A product offer has expired');
 
@@ -61,6 +62,7 @@ export async function createCartOrder(user,body={}){
       currency:x.currency,
       moq:x.moq,
       stock:String(d.stock||''),
+      stockUnlimited:isUnlimitedStock(d),
       leadTime:String(d.leadTime||''),
       categoryId:String(d.categoryId||'')
     };
