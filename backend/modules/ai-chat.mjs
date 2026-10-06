@@ -2,12 +2,15 @@ import {snapshot} from './records.mjs';
 import {assert,HttpError} from '../lib/supabase.mjs';
 import {createHash} from 'node:crypto';
 import {ensureConversation,saveCustomerMessage,saveAiMessage} from './ai-conversations.mjs';
+import {recordAiUsage} from './ai-usage.mjs';
 
 const OPENAI_URL='https://api.openai.com/v1/chat/completions';
-const DEFAULT_MODEL='gpt-5.6-luna';
+const DEFAULT_MODEL='gpt-6-luna';
 const usageWindows=new Map();
 const RATE_WINDOW_MS=10*60*1000;
 const IMAGE_MAX_CHARS=700000;
+const responseCache=new Map();
+const RESPONSE_CACHE_TTL_MS=6*60*60*1000;
 
 function openAiApiKey(){
   return String(process.env.OPENAI_API_KEY||'').trim();
@@ -74,8 +77,8 @@ function productContext(state,query){
   const rows=(state?.publicOffers||[]).filter(x=>x?.status==='published');
   const needles=terms(query);
   const ranked=rows.map(item=>({item,score:productScore(item,needles)})).sort((a,b)=>b.score-a.score||String(b.item?.createdAt||'').localeCompare(String(a.item?.createdAt||'')));
-  const positive=ranked.filter(x=>x.score>0).slice(0,20);
-  const selected=positive.length?positive:ranked.slice(0,16);
+  const positive=ranked.filter(x=>x.score>0).slice(0,6);
+  const selected=positive.length?positive:ranked.slice(0,4);
   return selected.map(({item})=>{
     const title=titlePair(item),description=descriptionPair(item);
     return {
@@ -99,7 +102,7 @@ function requestTitle(item){
   return title.ar||title.en||clamp(item?.product,240)||'';
 }
 function clientContext(state){
-  const requests=[...(state?.requests||[])].sort((a,b)=>(Date.parse(b?.trackingUpdatedAt||b?.updatedAt||b?.createdAt||0)||0)-(Date.parse(a?.trackingUpdatedAt||a?.updatedAt||a?.createdAt||0)||0)).slice(0,12).map(item=>({
+  const requests=[...(state?.requests||[])].sort((a,b)=>(Date.parse(b?.trackingUpdatedAt||b?.updatedAt||b?.createdAt||0)||0)-(Date.parse(a?.trackingUpdatedAt||a?.updatedAt||a?.createdAt||0)||0)).slice(0,6).map(item=>({
     number:item.displayNo||'',
     type:clamp(item.orderType||'custom',40),
     title:requestTitle(item),
@@ -111,7 +114,7 @@ function clientContext(state){
     paymentStatus:clamp(item.paymentStatus,80),
     selectedQuoteNumber:(state?.quotes||[]).find(q=>q.id===item.selectedQuoteId)?.displayNo||''
   }));
-  const interests=[...(state?.interests||[])].sort((a,b)=>(Date.parse(b?.trackingUpdatedAt||b?.updatedAt||b?.createdAt||0)||0)-(Date.parse(a?.trackingUpdatedAt||a?.updatedAt||a?.createdAt||0)||0)).slice(0,12).map(item=>({
+  const interests=[...(state?.interests||[])].sort((a,b)=>(Date.parse(b?.trackingUpdatedAt||b?.updatedAt||b?.createdAt||0)||0)-(Date.parse(a?.trackingUpdatedAt||a?.updatedAt||a?.createdAt||0)||0)).slice(0,6).map(item=>({
     number:item.displayNo||'',
     status:clamp(item.status,80),
     trackingStatus:clamp(item.trackingStatus,80),
@@ -121,7 +124,7 @@ function clientContext(state){
     total:Number.isFinite(Number(item.total))?Number(item.total):null,
     currency:clamp(item.currency,12)
   }));
-  const quotes=[...(state?.quotes||[])].slice(0,24).map(item=>({
+  const quotes=[...(state?.quotes||[])].slice(0,8).map(item=>({
     number:item.displayNo||'',
     requestNumber:(state?.requests||[]).find(r=>r.id===item.requestId)?.displayNo||'',
     status:clamp(item.status,80),
@@ -134,9 +137,9 @@ function clientContext(state){
 }
 function normalizeHistory(value){
   if(!Array.isArray(value))return[];
-  return value.slice(-10).map(row=>({
+  return value.slice(-6).map(row=>({
     role:row?.role==='assistant'?'assistant':'user',
-    content:clamp(row?.content,1600)
+    content:clamp(row?.content,900)
   })).filter(row=>row.content);
 }
 function extractReply(data){
@@ -144,6 +147,108 @@ function extractReply(data){
   if(typeof content==='string')return clean(content);
   if(Array.isArray(content))return clean(content.map(x=>typeof x==='string'?x:x?.text||'').join('\n'));
   return '';
+}
+
+const TRACKING_LABELS={
+  received:['تم استلام الطلب','Received'],reviewing:['قيد المراجعة','Under review'],sourcing:['جاري التوريد','Sourcing'],
+  quotes_available:['العروض متاحة','Quotes available'],quote_selected:['تم اختيار العرض','Quote selected'],
+  supplier_confirmation:['بانتظار تأكيد المورد','Supplier confirmation'],payment_confirmation:['بانتظار تأكيد الدفع','Payment confirmation'],
+  production:['قيد التجهيز','Preparing'],quality_check:['الفحص والجودة','Quality check'],ready_to_ship:['جاهز للشحن','Ready to ship'],
+  shipped:['تم الشحن','Shipped'],in_delivery:['قيد التوصيل','Out for delivery'],delivered:['تم التسليم','Delivered'],
+  completed:['مكتمل','Completed'],customer_action:['بانتظار إجراء من العميل','Customer action required'],
+  on_hold:['معلق مؤقتًا','On hold'],cancelled:['ملغي','Cancelled']
+};
+const qHas=(message,patterns)=>patterns.some(pattern=>message.includes(pattern));
+const localized=(pair,language)=>Array.isArray(pair)?pair[language==='en'?1:0]:String(pair||'');
+const latestByDate=rows=>[...(rows||[])].sort((a,b)=>(Date.parse(b?.trackingUpdatedAt||b?.updatedAt||b?.createdAt||0)||0)-(Date.parse(a?.trackingUpdatedAt||a?.updatedAt||a?.createdAt||0)||0));
+const visibleOrderNumber=item=>String(item?.displayNo||item?.number||'').trim();
+function matchingOwnOrder(state,message){
+  const rows=latestByDate([...(state?.requests||[]),...(state?.interests||[])]);
+  const digits=message.match(/\b\d{4,}\b/g)||[];
+  if(digits.length){
+    const exact=rows.find(row=>digits.includes(visibleOrderNumber(row)));
+    if(exact)return exact;
+  }
+  return rows[0]||null;
+}
+function productMatchConfidence(product,message){
+  const sku=String(product?.sku||'').toLowerCase();
+  if(sku&&message.includes(sku))return 100;
+  const title=clean((product?.title?.ar||'')+' '+(product?.title?.en||'')).toLowerCase();
+  const useful=terms(message).filter(t=>!['سعر','السعر','price','cost','متوفر','stock','available','كم','اقل','أقل','minimum','moq'].includes(t));
+  return useful.reduce((score,t)=>score+(title.includes(t)?1:0),0);
+}
+function directProductFact(state,message,language){
+  const wantsPrice=qHas(message,['سعر','السعر','price','cost','بكم','كم سعر']);
+  const wantsMoq=qHas(message,['اقل كمية','أقل كمية','حد ادنى','حد أدنى','moq','minimum']);
+  const wantsStock=qHas(message,['متوفر','المخزون','مخزون','stock','available','availability']);
+  const wantsLead=qHas(message,['مدة التجهيز','كم يوم','lead time','تجهيز']);
+  if(!wantsPrice&&!wantsMoq&&!wantsStock&&!wantsLead)return null;
+  const products=productContext(state,message);
+  const first=products[0],second=products[1];
+  if(!first)return null;
+  const confidence=productMatchConfidence(first,message),secondConfidence=second?productMatchConfidence(second,message):0;
+  if(confidence<1||confidence<100&&confidence<=secondConfidence)return null;
+  const title=(language==='en'?first.title?.en:first.title?.ar)||first.sku||'Product';
+  const facts=[];
+  if(wantsPrice&&Number.isFinite(Number(first.price)))facts.push((language==='en'?'Price: ':'السعر: ')+Number(first.price)+' '+(first.currency||'SAR'));
+  if(wantsMoq&&first.moq!==undefined&&first.moq!==null&&first.moq!=='')facts.push((language==='en'?'MOQ: ':'الحد الأدنى: ')+first.moq+(language==='en'?'':' قطعة'));
+  if(wantsStock&&first.stock!==undefined&&first.stock!==null&&first.stock!=='')facts.push((language==='en'?'Stock: ':'المخزون: ')+first.stock);
+  if(wantsLead&&first.leadTime!==undefined&&first.leadTime!==null&&first.leadTime!=='')facts.push((language==='en'?'Lead time: ':'مدة التجهيز: ')+first.leadTime+(language==='en'?' days':' يوم'));
+  if(!facts.length)return null;
+  return title+' — '+facts.join(' · ');
+}
+function directPolicyAnswer(state,message,language){
+  const pages=state?.settings?.storefront?.pages||[];
+  if(!pages.length)return null;
+  const needles=terms(message).filter(x=>!['هل','ماذا','كيف','what','how','the','is','are'].includes(x));
+  if(!needles.length)return null;
+  const ranked=pages.map(page=>{
+    const title=clean(language==='en'?(page.titleEn||page.title):(page.title||page.titleEn)).toLowerCase();
+    const content=clean(language==='en'?(page.contentEn||page.content):(page.content||page.contentEn)).toLowerCase();
+    const score=needles.reduce((n,t)=>n+(title.includes(t)?4:content.includes(t)?1:0),0);
+    return {page,score,content};
+  }).sort((a,b)=>b.score-a.score);
+  const top=ranked[0];
+  if(!top||top.score<4||!top.content)return null;
+  const body=clamp(top.content,650);
+  const title=clean(language==='en'?(top.page.titleEn||top.page.title):(top.page.title||top.page.titleEn));
+  return title?title+': '+body:body;
+}
+export function directCustomerAnswer(state,user,message,language='ar'){
+  const normalized=clean(message).toLowerCase();
+  if(user&&qHas(normalized,['طلبي','الطلب','وين الطلب','اين الطلب','أين الطلب','حالة الطلب','تتبع','tracking','my order','order status'])){
+    const order=matchingOwnOrder(state,normalized);
+    if(order){
+      const number=visibleOrderNumber(order),tracking=order.trackingStatus||order.status||'';
+      const status=localized(TRACKING_LABELS[tracking]||tracking,language);
+      const payment=String(order.paymentStatus||'');
+      const parts=[];
+      if(status)parts.push((language==='en'?'Status: ':'الحالة: ')+status);
+      if(payment)parts.push((language==='en'?'Payment: ':'الدفع: ')+payment);
+      if(order.trackingNumber)parts.push((language==='en'?'Tracking: ':'رقم التتبع: ')+order.trackingNumber);
+      if(parts.length)return (language==='en'?'Order ':'الطلب ')+(number||'')+' — '+parts.join(' · ');
+    }
+  }
+  return directProductFact(state,normalized,language)||directPolicyAnswer(state,normalized,language);
+}
+function cacheKeyFor(language,message,context){
+  const compact={language,message:clean(message).toLowerCase(),products:context?.products||[],shoppingSignal:context?.shoppingSignal||null};
+  return createHash('sha256').update(JSON.stringify(compact)).digest('hex');
+}
+function getCachedReply(key){
+  const row=responseCache.get(key);
+  if(!row)return '';
+  if(Date.now()-row.at>RESPONSE_CACHE_TTL_MS){responseCache.delete(key);return '';}
+  return row.reply;
+}
+function setCachedReply(key,reply){
+  responseCache.set(key,{reply,at:Date.now()});
+  if(responseCache.size>1000){
+    const cutoff=Date.now()-RESPONSE_CACHE_TTL_MS;
+    for(const [cacheKey,row] of responseCache)if(row.at<cutoff)responseCache.delete(cacheKey);
+    while(responseCache.size>1000)responseCache.delete(responseCache.keys().next().value);
+  }
 }
 function safeMarketingSignal(value){
   if(!value||typeof value!=='object'||Array.isArray(value))return null;
@@ -188,9 +293,9 @@ async function analyzeProductImage({image,message,language,apiKey,model,gatewayU
         }
       }
     },
-    max_tokens:220,
+    max_completion_tokens:220,
     temperature:0.1,
-    reasoning:{effort:'none'}
+    reasoning_effort:'none'
   };
   let response;
   try{
@@ -235,27 +340,48 @@ export async function aiChat(user,body={},req=null){
     if(conversation.status==='human')return {conversationId:conversation.id,humanMode:true};
   }
   const gatewayUser=enforceRateLimit(user,req);
+  const model=String(process.env.OPENAI_CHAT_MODEL||DEFAULT_MODEL).replace(/^openai\//,'');
+  const policySignal=qHas(message.toLowerCase(),['سياسة','الشحن','شحن','إرجاع','استرجاع','إلغاء','خصوصية','ضمان','policy','shipping','return','refund','cancel','privacy','warranty']);
+  const state=await snapshot(user||null,!user&&!policySignal?{q:message}:{});
+  if(!proactive&&!image){
+    const direct=directCustomerAnswer(state,user,message,language);
+    if(direct){
+      if(conversation)await saveAiMessage(conversation,direct);
+      await recordAiUsage({surface:'customer',source:'database',user,conversationId:conversation?.id,model});
+      return {reply:direct,source:'database',...(conversation?{conversationId:conversation.id,humanMode:false}:{})};
+    }
+  }
   const apiKey=openAiApiKey();
   if(!apiKey)throw new HttpError(503,'لم يتم تفعيل مفتاح OpenAI بعد. / OpenAI API key is not configured yet.');
-  const model=String(process.env.OPENAI_CHAT_MODEL||DEFAULT_MODEL).replace(/^openai\//,'');
   const imageSearch=image?await analyzeProductImage({image,message,language,apiKey,model,gatewayUser}):null;
   if(imageSearch?.confidence==='none'||imageSearch&&!imageSearch.query){
     const reply=language==='ar'
       ?'لم أستطع تحديد المنتج بوضوح من هذه الصورة. جرّب صورة أوضح للمنتج من الأمام أو أضف اسمه أو مواصفته.'
       :'I could not identify the product clearly from this image. Try a clearer front view or add the product name or specification.';
     if(conversation)await saveAiMessage(conversation,reply);
-    return {reply,...(conversation?{conversationId:conversation.id,humanMode:false}:{})};
+    await recordAiUsage({surface:'customer',source:'openai',user,conversationId:conversation?.id,model,usage:data?.usage});
+  return {reply,source:'openai',usage:data?.usage||null,...(conversation?{conversationId:conversation.id,humanMode:false}:{})};
   }
-  const state=await snapshot(user||null);
   const productQuery=[imageSearch?.query,imageSearch?.productType,imageSearch?.visibleText,marketingSignal?.query,marketingSignal?.productSku,marketingSignal?.productTitle,message].filter(Boolean).join(' ');
+  const personalContextNeeded=!!user&&qHas(message.toLowerCase(),['طلبي','الطلب','الدفع','فاتورة','عرض','تتبع','order','payment','invoice','quote','tracking']);
   const context={
     viewer:user?{signedIn:true}:{signedIn:false},
     products:productContext(state,productQuery),
     ...(imageSearch?{imageSearch}:{}),
     ...(marketingSignal?{shoppingSignal:marketingSignal}:{}),
-    ...(user?clientContext(state):{})
+    ...(personalContextNeeded?clientContext(state):{})
   };
   const history=normalizeHistory(body.history);
+  const cacheable=!user&&!proactive&&!imageSearch&&history.length===0;
+  const cacheKey=cacheable?cacheKeyFor(language,message,context):'';
+  if(cacheKey){
+    const cached=getCachedReply(cacheKey);
+    if(cached){
+      if(conversation)await saveAiMessage(conversation,cached);
+      await recordAiUsage({surface:'customer',source:'cache',user,conversationId:conversation?.id,model});
+      return {reply:cached,source:'cache',...(conversation?{conversationId:conversation.id,humanMode:false}:{})};
+    }
+  }
   const system=language==='ar'
     ?`أنت مستشار مبيعات وتوريد محترف داخل M Platform. هدفك فهم ما يحتاجه العميل ومساعدته على اتخاذ قرار شراء مناسب، بدون ضغط أو مبالغة.
 اعتمد على PLATFORM_CONTEXT_JSON في معلومات المنتجات والأسعار والمخزون والطلبات والعروض. لا تخترع أي سعر أو خصم أو مخزون أو حالة أو ميزة غير موجودة.
@@ -289,9 +415,9 @@ If PLATFORM_CONTEXT_JSON contains shoppingSignal, write a very short proactive m
       ...history,
       {role:'user',content:message}
     ],
-    max_tokens:700,
+    max_completion_tokens:320,
     temperature:0.2,
-    reasoning:{effort:'none'}
+    reasoning_effort:'none'
   };
   let response;
   try{
@@ -303,6 +429,7 @@ If PLATFORM_CONTEXT_JSON contains shoppingSignal, write a very short proactive m
   let data;try{data=await response.json();}catch{throw new HttpError(502,'استجابة المساعد غير صالحة. / Invalid AI response.');}
   const reply=extractReply(data);
   if(!reply)throw new HttpError(502,'لم يصل رد من المساعد الذكي. / Empty AI response.');
+  if(cacheKey)setCachedReply(cacheKey,reply);
   if(conversation){
     const current=await ensureConversation(user,{conversationId:conversation.id,guestKey:body.guestKey,language},false);
     if(current?.status==='human')return {conversationId:current.id,humanMode:true};

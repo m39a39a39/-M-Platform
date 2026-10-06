@@ -1,9 +1,10 @@
 import {snapshot} from './records.mjs';
 import {can} from './auth.mjs';
 import {assert,HttpError} from '../lib/supabase.mjs';
+import {recordAiUsage,aiUsageSummary} from './ai-usage.mjs';
 
 const OPENAI_URL='https://api.openai.com/v1/chat/completions';
-const DEFAULT_MODEL='gpt-5.6-luna';
+const DEFAULT_MODEL='gpt-6-luna';
 const usage=new Map();
 const WINDOW_MS=10*60*1000;
 
@@ -60,10 +61,10 @@ export function buildAdminAiContext(state={}){
 
   const lowStock=published
     .filter(x=>x.stock!==null&&x.stock!==undefined&&Number.isFinite(Number(x.stock))&&Number(x.stock)<=Math.max(10,num(x.moq)))
-    .slice(0,20)
+    .slice(0,12)
     .map(x=>({sku:clamp(x.sku,80),title:titleOf(x),stock:num(x.stock),moq:num(x.moq)}));
 
-  const products=published.slice(0,120).map(item=>({
+  const products=published.map(item=>({
     id:clamp(item.id,100),
     sku:clamp(item.sku,80),
     title:titleOf(item),
@@ -77,7 +78,7 @@ export function buildAdminAiContext(state={}){
     createdAt:clamp(item.createdAt,40)
   }));
 
-  const sections=(state.settings?.storefront?.sections||[]).slice(0,40).map(section=>({
+  const sections=(state.settings?.storefront?.sections||[]).slice(0,20).map(section=>({
     id:clamp(section.id,80),
     type:clamp(section.type,60),
     title:clamp(section.title,180),
@@ -117,6 +118,39 @@ export function buildAdminAiContext(state={}){
   };
 }
 
+
+const adminTerms=text=>clean(text).toLowerCase().split(/[^\p{L}\p{N}._-]+/u).filter(x=>x.length>=2).slice(0,24);
+function leanAdminContext(context,message){
+  const needles=adminTerms(message);
+  const ranked=(context.products||[]).map(product=>{
+    const hay=clean([product.sku,product.title,product.categoryId,product.subcategoryId,product.country].filter(Boolean).join(' ')).toLowerCase();
+    const score=needles.reduce((sum,term)=>sum+(hay.includes(term)?(String(product.sku||'').toLowerCase().includes(term)?5:1):0),0);
+    return {product,score};
+  }).sort((a,b)=>b.score-a.score);
+  const productSignals=['منتج','المنتجات','sku','product','catalog','كتالوج','مخزون','stock','سعر','price','حملة','campaign'];
+  const wantsProducts=productSignals.some(x=>clean(message).toLowerCase().includes(x));
+  const relevant=ranked.filter(x=>x.score>0).slice(0,8).map(x=>x.product);
+  return {
+    ...context,
+    products:wantsProducts?relevant:[],
+    topPurchasedProducts:(context.topPurchasedProducts||[]).slice(0,10),
+    lowStock:(context.lowStock||[]).slice(0,12),
+    storefront:{sections:(context.storefront?.sections||[]).slice(0,20)}
+  };
+}
+export function directAdminAnswer(context,message,language='ar'){
+  const q=clean(message).toLowerCase(),o=context?.overview||{};
+  const askCount=/كم|عدد|how many|count/.test(q);
+  if(!askCount)return '';
+  if(/المنتجات|منتج|products?/.test(q)){
+    if(/مسود|draft/.test(q))return language==='en'?'Draft products: '+Number(o.products?.drafts||0):'عدد المنتجات المسودة: '+Number(o.products?.drafts||0);
+    if(/منشور|published|active/.test(q))return language==='en'?'Published products: '+Number(o.products?.published||0):'عدد المنتجات المنشورة: '+Number(o.products?.published||0);
+    return language==='en'?'Total products: '+Number(o.products?.total||0):'إجمالي المنتجات: '+Number(o.products?.total||0);
+  }
+  if(/العملاء|عميل|customers?/.test(q))return language==='en'?'Customers: '+Number(o.customers?.total||0):'عدد العملاء: '+Number(o.customers?.total||0);
+  if(/الطلبات|طلب|orders?/.test(q))return language==='en'?'Store orders: '+Number(o.orders?.total||0):'عدد طلبات المتجر: '+Number(o.orders?.total||0);
+  return '';
+}
 function enforceRateLimit(user){
   const key=user?.id||'unknown',now=Date.now();
   let row=usage.get(key);
@@ -127,9 +161,9 @@ function enforceRateLimit(user){
 
 function normalizeHistory(value){
   if(!Array.isArray(value))return [];
-  return value.slice(-8).map(row=>({
+  return value.slice(-6).map(row=>({
     role:row?.role==='assistant'?'assistant':'user',
-    content:clamp(row?.content,1400)
+    content:clamp(row?.content,900)
   })).filter(row=>row.content);
 }
 
@@ -186,7 +220,7 @@ async function generateProductDraft(user,body,{apiKey,model,state}){
   const suppliedSku=clamp(body.sku,80);
   assert(!suppliedSku||/^[A-Za-z0-9._-]{1,80}$/.test(suppliedSku),400,'تحقق من SKU / Check SKU');
   const reference=buildProductDraftReference(state);
-  const system=`You create wholesale product catalog drafts for M Platform from product images and optional admin notes. Return only facts visible in the images or explicitly supplied by the admin. Do not invent brand, model, material, wattage, ports, compatibility, certifications, colors, capacity, dimensions, warranty, or other specifications. Write persuasive but factual B2B copy in Arabic and English. Select categoryId and subcategoryId only from TAXONOMY_JSON, otherwise use empty strings. Do not decide price, MOQ, stock, lead time, currency, or supply country. SKU may be copied only when clearly visible in the image or explicitly supplied. Never include phone numbers, emails, URLs, social handles, supplier identity, or contact details.`;
+  const system=`You create wholesale product catalog drafts for M Platform from product images and optional admin notes. Return only facts visible in the images or explicitly supplied by the admin. Do not invent brand, model, material, wattage, ports, compatibility, certifications, colors, capacity, dimensions, warranty, or other specifications. Write persuasive but factual B2B copy in Arabic and English. Select categoryId and subcategoryId only from TAXONOMY_JSON, otherwise use empty strings. Do not decide price, MOQ, stock, lead time, currency, or supply country. SKU may be copied only when clearly visible in the image or explicitly supplied. Never include phone numbers, emails, URLs, social handles, supplier identity, or contact details. Set needsMoreImages=true only when the supplied image(s) are not enough to identify the product or important visible specifications with reasonable confidence; otherwise false.`;
   const adminText=[
     'ADMIN_NOTES: '+(notes||'(none)'),
     'SUPPLIED_SKU: '+(suppliedSku||'(none)'),
@@ -219,16 +253,17 @@ async function generateProductDraft(user,body,{apiKey,model,state}){
             options:{type:'string'},
             categoryId:{type:'string'},
             subcategoryId:{type:'string'},
-            reviewNotes:{type:'string'}
+            reviewNotes:{type:'string'},
+            needsMoreImages:{type:'boolean'}
           },
-          required:['name','nameEn','sku','shortDescription','description','descriptionEn','technicalSpecs','options','categoryId','subcategoryId','reviewNotes'],
+          required:['name','nameEn','sku','shortDescription','description','descriptionEn','technicalSpecs','options','categoryId','subcategoryId','reviewNotes','needsMoreImages'],
           additionalProperties:false
         }
       }
     },
-    max_tokens:1300,
+    max_completion_tokens:950,
     temperature:0.15,
-    reasoning:{effort:'none'}
+    reasoning_effort:'none'
   };
   let response;
   try{
@@ -263,17 +298,21 @@ async function generateProductDraft(user,body,{apiKey,model,state}){
     subcategoryId,
     reviewNotes:clamp(parsed.reviewNotes,1000)
   };
+  const needsMoreImages=parsed.needsMoreImages===true;
   assert(draft.name,502,'لم يتمكن MG AI من تحديد المنتج بوضوح. أضف صورًا أوضح أو ملاحظة قصيرة. / MG AI could not identify the product clearly.');
-  return {draft,taxonomy:reference,mode:'draft-proposal'};
+  await recordAiUsage({surface:'product_draft',source:'openai',user,model,usage:data?.usage});
+  return {draft,taxonomy:reference,mode:'draft-proposal',needsMoreImages,usage:data?.usage||null};
 }
 
 export async function adminAiOverview(user){
   assert(can(user,'settings'),403,'لا تملك صلاحية MG AI / MG AI permission required');
   const state=await snapshot(user);
   const context=buildAdminAiContext(state);
+  let usage=null;try{usage=await aiUsageSummary();}catch(error){console.warn('AI usage summary failed',error?.message||'unknown');}
   return {
     mode:'proposal',
     overview:context.overview,
+    usage,
     taxonomy:buildProductDraftReference(state),
     productDraftEnabled:can(user,'offers.edit'),
     quickPrompts:[
@@ -300,6 +339,12 @@ export async function adminAi(user,body={}){
   const context=buildAdminAiContext(state);
   const history=normalizeHistory(body.history);
   const language=body.language==='en'?'en':'ar';
+  const direct=directAdminAnswer(context,message,language);
+  if(direct){
+    await recordAiUsage({surface:'admin',source:'database',user,model});
+    return {reply:direct,mode:'database',overview:context.overview,behaviorTrackingAvailable:false};
+  }
+  const llmContext=leanAdminContext(context,message);
 
   const system=language==='en'
     ?`You are MG AI, the read-only admin merchandising and business analyst inside M Platform. Use only ADMIN_CONTEXT_JSON. Never invent metrics, customer behavior, views, searches, cart events, margins, or profit. Behavioral event tracking is not enabled yet, so say that clearly whenever the request depends on it. Never reveal or request customer names, emails, phone numbers, addresses, or other personal data. Distinguish data-backed findings from recommendations. For homepage merchandising, prioritize wholesale relevance, product diversity, observed order history, stock and catalog quality. You cannot directly edit, publish, reorder or launch campaigns. Product creation is available only through the separate reviewed draft workflow in the admin UI. If the admin asks you to make a store change, provide a precise proposal and require admin approval. Keep answers practical and concise.`
@@ -309,13 +354,13 @@ export async function adminAi(user,body={}){
     model,
     messages:[
       {role:'system',content:system},
-      {role:'system',content:'ADMIN_CONTEXT_JSON\n'+JSON.stringify(context)},
+      {role:'system',content:'ADMIN_CONTEXT_JSON\n'+JSON.stringify(llmContext)},
       ...history,
       {role:'user',content:message}
     ],
-    max_tokens:1000,
+    max_completion_tokens:600,
     temperature:0.25,
-    reasoning:{effort:'none'}
+    reasoning_effort:'none'
   };
 
   let response;
@@ -334,5 +379,6 @@ export async function adminAi(user,body={}){
   try{data=await response.json();}catch{throw new HttpError(502,'استجابة MG AI غير صالحة. / Invalid MG AI response.');}
   const reply=extractReply(data);
   if(!reply)throw new HttpError(502,'لم يصل رد صالح من MG AI. / MG AI returned an empty response.');
-  return {reply,mode:'readonly',overview:context.overview,behaviorTrackingAvailable:false};
+  await recordAiUsage({surface:'admin',source:'openai',user,model,usage:data?.usage});
+  return {reply,mode:'readonly',usage:data?.usage||null,overview:context.overview,behaviorTrackingAvailable:false};
 }

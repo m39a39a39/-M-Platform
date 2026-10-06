@@ -29,6 +29,23 @@
     </div>`;
   }
 
+
+  function usagePanel(){
+    const m=overview?.usage?.month;
+    if(!m)return '';
+    const free=Number(m.database||0)+Number(m.cache||0);
+    const cost=Number(m.costUsd||0);
+    return `<section class="mg-ai-usage">
+      <div class="mg-ai-usage-head"><div><strong>${esc(tr('استهلاك الذكاء الاصطناعي هذا الشهر','AI usage this month'))}</strong><small>${esc(tr('يُحسب من الاستخدام الفعلي، ولا يتم حفظ نص الأسئلة هنا.','Calculated from actual usage; prompt text is not stored here.'))}</small></div><span>${esc(tr('نسبة بدون OpenAI','No-OpenAI rate'))}: ${Number(m.freeRate||0).toFixed(1)}%</span></div>
+      <div class="mg-ai-usage-grid">
+        <article><small>${esc(tr('إجمالي الطلبات','Total requests'))}</small><strong>${number(m.requests)}</strong></article>
+        <article><small>${esc(tr('بدون تكلفة OpenAI','No OpenAI call'))}</small><strong>${number(free)}</strong><span>${number(m.database)} DB · ${number(m.cache)} Cache</span></article>
+        <article><small>${esc(tr('طلبات OpenAI','OpenAI calls'))}</small><strong>${number(m.openai)}</strong><span>${number(m.totalTokens)} tokens</span></article>
+        <article><small>${esc(tr('التكلفة المقدرة','Estimated cost'))}</small><strong>${cost<0.01?cost.toFixed(4):cost.toFixed(2)}</strong><span>GPT‑6 Luna</span></article>
+      </div>
+    </section>`;
+  }
+
   function quickPrompts(){
     const prompts=overview?.quickPrompts||[
       tr('حلل أداء المتجر واقترح أهم الإجراءات الآن','Analyze store performance and suggest the most important actions now'),
@@ -81,7 +98,7 @@
         <label class="mg-ai-upload full">
           <span>${esc(tr('صور المنتج','Product images'))}</span>
           <input type="file" accept="image/png,image/jpeg,image/webp" multiple data-mg-ai-images ${generating?'disabled':''}>
-          <small>${esc(tr('حتى 5 صور. يتم تحليل أول 3 صور فقط، وعند الاعتماد تُرفع جميع الصور المختارة.','Up to 5 images. The first 3 are analyzed; all selected images are uploaded after approval.'))}</small>
+          <small>${esc(tr('حتى 5 صور. يبدأ MG AI بصورة واحدة فقط، ويطلب صورًا إضافية تلقائيًا إذا احتاجها. عند الاعتماد تُرفع جميع الصور المختارة.','Up to 5 images. MG AI starts with one image and only uses more when needed; all selected images are uploaded after approval.'))}</small>
         </label>
         <div class="full">${fileSummary()}</div>
         <label><span>${esc(tr('SKU / الموديل (اختياري)','SKU / model (optional)'))}</span><input name="sku" maxlength="80" value="${esc(productInput.sku)}" placeholder="MG-825"></label>
@@ -154,6 +171,7 @@
         <div class="mg-ai-safety">${esc(tr('آمن: الاعتماد مطلوب قبل الحفظ','Safe: approval required before saving'))}</div>
       </header>
       ${overview?cards():`<div class="mg-ai-loading">${esc(loadingOverview?tr('جاري تحميل ملخص المتجر…','Loading store overview…'):tr('تعذر تحميل ملخص المتجر','Could not load store overview'))}</div>`}
+      ${usagePanel()}
       ${creatorIntro()}
       <section class="mg-ai-panel">
         <div class="mg-ai-panel-head">
@@ -195,7 +213,7 @@
   async function send(text){
     const message=String(text||'').trim();
     if(!message||loading)return;
-    const history=messages.slice(-8).map(row=>({role:row.role,content:row.content}));
+    const history=messages.slice(-6).map(row=>({role:row.role,content:row.content}));
     messages.push({role:'user',content:message});loading=true;error='';draw();
     try{
       const result=await api({message,language:document.documentElement.lang==='en'?'en':'ar',history});
@@ -211,9 +229,12 @@
     if(!form.reportValidity())return;
     generating=true;productError='';draw();
     try{
-      const analysisFiles=productFiles.slice(0,3);
-      const images=await window.MStudioImages.filesToCompressedSources({files:analysisFiles},{targetBytes:300*1024,maxDimension:1600});
-      const result=await api({action:'product-draft',images,notes:productInput.notes,sku:productInput.sku,language:document.documentElement.lang==='en'?'en':'ar'});
+      const firstImages=await window.MStudioImages.filesToCompressedSources({files:productFiles.slice(0,1)},{targetBytes:260*1024,maxDimension:1400});
+      let result=await api({action:'product-draft',images:firstImages,notes:productInput.notes,sku:productInput.sku,language:document.documentElement.lang==='en'?'en':'ar'});
+      if(result?.needsMoreImages&&productFiles.length>1){
+        const extraImages=await window.MStudioImages.filesToCompressedSources({files:productFiles.slice(0,3)},{targetBytes:260*1024,maxDimension:1400});
+        result=await api({action:'product-draft',images:extraImages,notes:productInput.notes,sku:productInput.sku,language:document.documentElement.lang==='en'?'en':'ar'});
+      }
       productDraft=result?.draft||null;
       if(!productDraft)throw Error(tr('لم يتم إنشاء مسودة صالحة.','No valid draft was created.'));
       if(!productInput.sku)productInput.sku=productDraft.sku||'';
