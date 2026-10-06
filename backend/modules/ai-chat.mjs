@@ -228,7 +228,7 @@ function directShippingAnswer(state,message,language){
   if(!content)return '';
   const saudi=language==='en'?/saudi arabia/i.test(content):content.includes('السعودية');
   if(saudi&&qHas(q,['السعودية','saudi','ksa'])){
-    const asksCost=qHas(q,['كم','تكلفة','السعر','رسوم','cost','price','charge','fee']);
+    const asksCost=qHas(q,['كم تكلفة','كم سعر الشحن','تكلفة الشحن','سعر الشحن','رسوم الشحن','shipping cost','shipping price','shipping fee','freight cost']);
     if(language==='en'){
       return asksCost
         ?'Yes. We currently deliver to Saudi Arabia. Shipping is quoted separately after the goods are prepared, based on weight, volume and shipping method. Our approved shipping quote includes transport, customs duties, taxes, clearance and delivery to the agreed address.'
