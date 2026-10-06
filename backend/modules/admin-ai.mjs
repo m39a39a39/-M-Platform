@@ -60,7 +60,7 @@ export function buildAdminAiContext(state={}){
 
   const lowStock=published
     .filter(x=>x.stock!==null&&x.stock!==undefined&&Number.isFinite(Number(x.stock))&&Number(x.stock)<=Math.max(10,num(x.moq)))
-    .slice(0,20)
+    .slice(0,12)
     .map(x=>({sku:clamp(x.sku,80),title:titleOf(x),stock:num(x.stock),moq:num(x.moq)}));
 
   const products=published.slice(0,120).map(item=>({
@@ -77,7 +77,7 @@ export function buildAdminAiContext(state={}){
     createdAt:clamp(item.createdAt,40)
   }));
 
-  const sections=(state.settings?.storefront?.sections||[]).slice(0,40).map(section=>({
+  const sections=(state.settings?.storefront?.sections||[]).slice(0,20).map(section=>({
     id:clamp(section.id,80),
     type:clamp(section.type,60),
     title:clamp(section.title,180),
@@ -117,6 +117,39 @@ export function buildAdminAiContext(state={}){
   };
 }
 
+
+const adminTerms=text=>clean(text).toLowerCase().split(/[^\p{L}\p{N}._-]+/u).filter(x=>x.length>=2).slice(0,24);
+function leanAdminContext(context,message){
+  const needles=adminTerms(message);
+  const ranked=(context.products||[]).map(product=>{
+    const hay=clean([product.sku,product.title,product.categoryId,product.subcategoryId,product.country].filter(Boolean).join(' ')).toLowerCase();
+    const score=needles.reduce((sum,term)=>sum+(hay.includes(term)?(String(product.sku||'').toLowerCase().includes(term)?5:1):0),0);
+    return {product,score};
+  }).sort((a,b)=>b.score-a.score);
+  const productSignals=['منتج','المنتجات','sku','product','catalog','كتالوج','مخزون','stock','سعر','price','حملة','campaign'];
+  const wantsProducts=productSignals.some(x=>clean(message).toLowerCase().includes(x));
+  const relevant=ranked.filter(x=>x.score>0).slice(0,8).map(x=>x.product);
+  return {
+    ...context,
+    products:wantsProducts?relevant:[],
+    topPurchasedProducts:(context.topPurchasedProducts||[]).slice(0,10),
+    lowStock:(context.lowStock||[]).slice(0,12),
+    storefront:{sections:(context.storefront?.sections||[]).slice(0,20)}
+  };
+}
+export function directAdminAnswer(context,message,language='ar'){
+  const q=clean(message).toLowerCase(),o=context?.overview||{};
+  const askCount=/كم|عدد|how many|count/.test(q);
+  if(!askCount)return '';
+  if(/المنتجات|منتج|products?/.test(q)){
+    if(/مسود|draft/.test(q))return language==='en'?'Draft products: '+Number(o.products?.drafts||0):'عدد المنتجات المسودة: '+Number(o.products?.drafts||0);
+    if(/منشور|published|active/.test(q))return language==='en'?'Published products: '+Number(o.products?.published||0):'عدد المنتجات المنشورة: '+Number(o.products?.published||0);
+    return language==='en'?'Total products: '+Number(o.products?.total||0):'إجمالي المنتجات: '+Number(o.products?.total||0);
+  }
+  if(/العملاء|عميل|customers?/.test(q))return language==='en'?'Customers: '+Number(o.customers?.total||0):'عدد العملاء: '+Number(o.customers?.total||0);
+  if(/الطلبات|طلب|orders?/.test(q))return language==='en'?'Store orders: '+Number(o.orders?.total||0):'عدد طلبات المتجر: '+Number(o.orders?.total||0);
+  return '';
+}
 function enforceRateLimit(user){
   const key=user?.id||'unknown',now=Date.now();
   let row=usage.get(key);
@@ -300,6 +333,9 @@ export async function adminAi(user,body={}){
   const context=buildAdminAiContext(state);
   const history=normalizeHistory(body.history);
   const language=body.language==='en'?'en':'ar';
+  const direct=directAdminAnswer(context,message,language);
+  if(direct)return {reply:direct,mode:'database',overview:context.overview,behaviorTrackingAvailable:false};
+  const llmContext=leanAdminContext(context,message);
 
   const system=language==='en'
     ?`You are MG AI, the read-only admin merchandising and business analyst inside M Platform. Use only ADMIN_CONTEXT_JSON. Never invent metrics, customer behavior, views, searches, cart events, margins, or profit. Behavioral event tracking is not enabled yet, so say that clearly whenever the request depends on it. Never reveal or request customer names, emails, phone numbers, addresses, or other personal data. Distinguish data-backed findings from recommendations. For homepage merchandising, prioritize wholesale relevance, product diversity, observed order history, stock and catalog quality. You cannot directly edit, publish, reorder or launch campaigns. Product creation is available only through the separate reviewed draft workflow in the admin UI. If the admin asks you to make a store change, provide a precise proposal and require admin approval. Keep answers practical and concise.`
@@ -309,7 +345,7 @@ export async function adminAi(user,body={}){
     model,
     messages:[
       {role:'system',content:system},
-      {role:'system',content:'ADMIN_CONTEXT_JSON\n'+JSON.stringify(context)},
+      {role:'system',content:'ADMIN_CONTEXT_JSON\n'+JSON.stringify(llmContext)},
       ...history,
       {role:'user',content:message}
     ],
@@ -334,5 +370,5 @@ export async function adminAi(user,body={}){
   try{data=await response.json();}catch{throw new HttpError(502,'استجابة MG AI غير صالحة. / Invalid MG AI response.');}
   const reply=extractReply(data);
   if(!reply)throw new HttpError(502,'لم يصل رد صالح من MG AI. / MG AI returned an empty response.');
-  return {reply,mode:'readonly',overview:context.overview,behaviorTrackingAvailable:false};
+  return {reply,mode:'readonly',usage:data?.usage||null,overview:context.overview,behaviorTrackingAvailable:false};
 }
