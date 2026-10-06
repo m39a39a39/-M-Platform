@@ -146,13 +146,135 @@ function providerError(status){
   return new HttpError(502,'تعذر الحصول على رد من MG AI. / MG AI is temporarily unavailable.');
 }
 
+const parseJsonObject=value=>{
+  const raw=String(value||'').trim().replace(/^\`\`\`(?:json)?\s*/i,'').replace(/\s*\`\`\`$/,'');
+  try{return JSON.parse(raw);}catch{}
+  const start=raw.indexOf('{'),end=raw.lastIndexOf('}');
+  if(start>=0&&end>start){try{return JSON.parse(raw.slice(start,end+1));}catch{}}
+  return null;
+};
+const safeAiImage=value=>{
+  const image=String(value||'');
+  assert(image.length>50&&image.length<=480000,413,'إحدى صور التحليل كبيرة جدًا / One analysis image is too large');
+  assert(/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/i.test(image),400,'صيغة صورة غير مدعومة / Unsupported image format');
+  return image;
+};
+
+export function buildProductDraftReference(state={}){
+  const categories=(state.settings?.categories||[]).filter(x=>x?.active!==false).slice(0,100).map(x=>({
+    id:clamp(x.id,80),nameAr:clamp(x.nameAr,120),nameEn:clamp(x.nameEn,120)
+  }));
+  const categoryIds=new Set(categories.map(x=>x.id));
+  const subcategories=(state.settings?.subcategories||[]).filter(x=>x?.active!==false&&categoryIds.has(String(x.parentId||''))).slice(0,160).map(x=>({
+    id:clamp(x.id,80),parentId:clamp(x.parentId,80),nameAr:clamp(x.nameAr,120),nameEn:clamp(x.nameEn,120)
+  }));
+  const supplyCountries=(Array.isArray(state.settings?.supplyCountries)&&state.settings.supplyCountries.length?state.settings.supplyCountries:[
+    {id:'China',nameAr:'الصين',nameEn:'China',active:true},
+    {id:'United Arab Emirates',nameAr:'الإمارات',nameEn:'United Arab Emirates',active:true}
+  ]).filter(x=>x?.active!==false).slice(0,80).map(x=>({
+    id:clamp(x.id,80),nameAr:clamp(x.nameAr||x.id,120),nameEn:clamp(x.nameEn||x.id,120)
+  }));
+  return {categories,subcategories,supplyCountries};
+}
+
+async function generateProductDraft(user,body,{apiKey,model,state}){
+  assert(can(user,'offers.edit'),403,'لا تملك صلاحية إضافة المنتجات / Product edit permission required');
+  const images=Array.isArray(body.images)?body.images.slice(0,3).map(safeAiImage):[];
+  assert(images.length>0,400,'أضف صورة واحدة على الأقل / Add at least one product image');
+  const notes=clamp(body.notes,1800);
+  const suppliedSku=clamp(body.sku,80);
+  assert(!suppliedSku||/^[A-Za-z0-9._-]{1,80}$/.test(suppliedSku),400,'تحقق من SKU / Check SKU');
+  const reference=buildProductDraftReference(state);
+  const system=`You create wholesale product catalog drafts for M Platform from product images and optional admin notes. Return only facts visible in the images or explicitly supplied by the admin. Do not invent brand, model, material, wattage, ports, compatibility, certifications, colors, capacity, dimensions, warranty, or other specifications. Write persuasive but factual B2B copy in Arabic and English. Select categoryId and subcategoryId only from TAXONOMY_JSON, otherwise use empty strings. Do not decide price, MOQ, stock, lead time, currency, or supply country. SKU may be copied only when clearly visible in the image or explicitly supplied. Never include phone numbers, emails, URLs, social handles, supplier identity, or contact details.`;
+  const adminText=[
+    'ADMIN_NOTES: '+(notes||'(none)'),
+    'SUPPLIED_SKU: '+(suppliedSku||'(none)'),
+    'TAXONOMY_JSON: '+JSON.stringify({categories:reference.categories,subcategories:reference.subcategories})
+  ].join('\n');
+  const payload={
+    model,
+    messages:[
+      {role:'system',content:system},
+      {role:'user',content:[
+        {type:'text',text:adminText},
+        ...images.map(image=>({type:'image_url',image_url:{url:image,detail:'low'}}))
+      ]}
+    ],
+    response_format:{
+      type:'json_schema',
+      json_schema:{
+        name:'mg_product_draft',
+        strict:true,
+        schema:{
+          type:'object',
+          properties:{
+            name:{type:'string'},
+            nameEn:{type:'string'},
+            sku:{type:'string'},
+            shortDescription:{type:'string'},
+            description:{type:'string'},
+            descriptionEn:{type:'string'},
+            technicalSpecs:{type:'string'},
+            options:{type:'string'},
+            categoryId:{type:'string'},
+            subcategoryId:{type:'string'},
+            reviewNotes:{type:'string'}
+          },
+          required:['name','nameEn','sku','shortDescription','description','descriptionEn','technicalSpecs','options','categoryId','subcategoryId','reviewNotes'],
+          additionalProperties:false
+        }
+      }
+    },
+    max_tokens:1300,
+    temperature:0.15,
+    reasoning:{effort:'none'}
+  };
+  let response;
+  try{
+    response=await fetch(OPENAI_URL,{
+      method:'POST',
+      headers:{Authorization:`Bearer ${apiKey}`,'Content-Type':'application/json'},
+      body:JSON.stringify(payload),
+      signal:AbortSignal.timeout(28000)
+    });
+  }catch{
+    throw new HttpError(502,'تعذر تحليل صور المنتج الآن. / Could not analyze product images.');
+  }
+  if(!response.ok)throw providerError(response.status);
+  let data;try{data=await response.json();}catch{throw new HttpError(502,'استجابة تحليل المنتج غير صالحة. / Invalid product analysis response.');}
+  const parsed=parseJsonObject(extractReply(data));
+  assert(parsed,502,'تعذر فهم نتيجة تحليل المنتج. / Could not parse product analysis.');
+  const categoryId=reference.categories.some(x=>x.id===parsed.categoryId)?parsed.categoryId:'';
+  const subcategoryId=reference.subcategories.some(x=>x.id===parsed.subcategoryId&&x.parentId===categoryId)?parsed.subcategoryId:'';
+  const visibleSku=clamp(parsed.sku,80);
+  const generatedSku='MG-AI-'+Date.now().toString(36).toUpperCase();
+  const sku=suppliedSku||(/^[A-Za-z0-9._-]{1,80}$/.test(visibleSku)?visibleSku:generatedSku);
+  const draft={
+    name:clamp(parsed.name,100),
+    nameEn:clamp(parsed.nameEn,100),
+    sku,
+    shortDescription:clamp(parsed.shortDescription,500),
+    description:clamp(parsed.description,5000),
+    descriptionEn:clamp(parsed.descriptionEn,5000),
+    technicalSpecs:clamp(parsed.technicalSpecs,5000),
+    options:clamp(parsed.options,1000),
+    categoryId,
+    subcategoryId,
+    reviewNotes:clamp(parsed.reviewNotes,1000)
+  };
+  assert(draft.name,502,'لم يتمكن MG AI من تحديد المنتج بوضوح. أضف صورًا أوضح أو ملاحظة قصيرة. / MG AI could not identify the product clearly.');
+  return {draft,taxonomy:reference,mode:'draft-proposal'};
+}
+
 export async function adminAiOverview(user){
   assert(can(user,'settings'),403,'لا تملك صلاحية MG AI / MG AI permission required');
   const state=await snapshot(user);
   const context=buildAdminAiContext(state);
   return {
-    mode:'readonly',
+    mode:'proposal',
     overview:context.overview,
+    taxonomy:buildProductDraftReference(state),
+    productDraftEnabled:can(user,'offers.edit'),
     quickPrompts:[
       'حلل أداء المتجر واقترح أهم 5 إجراءات الآن',
       'اقترح ترتيب الصفحة الرئيسية والمنتجات التي يجب أن تظهر أولًا',
@@ -165,14 +287,15 @@ export async function adminAiOverview(user){
 
 export async function adminAi(user,body={}){
   assert(can(user,'settings'),403,'لا تملك صلاحية MG AI / MG AI permission required');
-  const message=clamp(body.message,2500);
-  assert(message,400,'اكتب طلبك إلى MG AI / Enter a request for MG AI');
   enforceRateLimit(user);
 
   const apiKey=String(process.env.OPENAI_API_KEY||'').trim();
   if(!apiKey)throw new HttpError(503,'لم يتم تفعيل مفتاح OpenAI بعد. / OpenAI API key is not configured yet.');
   const model=String(process.env.OPENAI_ADMIN_MODEL||process.env.OPENAI_CHAT_MODEL||DEFAULT_MODEL).replace(/^openai\//,'');
   const state=await snapshot(user);
+  if(body.action==='product-draft')return generateProductDraft(user,body,{apiKey,model,state});
+  const message=clamp(body.message,2500);
+  assert(message,400,'اكتب طلبك إلى MG AI / Enter a request for MG AI');
   const context=buildAdminAiContext(state);
   const history=normalizeHistory(body.history);
   const language=body.language==='en'?'en':'ar';
