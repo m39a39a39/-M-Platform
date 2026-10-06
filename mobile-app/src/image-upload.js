@@ -11,6 +11,15 @@ const readAsDataUrl=blob=>new Promise((resolve,reject)=>{
   reader.readAsDataURL(blob);
 });
 
+const dataUrlToBlob=dataUrl=>{
+  const [head,body='']=String(dataUrl||'').split(',');
+  const mime=(head.match(/^data:([^;]+)/)||[])[1]||'application/octet-stream';
+  const binary=atob(body);
+  const bytes=new Uint8Array(binary.length);
+  for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+  return new Blob([bytes],{type:mime});
+};
+
 async function loadImage(file){
   if(typeof createImageBitmap==='function'){
     try{
@@ -33,47 +42,113 @@ async function loadImage(file){
   }
 }
 
-const canvasBlob=(canvas,quality)=>new Promise((resolve,reject)=>{
-  canvas.toBlob(webp=>{
-    if(webp)return resolve(webp);
-    // Some Safari/WebKit builds can decode WebP but cannot encode it through canvas.
-    // Fall back to PNG rather than rejecting a perfectly valid selected image.
-    canvas.toBlob(png=>png?resolve(png):reject(new Error('compress_failed')),'image/png');
-  },'image/webp',quality);
+const encodeCanvas=(canvas,type,quality)=>new Promise(resolve=>{
+  let settled=false;
+  const done=blob=>{if(settled)return;settled=true;resolve(blob||null);};
+  try{
+    if(typeof canvas.toBlob==='function'){
+      canvas.toBlob(blob=>{
+        if(blob)return done(blob);
+        try{
+          const data=canvas.toDataURL(type,quality);
+          done(data&&data!=='data:,'?dataUrlToBlob(data):null);
+        }catch{done(null);}
+      },type,quality);
+      setTimeout(()=>done(null),3500);
+      return;
+    }
+    const data=canvas.toDataURL(type,quality);
+    done(data&&data!=='data:,'?dataUrlToBlob(data):null);
+  }catch{done(null);}
 });
+
+const jpegCanvas=canvas=>{
+  const flat=document.createElement('canvas');
+  flat.width=canvas.width;flat.height=canvas.height;
+  const ctx=flat.getContext('2d');
+  if(!ctx)return null;
+  ctx.fillStyle='#fff';
+  ctx.fillRect(0,0,flat.width,flat.height);
+  ctx.drawImage(canvas,0,0);
+  return flat;
+};
+
+async function canvasBlob(canvas,quality){
+  const candidates=[];
+  const webp=await encodeCanvas(canvas,'image/webp',quality);
+  if(webp?.size)candidates.push(webp);
+
+  const flat=jpegCanvas(canvas);
+  if(flat){
+    const jpeg=await encodeCanvas(flat,'image/jpeg',Math.max(.45,quality));
+    flat.width=1;flat.height=1;
+    if(jpeg?.size)candidates.push(jpeg);
+  }
+
+  if(!candidates.length){
+    const png=await encodeCanvas(canvas,'image/png',1);
+    if(png?.size)candidates.push(png);
+  }
+  if(!candidates.length)throw new Error('compress_failed');
+  return candidates.sort((a,b)=>a.size-b.size)[0];
+}
 
 async function compressFile(file,{targetBytes=TARGET_BYTES,maxDimension=MAX_DIMENSION}={}){
   if(!(file instanceof Blob)||!String(file.type||'').startsWith('image/'))throw new Error('unsupported');
   if(file.size>MAX_INPUT_BYTES)throw new Error('too_large');
-  const passThrough=['image/jpeg','image/png','image/webp'].includes(file.type)&&file.size<=Math.max(targetBytes,SAFE_PASSTHROUGH_BYTES)&&Math.max(1,Number(maxDimension)||MAX_DIMENSION)>=MAX_DIMENSION;
+
+  const safeTarget=Math.max(120*1024,Number(targetBytes)||TARGET_BYTES);
+  const requestedDimension=Math.max(320,Math.min(MAX_DIMENSION,Number(maxDimension)||MAX_DIMENSION));
+  const passThrough=['image/jpeg','image/png','image/webp'].includes(file.type)&&
+    file.size<=Math.max(safeTarget,SAFE_PASSTHROUGH_BYTES)&&requestedDimension>=MAX_DIMENSION;
   if(passThrough)return readAsDataUrl(file);
 
   const loaded=await loadImage(file);
   try{
     if(!loaded.width||!loaded.height)throw new Error('decode_failed');
     let width=loaded.width,height=loaded.height;
-    const limit=Math.max(320,Math.min(MAX_DIMENSION,Number(maxDimension)||MAX_DIMENSION));
-    const scale=Math.min(1,limit/Math.max(width,height));
+    const scale=Math.min(1,requestedDimension/Math.max(width,height));
     width=Math.max(1,Math.round(width*scale));
     height=Math.max(1,Math.round(height*scale));
     let quality=.88;
 
-    for(let attempt=0;attempt<14;attempt++){
+    for(let attempt=0;attempt<18;attempt++){
       const canvas=document.createElement('canvas');
       canvas.width=width;canvas.height=height;
-      const ctx=canvas.getContext('2d');
+      const ctx=canvas.getContext('2d',{alpha:true});
       if(!ctx)throw new Error('compress_failed');
+      ctx.imageSmoothingEnabled=true;
+      if('imageSmoothingQuality' in ctx)ctx.imageSmoothingQuality='high';
       ctx.drawImage(loaded.image,0,0,width,height);
-      const blob=await canvasBlob(canvas,quality);
-      canvas.width=1;canvas.height=1;
-      if(blob.size<=Math.max(120*1024,Number(targetBytes)||TARGET_BYTES))return readAsDataUrl(blob);
-      if(quality>.56)quality=Math.max(.56,quality-.08);
+
+      let blob;
+      try{blob=await canvasBlob(canvas,quality);}
+      finally{canvas.width=1;canvas.height=1;}
+
+      if(blob.size<=safeTarget)return readAsDataUrl(blob);
+
+      if(quality>.52)quality=Math.max(.52,quality-.08);
       else{
-        width=Math.max(1,Math.round(width*.82));
-        height=Math.max(1,Math.round(height*.82));
-        quality=.78;
+        width=Math.max(240,Math.round(width*.80));
+        height=Math.max(240,Math.round(height*.80));
+        quality=.76;
       }
     }
+
+    // Last-resort iPhone/Safari path: a small JPEG is preferable to failing
+    // the whole product flow. This still stays within the server image limit.
+    const fallback=document.createElement('canvas');
+    const ratio=Math.min(1,720/Math.max(loaded.width,loaded.height));
+    fallback.width=Math.max(1,Math.round(loaded.width*ratio));
+    fallback.height=Math.max(1,Math.round(loaded.height*ratio));
+    const fallbackCtx=fallback.getContext('2d');
+    if(!fallbackCtx)throw new Error('compress_failed');
+    fallbackCtx.fillStyle='#fff';
+    fallbackCtx.fillRect(0,0,fallback.width,fallback.height);
+    fallbackCtx.drawImage(loaded.image,0,0,fallback.width,fallback.height);
+    const jpeg=await encodeCanvas(fallback,'image/jpeg',.62);
+    fallback.width=1;fallback.height=1;
+    if(jpeg?.size&&jpeg.size<=Math.max(safeTarget,360*1024))return readAsDataUrl(jpeg);
     throw new Error('compress_failed');
   }finally{
     loaded.close();
