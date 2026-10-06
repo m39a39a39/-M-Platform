@@ -126,7 +126,8 @@ function productCardsHtml(products=[]){
 }
 function messageHtml(row){
   const meta=row?.metadata||{},sender=row.role==='admin'?'<small class="m-ai-sender">'+esc(t('team'))+'</small>':'';
-  return `<div class="m-ai-row ${row.role==='user'?'user':'assistant'}"><div>${sender}<span class="m-ai-message-text">${esc(row.content)}</span>${row.role!=='user'?productCardsHtml(meta.products):''}</div></div>`;
+  const hasProducts=row.role!=='user'&&Array.isArray(meta.products)&&meta.products.length;
+  return `<div class="m-ai-row ${row.role==='user'?'user':'assistant'}${hasProducts?' has-products':''}"><div>${sender}<span class="m-ai-message-text">${esc(row.content)}</span>${row.role!=='user'?productCardsHtml(meta.products):''}</div></div>`;
 }
 function latestQuickReplies(){
   if(controller?.humanMode)return [];
