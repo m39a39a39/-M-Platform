@@ -4,7 +4,7 @@ import { downloadInvoicePdf } from './invoice-pdf.js';
 import { categoryRows, subcategoryRows, supplyCountryRows, taxonomyLabel } from './catalog-taxonomy.js';
 let state=null,revision=0;
 let requestFilter='all',offerTab='pending',timer=null;
-let chatRows=[],chatTimer=null;
+let chatRows=[],chatTimer=null,chatFilter='all';
 let selectedProducts=new Set();
 const searches=new Map(),mediaCache=new Map(),mediaTasks=new Map();
 const MEDIA_CONCURRENCY=6;
@@ -12,7 +12,7 @@ let reloadWorkspace=async()=>{},adapter=null;
 export function configureAdmin({reload,bridge=null,modal:modalFn=null,close:closeFn=null,toast:toastFn=null,view:viewFn=null}) { reloadWorkspace=reload; adapter=bridge||((modalFn||closeFn||toastFn||viewFn)?{modal:modalFn,close:closeFn,toast:toastFn,view:viewFn}:null); }
 export function resetAdmin() {
   clearTimeout(timer);clearTimeout(chatTimer);chatTimer=null; state=null; revision++;
-  requestFilter='all'; offerTab='pending'; chatRows=[]; searches.clear(); selectedProducts.clear();
+  requestFilter='all'; offerTab='pending'; chatRows=[]; chatFilter='all'; searches.clear(); selectedProducts.clear();
   document.getElementById('navChatUnread')?.classList.add('hidden');
   for(const url of mediaCache.values()) URL.revokeObjectURL(url);
   mediaCache.clear();mediaTasks.clear();
@@ -491,11 +491,40 @@ function chatCustomer(row){
   if(!row?.customerId)return {name:tr('زائر','Visitor'),detail:tr('غير مسجل','Not signed in')};
   const a=account(row.customerId);return {name:a?.company||a?.name||tr('عميل','Customer'),detail:a?.email||a?.phone||('#'+String(row.customerId).slice(0,8))};
 }
-function chatStatusLabel(value){return value==='human'?tr('فريق M يرد','M Team replying'):value==='closed'?tr('مغلقة','Closed'):tr('الذكاء الاصطناعي','AI active');}
+function chatStatusLabel(row){
+  if(row?.status==='human')return tr('الموظف يرد','Agent replying');
+  if(row?.status==='closed')return tr('مغلقة','Closed');
+  if(row?.waitingHuman)return tr('بانتظار موظف','Waiting for agent');
+  return tr('الذكاء الاصطناعي','AI active');
+}
+function chatFilterMatch(row){
+  if(chatFilter==='waiting')return !!row.waitingHuman;
+  if(chatFilter==='human')return row.status==='human';
+  if(chatFilter==='ai')return row.status==='ai'&&!row.waitingHuman;
+  if(chatFilter==='unanswered')return Number(row.unreadAdmin||0)>0;
+  if(chatFilter==='closed')return row.status==='closed';
+  return true;
+}
+function chatPriority(row){
+  if(row.waitingHuman)return 5;
+  if(row.leadFollowupNeeded)return 4;
+  if(Number(row.unreadAdmin||0)>0)return 3;
+  if(row.status==='human')return 2;
+  if(row.status==='ai')return 1;
+  return 0;
+}
 function chats(){
-  const rows=[...chatRows].sort((a,b)=>String(b.lastMessageAt||'').localeCompare(String(a.lastMessageAt||'')));
-  setRoot('conversations',page(tr('محادثات العملاء','Customer conversations'),tr('شاهد محادثات الذكاء الاصطناعي واستلم أي محادثة للرد بنفسك.','View AI conversations and take over any conversation to reply yourself.'))+
-    `<div class="list-stack admin-chat-list" data-admin-results>${rows.map(row=>{const who=chatCustomer(row),unread=Number(row.unreadAdmin||0);return `<button type="button" class="admin-chat-card ${unread?'unread':''}" data-admin-conversation="${esc(row.id)}"><div class="admin-chat-avatar">${esc(who.name.charAt(0)||'M')}</div><div class="admin-chat-card-copy"><div><strong>${esc(who.name)}</strong><span class="status-pill ${row.status==='human'?'status-review':row.status==='closed'?'status-cancelled':'status-published'}">${esc(chatStatusLabel(row.status))}</span></div><small>${esc(who.detail)} · ${esc(date(row.lastMessageAt))}</small></div>${unread?`<i>${unread>99?'99+':unread}</i>`:''}</button>`;}).join('')||empty()}</div>`);
+  const rows=[...chatRows].filter(chatFilterMatch).sort((a,b)=>chatPriority(b)-chatPriority(a)||String(b.lastMessageAt||'').localeCompare(String(a.lastMessageAt||'')));
+  const filters=[['all',tr('الكل','All')],['waiting',tr('بانتظار موظف','Waiting')],['human',tr('قيد الرد','Agent')],['ai','AI'],['unanswered',tr('لم يتم الرد','Unread')],['closed',tr('مغلقة','Closed')]];
+  setRoot('conversations',page(tr('المحادثات','Conversations'),tr('تابع العملاء المحتملين واستلم المحادثات عند الحاجة.','Follow customer leads and take over conversations when needed.'))+
+    `<div class="admin-chat-filters">${filters.map(([key,label])=>`<button type="button" class="${chatFilter===key?'active':''}" data-admin-chat-filter="${key}">${esc(label)}</button>`).join('')}</div>
+    <div class="list-stack admin-chat-list" data-admin-results>${rows.map(row=>{
+      const who=chatCustomer(row),unread=Number(row.unreadAdmin||0),waitingOld=row.waitingHuman&&Date.now()-Date.parse(row.handoffRequestedAt||0)>=5*60*1000;
+      const statusClass=row.status==='human'?'status-review':row.status==='closed'?'status-cancelled':row.waitingHuman?'status-pending':'status-published';
+      const lead=row.leadFollowupNeeded?`<span class="admin-chat-lead">🔥 ${esc(tr('عميل محتمل','Lead'))}</span>`:'';
+      const wait=waitingOld?`<span class="admin-chat-wait">${esc(tr('بانتظار الرد منذ أكثر من 5 دقائق','Waiting over 5 min'))}</span>`:'';
+      return `<button type="button" class="admin-chat-card ${unread?'unread':''} ${waitingOld?'urgent':''}" data-admin-conversation="${esc(row.id)}"><div class="admin-chat-avatar">${esc(who.name.charAt(0)||'M')}</div><div class="admin-chat-card-copy"><div><strong>${esc(row.leadName||who.name)}</strong><span class="status-pill ${statusClass}">${esc(chatStatusLabel(row))}</span></div><small>${esc(row.leadContact||who.detail)} · ${esc(date(row.lastMessageAt))}</small><div class="admin-chat-flags">${lead}${wait}</div></div>${unread?`<i>${unread>99?'99+':unread}</i>`:''}</button>`;
+    }).join('')||empty()}</div>`);
 }
 async function openChatConversation(id){
   try{
@@ -511,7 +540,7 @@ async function openChatConversation(id){
       ?`<button type="button" class="secondary-btn" data-admin-chat-action="ai" data-chat-id="${esc(row.id)}">${esc(tr('إرجاع الرد للذكاء الاصطناعي','Return to AI'))}</button>`
       :`<button type="button" class="primary-btn" data-admin-chat-action="takeover" data-chat-id="${esc(row.id)}">${esc(row.status==='closed'?tr('إعادة فتح واستلام المحادثة','Reopen & take over'):tr('استلام المحادثة','Take over chat'))}</button>`;
     const reply=row.status==='closed'?'':`<form id="adminChatReplyForm" class="admin-chat-reply" data-chat-id="${esc(row.id)}"><textarea name="message" maxlength="4000" required placeholder="${esc(tr('اكتب ردك للعميل...','Write your reply...'))}"></textarea><button type="submit" class="primary-btn">${esc(tr('إرسال الرد','Send reply'))}</button></form>`;
-    modal(who.name,chatStatusLabel(row.status),`<section class="admin-chat-thread"><div class="admin-chat-customer"><strong>${esc(who.name)}</strong><small>${esc(who.detail)}</small></div><div class="admin-chat-messages">${messagesHtml||empty()}</div><div class="admin-chat-controls">${controls}${row.status!=='closed'?'<button type="button" class="danger-text" data-admin-chat-action="close" data-chat-id="'+esc(row.id)+'">'+esc(tr('إغلاق المحادثة','Close chat'))+'</button>':'<button type="button" class="secondary-btn" data-admin-chat-action="ai" data-chat-id="'+esc(row.id)+'">'+esc(tr('إعادة فتح بالذكاء الاصطناعي','Reopen with AI'))+'</button>'}</div>${reply}</section>`);
+    modal(row.leadName||who.name,chatStatusLabel(row),`<section class="admin-chat-thread"><div class="admin-chat-customer"><strong>${esc(row.leadName||who.name)}</strong><small>${esc(row.leadContact||who.detail)}</small>${row.leadFollowupNeeded?`<div class="admin-chat-lead-details"><b>🔥 ${esc(tr('عميل محتمل – يحتاج متابعة','Lead – follow-up needed'))}</b>${row.leadCountry?`<span>${esc(tr('الدولة','Country'))}: ${esc(row.leadCountry)}</span>`:''}${row.leadProductSku?`<span>SKU: ${esc(row.leadProductSku)}</span>`:''}${row.leadQuantity?`<span>${esc(tr('الكمية','Quantity'))}: ${esc(row.leadQuantity)}</span>`:''}</div>`:''}</div><div class="admin-chat-messages">${messagesHtml||empty()}</div><div class="admin-chat-controls">${controls}${row.status!=='closed'?'<button type="button" class="danger-text" data-admin-chat-action="close" data-chat-id="'+esc(row.id)+'">'+esc(tr('إغلاق المحادثة','Close chat'))+'</button>':'<button type="button" class="secondary-btn" data-admin-chat-action="ai" data-chat-id="'+esc(row.id)+'">'+esc(tr('إعادة فتح بالذكاء الاصطناعي','Reopen with AI'))+'</button>'}</div>${reply}</section>`);
     revision++;if(activeView()==='conversations')chats();
   }catch(e){toast(e.message);}
 }
@@ -848,6 +877,7 @@ function go(view,tab){if(view==='offers'&&tab)offerTab=tab;if(adapter){adapter.n
 
 document.addEventListener('click',e=>{
   if(!isAdmin()||(adapter?!adapter.active():document.getElementById('appView')?.classList.contains('hidden')))return;
+  const chatFilterButton=e.target.closest('[data-admin-chat-filter]');if(chatFilterButton){chatFilter=chatFilterButton.dataset.adminChatFilter||'all';chats();return;}
   const chat=e.target.closest('[data-admin-conversation]');if(chat){openChatConversation(chat.dataset.adminConversation);return;}
   const chatAction=e.target.closest('[data-admin-chat-action]');if(chatAction){runChatAction(chatAction.dataset.chatId,chatAction.dataset.adminChatAction);return;}
   const del=e.target.closest('[data-admin-delete-order]');if(del){e.preventDefault();e.stopPropagation();deleteOrderDialog(del.dataset.orderKind,del.dataset.adminDeleteOrder);return;}
