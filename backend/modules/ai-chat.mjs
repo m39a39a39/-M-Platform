@@ -147,6 +147,108 @@ function extractReply(data){
   if(Array.isArray(content))return clean(content.map(x=>typeof x==='string'?x:x?.text||'').join('\n'));
   return '';
 }
+
+const TRACKING_LABELS={
+  received:['تم استلام الطلب','Received'],reviewing:['قيد المراجعة','Under review'],sourcing:['جاري التوريد','Sourcing'],
+  quotes_available:['العروض متاحة','Quotes available'],quote_selected:['تم اختيار العرض','Quote selected'],
+  supplier_confirmation:['بانتظار تأكيد المورد','Supplier confirmation'],payment_confirmation:['بانتظار تأكيد الدفع','Payment confirmation'],
+  production:['قيد التجهيز','Preparing'],quality_check:['الفحص والجودة','Quality check'],ready_to_ship:['جاهز للشحن','Ready to ship'],
+  shipped:['تم الشحن','Shipped'],in_delivery:['قيد التوصيل','Out for delivery'],delivered:['تم التسليم','Delivered'],
+  completed:['مكتمل','Completed'],customer_action:['بانتظار إجراء من العميل','Customer action required'],
+  on_hold:['معلق مؤقتًا','On hold'],cancelled:['ملغي','Cancelled']
+};
+const qHas=(message,patterns)=>patterns.some(pattern=>message.includes(pattern));
+const localized=(pair,language)=>Array.isArray(pair)?pair[language==='en'?1:0]:String(pair||'');
+const latestByDate=rows=>[...(rows||[])].sort((a,b)=>(Date.parse(b?.trackingUpdatedAt||b?.updatedAt||b?.createdAt||0)||0)-(Date.parse(a?.trackingUpdatedAt||a?.updatedAt||a?.createdAt||0)||0));
+const visibleOrderNumber=item=>String(item?.displayNo||item?.number||'').trim();
+function matchingOwnOrder(state,message){
+  const rows=latestByDate([...(state?.requests||[]),...(state?.interests||[])]);
+  const digits=message.match(/\b\d{4,}\b/g)||[];
+  if(digits.length){
+    const exact=rows.find(row=>digits.includes(visibleOrderNumber(row)));
+    if(exact)return exact;
+  }
+  return rows[0]||null;
+}
+function productMatchConfidence(product,message){
+  const sku=String(product?.sku||'').toLowerCase();
+  if(sku&&message.includes(sku))return 100;
+  const title=clean((product?.title?.ar||'')+' '+(product?.title?.en||'')).toLowerCase();
+  const useful=terms(message).filter(t=>!['سعر','السعر','price','cost','متوفر','stock','available','كم','اقل','أقل','minimum','moq'].includes(t));
+  return useful.reduce((score,t)=>score+(title.includes(t)?1:0),0);
+}
+function directProductFact(state,message,language){
+  const wantsPrice=qHas(message,['سعر','السعر','price','cost','بكم','كم سعر']);
+  const wantsMoq=qHas(message,['اقل كمية','أقل كمية','حد ادنى','حد أدنى','moq','minimum']);
+  const wantsStock=qHas(message,['متوفر','المخزون','مخزون','stock','available','availability']);
+  const wantsLead=qHas(message,['مدة التجهيز','كم يوم','lead time','تجهيز']);
+  if(!wantsPrice&&!wantsMoq&&!wantsStock&&!wantsLead)return null;
+  const products=productContext(state,message);
+  const first=products[0],second=products[1];
+  if(!first)return null;
+  const confidence=productMatchConfidence(first,message),secondConfidence=second?productMatchConfidence(second,message):0;
+  if(confidence<1||confidence<100&&confidence<=secondConfidence)return null;
+  const title=(language==='en'?first.title?.en:first.title?.ar)||first.sku||'Product';
+  const facts=[];
+  if(wantsPrice&&Number.isFinite(Number(first.price)))facts.push((language==='en'?'Price: ':'السعر: ')+Number(first.price)+' '+(first.currency||'SAR'));
+  if(wantsMoq&&first.moq!==undefined&&first.moq!==null&&first.moq!=='')facts.push((language==='en'?'MOQ: ':'الحد الأدنى: ')+first.moq+(language==='en'?'':' قطعة'));
+  if(wantsStock&&first.stock!==undefined&&first.stock!==null&&first.stock!=='')facts.push((language==='en'?'Stock: ':'المخزون: ')+first.stock);
+  if(wantsLead&&first.leadTime!==undefined&&first.leadTime!==null&&first.leadTime!=='')facts.push((language==='en'?'Lead time: ':'مدة التجهيز: ')+first.leadTime+(language==='en'?' days':' يوم'));
+  if(!facts.length)return null;
+  return title+' — '+facts.join(' · ');
+}
+function directPolicyAnswer(state,message,language){
+  const pages=state?.settings?.storefront?.pages||[];
+  if(!pages.length)return null;
+  const needles=terms(message).filter(x=>!['هل','ماذا','كيف','what','how','the','is','are'].includes(x));
+  if(!needles.length)return null;
+  const ranked=pages.map(page=>{
+    const title=clean(language==='en'?(page.titleEn||page.title):(page.title||page.titleEn)).toLowerCase();
+    const content=clean(language==='en'?(page.contentEn||page.content):(page.content||page.contentEn)).toLowerCase();
+    const score=needles.reduce((n,t)=>n+(title.includes(t)?4:content.includes(t)?1:0),0);
+    return {page,score,content};
+  }).sort((a,b)=>b.score-a.score);
+  const top=ranked[0];
+  if(!top||top.score<4||!top.content)return null;
+  const body=clamp(top.content,650);
+  const title=clean(language==='en'?(top.page.titleEn||top.page.title):(top.page.title||top.page.titleEn));
+  return title?title+': '+body:body;
+}
+export function directCustomerAnswer(state,user,message,language='ar'){
+  const normalized=clean(message).toLowerCase();
+  if(user&&qHas(normalized,['طلبي','الطلب','وين الطلب','اين الطلب','أين الطلب','حالة الطلب','تتبع','tracking','my order','order status'])){
+    const order=matchingOwnOrder(state,normalized);
+    if(order){
+      const number=visibleOrderNumber(order),tracking=order.trackingStatus||order.status||'';
+      const status=localized(TRACKING_LABELS[tracking]||tracking,language);
+      const payment=String(order.paymentStatus||'');
+      const parts=[];
+      if(status)parts.push((language==='en'?'Status: ':'الحالة: ')+status);
+      if(payment)parts.push((language==='en'?'Payment: ':'الدفع: ')+payment);
+      if(order.trackingNumber)parts.push((language==='en'?'Tracking: ':'رقم التتبع: ')+order.trackingNumber);
+      if(parts.length)return (language==='en'?'Order ':'الطلب ')+(number||'')+' — '+parts.join(' · ');
+    }
+  }
+  return directProductFact(state,normalized,language)||directPolicyAnswer(state,normalized,language);
+}
+function cacheKeyFor(language,message,context){
+  const compact={language,message:clean(message).toLowerCase(),products:context?.products||[],shoppingSignal:context?.shoppingSignal||null};
+  return createHash('sha256').update(JSON.stringify(compact)).digest('hex');
+}
+function getCachedReply(key){
+  const row=responseCache.get(key);
+  if(!row)return '';
+  if(Date.now()-row.at>RESPONSE_CACHE_TTL_MS){responseCache.delete(key);return '';}
+  return row.reply;
+}
+function setCachedReply(key,reply){
+  responseCache.set(key,{reply,at:Date.now()});
+  if(responseCache.size>1000){
+    const cutoff=Date.now()-RESPONSE_CACHE_TTL_MS;
+    for(const [cacheKey,row] of responseCache)if(row.at<cutoff)responseCache.delete(cacheKey);
+    while(responseCache.size>1000)responseCache.delete(responseCache.keys().next().value);
+  }
+}
 function safeMarketingSignal(value){
   if(!value||typeof value!=='object'||Array.isArray(value))return null;
   const type=clamp(value.type,60);
