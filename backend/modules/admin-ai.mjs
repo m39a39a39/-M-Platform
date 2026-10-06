@@ -260,7 +260,7 @@ async function generateProductDraft(user,body,{apiKey,model,state}){
         }
       }
     },
-    max_tokens:950,
+    max_completion_tokens:950,
     temperature:0.15,
     reasoning_effort:'none'
   };
@@ -351,7 +351,7 @@ export async function adminAi(user,body={}){
       ...history,
       {role:'user',content:message}
     ],
-    max_tokens:600,
+    max_completion_tokens:600,
     temperature:0.25,
     reasoning_effort:'none'
   };
