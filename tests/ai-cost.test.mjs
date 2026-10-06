@@ -66,6 +66,18 @@ test('customer shipping-to-Saudi question is answered directly from store policy
   assert.match(reply,/الجوي أو البحري/);
 });
 
+test('shipping cost question returns the separate-quote rule without confusing لديكم with كم',()=>{
+  const state={publicOffers:[],settings:{storefront:{pages:[{
+    id:'policy-shipping',active:true,title:'سياسة الشحن والتوصيل',
+    content:'نوفر التوصيل حاليًا داخل السعودية. بعد تجهيز البضاعة ومعرفة وزنها وحجمها نرسل عرض الشحن بشكل منفصل. يشمل عرض الشركة النقل والجمارك والضرائب والتخليص والتوصيل.'
+  }]}}};
+  const availability=directCustomerAnswer(state,null,'هل لديكم شحن إلى السعودية؟','ar');
+  assert.doesNotMatch(availability,/الجمارك والضرائب/);
+  const cost=directCustomerAnswer(state,null,'كم تكلفة الشحن إلى السعودية؟','ar');
+  assert.match(cost,/تحدد تكلفة الشحن|تُحدد تكلفة الشحن/);
+  assert.match(cost,/الجمارك والضرائب/);
+});
+
 test('generic unrelated question is not falsely answered as a shipping policy fact',()=>{
   const state={publicOffers:[],settings:{storefront:{pages:[{
     id:'policy-shipping',active:true,title:'سياسة الشحن والتوصيل',content:'نوفر التوصيل حاليًا داخل السعودية.'
