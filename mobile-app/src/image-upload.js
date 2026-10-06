@@ -45,21 +45,20 @@ async function loadImage(file){
 const encodeCanvas=(canvas,type,quality)=>new Promise(resolve=>{
   let settled=false;
   const done=blob=>{if(settled)return;settled=true;resolve(blob||null);};
+  const fallback=()=>{
+    try{
+      const data=canvas.toDataURL(type,quality);
+      done(data&&data!=='data:,'?dataUrlToBlob(data):null);
+    }catch{done(null);}
+  };
   try{
     if(typeof canvas.toBlob==='function'){
-      canvas.toBlob(blob=>{
-        if(blob)return done(blob);
-        try{
-          const data=canvas.toDataURL(type,quality);
-          done(data&&data!=='data:,'?dataUrlToBlob(data):null);
-        }catch{done(null);}
-      },type,quality);
-      setTimeout(()=>done(null),3500);
+      canvas.toBlob(blob=>blob?done(blob):fallback(),type,quality);
+      setTimeout(fallback,3500);
       return;
     }
-    const data=canvas.toDataURL(type,quality);
-    done(data&&data!=='data:,'?dataUrlToBlob(data):null);
-  }catch{done(null);}
+    fallback();
+  }catch{fallback();}
 });
 
 const jpegCanvas=canvas=>{
@@ -148,7 +147,7 @@ async function compressFile(file,{targetBytes=TARGET_BYTES,maxDimension=MAX_DIME
     fallbackCtx.drawImage(loaded.image,0,0,fallback.width,fallback.height);
     const jpeg=await encodeCanvas(fallback,'image/jpeg',.62);
     fallback.width=1;fallback.height=1;
-    if(jpeg?.size&&jpeg.size<=Math.max(safeTarget,360*1024))return readAsDataUrl(jpeg);
+    if(jpeg?.size&&jpeg.size<=Math.max(safeTarget,330*1024))return readAsDataUrl(jpeg);
     throw new Error('compress_failed');
   }finally{
     loaded.close();
