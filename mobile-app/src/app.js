@@ -865,7 +865,7 @@ async function openPublicOffer(offerId){
   let o=(platformState.publicOffers||[]).find(x=>x.id===offerId);if(currentUser?.role==='supplier')try{o=await supplierProduct(offerId,request);}catch(error){showToast(error.message);return;}if(!o)return;
   if(currentUser?.role==='client')aiChatSignal('product_view',{productSku:o.sku||'',productTitle:titleOf(o),price:Number(o.unitPrice)||0,currency:o.currency||'',moq:Number(o.moq)||0});
   const cartItem=cartItems.find(x=>x.offerId===o.id);
-  const moq=Math.max(1,Math.ceil(Number(o.moq)||1)),stock=trackedStock(o),available=isUnlimitedStock(o)||stock>0,maxAttr=!isUnlimitedStock(o)?` max="${esc(stock)}"`:'';
+  const moq=Math.max(1,Math.ceil(Number(o.moq)||1)),stock=trackedStock(o),available=isUnlimitedStock(o)||stock>=moq,maxAttr=!isUnlimitedStock(o)?` max="${esc(stock)}"`:'';
   const initialQty=cartItem?.quantity||moq;
   const requestForm=currentUser.role==='client'&&homeConfig(platformState?.settings).showCart&&available?`<form id="publicInterestForm" class="public-interest-form" data-offer-id="${esc(o.id)}">
     <div class="public-interest-head"><div><strong>${esc(tr('حدد الكمية المطلوبة','Choose requested quantity'))}</strong><small>${esc(tr('الحد الأدنى للطلب','Minimum order'))}: ${esc(o.moq||'—')}</small></div></div>
