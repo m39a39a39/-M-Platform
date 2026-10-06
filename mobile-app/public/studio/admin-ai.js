@@ -234,9 +234,9 @@
 
   async function saveProduct(form){
     if(!form.reportValidity())return;
+    const fd=new FormData(form);
     savingProduct=true;productError='';draw();
     try{
-      const fd=new FormData(form);
       productInput={...productInput,
         price:String(fd.get('price')||'').trim(),
         currency:String(fd.get('currency')||'SAR').trim(),
