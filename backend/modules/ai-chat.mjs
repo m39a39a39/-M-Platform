@@ -339,18 +339,25 @@ export async function aiChat(user,body={},req=null){
     if(conversation.status==='human')return {conversationId:conversation.id,humanMode:true};
   }
   const gatewayUser=enforceRateLimit(user,req);
+  const model=String(process.env.OPENAI_CHAT_MODEL||DEFAULT_MODEL).replace(/^openai\//,'');
+  const state=await snapshot(user||null);
+  if(!proactive&&!image){
+    const direct=directCustomerAnswer(state,user,message,language);
+    if(direct){
+      if(conversation)await saveAiMessage(conversation,direct);
+      return {reply:direct,source:'database',...(conversation?{conversationId:conversation.id,humanMode:false}:{})};
+    }
+  }
   const apiKey=openAiApiKey();
   if(!apiKey)throw new HttpError(503,'لم يتم تفعيل مفتاح OpenAI بعد. / OpenAI API key is not configured yet.');
-  const model=String(process.env.OPENAI_CHAT_MODEL||DEFAULT_MODEL).replace(/^openai\//,'');
   const imageSearch=image?await analyzeProductImage({image,message,language,apiKey,model,gatewayUser}):null;
   if(imageSearch?.confidence==='none'||imageSearch&&!imageSearch.query){
     const reply=language==='ar'
       ?'لم أستطع تحديد المنتج بوضوح من هذه الصورة. جرّب صورة أوضح للمنتج من الأمام أو أضف اسمه أو مواصفته.'
       :'I could not identify the product clearly from this image. Try a clearer front view or add the product name or specification.';
     if(conversation)await saveAiMessage(conversation,reply);
-    return {reply,...(conversation?{conversationId:conversation.id,humanMode:false}:{})};
+    return {reply,source:'openai',usage:data?.usage||null,...(conversation?{conversationId:conversation.id,humanMode:false}:{})};
   }
-  const state=await snapshot(user||null);
   const productQuery=[imageSearch?.query,imageSearch?.productType,imageSearch?.visibleText,marketingSignal?.query,marketingSignal?.productSku,marketingSignal?.productTitle,message].filter(Boolean).join(' ');
   const context={
     viewer:user?{signedIn:true}:{signedIn:false},
@@ -360,6 +367,15 @@ export async function aiChat(user,body={},req=null){
     ...(user?clientContext(state):{})
   };
   const history=normalizeHistory(body.history);
+  const cacheable=!user&&!proactive&&!imageSearch&&history.length===0;
+  const cacheKey=cacheable?cacheKeyFor(language,message,context):'';
+  if(cacheKey){
+    const cached=getCachedReply(cacheKey);
+    if(cached){
+      if(conversation)await saveAiMessage(conversation,cached);
+      return {reply:cached,source:'cache',...(conversation?{conversationId:conversation.id,humanMode:false}:{})};
+    }
+  }
   const system=language==='ar'
     ?`أنت مستشار مبيعات وتوريد محترف داخل M Platform. هدفك فهم ما يحتاجه العميل ومساعدته على اتخاذ قرار شراء مناسب، بدون ضغط أو مبالغة.
 اعتمد على PLATFORM_CONTEXT_JSON في معلومات المنتجات والأسعار والمخزون والطلبات والعروض. لا تخترع أي سعر أو خصم أو مخزون أو حالة أو ميزة غير موجودة.
@@ -407,6 +423,7 @@ If PLATFORM_CONTEXT_JSON contains shoppingSignal, write a very short proactive m
   let data;try{data=await response.json();}catch{throw new HttpError(502,'استجابة المساعد غير صالحة. / Invalid AI response.');}
   const reply=extractReply(data);
   if(!reply)throw new HttpError(502,'لم يصل رد من المساعد الذكي. / Empty AI response.');
+  if(cacheKey)setCachedReply(cacheKey,reply);
   if(conversation){
     const current=await ensureConversation(user,{conversationId:conversation.id,guestKey:body.guestKey,language},false);
     if(current?.status==='human')return {conversationId:current.id,humanMode:true};
