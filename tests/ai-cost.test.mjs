@@ -84,3 +84,23 @@ test('generic unrelated question is not falsely answered as a shipping policy fa
   }]}}};
   assert.equal(directCustomerAnswer(state,null,'هل عندكم سماعات؟','ar'),null);
 });
+
+
+test('published product with stock zero is described as available to order',()=>{
+  const state={publicOffers:[{
+    id:'p1',status:'published',sku:'MG-20W',unitPrice:25,currency:'SAR',moq:10,stock:0,
+    translation:{titleAr:'شاحن حائط MG 20W',titleEn:'MG 20W Wall Charger'}
+  }],settings:{}};
+  const reply=directCustomerAnswer(state,null,'هل شاحن MG-20W متوفر؟','ar');
+  assert.match(reply,/متوفر للطلب/);
+  assert.doesNotMatch(reply,/0/);
+});
+
+test('shipping duration question stays concise and does not dump policy text',()=>{
+  const state={publicOffers:[],settings:{storefront:{pages:[{
+    id:'policy-shipping',active:true,title:'سياسة الشحن والتوصيل',
+    content:'نوفر التوصيل حاليًا داخل السعودية. نرتب الشحن الجوي أو البحري. بعد تجهيز البضاعة نرسل عرض الشحن بشكل منفصل ويشمل النقل والجمارك والضرائب والتخليص والتوصيل.'
+  }]}}};
+  const reply=directCustomerAnswer(state,null,'كم مدة الشحن؟','ar');
+  assert.equal(reply,'مدة الشحن غير محددة حاليًا في سياسة المتجر، ويتم تأكيد المدة المتوقعة لك قبل الشحن.');
+});
