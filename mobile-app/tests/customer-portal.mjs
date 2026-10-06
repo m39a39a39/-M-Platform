@@ -34,7 +34,7 @@ for(const [engine,type] of Object.entries({chromium,webkit})){
    else if(path.endsWith('/state'))result={...state,user:req.headers().authorization?user:null,...(empty?{requests:[],quotes:[],interests:[]}:{})};
    else if(path.endsWith('/notifications'))result=[];
    else if(path.endsWith('/profile/currency')){if(failCurrency)return route.fulfill({status:500,json:{error:'Test save failure'}});user.preferredCurrency=req.postDataJSON().currency;result={user,currency:user.preferredCurrency};}
-   else if(path.endsWith('/mutations')){const m=req.postDataJSON();assert.equal(m.collection,'requests');assert.deepEqual(Object.keys(m.patch),['lastSeenQuoteAt']);Object.assign(state.requests.find(r=>r.id===m.id),m.patch);result={ok:true};}
+   else if(path.endsWith('/mutations')){const m=req.postDataJSON();assert.equal(m.collection,'requests');assert.ok(['lastSeenQuoteAt','selectedQuoteId','rejectedQuoteId'].includes(Object.keys(m.patch)[0]));Object.assign(state.requests.find(r=>r.id===m.id),m.patch);result={ok:true};}
    else if(path.endsWith('/app-config'))result={apiVersion:1};
    else return route.fulfill({status:404,json:{error:`Unexpected fixture endpoint ${path}`}});
    await route.fulfill({json:result});
@@ -55,31 +55,35 @@ for(const [engine,type] of Object.entries({chromium,webkit})){
    await close();
    await page.goto(baseURL+'/customer.html?screen=account');
    await page.locator('#email').fill(user.email);await page.locator('#password').fill('fixture-password');await page.locator('#loginBtn').click();
-   await page.locator('.client-account-overview').waitFor();
+   await page.locator('.client-account-layout .profile-card').waitFor();
+   assert.equal(await page.locator('.client-account-overview,.client-account-stats').count(),0);
    assert.equal(await page.locator('html').getAttribute('dir'),language==='ar'?'rtl':'ltr');
-   assert.equal(await page.locator('.client-account-stats [data-client-order-filter="active"] strong').textContent(),'4');
-   assert.equal(await page.locator('.client-account-stats [data-client-order-filter="action"] strong').textContent(),'2');
-   assert.equal(await page.locator('.client-account-stats [data-client-order-filter="completed"] strong').textContent(),'1');
+   const navigate=async screen=>{await page.locator(width<600?`#bottomNav [data-screen="${screen}"]`:`.portal-header a[href$="screen=${screen}"]`).click();await page.locator(screen==='account'?'.profile-card':'#clientOrderResults').waitFor();};
    await geometry();await page.screenshot({path:`${output}/${label}-account.png`,fullPage:true});
-   await filter('action');assert.equal(await cards().count(),2);assert.ok(page.url().includes('screen=requests'));
+   await navigate('requests');assert.equal(await cards().count(),2);assert.equal(await page.locator('[data-action="new-request"]').count(),0);
+   await page.locator('.client-order-title[data-cart-order="cart"]').click();await page.locator('#modal .cart-order-line').waitFor();await close();
+   await page.locator('.client-order-title[data-ready-order="ready"]').click();await page.locator('#modal .tracking-timeline').waitFor();await close();
+   await navigate('offers');assert.equal(await cards().count(),4);
+   await filter('action');assert.equal(await cards().count(),2);
    await filter('cancelled');assert.equal(await cards().count(),1);assert.equal(await cards().locator('.client-next-action').count(),0);
    await filter('completed');assert.equal(await cards().count(),1);assert.equal(await cards().locator('.client-next-action').count(),0);
-   await filter('all');assert.equal(await cards().count(),6);
-   await page.locator('#clientOrderSearch').fill('١٢٠٠١');assert.equal(await cards().count(),1);assert.equal(await cards().locator('.client-order-title').getAttribute('data-request'),'pay');
-   assert.equal(await page.locator('#clientOrderSearch').evaluate(el=>el===document.activeElement),true,'Search must retain focus');
-   await page.locator('#clientOrderSearch').fill('not-a-product');assert.equal(await cards().count(),0);await page.locator('[data-action="reset-order-filters"]').click();assert.equal(await cards().count(),6);
-   await page.locator('.client-order-title[data-request="pay"]').press('Enter');await page.locator('#modal .payment-card').waitFor();assert.equal(await page.locator('#modal .tracking-timeline').count(),1);await close();
-   await page.locator('.client-order-title[data-cart-order="cart"]').click();await page.locator('#modal .cart-order-line').waitFor();assert.equal(await page.locator('#modal .cart-order-line').count(),1);await close();
-   await page.locator('.client-order-title[data-ready-order="ready"]').click();await page.locator('#modal .tracking-timeline').waitFor();await close();
-   await page.locator('.client-next-action[data-client-offers-request="quote"]').click();await page.locator('#modal .client-compare-quote').waitFor();await close();
-   await geometry();await page.screenshot({path:`${output}/${label}-orders.png`,fullPage:true});
-   await page.locator('#bottomNav [data-screen="account"]').click();await page.locator('.client-account-overview').waitFor();
+   await filter('all');await page.locator('#clientOrderSearch').fill('١٢٠٠١');assert.equal(await cards().count(),1);
+   assert.equal(await page.locator('#clientOrderSearch').evaluate(el=>el===document.activeElement),true);
+   await page.locator('#clientOrderSearch').fill('not-a-product');assert.equal(await cards().count(),0);await page.locator('[data-action="reset-order-filters"]').click();assert.equal(await cards().count(),4);
+   await page.locator('.client-order-title[data-request="pay"]').press('Enter');await page.locator('#modal .payment-card').waitFor();await close();
+   await page.locator('.client-order-title[data-request="quote"]').click();await page.locator('#modal .client-price-quote').waitFor();assert.equal(await page.locator('#modal .client-price-quote').count(),1);assert.equal(await page.locator('.client-compare-list').count(),0);
+   await page.locator('[data-reject-quote="q2"]').click();await page.waitForFunction(()=>!document.querySelector('[data-reject-quote]'));assert.equal(state.requests.find(r=>r.id==='quote').rejectedQuoteId,'q2');await close();
+   await page.reload();await page.locator('#clientOrderResults').waitFor();await page.locator('.client-order-title[data-request="quote"]').click();assert.equal(await page.locator('[data-select-quote],[data-reject-quote]').count(),0);await close();
+   state.quotes.push({...base,id:'q3',requestId:'quote',unitPrice:29,status:'published',publishedAt:'2026-10-06'});
+   await page.reload();await page.locator('.client-order-title[data-request="quote"]').click();assert.equal(await page.locator('#modal .client-price-quote').count(),1);await page.locator('[data-select-quote="q3"]').click();await page.locator('#modal').waitFor({state:'hidden'});assert.equal(state.requests.find(r=>r.id==='quote').selectedQuoteId,'q3');
+   await geometry();await page.screenshot({path:`${output}/${label}-sourcing.png`,fullPage:true});
+   await navigate('account');
    await page.locator('[data-client-currency]').selectOption('USD');await page.locator('[data-save-client-currency]').click();await page.waitForFunction(()=>document.querySelector('.account-currency-setting strong')?.textContent.includes('USD'));assert.equal(user.preferredCurrency,'USD');
    failCurrency=true;await page.locator('[data-client-currency]').selectOption('SAR');await page.locator('[data-save-client-currency]').click();await page.waitForFunction(()=>!document.querySelector('[data-save-client-currency]').disabled);assert.equal(user.preferredCurrency,'USD');assert.ok((await page.locator('.account-currency-setting strong').innerText()).includes('USD'));failCurrency=false;
    await page.locator('[data-action="toggle-language"]').click();assert.equal(await page.locator('html').getAttribute('dir'),language==='ar'?'ltr':'rtl');await geometry();await page.locator('[data-action="toggle-language"]').click();
-   await page.locator('[data-action="new-request"]').click();await page.locator('#newRequestForm').waitFor();await close();
-   empty=true;await page.reload();await page.locator('.client-account-overview .client-empty').waitFor();assert.equal(logins,1,'Refresh must preserve the session');await filter('all');await page.locator('#clientOrderResults .client-empty').waitFor();assert.equal(await cards().count(),0);
-   await page.locator('#bottomNav [data-screen="account"]').click();await page.locator('[data-action="logout"]').click();await page.waitForFunction(()=>!sessionStorage.getItem('m-platform.session.v1'));
+   await navigate('offers');await page.locator('[data-action="new-request"]').click();await page.locator('#newRequestForm').waitFor();await close();
+   empty=true;await page.reload();await page.locator('#clientOrderResults .client-empty').waitFor();assert.equal(logins,1,'Refresh must preserve the session');await filter('all');await page.locator('#clientOrderResults .client-empty').waitFor();assert.equal(await cards().count(),0);
+   await navigate('requests');assert.equal(await cards().count(),0);await navigate('account');await page.locator('[data-action="logout"]').click();await page.waitForFunction(()=>!sessionStorage.getItem('m-platform.session.v1'));
    assert.deepEqual(errors,[]);report.push({label,pass:true});console.log('PASS '+label);
   }catch(error){report.push({label,pass:false,error:error.stack});console.error('FAIL '+label+': '+error.stack);await page.screenshot({path:`${output}/${label}-failure.png`,fullPage:true});}
   await context.close();

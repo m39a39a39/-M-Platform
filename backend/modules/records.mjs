@@ -1,3 +1,4 @@
+import {customerQuote} from '../../shared/customer-quote.mjs';
 import {upgradeSettings} from './storefront-upgrade.mjs';
 import {selectSectionProducts} from '../../shared/storefront-model.mjs';
 import {db,one,assert} from '../lib/supabase.mjs';
@@ -222,6 +223,16 @@ export async function snapshot(user,{productId='',pageId='',category='',q=''}={}
   });
   quotes=quotes.filter(q=>q.owner_id===user?.id||user?.role==='supplier'&&q.data.assignedSupplierId===user.id||ownerActive(q.owner_id)&&open(requests.find(r=>r.id===q.request_id)));
   publicOffers=publicOffers.filter(o=>open(o)&&(o.data.storeOwned||o.owner_id===user?.id||ownerActive(o.owner_id)));
+  if(user?.role==='client'){
+    const allowed=new Set();
+    for(const row of requests){
+      if(row.data.orderType==='cart'){if(row.data.pendingCartReplacement?.quoteId)allowed.add(row.data.pendingCartReplacement.quoteId);continue;}
+      const q=customerQuote({...row.data,id:row.id},quotes.map(q=>({...q.data,id:q.id,requestId:q.request_id,createdAt:q.created_at})));
+      if(q)allowed.add(q.id);
+      if(row.data.pendingReplacementQuoteId)allowed.add(row.data.pendingReplacementQuoteId);
+    }
+    quotes=quotes.filter(q=>allowed.has(q.id));
+  }
   const projectedRequests=requests.map(r=>{
     if(r.owner_id===user?.id)return ownRecord(r,'requests');
     let item=anonymous(r,'requests',user);

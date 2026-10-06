@@ -48,12 +48,12 @@ let cartItems=[];
 
 const text={
   ar:{
-    tagline:'اطلب ما تحتاجه، وقارن العروض بثقة.',eyebrow:'منصة شراء وتوريد موثوقة',title:'اطلب ما تحتاجه، وقارن العروض بثقة.',
+    tagline:'تسوق المنتجات أو أرسل طلب توريد.',eyebrow:'منصة شراء وتوريد موثوقة',title:'تسوق المنتجات أو أرسل طلب توريد.',
     subtitle:'منصة آمنة تربطك بموردين مؤهلين، بينما نتولى مراجعة العروض، التحقق من البضاعة، الترجمة، الشحن الموثوق، ومتابعة الضمان.',
     browse:'تصفح المنتجات',login:'تسجيل الدخول',customer:'إنشاء حساب عميل',supplier:'إنشاء حساب مورد',kicker:'تصفح دون حساب',offers:'المنتجات',
     reload:'تحديث',loading:'جارٍ تحميل المنتجات...',empty:'لا توجد منتجات منشورة حاليًا.',price:'السعر',unitPrice:'سعر الحبة',moq:'الحد الأدنى',
     production:'الإنتاج',days:'يوم',stock:'المخزون',details:'تفاصيل المنتج',back:'العودة للرئيسية',error:'تعذر تحميل المنتجات. تحقق من اتصال الإنترنت.',
-    previous:'السابق',next:'التالي',page:'صفحة',companyDescription:'منصة تساعدك في طلب المنتجات، مقارنة العروض، ومتابعة التوريد بسهولة.',
+    previous:'السابق',next:'التالي',page:'صفحة',companyDescription:'تسوق المنتجات وتابع مشترياتك وطلبات التوريد.',
     contact:'تواصل معنا',copyright:'© 2026 MIG COMPANY — جميع الحقوق محفوظة',allCategories:'الكل',supplyCountry:'بلد التوريد',allCountries:'الكل',
     search:'ابحث عن منتج أو SKU',quantity:'الكمية',productTotal:'إجمالي هذا المنتج',addCart:'إضافة إلى السلة',updateCart:'تحديث الكمية في السلة',
     added:'تمت إضافة المنتج إلى السلة.',cart:'سلة الطلب',products:'منتجات',total:'الإجمالي',grandTotal:'الإجمالي الكلي',remove:'حذف',
@@ -65,12 +65,12 @@ const text={
     maxProducts:'الحد الأقصى 10 منتجات في الطلب الواحد.',invalidQty:'تحقق من الكمية والحد الأدنى والمخزون.'
   },
   en:{
-    tagline:'Request what you need, and compare offers with confidence.',eyebrow:'Trusted sourcing platform',title:'Request what you need, and compare offers with confidence.',
+    tagline:'Shop products or send a sourcing request.',eyebrow:'Trusted sourcing platform',title:'Shop products or send a sourcing request.',
     subtitle:'A secure platform that connects you with qualified suppliers while we handle offer review, product verification, translation, reliable shipping, and warranty follow-up.',
     browse:'Browse products',login:'Sign in',customer:'Create customer account',supplier:'Create supplier account',kicker:'Browse without an account',offers:'Products',
     reload:'Refresh',loading:'Loading products...',empty:'No products are currently published.',price:'Price',unitPrice:'Unit price',moq:'MOQ',
     production:'Production',days:'days',stock:'Stock',details:'Product details',back:'Back to home',error:'Could not load products. Check your internet connection.',
-    previous:'Previous',next:'Next',page:'Page',companyDescription:'A platform that helps you request products, compare offers, and follow your sourcing process with ease.',
+    previous:'Previous',next:'Next',page:'Page',companyDescription:'Shop products and track your purchases and sourcing requests.',
     contact:'Contact us',copyright:'© 2026 MIG COMPANY — All rights reserved.',allCategories:'All',supplyCountry:'Supply country',allCountries:'All',
     search:'Search products or SKU',quantity:'Quantity',productTotal:'This product total',addCart:'Add to cart',updateCart:'Update quantity in cart',
     added:'Product added to cart.',cart:'Order cart',products:'products',total:'Total',grandTotal:'Grand total',remove:'Remove',
