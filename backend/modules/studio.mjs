@@ -79,6 +79,52 @@ export async function saveStudio(user,body){
   return {ok:true};
 }
 
+
+export async function saveStudioProduct(user,body={}){
+  assert(user?.role==='admin'&&can(user,'offers.edit'),403,'غير مسموح / Not allowed');
+  const p=body.product;assert(p&&typeof p==='object'&&!Array.isArray(p),400,'بيانات المنتج غير صالحة / Invalid product');
+  id(p.id);assert(['draft','active','archived'].includes(p.status),400,'حالة المنتج غير صالحة / Invalid product status');
+  const old=await one('public_offers',p.id);
+  assert(!old?.data?.deletedAt,409,'المنتج محذوف / Product deleted');
+  assert(Number(p.version||0)===(old?.version||0),409,'تغيّر المنتج؛ حدّث الصفحة / Product changed; refresh');
+  const settings=await one('settings','site');assert(settings,409,'إعدادات المتجر غير متاحة / Store settings unavailable');
+  const categories=Array.isArray(settings.data?.categories)?settings.data.categories:[];
+  const subcategories=Array.isArray(settings.data?.subcategories)?settings.data.subcategories:[];
+  const countries=Array.isArray(settings.data?.supplyCountries)&&settings.data.supplyCountries.length?settings.data.supplyCountries:[{id:'China',active:true},{id:'United Arab Emirates',active:true}];
+  const now=new Date().toISOString(),published=p.status==='active';
+  const d={...old?.data,storeOwned:true,sku:text(String(p.sku||''),80),product:text(String(p.name||''),100),specs:text(String(p.description||'')),country:text(String(p.country||''),80),unitPrice:Number(p.price),currency:String(p.currency||'').toUpperCase(),moq:Number(p.moq),stock:p.stock==null?'':String(p.stock),leadTime:String(p.leadDays),categoryId:String(p.categoryId||''),subcategoryId:String(p.subcategoryId||''),images:list(p.images||[],5),translation:{titleAr:text(String(p.name||''),100),titleEn:text(String(p.nameEn||''),100),descriptionAr:text(String(p.description||'')),descriptionEn:text(String(p.descriptionEn||''))},status:published?'published':'review',studioArchived:p.status==='archived',shortDescription:text(String(p.shortDescription||''),500),productNotes:text(String(p.notes||''),2000),options:text(String(p.options||''),1000),technicalSpecs:text(String(p.technicalSpecs||''),5000),tiers:normalizeTiers(p.tiers||[],Number(p.moq),Number(p.price)),createdAt:old?.data?.createdAt||now,updatedAt:now};
+  const publicText=[...Object.values(d.translation),d.shortDescription,d.productNotes,d.options,d.technicalSpecs];
+  for(const value of publicText)assert(!/(?:https?:\/\/|www\.|wa\.me|@[a-z0-9]|[\w.+-]+@[\w.-]+\.[a-z]{2,}|(?:\+|00)\d[\d\s()-]{7,})/i.test(value),400,'احذف بيانات التواصل من المحتوى العام');
+  assert(d.product&&/^[A-Za-z0-9._-]{1,80}$/.test(d.sku),400,'أكمل اسم المنتج وتحقق من SKU / Complete product name and SKU');
+  assert(Number.isFinite(d.unitPrice)&&d.unitPrice>0&&Number.isInteger(d.moq)&&d.moq>0&&Number.isInteger(Number(d.leadTime))&&Number(d.leadTime)>0,400,'تحقق من السعر والحد الأدنى ومدة التجهيز / Check price, MOQ and lead time');
+  assert(['USD','SAR','AED','CNY','EUR'].includes(d.currency),400,'عملة غير مدعومة / Unsupported currency');
+  assert(d.stock===''||Number.isInteger(Number(d.stock))&&Number(d.stock)>=0,400,'المخزون غير صالح / Invalid stock');
+  assert(d.country.length<=80&&d.categoryId.length<=80&&d.subcategoryId.length<=80,400,'بيانات التصنيف أو دولة التوريد غير صالحة / Invalid taxonomy or supply country');
+  await checkImages(d.images,user,old?.data?.images||[]);
+  if(published){
+    assert(can(user,'publish')&&can(user,'translate'),403,'لا تملك صلاحية النشر / Publishing not allowed');
+    assert(body.redactionConfirmed===true,400,'أكد مراجعة النصوص والصور قبل النشر / Confirm content review before publishing');
+    validateContent('publicOffers',d);
+    assert(countries.some(c=>c.id===d.country&&c.active!==false),400,'اختر دولة توريد معتمدة / Choose an active supply country');
+    assert(categories.some(c=>c.id===d.categoryId&&c.active!==false),400,'اختر تصنيفًا فعالًا / Choose an active category');
+    assert(!d.subcategoryId||subcategories.some(s=>s.id===d.subcategoryId&&s.parentId===d.categoryId&&s.active!==false),400,'التصنيف الفرعي غير متاح / Subcategory unavailable');
+    assert(Object.values(d.translation).every(Boolean),400,'أكمل الاسم والوصف بالعربية والإنجليزية قبل النشر / Complete Arabic and English name and description before publishing');
+    d.publishedAt=old?.data?.publishedAt||now;
+  }else{
+    if(d.country)assert(countries.some(c=>c.id===d.country),400,'دولة التوريد غير متاحة / Supply country unavailable');
+    if(d.categoryId)assert(categories.some(c=>c.id===d.categoryId),400,'التصنيف غير متاح / Category unavailable');
+    if(d.subcategoryId)assert(subcategories.some(s=>s.id===d.subcategoryId&&s.parentId===d.categoryId),400,'التصنيف الفرعي غير متاح / Subcategory unavailable');
+  }
+  const changes=[{table:'public_offers',id:p.id,version:old?.version||0,ownerId:old?.owner_id||null,data:d,action:'studio_product_save'}];
+  const settingsData=structuredClone(settings.data||{}),draftProducts=settingsData.studioDraft?.products;
+  if(Array.isArray(draftProducts)&&draftProducts.some(item=>item?.id===p.id)){
+    settingsData.studioDraft={...settingsData.studioDraft,products:draftProducts.filter(item=>item?.id!==p.id)};
+    changes.push({table:'settings',id:'site',version:settings.version,data:settingsData,action:'studio_product_draft_clear'});
+  }
+  await rpc('commit_changes',{actor:user.id,changes});
+  return {ok:true,status:d.status};
+}
+
 function normalizeCatalog(raw={},options={}){
  const result={...catalogDefaults(),...Object.fromEntries(Object.keys(CATALOG_CONTROLS).filter(k=>typeof options[k]==='boolean').map(k=>[k,options[k]]))};for(const k of Object.keys(CATALOG_CONTROLS)){assert(raw[k]===undefined||typeof raw[k]==='boolean',400);if(raw[k]!==undefined)result[k]=raw[k];}
  for(const k of ['categoryIds','subcategoryIds','countryIds'])result[k]=list(raw[k]||[],100).map(v=>text(v,80));

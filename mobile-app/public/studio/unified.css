@@ -7,3 +7,28 @@
 .admin-order-products{max-height:300px;overflow:auto;border:1px solid #e5e9ed;border-radius:12px}.admin-order-line{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px;border-bottom:1px solid #e5e9ed}.admin-order-line small{display:block;color:#708187}.admin-order-line input{width:100px}.admin-order-line[hidden]{display:none}
 
 .unified-preview.is-tablet{max-width:768px;margin-inline:auto}.section-editor-image{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px}
+
+
+/* Keep the admin sidebar contained at every responsive breakpoint.
+   Closed mobile navigation must not leak its text into the workspace. */
+.studio-shell .side,
+.studio-shell .side nav,
+.studio-shell .side .brand,
+.studio-shell .side .profile,
+.studio-shell .side .nav-group,
+.studio-shell .side .nav-group-items{min-width:0}
+.studio-shell .side nav,
+.studio-shell .side .nav-group,
+.studio-shell .side .nav-group-items{width:100%;max-width:100%;overflow-x:hidden}
+.studio-shell .side nav button,
+.studio-shell .side .nav-group summary{width:100%;max-width:100%;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.studio-shell .side .brand strong{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media(min-width:851px){
+  .studio-shell .side{right:0;left:auto;width:260px;min-width:260px;max-width:260px;transform:none!important;overflow:hidden}
+  .studio-shell .main{margin-right:260px;min-width:0}
+}
+@media(max-width:850px){
+  .studio-shell .side{right:0;left:auto;width:min(260px,88vw);min-width:min(260px,88vw);max-width:88vw;overflow:hidden;visibility:hidden;pointer-events:none}
+  .studio-shell .side.open{transform:translateX(0);visibility:visible;pointer-events:auto}
+  .studio-shell .main{margin-right:0!important;width:100%;min-width:0}
+}
