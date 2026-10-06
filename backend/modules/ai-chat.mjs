@@ -359,12 +359,13 @@ export async function aiChat(user,body={},req=null){
     return {reply,source:'openai',usage:data?.usage||null,...(conversation?{conversationId:conversation.id,humanMode:false}:{})};
   }
   const productQuery=[imageSearch?.query,imageSearch?.productType,imageSearch?.visibleText,marketingSignal?.query,marketingSignal?.productSku,marketingSignal?.productTitle,message].filter(Boolean).join(' ');
+  const personalContextNeeded=!!user&&qHas(message.toLowerCase(),['طلبي','الطلب','الدفع','فاتورة','عرض','تتبع','order','payment','invoice','quote','tracking']);
   const context={
     viewer:user?{signedIn:true}:{signedIn:false},
     products:productContext(state,productQuery),
     ...(imageSearch?{imageSearch}:{}),
     ...(marketingSignal?{shoppingSignal:marketingSignal}:{}),
-    ...(user?clientContext(state):{})
+    ...(personalContextNeeded?clientContext(state):{})
   };
   const history=normalizeHistory(body.history);
   const cacheable=!user&&!proactive&&!imageSearch&&history.length===0;
