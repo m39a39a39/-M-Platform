@@ -43,7 +43,7 @@ render=function(){
   document.getElementById('site-header')?.remove();
   document.getElementById('site-footer')?.remove();
   document.body.classList.remove('has-site-chrome');
-  $('[data-action=history]').forEach(b=>b.hidden=true);
+  $$('[data-action=history]').forEach(b=>b.hidden=true);
   const top=$('.top-actions');if(top)top.insertAdjacentHTML('beforeend','<a href="/?store=1" target="_blank" rel="noopener" class="button">فتح المتجر</a>');
   hydrateStudioImages();
 };
