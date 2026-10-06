@@ -1,4 +1,5 @@
 import {customerQuote,canRespondToQuote} from '../../shared/customer-quote.mjs';
+import {isUnlimitedStock,trackedStock} from '../../shared/inventory.mjs';
 import './styles.css';
 import './customer-account.css';
 import {filterClientOrders, clientOrderCounts, isClosedClientOrder} from './client-orders.js';
@@ -280,15 +281,15 @@ function cartCurrency(){return cartRows()[0]?.currency||'';}
 function cartTotal(){return cartRows().reduce((sum,row)=>sum+row.total,0);}
 function setCartQuantity(offerId,quantity){
   const row=cartItems.find(x=>x.offerId===offerId),offer=(platformState?.publicOffers||[]).find(o=>o.id===offerId&&o.status==='published');if(!row||!offer)return false;
-  const q=Number(quantity),moq=Math.max(1,Math.ceil(Number(offer.moq)||1)),stock=Number(offer.stock);
-  if(!Number.isInteger(q)||q<moq||(Number.isFinite(stock)&&stock>0&&q>stock))return false;
+  const q=Number(quantity),moq=Math.max(1,Math.ceil(Number(offer.moq)||1)),stock=trackedStock(offer);
+  if(!Number.isInteger(q)||q<moq||(!isUnlimitedStock(offer)&&q>stock))return false;
   row.quantity=q;saveCart();return true;
 }
 function addToCart(offer,quantity){
-  const q=Number(quantity),moq=Math.max(1,Math.ceil(Number(offer?.moq)||1)),stock=Number(offer?.stock);
+  const q=Number(quantity),moq=Math.max(1,Math.ceil(Number(offer?.moq)||1)),stock=trackedStock(offer);
   if(!offer||offer.status!=='published')throw new Error(tr('هذا المنتج غير متاح حاليًا.','This product is currently unavailable.'));
   if(!Number.isInteger(q)||q<moq)throw new Error(tr('الكمية يجب ألا تقل عن الحد الأدنى للطلب.','Quantity cannot be below the MOQ.'));
-  if(Number.isFinite(stock)&&stock>0&&q>stock)throw new Error(tr('الكمية المطلوبة أكبر من المخزون المتاح.','Requested quantity exceeds available stock.'));
+  if(!isUnlimitedStock(offer)&&q>stock)throw new Error(tr('الكمية المطلوبة أكبر من المخزون المتاح.','Requested quantity exceeds available stock.'));
   const existing=cartItems.find(x=>x.offerId===offer.id);
   const currency=String(offer.currency||'').toUpperCase(),current=cartCurrency();
   if(current&&currency!==current)throw new Error(tr(`السلة الحالية بعملة ${current}. أرسلها أولًا أو أفرغها لإضافة منتج بعملة ${currency}.`,`Your cart uses ${current}. Submit or clear it before adding a ${currency} product.`));
@@ -849,7 +850,7 @@ function openReadyOrder(interestId){
   const title=o?titleOf(o):tr('منتج جاهز','Ready product');
   const summary=`<section class="client-order-summary"><div class="client-order-summary-title"><small>#${esc(ref(interest))} · ${esc(tr('منتج جاهز','Ready product'))}</small><strong>${esc(title)}</strong></div><div class="client-order-summary-facts"><span>${esc(tr('الكمية','Quantity'))}: ${esc(interest.quantity||'—')}</span><span>${esc(tr('سعر الوحدة','Unit price'))}: ${frozenOrderMoney(interest,unitPrice,currency)}</span><span>${esc(tr('الإجمالي','Total'))}: ${frozenOrderMoney(interest,total,currency)}</span></div></section>`;
   const statusCard=`<section class="client-current-status"><small>${esc(tr('الحالة الحالية','Current status'))}</small><strong>${esc(trackingLabel(status))}</strong>${interest.trackingUpdatedAt?`<span>${esc(tr('آخر تحديث','Last update'))}: ${esc(date(interest.trackingUpdatedAt))}</span>`:''}</section>`;
-  const productInfo=o?`<section class="client-detail-content"><h3>${esc(t('specifications'))}</h3><p class="long-copy">${esc(descriptionOf(o)||'—')}</p><div class="facts"><span>MOQ ${esc(o.moq||'—')}</span>${homeConfig(platformState.settings).showStock?`<span>${esc(t('stock'))}: ${esc(o.stock||'—')}</span>`:''}<span>${esc(t('leadTime'))}: ${esc(o.leadTime||'—')}</span></div>${gallery(o.images)}</section>`:'';
+  const productInfo=o?`<section class="client-detail-content"><h3>${esc(t('specifications'))}</h3><p class="long-copy">${esc(descriptionOf(o)||'—')}</p><div class="facts"><span>MOQ ${esc(o.moq||'—')}</span>${homeConfig(platformState.settings).showStock?`<span>${esc(isUnlimitedStock(o)?tr('متوفر للطلب','Available to order'):`${t('stock')}: ${trackedStock(o)}`)}</span>`:''}<span>${esc(t('leadTime'))}: ${esc(o.leadTime||'—')}</span></div>${gallery(o.images)}</section>`:'';
   openModal(title,`#${ref(interest)}`,`${summary}${clientReadyActionPanel(interest,o)}${statusCard}${paymentPanel(interest,'interest')}${invoicePanel(interest,'interest')}${trackingTimeline(interest,{flow:READY_TRACKING_FLOW,statusResolver:readyTrackingStatus})}${productInfo}`);
 }
 async function offerSupply(productId){
@@ -864,17 +865,17 @@ async function openPublicOffer(offerId){
   let o=(platformState.publicOffers||[]).find(x=>x.id===offerId);if(currentUser?.role==='supplier')try{o=await supplierProduct(offerId,request);}catch(error){showToast(error.message);return;}if(!o)return;
   if(currentUser?.role==='client')aiChatSignal('product_view',{productSku:o.sku||'',productTitle:titleOf(o),price:Number(o.unitPrice)||0,currency:o.currency||'',moq:Number(o.moq)||0});
   const cartItem=cartItems.find(x=>x.offerId===o.id);
-  const moq=Math.max(1,Math.ceil(Number(o.moq)||1)),stock=Number(o.stock),maxAttr=Number.isFinite(stock)&&stock>0?` max="${esc(Math.floor(stock))}"`:'';
+  const moq=Math.max(1,Math.ceil(Number(o.moq)||1)),stock=trackedStock(o),available=isUnlimitedStock(o)||stock>0,maxAttr=!isUnlimitedStock(o)?` max="${esc(stock)}"`:'';
   const initialQty=cartItem?.quantity||moq;
-  const requestForm=currentUser.role==='client'&&homeConfig(platformState?.settings).showCart?`<form id="publicInterestForm" class="public-interest-form" data-offer-id="${esc(o.id)}">
+  const requestForm=currentUser.role==='client'&&homeConfig(platformState?.settings).showCart&&available?`<form id="publicInterestForm" class="public-interest-form" data-offer-id="${esc(o.id)}">
     <div class="public-interest-head"><div><strong>${esc(tr('حدد الكمية المطلوبة','Choose requested quantity'))}</strong><small>${esc(tr('الحد الأدنى للطلب','Minimum order'))}: ${esc(o.moq||'—')}</small></div></div>
     <label><span>${esc(tr('الكمية','Quantity'))}</span><input id="publicInterestQuantity" name="quantity" type="number" min="${esc(moq)}" step="1" value="${esc(initialQty)}"${maxAttr} required></label>
     <div class="public-interest-total"><span>${esc(tr('إجمالي هذا المنتج','This product total'))}</span><strong id="publicInterestTotal">${money(initialQty*tierPrice(o,initialQty),o.currency)}</strong></div>
-    ${Number.isFinite(stock)&&stock>0?`<small>${esc(tr('المخزون المتاح','Available stock'))}: ${esc(stock)}</small>`:''}
+    ${isUnlimitedStock(o)?`<small>${esc(tr('متوفر للطلب','Available to order'))}</small>`:stock>0?`<small>${esc(tr('المخزون المتاح','Available stock'))}: ${esc(stock)}</small>`:''}
     <p class="form-message" id="publicInterestMessage"></p>
     <button class="primary-btn full" type="submit">${esc(cartItem?tr('تحديث الكمية في السلة','Update quantity in cart'):tr('إضافة إلى السلة','Add to cart'))}</button>
   </form>`:'';
-  openModal(titleOf(o),`#${ref(o)}`,`${gallery(o.images)}${homeConfig(platformState?.settings).showPrices?`<div class="quote-price">${money(o.unitPrice,o.currency)}</div>`:''}<div class="facts"><span>MOQ ${esc(o.moq||'—')}</span>${homeConfig(platformState.settings).showStock?`<span>${esc(t('stock'))}: ${esc(o.stock||'—')}</span>`:''}<span>${esc(t('leadTime'))}: ${esc(o.leadTime||'—')}</span><span>${esc(tr('بلد التوريد','Supply country'))}: ${esc(supplyCountryLabel(o.country))}</span><span>${esc(t('validUntil'))}: ${esc(o.validUntil||'—')}</span></div><p class="long-copy">${esc(descriptionOf(o)||'—')}</p>${productExtras(o,homeConfig(platformState.settings))}${requestForm}`);
+  openModal(titleOf(o),`#${ref(o)}`,`${gallery(o.images)}${homeConfig(platformState?.settings).showPrices?`<div class="quote-price">${money(o.unitPrice,o.currency)}</div>`:''}<div class="facts"><span>MOQ ${esc(o.moq||'—')}</span>${homeConfig(platformState.settings).showStock?`<span>${esc(isUnlimitedStock(o)?tr('متوفر للطلب','Available to order'):`${t('stock')}: ${trackedStock(o)}`)}</span>`:''}<span>${esc(t('leadTime'))}: ${esc(o.leadTime||'—')}</span><span>${esc(tr('بلد التوريد','Supply country'))}: ${esc(supplyCountryLabel(o.country))}</span><span>${esc(t('validUntil'))}: ${esc(o.validUntil||'—')}</span></div><p class="long-copy">${esc(descriptionOf(o)||'—')}</p>${productExtras(o,homeConfig(platformState.settings))}${requestForm}`);
   if(currentUser.role==='client'){
     const form=$('publicInterestForm'),input=$('publicInterestQuantity'),total=$('publicInterestTotal');
     input?.addEventListener('input',()=>{const q=Number(input.value);total.textContent=money((Number.isFinite(q)?q:0)*tierPrice(o,q),o.currency);});
@@ -907,7 +908,7 @@ function openCart(){
         <span>${esc(tr('صورة المنتج','Image'))}</span><span>${esc(tr('اسم المنتج','Product'))}</span><span>${esc(tr('سعر الحبة','Unit price'))}</span><span>${esc(tr('الكمية','Quantity'))}</span><span>${esc(tr('الإجمالي','Total'))}</span><span>${esc(tr('حذف','Remove'))}</span>
       </div>
       <div class="cart-lines">${rows.map(row=>{
-        const o=row.offer,image=(o.images||[])[0],stock=Number(o.stock),maxAttr=Number.isFinite(stock)&&stock>0?` max="${esc(Math.floor(stock))}"`:'';
+        const o=row.offer,image=(o.images||[])[0],stock=trackedStock(o),maxAttr=!isUnlimitedStock(o)?` max="${esc(stock)}"`:'';
         return `<article class="cart-line" data-cart-line="${esc(o.id)}">
           <div class="cart-line-image">${image?`<img alt="" data-media="${esc(image)}">`:'<div>M</div>'}</div>
           <div class="cart-line-product"><strong>${esc(titleOf(o))}</strong><small>MOQ ${esc(o.moq||'—')}</small></div>
