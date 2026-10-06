@@ -50,12 +50,9 @@ export function buildAdminAiContext(state={}){
         sku:clamp(product?.sku,80),
         title:titleOf(product),
         orderCount:0,
-        quantity:0,
-        value:0,
-        currency:clamp(order.currency||product?.currency||'SAR',12)
+        quantity:0
       };
       row.quantity+=num(line.quantity);
-      row.value+=num(line.total)||num(line.unitPrice)*num(line.quantity);
       if(!seen.has(productId)){row.orderCount+=1;seen.add(productId);}
       performance.set(productId,row);
     }
