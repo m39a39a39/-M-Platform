@@ -1,5 +1,5 @@
 import {snapshot} from './records.mjs';
-import {assert,HttpError} from '../lib/supabase.mjs';
+import {assert,HttpError,db} from '../lib/supabase.mjs';
 import {createHash} from 'node:crypto';
 import {ensureConversation,saveCustomerMessage,saveAiMessage} from './ai-conversations.mjs';
 import {recordAiUsage} from './ai-usage.mjs';
@@ -236,18 +236,38 @@ function cacheKeyFor(language,message,context){
   const compact={language,message:clean(message).toLowerCase(),products:context?.products||[],shoppingSignal:context?.shoppingSignal||null};
   return createHash('sha256').update(JSON.stringify(compact)).digest('hex');
 }
-function getCachedReply(key){
-  const row=responseCache.get(key);
-  if(!row)return '';
-  if(Date.now()-row.at>RESPONSE_CACHE_TTL_MS){responseCache.delete(key);return '';}
-  return row.reply;
+async function getCachedReply(key){
+  const local=responseCache.get(key);
+  if(local&&Date.now()-local.at<=RESPONSE_CACHE_TTL_MS)return local.reply;
+  if(local)responseCache.delete(key);
+  try{
+    const now=new Date().toISOString();
+    const rows=await db('ai_response_cache',`cache_key=eq.${encodeURIComponent(key)}&expires_at=gt.${encodeURIComponent(now)}&limit=1`);
+    const row=rows?.[0];
+    if(row?.reply){
+      responseCache.set(key,{reply:row.reply,at:Date.now()});
+      return row.reply;
+    }
+  }catch(error){
+    console.warn('Persistent AI cache read failed',error?.message||'unknown');
+  }
+  return '';
 }
-function setCachedReply(key,reply){
+async function setCachedReply(key,reply,model=''){
   responseCache.set(key,{reply,at:Date.now()});
   if(responseCache.size>1000){
     const cutoff=Date.now()-RESPONSE_CACHE_TTL_MS;
     for(const [cacheKey,row] of responseCache)if(row.at<cutoff)responseCache.delete(cacheKey);
     while(responseCache.size>1000)responseCache.delete(responseCache.keys().next().value);
+  }
+  try{
+    await db('ai_response_cache','on_conflict=cache_key',{
+      method:'POST',
+      body:{cache_key:key,reply,model:String(model||''),expires_at:new Date(Date.now()+RESPONSE_CACHE_TTL_MS).toISOString()},
+      headers:{Prefer:'resolution=merge-duplicates,return=minimal'}
+    });
+  }catch(error){
+    console.warn('Persistent AI cache write failed',error?.message||'unknown');
   }
 }
 function safeMarketingSignal(value){
@@ -359,8 +379,8 @@ export async function aiChat(user,body={},req=null){
       ?'لم أستطع تحديد المنتج بوضوح من هذه الصورة. جرّب صورة أوضح للمنتج من الأمام أو أضف اسمه أو مواصفته.'
       :'I could not identify the product clearly from this image. Try a clearer front view or add the product name or specification.';
     if(conversation)await saveAiMessage(conversation,reply);
-    await recordAiUsage({surface:'customer',source:'openai',user,conversationId:conversation?.id,model,usage:data?.usage});
-  return {reply,source:'openai',usage:data?.usage||null,...(conversation?{conversationId:conversation.id,humanMode:false}:{})};
+    await recordAiUsage({surface:'customer',source:'openai',user,conversationId:conversation?.id,model});
+    return {reply,source:'openai',usage:null,...(conversation?{conversationId:conversation.id,humanMode:false}:{})};
   }
   const productQuery=[imageSearch?.query,imageSearch?.productType,imageSearch?.visibleText,marketingSignal?.query,marketingSignal?.productSku,marketingSignal?.productTitle,message].filter(Boolean).join(' ');
   const personalContextNeeded=!!user&&qHas(message.toLowerCase(),['طلبي','الطلب','الدفع','فاتورة','عرض','تتبع','order','payment','invoice','quote','tracking']);
@@ -375,7 +395,7 @@ export async function aiChat(user,body={},req=null){
   const cacheable=!user&&!proactive&&!imageSearch&&history.length===0;
   const cacheKey=cacheable?cacheKeyFor(language,message,context):'';
   if(cacheKey){
-    const cached=getCachedReply(cacheKey);
+    const cached=await getCachedReply(cacheKey);
     if(cached){
       if(conversation)await saveAiMessage(conversation,cached);
       await recordAiUsage({surface:'customer',source:'cache',user,conversationId:conversation?.id,model});
@@ -429,11 +449,12 @@ If PLATFORM_CONTEXT_JSON contains shoppingSignal, write a very short proactive m
   let data;try{data=await response.json();}catch{throw new HttpError(502,'استجابة المساعد غير صالحة. / Invalid AI response.');}
   const reply=extractReply(data);
   if(!reply)throw new HttpError(502,'لم يصل رد من المساعد الذكي. / Empty AI response.');
-  if(cacheKey)setCachedReply(cacheKey,reply);
+  if(cacheKey)await setCachedReply(cacheKey,reply,model);
   if(conversation){
     const current=await ensureConversation(user,{conversationId:conversation.id,guestKey:body.guestKey,language},false);
     if(current?.status==='human')return {conversationId:current.id,humanMode:true};
     await saveAiMessage(current||conversation,reply);
   }
-  return {reply,...(conversation?{conversationId:conversation.id,humanMode:false}:{})};
+  await recordAiUsage({surface:'customer',source:'openai',user,conversationId:conversation?.id,model,usage:data?.usage});
+  return {reply,source:'openai',usage:data?.usage||null,...(conversation?{conversationId:conversation.id,humanMode:false}:{})};
 }
