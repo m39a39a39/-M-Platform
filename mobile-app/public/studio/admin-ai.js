@@ -19,6 +19,19 @@
   };
   const labelOf=x=>document.documentElement.lang==='en'?(x?.nameEn||x?.nameAr||x?.id):(x?.nameAr||x?.nameEn||x?.id);
 
+  const imageErrorMessage=(error,fallbackAr,fallbackEn)=>{
+    const code=String(error?.message||'').trim();
+    const known={
+      compress_failed:tr('تعذر تجهيز الصورة على هذا الجهاز. جرّب الصورة مرة أخرى أو اختر صورة أخرى.','Could not prepare this image on this device. Try it again or choose another image.'),
+      decode_failed:tr('تعذر قراءة الصورة. إذا كانت HEIC جرّب اختيارها من تطبيق الصور مرة أخرى أو استخدم JPG/PNG.','Could not read the image. If it is HEIC, try selecting it again from Photos or use JPG/PNG.'),
+      unsupported:tr('صيغة الصورة غير مدعومة. اختر صورة من تطبيق الصور أو استخدم JPG/PNG/WebP.','Unsupported image format. Choose an image from Photos or use JPG/PNG/WebP.'),
+      too_large:tr('حجم الصورة أكبر من 10MB. اختر صورة أصغر.','The image is larger than 10MB. Choose a smaller image.'),
+      too_many:tr('يمكن اختيار 5 صور كحد أقصى.','You can select up to 5 images.'),
+      read_failed:tr('تعذر قراءة ملف الصورة. اختر الصورة مرة أخرى.','Could not read the image file. Select it again.')
+    };
+    return known[code]||error?.message||tr(fallbackAr,fallbackEn);
+  };
+
   function cards(){
     const o=overview?.overview||{};
     return `<div class="mg-ai-stats">
@@ -97,7 +110,7 @@
       <div class="mg-ai-form-grid">
         <label class="mg-ai-upload full">
           <span>${esc(tr('صور المنتج','Product images'))}</span>
-          <input type="file" accept="image/png,image/jpeg,image/webp" multiple data-mg-ai-images ${generating?'disabled':''}>
+          <input type="file" accept="image/*" multiple data-mg-ai-images ${generating?'disabled':''}>
           <small>${esc(tr('حتى 5 صور. يبدأ MG AI بصورة واحدة فقط، ويطلب صورًا إضافية تلقائيًا إذا احتاجها. عند الاعتماد تُرفع جميع الصور المختارة.','Up to 5 images. MG AI starts with one image and only uses more when needed; all selected images are uploaded after approval.'))}</small>
         </label>
         <div class="full">${fileSummary()}</div>
@@ -238,7 +251,7 @@
       productDraft=result?.draft||null;
       if(!productDraft)throw Error(tr('لم يتم إنشاء مسودة صالحة.','No valid draft was created.'));
       if(!productInput.sku)productInput.sku=productDraft.sku||'';
-    }catch(e){productError=e?.message||tr('تعذر تحليل المنتج.','Could not analyze the product.');}
+    }catch(e){productError=imageErrorMessage(e,'تعذر تحليل المنتج.','Could not analyze the product.');}
     finally{generating=false;draw();}
   }
 
@@ -293,7 +306,7 @@
       await studioApi('studio-product',{product,redactionConfirmed:false});
       location.assign('/admin.html?screen=products');
     }catch(e){
-      productError=e?.message||tr('تعذر حفظ مسودة المنتج.','Could not save the product draft.');
+      productError=imageErrorMessage(e,'تعذر حفظ مسودة المنتج.','Could not save the product draft.');
       savingProduct=false;draw();
     }
   }
