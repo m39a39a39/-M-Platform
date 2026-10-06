@@ -1513,10 +1513,19 @@ async function resumeSession(){
 }
 $('sessionRetryBtn').addEventListener('click',resumeSession);
 $('sessionLogoutBtn').addEventListener('click',logout);
-App.addListener('appStateChange',({isActive})=>{
-  if(isActive&&session.active&&!busy&&Date.now()-lastDataLoadedAt>30000){
-    loadData().catch(error=>{if(currentUser)showToast(errorText(error));});
+function refreshAfterResume(){
+  if(session.active&&!busy&&Date.now()-lastDataLoadedAt>30000){
+    loadData().catch(error=>{
+      if(error.code==='session_expired'||error.code==='session_changed')return;
+      if(currentUser)showToast(errorText(error));
+    });
   }
-});
+}
+if(Capacitor.isNativePlatform()){
+  App.addListener('appStateChange',({isActive})=>{if(isActive)refreshAfterResume();});
+}else{
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')refreshAfterResume();});
+  window.addEventListener('pageshow',refreshAfterResume);
+}
 (async function boot(){await languageReady;lang=getLanguage();applyLanguage();setRegisterRole('client');applyResetLanguage();if(recoveryAccessToken()){showView('resetView');return;}if(new URLSearchParams(location.search).get('store')==='1'){showView('guestView');return;}await resumeSession();})();
 
