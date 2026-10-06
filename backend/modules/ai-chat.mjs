@@ -74,11 +74,18 @@ function productScore(item,needles){
   const hay=clean([item?.sku,title.ar,title.en,description.ar,description.en,item?.country,item?.categoryId,item?.subcategoryId].filter(Boolean).join(' ')).toLowerCase();
   return needles.reduce((score,term)=>score+(hay.includes(term)?(String(item?.sku||'').toLowerCase().includes(term)?5:2):0),0);
 }
-function productContext(state,query){
-  const rows=(state?.publicOffers||[]).filter(x=>x?.status==='published');
+function rankedProductItems(state,query){
+  const rows=(state?.publicOffers||[]).filter(x=>x?.status==='published'&&!x?.deletedAt&&!x?.studioArchived);
   const needles=terms(query);
-  const ranked=rows.map(item=>({item,score:productScore(item,needles)})).sort((a,b)=>b.score-a.score||String(b.item?.createdAt||'').localeCompare(String(a.item?.createdAt||'')));
-  const positive=ranked.filter(x=>x.score>0).slice(0,6);
+  const cheapest=qHas(clean(query).toLowerCase(),['أرخص','ارخص','cheapest','lowest price']);
+  return rows.map(item=>({item,score:productScore(item,needles)})).sort((a,b)=>{
+    if(a.score!==b.score)return b.score-a.score;
+    if(cheapest&&Number.isFinite(Number(a.item?.unitPrice))&&Number.isFinite(Number(b.item?.unitPrice)))return Number(a.item.unitPrice)-Number(b.item.unitPrice);
+    return String(b.item?.createdAt||'').localeCompare(String(a.item?.createdAt||''));
+  });
+}
+function productContext(state,query){
+  const ranked=rankedProductItems(state,query),positive=ranked.filter(x=>x.score>0).slice(0,6);
   const selected=positive.length?positive:ranked.slice(0,4);
   return selected.map(({item})=>{
     const title=titlePair(item),description=descriptionPair(item);
@@ -98,6 +105,34 @@ function productContext(state,query){
       subcategoryId:clamp(item.subcategoryId,120)
     };
   });
+}
+function productCards(state,query,language){
+  return rankedProductItems(state,query).filter(x=>x.score>0).slice(0,6).map(({item})=>{
+    const titles=titlePair(item),image=Array.isArray(item.images)?String(item.images[0]||''):'';
+    return {
+      id:clamp(item.id,90),
+      sku:clamp(item.sku,100),
+      title:language==='en'?(titles.en||titles.ar):(titles.ar||titles.en),
+      price:Number.isFinite(Number(item.unitPrice))?Number(item.unitPrice):null,
+      currency:clamp(item.currency||'SAR',12),
+      moq:item.moq??null,
+      image:clamp(image,1200),
+      href:'/?product='+encodeURIComponent(String(item.id||''))
+    };
+  }).filter(x=>x.id&&x.title);
+}
+function quickRepliesFor(query,cards,language){
+  const q=clean(query).toLowerCase();
+  if(!cards.length)return [];
+  if(qHas(q,['شاحن','charger']))return language==='en'?['Wall charger','Car charger','Cheapest option','With cable']:['شاحن منزلي','شاحن سيارة','أرخص خيار','مع كابل'];
+  if(qHas(q,['كيبل','كابل','cable']))return language==='en'?['Type-C to Type-C','USB to Type-C','Lightning','Cheapest option']:['Type-C to Type-C','USB to Type-C','Lightning','أرخص خيار'];
+  if(qHas(q,['سماعة','سماعات','earbuds','headphones','tws']))return language==='en'?['TWS','Wired','Best for calls','Cheapest option']:['TWS','سلكية','أفضل للمكالمات','أرخص خيار'];
+  if(qHas(q,['كفر','غطاء','case','cover']))return language==='en'?['iPhone','Samsung','TPU','Silicone']:['آيفون','سامسونج','TPU','سيليكون'];
+  return language==='en'?['Cheapest option','Compare these','Show more']:['أرخص خيار','قارن بينها','عرض المزيد'];
+}
+function chatUiMetadata(state,query,language){
+  const products=productCards(state,query,language);
+  return {products,quickReplies:quickRepliesFor(query,products,language)};
 }
 function requestTitle(item){
   const title=titlePair(item);
@@ -232,6 +267,11 @@ function directShippingAnswer(state,message,language){
   const q=clean(message).toLowerCase();
   if(!content)return '';
   const saudi=language==='en'?/saudi arabia/i.test(content):content.includes('السعودية');
+  if(qHas(q,['مدة الشحن','وقت الشحن','كم مدة','shipping time','delivery time','how long'])){
+    return language==='en'
+      ?'The shipping duration is not fixed in the store policy right now. We will confirm the expected duration before shipping.'
+      :'مدة الشحن غير محددة حاليًا في سياسة المتجر، ويتم تأكيد المدة المتوقعة لك قبل الشحن.';
+  }
   if(saudi&&qHas(q,['السعودية','saudi','ksa'])){
     const asksCost=qHas(q,['كم تكلفة','كم سعر الشحن','تكلفة الشحن','سعر الشحن','رسوم الشحن','shipping cost','shipping price','shipping fee','freight cost']);
     if(language==='en'){
@@ -282,7 +322,7 @@ export function directCustomerAnswer(state,user,message,language='ar'){
       if(parts.length)return (language==='en'?'Order ':'الطلب ')+(number||'')+' — '+parts.join(' · ');
     }
   }
-  return directProductFact(state,normalized,language)||directShippingAnswer(state,normalized,language)||directPolicyAnswer(state,normalized,language);
+  return directProductFact(state,normalized,language)||directShippingAnswer(state,normalized,language);
 }
 function cacheKeyFor(language,message,context){
   const compact={language,message:clean(message).toLowerCase(),products:context?.products||[],shoppingSignal:context?.shoppingSignal||null};
@@ -412,12 +452,13 @@ export async function aiChat(user,body={},req=null){
     if(conversation.status==='human')return {conversationId:conversation.id,humanMode:true};
     if(wantsHumanSupport(message)){
       const reply=language==='en'
-        ?'Done. I have transferred this conversation to the M Platform customer service team. You can continue writing here and a team member can reply in the same chat.'
-        :'تم. حولت المحادثة الآن إلى فريق خدمة عملاء M Platform. يمكنك متابعة الكتابة هنا، وسيتمكن الموظف من الرد عليك في نفس المحادثة.';
+        ?'Your request is now waiting for a customer service agent. I can still help you here until a team member takes over.'
+        :'طلبك الآن بانتظار موظف خدمة العملاء. أقدر أواصل مساعدتك هنا إلى أن يستلم الموظف المحادثة.';
       conversation=await requestHumanHandoff(conversation);
-      await saveAiMessage(conversation,reply);
+      const metadata={handoff:'waiting',leadPrompt:!user};
+      await saveAiMessage(conversation,reply,metadata);
       await recordAiUsage({surface:'customer',source:'database',user,conversationId:conversation.id,model:''});
-      return {reply,source:'database',conversationId:conversation.id,humanMode:true};
+      return {reply,source:'database',conversationId:conversation.id,humanMode:false,waitingHuman:true,leadPrompt:!user};
     }
   }
   const gatewayUser=enforceRateLimit(user,req);
@@ -428,9 +469,10 @@ export async function aiChat(user,body={},req=null){
   if(!proactive&&!image){
     const direct=directCustomerAnswer(state,user,message,language);
     if(direct){
-      if(conversation)await saveAiMessage(conversation,direct);
+      const ui=chatUiMetadata(state,message,language);
+      if(conversation)await saveAiMessage(conversation,direct,ui);
       await recordAiUsage({surface:'customer',source:'database',user,conversationId:conversation?.id,model});
-      return {reply:direct,source:'database',...(conversation?{conversationId:conversation.id,humanMode:false}:{})};
+      return {reply:direct,source:'database',recommendations:ui.products,quickReplies:ui.quickReplies,...(conversation?{conversationId:conversation.id,humanMode:false,waitingHuman:!!conversation.handoff_requested_at}:{})};
     }
   }
   const apiKey=openAiApiKey();
@@ -444,7 +486,9 @@ export async function aiChat(user,body={},req=null){
     await recordAiUsage({surface:'customer',source:'openai',user,conversationId:conversation?.id,model});
     return {reply,source:'openai',usage:null,...(conversation?{conversationId:conversation.id,humanMode:false}:{})};
   }
-  const productQuery=[imageSearch?.query,imageSearch?.productType,imageSearch?.visibleText,marketingSignal?.query,marketingSignal?.productSku,marketingSignal?.productTitle,message].filter(Boolean).join(' ');
+  const history=normalizeHistory(body.history);
+  const recentSearchContext=history.slice(-4).map(x=>x.content).join(' ');
+  const productQuery=[imageSearch?.query,imageSearch?.productType,imageSearch?.visibleText,marketingSignal?.query,marketingSignal?.productSku,marketingSignal?.productTitle,recentSearchContext,message].filter(Boolean).join(' ');
   const personalContextNeeded=!!user&&qHas(message.toLowerCase(),['طلبي','الطلب','الدفع','فاتورة','عرض','تتبع','order','payment','invoice','quote','tracking']);
   const policyPage=policyPageId?selectedPolicyPage(state,policyPageId):null;
   const context={
@@ -455,23 +499,25 @@ export async function aiChat(user,body={},req=null){
     ...(marketingSignal?{shoppingSignal:marketingSignal}:{}),
     ...(personalContextNeeded?clientContext(state):{})
   };
-  const history=normalizeHistory(body.history);
+  const ui=chatUiMetadata(state,productQuery,language);
   const cacheable=!user&&!proactive&&!imageSearch&&history.length===0;
   const cacheKey=cacheable?cacheKeyFor(language,message,context):'';
   if(cacheKey){
     const cached=await getCachedReply(cacheKey);
     if(cached){
-      if(conversation)await saveAiMessage(conversation,cached);
+      if(conversation)await saveAiMessage(conversation,cached,ui);
       await recordAiUsage({surface:'customer',source:'cache',user,conversationId:conversation?.id,model});
-      return {reply:cached,source:'cache',...(conversation?{conversationId:conversation.id,humanMode:false}:{})};
+      return {reply:cached,source:'cache',recommendations:ui.products,quickReplies:ui.quickReplies,...(conversation?{conversationId:conversation.id,humanMode:false,waitingHuman:!!conversation.handoff_requested_at}:{})};
     }
   }
   const system=language==='ar'
     ?`أنت مستشار مبيعات وتوريد محترف داخل M Platform. هدفك فهم ما يحتاجه العميل ومساعدته على اتخاذ قرار شراء مناسب، بدون ضغط أو مبالغة.
 اعتمد على PLATFORM_CONTEXT_JSON في معلومات المنتجات والأسعار والمخزون والطلبات والعروض والسياسات. إذا احتوى السياق على policy فاعتبره المصدر الرسمي للسؤال المتعلق بالسياسة، وأجب منه مباشرة وباختصار. لا تخترع أي سعر أو خصم أو مخزون أو حالة أو ميزة غير موجودة.
 افهم احتياج العميل من كلامه وسلوكه الشرائي غير الحساس فقط، مثل البحث، المنتجات التي يقارنها، أو السلة. لا تستنتج أو تستخدم صفات حساسة شخصية.
-إذا كان الاحتياج غير واضح، اسأل سؤالًا واحدًا أو سؤالين مفيدين مثل: الاستخدام، الكمية، الميزانية، السوق المستهدف، أو المواصفة الأهم.
-عند وجود منتجات مناسبة، اقترح من 1 إلى 3 خيارات فقط واشرح باختصار لماذا يناسب كل خيار. اذكر SKU والسعر والحد الأدنى عندما تكون موجودة.
+أجب عن السؤال الحالي فقط. الرد العادي جملة أو جملتان قصيرتان، ولا تشرح سياسة كاملة ما لم يطلب العميل التفاصيل.
+إذا احتجت توضيحًا، اسأل سؤالًا واحدًا فقط في الرد، ولا تجمع عدة أسئلة معًا. لا تسأل عن الكمية في البداية إلا إذا كانت ضرورية للسعر أو الحد الأدنى للطلب، ولا تكرر سؤالًا أجاب عنه العميل سابقًا.
+إذا كانت المنتجات الموجودة في السياق مناسبة، لا تسرد مواصفاتها كلها في النص لأن الواجهة ستعرض بطاقات المنتجات. اكتفِ بجملة قصيرة مثل "هذه أنسب الخيارات" ثم اسأل سؤالًا واحدًا فقط عند الحاجة.
+إذا كان المنتج stockUnlimited=true فقل إنه متوفر للطلب ولا تذكر رقم مخزون. إذا كان stockUnlimited=false فاستخدم رقم المخزون الموجود فقط ولا تخترع توفرًا غير موجود.
 إذا كان PLATFORM_CONTEXT_JSON يحتوي imageSearch، فالصورة تم تحليلها مرة واحدة مسبقًا. استخدم وصف imageSearch والمنتجات المطابقة في السياق لتحديد أقرب الخيارات، وقل بوضوح "أقرب تطابق" عندما لا يكون التطابق مؤكدًا.
 إذا لم يوجد منتج مطابق، اقترح إرسال طلب خاص بدل اختراع منتج.
 لا تستخدم ندرة أو استعجالًا أو خصمًا غير حقيقي، ولا تقل إن منتجًا هو الأفضل إلا إذا شرحت معيار المقارنة من البيانات المتاحة.
@@ -482,8 +528,10 @@ export async function aiChat(user,body={},req=null){
     :`You are a professional sales and sourcing advisor inside M Platform. Your goal is to understand what the customer needs and help them make a suitable purchase decision without pressure or exaggeration.
 Use PLATFORM_CONTEXT_JSON for product, price, stock, order, quote, and policy facts. If the context contains policy, treat it as the official source for policy questions and answer from it directly and concisely. Never invent a price, discount, stock level, status, feature, or promotion.
 Understand needs only from the customer's words and non-sensitive shopping behavior such as searches, compared products, or cart activity. Never infer or use sensitive personal traits.
-If the need is unclear, ask one or two useful questions about use case, quantity, budget, target market, or the most important specification.
-When suitable products exist, recommend only 1 to 3 options and briefly explain why each fits. Include SKU, price, and MOQ when available.
+Answer only the current question. Normal replies should be one or two short sentences; never paste a full policy unless the customer asks for details.
+If clarification is necessary, ask at most one question per reply. Never bundle multiple questions. Do not ask for quantity early unless price or MOQ truly requires it, and never repeat a question the customer already answered.
+When the context contains suitable products, do not list all specifications in prose because the UI will show product cards. Use one short sentence such as "These are the best matching options" and ask only one clarification if needed.
+If stockUnlimited=true, say the product is available to order and do not mention a stock count. If stockUnlimited=false, use only the explicit tracked stock value and do not invent availability.
 If PLATFORM_CONTEXT_JSON contains imageSearch, the image was analyzed once before this response. Use the imageSearch description and matched catalog products to identify the closest options, and explicitly say "closest match" when the match is uncertain.
 If there is no exact match, suggest a custom sourcing request rather than inventing a product.
 Do not use fake scarcity, false urgency, or nonexistent discounts. Do not call something the best unless you explain the comparison criterion from available data.
@@ -499,7 +547,7 @@ If PLATFORM_CONTEXT_JSON contains shoppingSignal, write a very short proactive m
       ...history,
       {role:'user',content:message}
     ],
-    max_completion_tokens:320,
+    max_completion_tokens:190,
     temperature:0.2,
     reasoning_effort:'none'
   };
@@ -517,8 +565,8 @@ If PLATFORM_CONTEXT_JSON contains shoppingSignal, write a very short proactive m
   if(conversation){
     const current=await ensureConversation(user,{conversationId:conversation.id,guestKey:body.guestKey,language},false);
     if(current?.status==='human')return {conversationId:current.id,humanMode:true};
-    await saveAiMessage(current||conversation,reply);
+    await saveAiMessage(current||conversation,reply,ui);
   }
   await recordAiUsage({surface:'customer',source:'openai',user,conversationId:conversation?.id,model,usage:data?.usage});
-  return {reply,source:'openai',usage:data?.usage||null,...(conversation?{conversationId:conversation.id,humanMode:false}:{})};
+  return {reply,source:'openai',usage:data?.usage||null,recommendations:ui.products,quickReplies:ui.quickReplies,...(conversation?{conversationId:conversation.id,humanMode:false,waitingHuman:!!conversation.handoff_requested_at}:{})};
 }
