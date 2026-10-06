@@ -2326,3 +2326,7 @@ body.image-viewer-open {
 .toast{z-index:2100}
 body:has(.modal:not(.hidden)){overflow:hidden}
 body:has(#modal:not(.hidden)) .sf-product-page .sf-buy-bar{display:none!important}
+
+.admin-chat-filters{display:flex;gap:8px;overflow:auto;padding:2px 0 12px;scrollbar-width:none}.admin-chat-filters::-webkit-scrollbar{display:none}.admin-chat-filters button{flex:0 0 auto;border:1px solid #d7e2e8;background:#fff;color:#284354;border-radius:999px;padding:8px 12px;font:inherit;font-size:12px}.admin-chat-filters button.active{background:#17324d;color:#fff;border-color:#17324d}
+.admin-chat-card.urgent{border-color:#efb9ad;background:#fff9f7}.admin-chat-flags{display:flex;gap:6px;flex-wrap:wrap;margin-top:5px}.admin-chat-lead,.admin-chat-wait{display:inline-flex;align-items:center;border-radius:999px;padding:3px 7px;font-size:10px;font-style:normal}.admin-chat-lead{background:#fff4dc;color:#8a5a00}.admin-chat-wait{background:#fff0ed;color:#a83224}
+.admin-chat-lead-details{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}.admin-chat-lead-details b{width:100%;color:#9a5b00}.admin-chat-lead-details span{background:#f5f8fa;border-radius:8px;padding:4px 7px;font-size:11px;color:#526775}
