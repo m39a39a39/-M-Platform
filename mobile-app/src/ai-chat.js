@@ -72,6 +72,9 @@ export function chatAttributionForOrder(){
   const row=readAttribution();
   return row?{conversationId:row.conversationId,guestKey:row.guestKey||'',productId:row.productId||''}:null;
 }
+export function clearChatAttribution(){
+  try{localStorage.removeItem(ATTRIBUTION_KEY);}catch{}
+}
 async function trackConversion(eventName,{productId='',metadata={}}={}){
   const attribution=readAttribution();
   const conversationId=attribution?.conversationId||controller?.conversationId||'';
