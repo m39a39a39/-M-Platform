@@ -82,7 +82,8 @@ function productIntent(query=''){
     material:'',
     device:'',
     use:'',
-    cheapest:/(أرخص|ارخص|cheapest|lowest price|اقتصادي|budget)/u.test(q)
+    quantity:null,
+    cheapest:/(أرخص|ارخص|cheapest|lowest price|اقل سعر|أقل سعر|اقتصادي|budget)/u.test(q)
   };
   if(/(مكبر|سبيكر|speaker|soundbar)/u.test(q)){intent.category='audio';intent.subtype='speaker';}
   else if(/(سماع(?:ة|ه|ات)|earbud|earphone|headphone|headset|tws)/u.test(q)){
@@ -108,6 +109,11 @@ function productIntent(query=''){
 
   const watts=[...q.matchAll(/(?:^|\D)(\d{1,3})\s*w(?:att)?\b/gi)].map(m=>Number(m[1])).filter(n=>n>=5&&n<=300);
   if(watts.length)intent.watt=watts[0];
+
+  const qtyAfter=(q.match(/(?:كمية|الكميه|الكمية|عدد|qty|quantity)\s*[:：-]?\s*(\d{1,7})/iu)||[])[1];
+  const qtyBefore=(q.match(/(?:^|\s)(\d{1,7})\s*(?:حبة|حبه|قطعة|قطعه|pcs?|pieces?|units?)(?:\s|$)/iu)||[])[1];
+  const parsedQuantity=Number(qtyAfter||qtyBefore||0);
+  if(Number.isInteger(parsedQuantity)&&parsedQuantity>0)intent.quantity=parsedQuantity;
 
   if(/silicone|سيليكون/u.test(q))intent.material='silicone';
   else if(/\btpu\b/u.test(q))intent.material='tpu';
@@ -149,6 +155,43 @@ function productProfile(item){
   const watts=[...hay.matchAll(/(?:^|\D)(\d{1,3})\s*w(?:att)?\b/gi)].map(m=>Number(m[1])).filter(n=>n>=5&&n<=300);
   const material=/silicone|سيليكون/u.test(hay)?'silicone':/\btpu\b/u.test(hay)?'tpu':/leather|جلد/u.test(hay)?'leather':/acrylic|اكريل|أكريل/u.test(hay)?'acrylic':'';
   return {hay,category,subtype,connector,watts,material};
+}
+
+function intentHasHardConstraints(intent){
+  return !!(intent.category||intent.subtype||intent.connector||intent.watt||intent.material||intent.device||intent.wireless);
+}
+function explicitlyCompatible(item,intent){
+  const p=productProfile(item);
+  if(intent.category&&p.category){
+    const categoryMatch=intent.category==='charger'
+      ?['charger','wall_charger','car_charger'].includes(p.category)
+      :intent.category==='audio'?p.category==='audio':p.category===intent.category;
+    if(!categoryMatch)return false;
+  }
+  if(intent.subtype&&p.subtype){
+    const subtypeMatch=intent.subtype==='personal'
+      ?['tws','headphone','wired'].includes(p.subtype)
+      :p.subtype===intent.subtype;
+    if(!subtypeMatch)return false;
+  }
+  if(intent.wireless&&p.subtype==='wired')return false;
+  if(intent.connector&&p.connector&&p.connector!==intent.connector)return false;
+  if(intent.watt&&p.watts.length&&!p.watts.includes(intent.watt))return false;
+  if(intent.material&&p.material&&p.material!==intent.material)return false;
+  return true;
+}
+function effectiveUnitPrice(item,quantity=null){
+  let price=Number(item?.unitPrice);
+  if(!Number.isFinite(price))return null;
+  const q=Number(quantity);
+  if(Number.isInteger(q)&&q>0&&Array.isArray(item?.tiers)){
+    const tiers=[...item.tiers]
+      .map(t=>({min:Number(t?.min),price:Number(t?.price)}))
+      .filter(t=>Number.isFinite(t.min)&&Number.isFinite(t.price)&&t.min>0)
+      .sort((a,b)=>a.min-b.min);
+    for(const tier of tiers)if(q>=tier.min)price=tier.price;
+  }
+  return Number.isFinite(price)?price:null;
 }
 function intentScore(item,intent){
   const p=productProfile(item);
@@ -200,24 +243,38 @@ function productScore(item,needles,intent,signals={}){
 }
 function rankedProductItems(state,query,signals={}){
   const rows=(state?.publicOffers||[]).filter(x=>x?.status==='published'&&!x?.deletedAt&&!x?.studioArchived);
-  const needles=terms(query),intent=productIntent(query);
-  return rows.map(item=>({item,score:productScore(item,needles,intent,signals)})).sort((a,b)=>{
-    if(a.score!==b.score)return b.score-a.score;
-    if(intent.cheapest&&Number.isFinite(Number(a.item?.unitPrice))&&Number.isFinite(Number(b.item?.unitPrice)))return Number(a.item.unitPrice)-Number(b.item.unitPrice);
+  const needles=terms(query),intent=productIntent(query),hard=intentHasHardConstraints(intent);
+  const ranked=rows.map(item=>({
+    item,
+    score:productScore(item,needles,intent,signals),
+    compatible:explicitlyCompatible(item,intent),
+    effectivePrice:effectiveUnitPrice(item,intent.quantity)
+  })).filter(row=>!hard||row.compatible);
+
+  return ranked.sort((a,b)=>{
+    if(intent.cheapest){
+      const ap=a.effectivePrice,bp=b.effectivePrice;
+      const aHas=Number.isFinite(ap),bHas=Number.isFinite(bp);
+      if(aHas&&bHas&&ap!==bp)return ap-bp;
+      if(aHas!==bHas)return aHas?-1:1;
+      if(a.score!==b.score)return b.score-a.score;
+    }else if(a.score!==b.score)return b.score-a.score;
     return String(b.item?.createdAt||'').localeCompare(String(a.item?.createdAt||''));
   });
 }
 function productContext(state,query,signals={}){
-  const ranked=rankedProductItems(state,query,signals),positive=ranked.filter(x=>x.score>0).slice(0,6);
+  const intent=productIntent(query),ranked=rankedProductItems(state,query,signals),positive=ranked.filter(x=>x.score>0).slice(0,6);
   const selected=positive.length?positive:ranked.slice(0,4);
-  return selected.map(({item})=>{
-    const title=titlePair(item),description=descriptionPair(item);
+  return selected.map(({item,effectivePrice})=>{
+    const title=titlePair(item),description=descriptionPair(item),basePrice=Number.isFinite(Number(item.unitPrice))?Number(item.unitPrice):null;
     return {
       number:item.displayNo||'',
       sku:clamp(item.sku,120),
       title,
       description,
-      price:Number.isFinite(Number(item.unitPrice))?Number(item.unitPrice):null,
+      price:intent.quantity&&Number.isFinite(effectivePrice)?effectivePrice:basePrice,
+      basePrice,
+      requestedQuantity:intent.quantity||null,
       currency:clamp(item.currency,12),
       moq:item.moq??null,
       stock:isUnlimitedStock(item)?null:(item.stock??null),
@@ -230,13 +287,17 @@ function productContext(state,query,signals={}){
   });
 }
 export function customerProductRecommendations(state,query,language='ar',signals={}){
-  return rankedProductItems(state,query,signals).filter(x=>x.score>0).slice(0,6).map(({item})=>{
+  const intent=productIntent(query);
+  return rankedProductItems(state,query,signals).filter(x=>x.score>0).slice(0,6).map(({item,effectivePrice})=>{
     const titles=titlePair(item),image=Array.isArray(item.images)?String(item.images[0]||''):'';
+    const basePrice=Number.isFinite(Number(item.unitPrice))?Number(item.unitPrice):null;
     return {
       id:clamp(item.id,90),
       sku:clamp(item.sku,100),
       title:language==='en'?(titles.en||titles.ar):(titles.ar||titles.en),
-      price:Number.isFinite(Number(item.unitPrice))?Number(item.unitPrice):null,
+      price:intent.quantity&&Number.isFinite(effectivePrice)?effectivePrice:basePrice,
+      basePrice,
+      priceQuantity:intent.quantity||null,
       currency:clamp(item.currency||'SAR',12),
       moq:item.moq??null,
       image:clamp(image,1200),
