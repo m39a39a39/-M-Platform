@@ -160,7 +160,7 @@ function enforceRateLimit(user){
   let row=usage.get(key);
   if(!row||now-row.startedAt>=WINDOW_MS)row={startedAt:now,count:0};
   row.count+=1;usage.set(key,row);
-  if(row.count>30)throw new HttpError(429,'تم الوصول إلى حد استخدام MG AI مؤقتًا. حاول بعد قليل. / MG AI usage limit reached.');
+  if(row.count>30)throw new HttpError(429,'تم الوصول إلى حد استخدام IMSG AI مؤقتًا. حاول بعد قليل. / IMSG AI usage limit reached.');
 }
 
 function normalizeHistory(value){
@@ -180,9 +180,9 @@ function extractReply(data){
 
 function providerError(status){
   if(status===429)return new HttpError(429,'تم الوصول إلى حد استخدام الذكاء الاصطناعي مؤقتًا. / AI usage limit reached.');
-  if(status===402)return new HttpError(503,'خدمة MG AI متوقفة مؤقتًا بسبب حد الميزانية. / MG AI budget limit reached.');
+  if(status===402)return new HttpError(503,'خدمة IMSG AI متوقفة مؤقتًا بسبب حد الميزانية. / IMSG AI budget limit reached.');
   if(status===401||status===403)return new HttpError(503,'إعداد OpenAI يحتاج مراجعة. / OpenAI configuration needs review.');
-  return new HttpError(502,'تعذر الحصول على رد من MG AI. / MG AI is temporarily unavailable.');
+  return new HttpError(502,'تعذر الحصول على رد من IMSG AI. / IMSG AI is temporarily unavailable.');
 }
 
 const parseJsonObject=value=>{
@@ -303,18 +303,18 @@ async function generateProductDraft(user,body,{apiKey,model,state}){
     reviewNotes:clamp(parsed.reviewNotes,1000)
   };
   const needsMoreImages=parsed.needsMoreImages===true;
-  assert(draft.name,502,'لم يتمكن MG AI من تحديد المنتج بوضوح. أضف صورًا أوضح أو ملاحظة قصيرة. / MG AI could not identify the product clearly.');
+  assert(draft.name,502,'لم يتمكن IMSG AI من تحديد المنتج بوضوح. أضف صورًا أوضح أو ملاحظة قصيرة. / IMSG AI could not identify the product clearly.');
   await recordAiUsage({surface:'product_draft',source:'openai',user,model,usage:data?.usage});
   return {draft,taxonomy:reference,mode:'draft-proposal',needsMoreImages,usage:data?.usage||null};
 }
 
 export async function adminAiOverview(user){
-  assert(can(user,'settings'),403,'لا تملك صلاحية MG AI / MG AI permission required');
+  assert(can(user,'settings'),403,'لا تملك صلاحية IMSG AI / IMSG AI permission required');
   const state=await snapshot(user);
   const context=buildAdminAiContext(state);
   let usage=null,conversion=null;
   try{[usage,conversion]=await Promise.all([aiUsageSummary(),chatConversionSummary()]);}
-  catch(error){console.warn('MG AI metrics summary failed',error?.message||'unknown');}
+  catch(error){console.warn('IMSG AI metrics summary failed',error?.message||'unknown');}
   return {
     mode:'proposal',
     overview:context.overview,
@@ -333,7 +333,7 @@ export async function adminAiOverview(user){
 }
 
 export async function adminAi(user,body={}){
-  assert(can(user,'settings'),403,'لا تملك صلاحية MG AI / MG AI permission required');
+  assert(can(user,'settings'),403,'لا تملك صلاحية IMSG AI / IMSG AI permission required');
   enforceRateLimit(user);
 
   const apiKey=String(process.env.OPENAI_API_KEY||'').trim();
@@ -342,7 +342,7 @@ export async function adminAi(user,body={}){
   const state=await snapshot(user);
   if(body.action==='product-draft')return generateProductDraft(user,body,{apiKey,model,state});
   const message=clamp(body.message,2500);
-  assert(message,400,'اكتب طلبك إلى MG AI / Enter a request for MG AI');
+  assert(message,400,'اكتب طلبك إلى IMSG AI / Enter a request for IMSG AI');
   const context=buildAdminAiContext(state);
   const history=normalizeHistory(body.history);
   const language=body.language==='en'?'en':'ar';
@@ -356,8 +356,8 @@ export async function adminAi(user,body={}){
   if(conversion)llmContext.chatConversions=conversion;
 
   const system=language==='en'
-    ?`You are MG AI, the read-only admin merchandising and business analyst inside IMSG. Use only ADMIN_CONTEXT_JSON. Never invent metrics, customer behavior, views, searches, cart events, margins, or profit. When ADMIN_CONTEXT_JSON contains chatConversions, use those real aggregated chat-funnel events for behavior and conversion analysis. Never reveal or request customer names, emails, phone numbers, addresses, or other personal data. Distinguish data-backed findings from recommendations. For homepage merchandising, prioritize wholesale relevance, product diversity, observed order history, stock and catalog quality. You cannot directly edit, publish, reorder or launch campaigns. Product creation is available only through the separate reviewed draft workflow in the admin UI. If the admin asks you to make a store change, provide a precise proposal and require admin approval. Keep answers practical and concise.`
-    :`أنت MG AI، محلل المتجر والتسويق وترتيب المنتجات داخل لوحة إدارة IMSG بوضع قراءة فقط. اعتمد فقط على ADMIN_CONTEXT_JSON ولا تخترع أي أرقام أو سلوك للعملاء أو مشاهدات أو عمليات بحث أو إضافات للسلة أو هامش ربح. عندما يحتوي ADMIN_CONTEXT_JSON على chatConversions فاستخدم بيانات التحويل الحقيقية والمجمعة لتحليل أداء شات العملاء. لا تعرض ولا تطلب أسماء العملاء أو البريد أو الهاتف أو العنوان أو أي بيانات شخصية. فرّق بوضوح بين النتائج المبنية على البيانات وبين الاقتراحات. عند اقتراح الصفحة الرئيسية راعِ طبيعة الجملة، تنويع فئات المنتجات، سجل الطلبات المتاح، المخزون وجودة الكتالوج. لا تستطيع تعديل أو نشر أو إعادة ترتيب أو تشغيل حملة مباشرة. إضافة المنتجات متاحة فقط عبر مسار مسودة منفصل داخل لوحة الإدارة وبعد مراجعة المسؤول. إذا طُلب منك تغيير المتجر فاعرض الاقتراح بدقة واطلب الاعتماد. اجعل الإجابة عملية ومختصرة.`;
+    ?`You are IMSG AI, the read-only admin merchandising and business analyst inside IMSG. Use only ADMIN_CONTEXT_JSON. Never invent metrics, customer behavior, views, searches, cart events, margins, or profit. When ADMIN_CONTEXT_JSON contains chatConversions, use those real aggregated chat-funnel events for behavior and conversion analysis. Never reveal or request customer names, emails, phone numbers, addresses, or other personal data. Distinguish data-backed findings from recommendations. For homepage merchandising, prioritize wholesale relevance, product diversity, observed order history, stock and catalog quality. You cannot directly edit, publish, reorder or launch campaigns. Product creation is available only through the separate reviewed draft workflow in the admin UI. If the admin asks you to make a store change, provide a precise proposal and require admin approval. Keep answers practical and concise.`
+    :`أنت IMSG AI، محلل المتجر والتسويق وترتيب المنتجات داخل لوحة إدارة IMSG بوضع قراءة فقط. اعتمد فقط على ADMIN_CONTEXT_JSON ولا تخترع أي أرقام أو سلوك للعملاء أو مشاهدات أو عمليات بحث أو إضافات للسلة أو هامش ربح. عندما يحتوي ADMIN_CONTEXT_JSON على chatConversions فاستخدم بيانات التحويل الحقيقية والمجمعة لتحليل أداء شات العملاء. لا تعرض ولا تطلب أسماء العملاء أو البريد أو الهاتف أو العنوان أو أي بيانات شخصية. فرّق بوضوح بين النتائج المبنية على البيانات وبين الاقتراحات. عند اقتراح الصفحة الرئيسية راعِ طبيعة الجملة، تنويع فئات المنتجات، سجل الطلبات المتاح، المخزون وجودة الكتالوج. لا تستطيع تعديل أو نشر أو إعادة ترتيب أو تشغيل حملة مباشرة. إضافة المنتجات متاحة فقط عبر مسار مسودة منفصل داخل لوحة الإدارة وبعد مراجعة المسؤول. إذا طُلب منك تغيير المتجر فاعرض الاقتراح بدقة واطلب الاعتماد. اجعل الإجابة عملية ومختصرة.`;
 
   const payload={
     model,
@@ -381,13 +381,13 @@ export async function adminAi(user,body={}){
       signal:AbortSignal.timeout(26000)
     });
   }catch{
-    throw new HttpError(502,'تعذر الاتصال بـ MG AI الآن. / Could not connect to MG AI.');
+    throw new HttpError(502,'تعذر الاتصال بـ IMSG AI الآن. / Could not connect to IMSG AI.');
   }
   if(!response.ok)throw providerError(response.status);
   let data;
-  try{data=await response.json();}catch{throw new HttpError(502,'استجابة MG AI غير صالحة. / Invalid MG AI response.');}
+  try{data=await response.json();}catch{throw new HttpError(502,'استجابة IMSG AI غير صالحة. / Invalid IMSG AI response.');}
   const reply=extractReply(data);
-  if(!reply)throw new HttpError(502,'لم يصل رد صالح من MG AI. / MG AI returned an empty response.');
+  if(!reply)throw new HttpError(502,'لم يصل رد صالح من IMSG AI. / IMSG AI returned an empty response.');
   await recordAiUsage({surface:'admin',source:'openai',user,model,usage:data?.usage});
   return {reply,mode:'readonly',usage:data?.usage||null,overview:context.overview,behaviorTrackingAvailable:true};
 }
