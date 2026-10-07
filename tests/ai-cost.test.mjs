@@ -29,6 +29,40 @@ test('company name and address are answered locally from active policy content',
   assert.match(address,/广州彩尊企业管理咨询公司/);
 });
 
+test('short company followups keep policy context and return labeled fields locally',()=>{
+  const state={settings:{storefront:{pages:[{
+    id:'policy-terms',active:true,title:'الشروط والأحكام',titleEn:'Terms',
+    content:'اسم الشركة القانوني: GUANGZHOU MIG TRADING CO., LTD. / 广州米各贸易有限公司، ويشار إليها باسم «الشركة»\nالعنوان: الصين، قوانزو — 广州彩尊企业管理咨询公司（金沙大都会二期2栋1730房)',
+    contentEn:'Legal company name: GUANGZHOU MIG TRADING CO., LTD. / 广州米各贸易有限公司\nCompany address: Guangzhou, China'
+  }]}},publicOffers:[]};
+  const history=[
+    {role:'user',content:'اسم شركتكم'},
+    {role:'assistant',content:'GUANGZHOU MIG TRADING CO., LTD. / 广州米各贸易有限公司'}
+  ];
+  const address=directCustomerAnswer(state,null,'أين موقعها','ar',{},'أين موقعها',null,false,history);
+  const shortAddress=directCustomerAnswer(state,null,'والعنوان','ar',{},'والعنوان',null,false,history);
+  assert.match(address,/广州彩尊企业管理咨询公司/);
+  assert.match(shortAddress,/广州彩尊企业管理咨询公司/);
+  assert.doesNotMatch(address,/لا تتوفر لدي/);
+
+  const name=directCustomerAnswer(state,null,'اسم الشركة','ar');
+  assert.match(name,/GUANGZHOU MIG TRADING CO., LTD/);
+  assert.match(name,/广州米各贸易有限公司/);
+  assert.doesNotMatch(name,/ويشار إليها باسم/);
+});
+
+test('company followups are not treated as product queries when recent history is about the company',()=>{
+  const state={settings:{
+    categories:[{id:'cat-cables-adapters',active:true,nameAr:'الكيابل والمحولات',nameEn:'Cables & Adapters'}],
+    subcategories:[{id:'sub-charging-data-cables',parentId:'cat-cables-adapters',active:true,nameAr:'كيابل الشحن والبيانات',nameEn:'Charging & Data Cables'}]
+  },publicOffers:[
+    {id:'cable',status:'published',sku:'C1',unitPrice:2,currency:'SAR',subcategoryId:'sub-charging-data-cables',categoryId:'cat-cables-adapters',translation:{titleAr:'كابل شحن',titleEn:'Charging Cable'}}
+  ]};
+  const history=[{role:'user',content:'اسم الشركة'},{role:'assistant',content:'GUANGZHOU MIG TRADING CO., LTD.'}];
+  assert.equal(isCustomerProductQuery(state,'العنوان',history),false);
+  assert.equal(isCustomerProductQuery(state,'أين موقعها',history),false);
+});
+
 test('shipping policy questions use the stored policy text locally',()=>{
   const state={settings:{storefront:{pages:[{
     id:'policy-shipping',active:true,title:'سياسة الشحن',titleEn:'Shipping Policy',

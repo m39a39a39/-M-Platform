@@ -1,5 +1,6 @@
 import './ai-chat.css';
 import {filesToCompressedSources} from './image-upload.js';
+import {latestAssistantQuickReplies} from './ai-chat-state.js';
 
 let controller=null;
 let pollTimer=null;
@@ -171,12 +172,7 @@ function messageHtml(row){
   return `<div class="m-ai-row ${row.role==='user'?'user':'assistant'}${hasProducts?' has-products':''}"><div>${sender}<span class="m-ai-message-text">${esc(row.content)}</span>${row.role!=='user'?productCardsHtml(meta.products):''}</div></div>`;
 }
 function latestQuickReplies(){
-  if(controller?.humanMode)return [];
-  for(let i=(controller?.messages?.length||0)-1;i>=0;i--){
-    const rows=controller.messages[i]?.metadata?.quickReplies;
-    if(Array.isArray(rows)&&rows.length)return rows.slice(0,4);
-  }
-  return [];
+  return latestAssistantQuickReplies(controller?.messages||[],!!controller?.humanMode);
 }
 function latestProductSku(){
   for(let i=(controller?.messages?.length||0)-1;i>=0;i--){
