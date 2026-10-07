@@ -83,7 +83,7 @@ function productIntent(query=''){
     device:'',
     use:'',
     quantity:null,
-    cheapest:/(أرخص|ارخص|رخيص|رخيصة|cheap|cheapest|lowest price|اقل سعر|أقل سعر|اقتصادي|budget)/u.test(q)
+    cheapest:/(أرخص|ارخص|رخيص|رخيصة|cheap|cheapest|lowest price|اقل سعر|أقل سعر|اقتصادي|budget)/u.test(q)||fuzzyHas(q,['ارخص','رخيص','cheap','cheapest'],1)
   };
   if(/(مكبر|سبيكر|speaker|soundbar)/u.test(q)){intent.category='audio';intent.subtype='speaker';}
   else if(/(سماع(?:ة|ه|ات)|earbud|earphone|headphone|headset|tws)/u.test(q)){
@@ -160,10 +160,58 @@ function normalizeCatalogText(value=''){
 function catalogTokens(value=''){
   return normalizeCatalogText(value).split(' ').filter(x=>x.length>=3);
 }
+function lightTokenStem(value=''){
+  let token=normalizeCatalogText(value);
+  if(!token)return '';
+  if(/^[\u0600-\u06ff]+$/u.test(token)){
+    if(token.length>=6&&token.startsWith('ال'))token=token.slice(2);
+    for(const suffix of ['كما','هما','كم','كن','هم','هن','نا','ات','ها','ه','ك','ي']){
+      if(token.length-suffix.length>=3&&token.endsWith(suffix)){token=token.slice(0,-suffix.length);break;}
+    }
+    if(token.length>=4&&token.endsWith('ت'))token=token.slice(0,-1)+'ه';
+  }
+  return token;
+}
+function boundedEditDistance(a,b,max=2){
+  a=String(a||'');b=String(b||'');
+  if(a===b)return 0;
+  if(Math.abs(a.length-b.length)>max)return max+1;
+  const prev=Array.from({length:b.length+1},(_,i)=>i),curr=new Array(b.length+1);
+  for(let i=1;i<=a.length;i++){
+    curr[0]=i;let rowMin=curr[0];
+    for(let j=1;j<=b.length;j++){
+      curr[j]=Math.min(prev[j]+1,curr[j-1]+1,prev[j-1]+(a[i-1]===b[j-1]?0:1));
+      rowMin=Math.min(rowMin,curr[j]);
+    }
+    if(rowMin>max)return max+1;
+    for(let j=0;j<=b.length;j++)prev[j]=curr[j];
+  }
+  return prev[b.length];
+}
 function tokenRelated(a,b){
+  a=normalizeCatalogText(a);b=normalizeCatalogText(b);
+  if(!a||!b)return false;
   if(a===b)return true;
   if(Math.min(a.length,b.length)>=4&&(a.startsWith(b)||b.startsWith(a)))return true;
-  return false;
+  const sa=lightTokenStem(a),sb=lightTokenStem(b);
+  if(sa&&sb&&(sa===sb||Math.min(sa.length,sb.length)>=4&&(sa.startsWith(sb)||sb.startsWith(sa))))return true;
+  const maxLen=Math.max(a.length,b.length);
+  if(Math.min(a.length,b.length)<3||maxLen>24)return false;
+  const maxEdits=maxLen<=8?1:2;
+  const distance=boundedEditDistance(a,b,maxEdits);
+  return distance<=maxEdits&&distance/Math.max(1,maxLen)<=0.28;
+}
+function phraseMatchScore(message,phrase){
+  const q=normalizeCatalogText(message),p=normalizeCatalogText(phrase);
+  if(!q||!p)return 0;
+  if(q.includes(p))return 1;
+  const qTokens=catalogTokens(q),pTokens=catalogTokens(p);
+  if(!pTokens.length)return 0;
+  const matched=pTokens.filter(token=>qTokens.some(queryToken=>tokenRelated(token,queryToken))).length;
+  return matched/pTokens.length;
+}
+function fuzzyHas(message,patterns=[],threshold=1){
+  return patterns.some(pattern=>phraseMatchScore(message,pattern)>=threshold);
 }
 function taxonomyEntries(state){
   const settings=state?.settings||{};
@@ -193,7 +241,10 @@ function taxonomyMatch(state,message=''){
     }
     for(const alias of TAXONOMY_ALIASES[entry.id]||[]){
       const normalized=normalizeCatalogText(alias);
+      const coverage=phraseMatchScore(q,normalized);
       if(normalized&&q.includes(normalized))score=Math.max(score,normalized.includes(' ')?110:82);
+      else if(coverage===1)score=Math.max(score,normalized.includes(' ')?104:78);
+      else if(coverage>=0.75&&catalogTokens(normalized).length>=2)score=Math.max(score,88);
     }
     return {entry,score};
   }).filter(x=>x.score>=24).sort((a,b)=>b.score-a.score);
@@ -373,14 +424,20 @@ function intentScore(item,intent,{ignoreCategory=false}={}){
   return score;
 }
 function productScore(item,needles,intent,signals={},taxonomy=null){
-  const p=productProfile(item),sku=String(item?.sku||'').toLowerCase();
-  const lexical=needles.reduce((score,term)=>score+(p.hay.includes(term)?(sku.includes(term)?7:2):0),0);
+  const p=productProfile(item),sku=normalizeCatalogText(item?.sku||''),hay=normalizeCatalogText(p.hay),hayTokens=catalogTokens(hay);
+  const lexical=needles.reduce((score,term)=>{
+    const normalized=normalizeCatalogText(term);
+    if(!normalized)return score;
+    if(hay.includes(normalized))return score+(sku.includes(normalized)?7:2);
+    if(hayTokens.some(token=>tokenRelated(normalized,token)))return score+2;
+    return score;
+  },0);
   const performance=Math.max(0,Math.min(8,Number(signals?.[item?.id]?.score)||0));
   return lexical+intentScore(item,intent,{ignoreCategory:!!taxonomy})+performance;
 }
 function rankedProductItems(state,query,signals={}){
   const rows=(state?.publicOffers||[]).filter(x=>x?.status==='published'&&!x?.deletedAt&&!x?.studioArchived);
-  const needles=terms(query),intent=productIntent(query),taxonomy=taxonomyMatch(state,query),hard=intentHasHardConstraints(intent)||!!taxonomy;
+  const needles=catalogTokens(query).filter(token=>!STOP_TERMS.has(token)).slice(0,28),intent=productIntent(query),taxonomy=taxonomyMatch(state,query),hard=intentHasHardConstraints(intent)||!!taxonomy;
   const ranked=rows.map(item=>{
     const taxonomyCompatible=!taxonomy
       ||taxonomy.subcategoryId&&String(item?.subcategoryId||'')===taxonomy.subcategoryId
@@ -630,14 +687,18 @@ function wantsHumanSupport(message=''){
   ]);
 }
 function policyPageIdForMessage(message=''){
-  const q=clean(message).toLowerCase();
-  if(qHas(q,['الشحن','شحن','التوصيل','توصيل','ناقل','shipping','delivery','freight','carrier']))return 'policy-shipping';
-  if(qHas(q,['استرجاع','استرداد','ارجاع','إرجاع','refund','return']))return 'policy-returns';
-  if(qHas(q,['إلغاء','الغاء','cancel','cancellation']))return 'policy-cancellation';
-  if(qHas(q,['الدفع','تحويل','عربون','payment','deposit','bank transfer']))return 'policy-payments';
-  if(qHas(q,['خصوصية','privacy']))return 'policy-privacy';
-  if(qHas(q,['ملفات الارتباط','كوكيز','cookies','cookie']))return 'policy-cookies';
-  if(qHas(q,['الشروط','الأحكام','terms','conditions']))return 'policy-terms';
+  const q=normalizeCatalogText(message);
+  if(qHas(q,['الشحن','التوصيل','توصيل','ناقل','shipping','delivery','freight','carrier','تشحن','تشحنون'])
+    ||fuzzyHas(q,['تشحن','تشحنون','التوصيل','شحنه','shipping','delivery','freight'],1))return 'policy-shipping';
+  if(qHas(q,['استرجاع','استرداد','ارجاع','refund','return'])
+    ||fuzzyHas(q,['استرجاع','استرداد','refund','return'],1))return 'policy-returns';
+  if(qHas(q,['الغاء','cancel','cancellation'])
+    ||fuzzyHas(q,['الغاء','cancellation'],1))return 'policy-cancellation';
+  if(qHas(q,['الدفع','تحويل','عربون','payment','deposit','bank transfer'])
+    ||fuzzyHas(q,['الدفع','تحويل','عربون','payment','deposit'],1))return 'policy-payments';
+  if(qHas(q,['خصوصيه','privacy'])||fuzzyHas(q,['خصوصيه','privacy'],1))return 'policy-privacy';
+  if(qHas(q,['ملفات الارتباط','كوكيز','cookies','cookie'])||fuzzyHas(q,['كوكيز','cookies'],1))return 'policy-cookies';
+  if(qHas(q,['الشروط','الاحكام','terms','conditions'])||fuzzyHas(q,['الشروط','الاحكام','terms','conditions'],1))return 'policy-terms';
   return '';
 }
 function isCompanyPolicyQuestion(message=''){
@@ -649,8 +710,8 @@ function isCompanyPolicyQuestion(message=''){
     'where are you located','where is your office','who are you','about the company','location'
   ]);
   if(explicit)return true;
-  const companyRef=qHas(q,['شركتكم','الشركه','الشركة','imsg','company']);
-  const companyFact=qHas(q,['وين','اين','أين','عنوان','موقع','مقر','اسم','where','address','location','office','name']);
+  const companyRef=fuzzyHas(q,['شركه','شركتكم','imsg','company'],0.8);
+  const companyFact=fuzzyHas(q,['وين','اين','عنوان','موقع','مقر','اسم','where','address','location','office','name'],0.8);
   return companyRef&&companyFact;
 }
 function recentCompanyContext(history=[]){
@@ -669,17 +730,58 @@ function isCompanyPolicyFollowup(message='',history=[]){
   if(!recentCompanyContext(history))return false;
   const q=normalizeCatalogText(message);
   if(!q||q.length>80)return false;
-  return qHas(q,[
+  return fuzzyHas(q,[
     'العنوان','والعنوان','عنوانها','عنوانه','عنوانهم','موقعها','موقعه','موقعهم','موقعكم','الموقع',
     'اين موقعها','وين موقعها','اين موقعه','وين موقعه','اين مقرها','وين مقرها','مقرها','مقره',
     'اسمها','اسمه','اسمهم','ما اسمها','وش اسمها','ايش اسمها','شو اسمها','ما اسمه','وش اسمه',
     'شركتكم وين','وين شركتكم','الشركه وين','وين الشركه',
     'what is its name','what is the name','what is the address','where is it','where are they located','address','location'
-  ]);
+  ],0.75);
+}
+function isClarificationFollowup(message=''){
+  const q=normalizeCatalogText(message);
+  if(!q||q.length>120)return false;
+  return fuzzyHas(q,[
+    'ماذا تقصد','وش تقصد','ايش تقصد','شو تقصد','وضح','وضح لي','اشرح','اشرح لي','يعني ايش','يعني ماذا',
+    'كيف','ليش','لماذا','طيب كيف','what do you mean','explain','how so','why'
+  ],0.75);
+}
+function recentPolicyContext(history=[]){
+  const recent=[...(Array.isArray(history)?history:[])].slice(-8).reverse();
+  for(const row of recent){
+    if(row?.role!=='user')continue;
+    const text=clean(row?.content);
+    if(!text)continue;
+    const pageId=policyPageIdForMessage(text);
+    if(pageId)return {pageId,question:text};
+  }
+  for(const row of recent){
+    if(row?.role!=='assistant')continue;
+    const text=clean(row?.content);
+    if(!text)continue;
+    const q=normalizeCatalogText(text);
+    if(fuzzyHas(q,['سياسه الشحن','shipping and delivery','التوصيل حاليا داخل السعوديه'],0.7))return {pageId:'policy-shipping',question:''};
+    if(fuzzyHas(q,['سياسه الاسترجاع','returns and refunds'],0.7))return {pageId:'policy-returns',question:''};
+    if(fuzzyHas(q,['سياسه الدفع','payment policy'],0.7))return {pageId:'policy-payments',question:''};
+    if(fuzzyHas(q,['سياسه الغاء','order cancellation'],0.7))return {pageId:'policy-cancellation',question:''};
+  }
+  return {pageId:'',question:''};
+}
+function resolvedPolicyPageId(message='',history=[]){
+  const current=policyPageIdForMessage(message);
+  if(current)return current;
+  if(!isClarificationFollowup(message))return '';
+  return recentPolicyContext(history).pageId;
+}
+function resolvedPolicyQuery(message='',history=[]){
+  const current=policyPageIdForMessage(message);
+  if(current||!isClarificationFollowup(message))return message;
+  const recent=recentPolicyContext(history);
+  return recent.question?recent.question+' '+message:message;
 }
 function policyQuestionSignal(message='',history=[]){
-  const q=clean(message).toLowerCase();
-  return !!policyPageIdForMessage(message)||isCompanyPolicyQuestion(message)||isCompanyPolicyFollowup(message,history)||qHas(q,['سياسة','السياسة','ضمان','warranty','policy']);
+  const q=normalizeCatalogText(message);
+  return !!resolvedPolicyPageId(message,history)||isCompanyPolicyQuestion(message)||isCompanyPolicyFollowup(message,history)||fuzzyHas(q,['سياسه','ضمان','warranty','policy'],1);
 }
 function selectedPolicyPage(state,pageId){
   return (state?.settings?.storefront?.pages||[]).find(page=>page?.id===pageId&&page?.active!==false)||null;
@@ -696,6 +798,19 @@ function policyPagesForLanguage(state,language){
 }
 function policyChunks(value=''){
   return String(value||'').replace(/\r/g,'\n').split(/\n+|[.!؟。؛]+\s*/u).map(clean).filter(chunk=>chunk.length>=4);
+}
+function policySegments(value=''){
+  return String(value||'').replace(/\r/g,'\n').split(/\n{2,}/u).map(block=>{
+    const lines=String(block||'').split(/\n+/u).map(clean).filter(Boolean);
+    if(!lines.length)return null;
+    const heading=lines.length>1&&lines[0].length<=90?lines[0]:'';
+    const text=clean((heading?lines.slice(1):lines).join(' '));
+    return {heading,text,raw:clean(block)};
+  }).filter(segment=>segment?.text);
+}
+function policyMetadataOnly(value=''){
+  const q=normalizeCatalogText(value);
+  return q.startsWith('تاريخ التحديث')||q.startsWith('اخر تحديث')||q.startsWith('last updated');
 }
 function policyLines(value=''){
   return String(value||'').replace(/\r/g,'\n').split(/\n+/u).map(clean).filter(Boolean);
@@ -755,8 +870,9 @@ function directShippingPolicyAnswer(state,message,language){
       ?'The shipping duration is not specified in the current store policy. The expected duration is confirmed before shipping.'
       :'مدة الشحن غير محددة حاليًا في سياسة المتجر، ويتم تأكيد المدة المتوقعة لك قبل الشحن.';
   }
-  const asksSaudi=qHas(q,['السعودية','saudi','ksa']);
-  const asksCost=qHas(q,['كم تكلفة الشحن','كم سعر الشحن','تكلفة الشحن','سعر الشحن','رسوم الشحن','shipping cost','shipping price','shipping fee','freight cost']);
+  const asksSaudi=fuzzyHas(q,['السعوديه','saudi','ksa'],1);
+  const asksCost=qHas(q,['كم تكلفة الشحن','كم سعر الشحن','تكلفة الشحن','سعر الشحن','رسوم الشحن','shipping cost','shipping price','shipping fee','freight cost'])
+    ||fuzzyHas(q,['تكلفه الشحن','سعر الشحن','shipping cost','shipping fee','freight cost'],0.75);
   const hasSaudi=/السعودية|saudi arabia|\bksa\b/iu.test(content);
   if(asksSaudi&&hasSaudi){
     if(asksCost){
@@ -799,37 +915,41 @@ function directPolicyAnswer(state,message,language,history=[]){
   if(!policyQuestionSignal(message,history))return null;
   const company=directCompanyPolicyAnswer(state,message,language,history);
   if(company)return company;
-  const shipping=directShippingPolicyAnswer(state,message,language);
+  const effectiveMessage=resolvedPolicyQuery(message,history);
+  const shipping=directShippingPolicyAnswer(state,effectiveMessage,language);
   if(shipping)return shipping;
   const pages=policyPagesForLanguage(state,language);
   if(!pages.length)return null;
-  const pageId=policyPageIdForMessage(message);
+  const pageId=resolvedPolicyPageId(message,history);
   const selected=pageId?pages.filter(page=>page.id===pageId):pages;
+  const qTokens=catalogTokens(effectiveMessage).filter(token=>!['سياسه','policy','ماذا','تقصد','كيف','what','mean','how'].includes(token));
   const candidates=[];
-  const qTokens=catalogTokens(message).filter(token=>!['سياسه','policy','ماذا','كيف','what','how'].includes(token));
   for(const page of selected.length?selected:pages){
     const titleTokens=catalogTokens(page.title);
-    for(const chunk of policyChunks(page.content)){
-      const chunkTokens=catalogTokens(chunk);
-      let score=pageId&&page.id===pageId?4:0;
+    for(const segment of policySegments(page.content)){
+      const headingTokens=catalogTokens(segment.heading),bodyTokens=catalogTokens(segment.text);
+      let score=pageId&&page.id===pageId?5:0;
+      if(policyMetadataOnly(segment.raw))score-=30;
       for(const token of qTokens){
-        if(chunkTokens.some(value=>tokenRelated(token,value)))score+=3;
-        if(titleTokens.some(value=>tokenRelated(token,value)))score+=2;
+        if(bodyTokens.some(value=>tokenRelated(token,value)))score+=4;
+        if(headingTokens.some(value=>tokenRelated(token,value)))score+=3;
+        if(titleTokens.some(value=>tokenRelated(token,value)))score+=1;
       }
-      candidates.push({page,chunk,score});
+      if(segment.text.length>=35)score+=1;
+      candidates.push({page,segment,score});
     }
   }
-  candidates.sort((a,b)=>b.score-a.score);
+  candidates.sort((a,b)=>b.score-a.score||b.segment.text.length-a.segment.text.length);
   const top=candidates[0];
-  if(top&&top.score>=4){
-    const body=clamp(top.chunk,650);
-    return top.page.title?top.page.title+': '+body:body;
+  if(top&&top.score>=6){
+    const body=clamp(top.segment.text,650);
+    return top.segment.heading?top.segment.heading+': '+body:body;
   }
   if(pageId){
-    const page=(selected.length?selected:pages)[0];
-    if(page?.content){
-      const body=clamp(page.content,650);
-      return page.title?page.title+': '+body:body;
+    const fallback=candidates.find(item=>item.page.id===pageId&&!policyMetadataOnly(item.segment.raw)&&item.segment.text.length>=30);
+    if(fallback){
+      const body=clamp(fallback.segment.text,650);
+      return fallback.segment.heading?fallback.segment.heading+': '+body:body;
     }
   }
   return null;
@@ -995,7 +1115,7 @@ export async function aiChat(user,body={},req=null){
   let gatewayUser='';
   const model=String(process.env.OPENAI_CHAT_MODEL||DEFAULT_MODEL).replace(/^openai\//,'');
   const history=normalizeHistory(body.history);
-  const policyPageId=policyPageIdForMessage(message);
+  const policyPageId=resolvedPolicyPageId(message,history);
   const policySignal=policyQuestionSignal(message,history);
   const guestSnapshotOptions=policySignal
     ?{...(policyPageId?{pageId:policyPageId}:{}),aiPolicies:true}

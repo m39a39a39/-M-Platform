@@ -78,7 +78,7 @@ test('shipping policy questions use the stored policy text locally',()=>{
     contentEn:'Shipping to Saudi Arabia: shipping cost is confirmed after preparation based on weight, volume and shipping method.'
   }]}},publicOffers:[]};
   const reply=directCustomerAnswer(state,null,'كم تكلفة الشحن للسعودية؟','ar');
-  assert.match(reply,/تحديد تكلفة الشحن بعد تجهيز البضاعة/);
+  assert.match(reply,/تكلفة الشحن بعد تجهيز البضاعة/);
 });
 
 test('company and policy questions are never classified as product-card queries',()=>{
@@ -110,6 +110,48 @@ test('local-first product discovery answers from catalog without needing prose g
   assert.equal(search.recommendations[0]?.id,'cheap');
   assert.match(reply,/أرخص خيار مطابق/);
   assert.match(reply,/2.5 SAR/);
+});
+
+test('typo-tolerant taxonomy understands power bank wording variants and sorts cheapest locally',()=>{
+  const state={settings:{
+    categories:[{id:'cat-charging-power',active:true,nameAr:'الشحن والطاقة',nameEn:'Charging & Power'}],
+    subcategories:[{id:'sub-power-banks',parentId:'cat-charging-power',active:true,nameAr:'الشواحن المتنقلة',nameEn:'Power Banks'}]
+  },publicOffers:[
+    {id:'cheap-pb',status:'published',sku:'PB1',unitPrice:20,currency:'SAR',categoryId:'cat-charging-power',subcategoryId:'sub-power-banks',translation:{titleAr:'شاحن متنقل 10000mAh',titleEn:'10000mAh Power Bank'}},
+    {id:'expensive-pb',status:'published',sku:'PB2',unitPrice:30,currency:'SAR',categoryId:'cat-charging-power',subcategoryId:'sub-power-banks',translation:{titleAr:'شاحن متنقل 20000mAh',titleEn:'20000mAh Power Bank'}}
+  ]};
+  for(const query of ['ارخص باور بنك','ارخص بور بانك','رخيس باور بنك']){
+    assert.equal(isCustomerProductQuery(state,query,[]),true);
+    const search=customerProductSearch(state,query,'ar');
+    assert.equal(search.recommendations[0]?.id,'cheap-pb');
+    assert.ok(search.recommendations.every(x=>x.id==='cheap-pb'||x.id==='expensive-pb'));
+  }
+});
+
+test('shipping destination question ignores update-date metadata and answers from the actual policy section',()=>{
+  const state={publicOffers:[],settings:{storefront:{pages:[{
+    id:'policy-shipping',active:true,title:'سياسة الشحن والتوصيل',titleEn:'Shipping and delivery',
+    content:'تاريخ التحديث: ٤ أكتوبر ٢٠٢٦\n\nوجهات الخدمة\nنوفر التوصيل حاليًا داخل السعودية. وتُضاف وجهات أخرى عند الإعلان عن إتاحتها.\n\nالطريقة والتكلفة\nنرتب الشحن الجوي أو البحري وفق اختيار العميل.',
+    contentEn:'Last updated: 4 October 2026\n\nDestinations\nDelivery currently serves Saudi Arabia.\n\nMethod and charges\nWe arrange air or sea freight.'
+  }]}}};
+  const reply=directCustomerAnswer(state,null,'هل تشحن للسعوديه؟','ar');
+  assert.match(reply,/نعم|نوفر التوصيل/);
+  assert.match(reply,/السعودية/);
+  assert.doesNotMatch(reply,/تاريخ التحديث/);
+});
+
+test('short clarification keeps the previous shipping-policy topic instead of falling back to generic AI',()=>{
+  const state={publicOffers:[],settings:{storefront:{pages:[{
+    id:'policy-shipping',active:true,title:'سياسة الشحن والتوصيل',
+    content:'تاريخ التحديث: ٤ أكتوبر ٢٠٢٦\n\nوجهات الخدمة\nنوفر التوصيل حاليًا داخل السعودية.\n\nالطريقة والتكلفة\nنرتب الشحن الجوي أو البحري وفق اختيار العميل.'
+  }]}}};
+  const history=[
+    {role:'user',content:'هل تشحن للسعودية؟'},
+    {role:'assistant',content:'نعم، نوفر التوصيل حاليًا إلى السعودية.'}
+  ];
+  const reply=directCustomerAnswer(state,null,'ماذا تقصد؟','ar',{},'ماذا تقصد؟',null,false,history);
+  assert.match(reply,/السعودية/);
+  assert.doesNotMatch(reply,/تاريخ التحديث/);
 });
 
 test('customer order status is answered from own order only',()=>{
