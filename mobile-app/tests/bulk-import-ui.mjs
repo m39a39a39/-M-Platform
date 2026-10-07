@@ -51,12 +51,12 @@ for(const [engine,type] of Object.entries({chromium,webkit})) for(const language
       page.waitForEvent('download'),
       page.locator('#bulkDownloadTemplate').click()
     ]);
-    assert.equal(download.suggestedFilename(),'M-Platform-products-template.xlsx');
+    assert.equal(download.suggestedFilename(),'IMSG-products-template.xlsx');
     const path=await download.path();
     assert.ok(path,'Template download path missing');
     const buffer=await readFile(path);
     await page.locator('#bulkExcelFile').setInputFiles({
-      name:'M-Platform-products-template.xlsx',
+      name:'IMSG-products-template.xlsx',
       mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       buffer
     });
