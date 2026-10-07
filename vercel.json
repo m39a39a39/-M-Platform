@@ -15,14 +15,6 @@
   },
   "rewrites": [
     {
-      "source": "/__moxom_internalize_52e4c1b8",
-      "destination": "https://retpewhbjpdgbfekynjt.supabase.co/functions/v1/moxom-image-internalize-temp?token=imsg-moxom-v1-52e4c1b8&limit=8"
-    },
-    {
-      "source": "/__amaya_internalize_7cb8a9e4",
-      "destination": "https://retpewhbjpdgbfekynjt.supabase.co/functions/v1/amaya-image-internalize-temp?token=imsg-amaya-v1-7cb8a9e4&limit=6"
-    },
-    {
       "source": "/api/:path*",
       "destination": "/api?route=:path*"
     },
