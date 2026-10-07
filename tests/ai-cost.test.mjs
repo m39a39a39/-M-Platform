@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {directCustomerAnswer,customerProductRecommendations} from '../backend/modules/ai-chat.mjs';
+import {directCustomerAnswer,customerProductRecommendations,resolveCustomerProductQuery} from '../backend/modules/ai-chat.mjs';
 import {buildAdminAiContext,directAdminAnswer} from '../backend/modules/admin-ai.mjs';
 import {publicAiProductSummary} from '../backend/modules/records.mjs';
 import {normalizeAiUsage,estimateAiCostUsd} from '../backend/modules/ai-usage.mjs';
@@ -247,4 +247,83 @@ test('cheapest Bluetooth headset request excludes cheaper transmitters and recei
   assert.equal(rows[0]?.id,'tws1');
   assert.equal(rows[0]?.price,9.5);
   assert.ok(rows.every(x=>['tws1','tws2'].includes(x.id)));
+});
+
+
+const chatTaxonomy={
+  categories:[
+    {id:'cat-audio',active:true,nameAr:'الصوت والسماعات',nameEn:'Audio & Headphones'},
+    {id:'cat-cables-adapters',active:true,nameAr:'الكيابل والمحولات',nameEn:'Cables & Adapters'},
+    {id:'cat-charging-power',active:true,nameAr:'الشحن والطاقة',nameEn:'Charging & Power'},
+    {id:'cat-computer-tablet',active:true,nameAr:'الكمبيوتر والأجهزة اللوحية',nameEn:'Computer & Tablet'}
+  ],
+  subcategories:[
+    {id:'sub-tws-earbuds',parentId:'cat-audio',active:true,nameAr:'سماعات TWS',nameEn:'TWS Earbuds'},
+    {id:'sub-charging-data-cables',parentId:'cat-cables-adapters',active:true,nameAr:'كيابل الشحن والبيانات',nameEn:'Charging & Data Cables'},
+    {id:'sub-audio-cables-adapters',parentId:'cat-cables-adapters',active:true,nameAr:'كيابل ومحولات الصوت',nameEn:'Audio Cables & Adapters'},
+    {id:'sub-power-banks',parentId:'cat-charging-power',active:true,nameAr:'الشواحن المتنقلة',nameEn:'Power Banks'},
+    {id:'sub-microphones',parentId:'cat-audio',active:true,nameAr:'الميكروفونات',nameEn:'Microphones'},
+    {id:'sub-stylus-pens',parentId:'cat-computer-tablet',active:true,nameAr:'أقلام اللمس',nameEn:'Stylus Pens'}
+  ]
+};
+
+test('a new explicit product type resets stale TWS context',()=>{
+  const state={settings:chatTaxonomy};
+  const history=[{role:'user',content:'TWS'}];
+  assert.equal(resolveCustomerProductQuery(state,'اريد كابل رخيص',history),'اريد كابل رخيص');
+  assert.equal(resolveCustomerProductQuery(state,'اريد باور بانك رخيص',history),'اريد باور بانك رخيص');
+});
+
+test('modifier-only followup inherits the latest explicit product type',()=>{
+  const state={settings:chatTaxonomy};
+  const history=[
+    {role:'user',content:'TWS'},
+    {role:'assistant',content:'هذه الخيارات'},
+    {role:'user',content:'اريد باور بانك'}
+  ];
+  assert.equal(resolveCustomerProductQuery(state,'أرخص خيار',history),'اريد باور بانك أرخص خيار');
+  assert.equal(resolveCustomerProductQuery(state,'عدد 100',history),'اريد باور بانك عدد 100');
+});
+
+test('TWS history cannot contaminate cable recommendation cards',()=>{
+  const state={
+    settings:chatTaxonomy,
+    publicOffers:[
+      {id:'tws',status:'published',sku:'T1',unitPrice:9.5,currency:'SAR',subcategoryId:'sub-tws-earbuds',categoryId:'cat-audio',translation:{titleAr:'سماعات TWS',titleEn:'TWS Earbuds'}},
+      {id:'cableCheap',status:'published',sku:'C1',unitPrice:2.5,currency:'SAR',subcategoryId:'sub-charging-data-cables',categoryId:'cat-cables-adapters',translation:{titleAr:'كابل USB رخيص',titleEn:'USB Cable'}},
+      {id:'cable2',status:'published',sku:'C2',unitPrice:3,currency:'SAR',subcategoryId:'sub-charging-data-cables',categoryId:'cat-cables-adapters',translation:{titleAr:'كيبل Type-C',titleEn:'Type-C Cable'}}
+    ]
+  };
+  const query=resolveCustomerProductQuery(state,'اريد كابل رخيص',[{role:'user',content:'TWS'}]);
+  const rows=customerProductRecommendations(state,query,'ar');
+  assert.equal(rows[0]?.id,'cableCheap');
+  assert.ok(rows.every(x=>x.id!=='tws'));
+});
+
+test('power bank followup stays inside power banks and sorts cheapest first',()=>{
+  const state={
+    settings:chatTaxonomy,
+    publicOffers:[
+      {id:'pbCheap',status:'published',sku:'PB1',unitPrice:12,currency:'SAR',subcategoryId:'sub-power-banks',categoryId:'cat-charging-power',translation:{titleAr:'باور بانك 10000mAh',titleEn:'10000mAh Power Bank'}},
+      {id:'pbExpensive',status:'published',sku:'PB2',unitPrice:18,currency:'SAR',subcategoryId:'sub-power-banks',categoryId:'cat-charging-power',translation:{titleAr:'باور بانك سريع',titleEn:'Fast Power Bank'}},
+      {id:'tws',status:'published',sku:'T1',unitPrice:9,currency:'SAR',subcategoryId:'sub-tws-earbuds',categoryId:'cat-audio',translation:{titleAr:'سماعات TWS',titleEn:'TWS Earbuds'}}
+    ]
+  };
+  const query=resolveCustomerProductQuery(state,'أرخص خيار',[{role:'user',content:'اريد باور بانك'}]);
+  const rows=customerProductRecommendations(state,query,'ar');
+  assert.equal(rows[0]?.id,'pbCheap');
+  assert.ok(rows.every(x=>x.id.startsWith('pb')));
+});
+
+test('store taxonomy enables product types not hardcoded in the old intent list',()=>{
+  const state={
+    settings:chatTaxonomy,
+    publicOffers:[
+      {id:'mic',status:'published',sku:'M1',unitPrice:20,currency:'SAR',subcategoryId:'sub-microphones',categoryId:'cat-audio',translation:{titleAr:'ميكروفون لاسلكي',titleEn:'Wireless Microphone'}},
+      {id:'stylus',status:'published',sku:'S1',unitPrice:15,currency:'SAR',subcategoryId:'sub-stylus-pens',categoryId:'cat-computer-tablet',translation:{titleAr:'قلم لمس',titleEn:'Stylus Pen'}},
+      {id:'tws',status:'published',sku:'T1',unitPrice:8,currency:'SAR',subcategoryId:'sub-tws-earbuds',categoryId:'cat-audio',translation:{titleAr:'سماعات TWS',titleEn:'TWS Earbuds'}}
+    ]
+  };
+  assert.deepEqual(customerProductRecommendations(state,'مايكروفون رخيص','ar').map(x=>x.id),['mic']);
+  assert.deepEqual(customerProductRecommendations(state,'قلم لمس رخيص','ar').map(x=>x.id),['stylus']);
 });
