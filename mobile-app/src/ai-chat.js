@@ -1,5 +1,6 @@
 import './ai-chat.css';
 import {filesToCompressedSources} from './image-upload.js';
+import {latestAssistantQuickReplies} from './ai-chat-state.js';
 
 let controller=null;
 let pollTimer=null;
@@ -169,15 +170,6 @@ function messageHtml(row){
   const meta=row?.metadata||{},sender=row.role==='admin'?'<small class="m-ai-sender">'+esc(t('team'))+'</small>':'';
   const hasProducts=row.role!=='user'&&Array.isArray(meta.products)&&meta.products.length;
   return `<div class="m-ai-row ${row.role==='user'?'user':'assistant'}${hasProducts?' has-products':''}"><div>${sender}<span class="m-ai-message-text">${esc(row.content)}</span>${row.role!=='user'?productCardsHtml(meta.products):''}</div></div>`;
-}
-export function latestAssistantQuickReplies(messages=[],humanMode=false){
-  if(humanMode)return [];
-  const latest=[...(Array.isArray(messages)?messages:[])].reverse().find(row=>row?.role==='assistant');
-  if(!latest)return [];
-  const products=latest?.metadata?.products;
-  const rows=latest?.metadata?.quickReplies;
-  if(!Array.isArray(products)||!products.length||!Array.isArray(rows)||!rows.length)return [];
-  return rows.slice(0,4);
 }
 function latestQuickReplies(){
   return latestAssistantQuickReplies(controller?.messages||[],!!controller?.humanMode);
