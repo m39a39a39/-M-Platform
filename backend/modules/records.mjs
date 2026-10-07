@@ -58,7 +58,7 @@ function publicSettingsForView(data={},route={}){
   }
   return compactPublicValue(safe)||{};
 }
-function publicProductSummary(row){
+export function publicProductSummary(row){
   const d=row.data||{},translation=d.translation||{},item={id:row.id,displayNo:row.display_no,createdAt:row.created_at,status:'published',
     sku:d.sku||'',product:d.product||'',
     translation:{
