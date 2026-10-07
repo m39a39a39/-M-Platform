@@ -26,7 +26,7 @@ async function loadLive(){
   settingsVersion=liveState.settings._version;
   const data={...clone(seed),...liveState.settings.storefront};
   data.categories=[...(liveState.settings.categories||[]).map(c=>({id:c.id,name:c.nameAr,nameEn:c.nameEn,active:c.active,parent:''})),...(liveState.settings.subcategories||[]).map(c=>({id:c.id,name:c.nameAr,nameEn:c.nameEn,active:c.active,parent:c.parentId}))];
-  if(!liveState.settings.storefront){data.theme.name=liveState.settings.logoText||'M Platform';data.sections=window.MStorefront.defaultStore().sections;}
+  if(!liveState.settings.storefront){data.theme.name=liveState.settings.logoText||'IMSG';data.sections=window.MStorefront.defaultStore().sections;}
   data.products=(liveState.publicOffers||[]).filter(p=>!p.deletedAt&&p.status!=='source_review').map(productOf);StoreRules.normalize(data);data.media=[...new Set(data.products.flatMap(p=>p.images))].map((image,i)=>({id:'asset-'+i,image,name:'صورة منتج'}));
   state={published:clone(data),draft:clone(data),history:[],lastSaved:liveState.settings.storefrontPublishedAt||null};
   const draft=liveState.settings.studioDraft;
@@ -47,7 +47,7 @@ render=function(){
   const top=$('.top-actions');if(top)top.insertAdjacentHTML('beforeend','<a href="/?store=1" target="_blank" rel="noopener" class="button">فتح المتجر</a>');
   hydrateStudioImages();
 };
-settingsView=function(){return heading('الربط بالمشروع','تستخدم اللوحة حسابات وصلاحيات وبيانات M Platform.')+`<section class="panel panel-body"><p>المستخدم: ${esc(liveState.user.name||liveState.user.id)}</p><p>التعديلات محفوظة كمسودة حتى تضغط نشر. الطلبات تُحفظ مباشرة بعد تنفيذ الإجراء.</p><p>تتوقف العملية عند تعديل البيانات من مسؤول آخر لتجنب فقدان التغييرات.</p><a href="/">إدارة الحسابات والفواتير والإعدادات المالية</a></section>`;};
+settingsView=function(){return heading('الربط بالمشروع','تستخدم اللوحة حسابات وصلاحيات وبيانات IMSG.')+`<section class="panel panel-body"><p>المستخدم: ${esc(liveState.user.name||liveState.user.id)}</p><p>التعديلات محفوظة كمسودة حتى تضغط نشر. الطلبات تُحفظ مباشرة بعد تنفيذ الإجراء.</p><p>تتوقف العملية عند تعديل البيانات من مسؤول آخر لتجنب فقدان التغييرات.</p><a href="/">إدارة الحسابات والفواتير والإعدادات المالية</a></section>`;};
 async function snapshot(kind){if(publishing)return;publishing=true;try{if(edits().length>19)throw Error('يمكن نشر 19 تعديل منتج في العملية الواحدة؛ قلل عدد التعديلات ثم انشر.');await api('studio',{action:kind.includes('نشر')?'publish':'draft',version:settingsVersion,store:state.draft,products:edits(),redactionConfirmed:kind.includes('نشر')});await loadLive();toast(kind.includes('نشر')?'تم نشر التغييرات على المتجر':'تم حفظ المسودة على الخادم');}catch(e){toast(e.message)}finally{publishing=false}};
 const originalReview=reviewChanges;reviewChanges=function(){originalReview();$('#dialog .review-summary p').textContent='سيتم تحديث المتجر الحقيقي. بنشرك تؤكد مراجعة الترجمة وإزالة هوية المورد وبيانات التواصل من المحتوى العام.';};
 const readDataImage=readImage;readImage=async function(file){const source=await readDataImage(file);if(!source)return null;return (await api('uploads',{source})).src;};
@@ -122,12 +122,12 @@ async function bootStudio(){
    window.MStudioChrome(publicState,{}, {hydrate:()=>hydrateStudioImages(),action:()=>location.assign('/')});
   }catch{}
   if(window.MStudioSession.active&&error.code!=='session_expired'){
-   $('#app').innerHTML=`<main class="login-panel panel"><h1>M Platform</h1><h2>إدارة المتجر</h2><p>تعذر التحقق من الجلسة الحالية. قد يكون الاتصال مؤقتًا غير متاح.</p><button id="studio-session-retry" class="primary">إعادة المحاولة</button><button id="studio-session-logout">تسجيل الخروج</button><a href="/">العودة إلى المنصة</a></main>`;
+   $('#app').innerHTML=`<main class="login-panel panel"><h1>IMSG</h1><h2>إدارة المتجر</h2><p>تعذر التحقق من الجلسة الحالية. قد يكون الاتصال مؤقتًا غير متاح.</p><button id="studio-session-retry" class="primary">إعادة المحاولة</button><button id="studio-session-logout">تسجيل الخروج</button><a href="/">العودة إلى المنصة</a></main>`;
    $('#studio-session-retry').onclick=()=>bootStudio();
    $('#studio-session-logout').onclick=async()=>{await window.MStudioSession.logout();liveState=null;await bootStudio();};
    return;
   }
-  $('#app').innerHTML=`<main class="login-panel panel"><h1>M Platform</h1><h2>إدارة المتجر</h2><p>${esc(error.code==='session_expired'||error.message==='session_expired'?'سجّل الدخول بحساب الإدارة':error.message)}</p><form id="studio-login"><label>البريد الإلكتروني<input name="email" type="email" autocomplete="username" required></label><label>كلمة المرور<input name="password" type="password" autocomplete="current-password" required></label><button class="primary">تسجيل الدخول</button><p id="login-error" role="alert"></p></form><a href="/">العودة إلى المنصة</a></main>`;
+  $('#app').innerHTML=`<main class="login-panel panel"><h1>IMSG</h1><h2>إدارة المتجر</h2><p>${esc(error.code==='session_expired'||error.message==='session_expired'?'سجّل الدخول بحساب الإدارة':error.message)}</p><form id="studio-login"><label>البريد الإلكتروني<input name="email" type="email" autocomplete="username" required></label><label>كلمة المرور<input name="password" type="password" autocomplete="current-password" required></label><button class="primary">تسجيل الدخول</button><p id="login-error" role="alert"></p></form><a href="/">العودة إلى المنصة</a></main>`;
   $('#studio-login').onsubmit=async e=>{
    e.preventDefault();const b=e.target.querySelector('button');b.disabled=true;
    try{const f=new FormData(e.target);await window.MStudioSession.login({email:f.get('email'),password:f.get('password')});await loadLive();}

@@ -54,7 +54,7 @@ const text={
     reload:'تحديث',loading:'جارٍ تحميل المنتجات...',empty:'لا توجد منتجات منشورة حاليًا.',price:'السعر',unitPrice:'سعر الحبة',moq:'الحد الأدنى',
     production:'الإنتاج',days:'يوم',stock:'المخزون',details:'تفاصيل المنتج',back:'العودة للرئيسية',error:'تعذر تحميل المنتجات. تحقق من اتصال الإنترنت.',
     previous:'السابق',next:'التالي',page:'صفحة',companyDescription:'تسوق المنتجات وتابع مشترياتك وطلبات التوريد.',
-    contact:'تواصل معنا',copyright:'© 2026 MIG COMPANY — جميع الحقوق محفوظة',allCategories:'الكل',supplyCountry:'بلد التوريد',allCountries:'الكل',
+    contact:'تواصل معنا',copyright:'© 2026 IMSG — جميع الحقوق محفوظة',allCategories:'الكل',supplyCountry:'بلد التوريد',allCountries:'الكل',
     search:'ابحث عن منتج أو SKU',quantity:'الكمية',productTotal:'إجمالي هذا المنتج',addCart:'إضافة إلى السلة',updateCart:'تحديث الكمية في السلة',
     added:'تمت إضافة المنتج إلى السلة.',cart:'سلة الطلب',products:'منتجات',total:'الإجمالي',grandTotal:'الإجمالي الكلي',remove:'حذف',
     clearCart:'إفراغ السلة',submitOrder:'إرسال الطلب',emptyCart:'السلة فارغة. أضف منتجات من الصفحة الرئيسية.',
@@ -71,7 +71,7 @@ const text={
     reload:'Refresh',loading:'Loading products...',empty:'No products are currently published.',price:'Price',unitPrice:'Unit price',moq:'MOQ',
     production:'Production',days:'days',stock:'Stock',details:'Product details',back:'Back to home',error:'Could not load products. Check your internet connection.',
     previous:'Previous',next:'Next',page:'Page',companyDescription:'Shop products and track your purchases and sourcing requests.',
-    contact:'Contact us',copyright:'© 2026 MIG COMPANY — All rights reserved.',allCategories:'All',supplyCountry:'Supply country',allCountries:'All',
+    contact:'Contact us',copyright:'© 2026 IMSG — All rights reserved.',allCategories:'All',supplyCountry:'Supply country',allCountries:'All',
     search:'Search products or SKU',quantity:'Quantity',productTotal:'This product total',addCart:'Add to cart',updateCart:'Update quantity in cart',
     added:'Product added to cart.',cart:'Order cart',products:'products',total:'Total',grandTotal:'Grand total',remove:'Remove',
     clearCart:'Clear cart',submitOrder:'Submit order',emptyCart:'Your cart is empty. Add products from the home page.',
@@ -183,7 +183,7 @@ function loadingSkeleton(){
 }
 function renderLoading(error=false){
   if(!error){$('guest-storefront').innerHTML=loadingSkeleton();return;}
-  $('guest-storefront').innerHTML=`<div class="sf-loading" role="alert"><strong>M Platform</strong><p>${esc(t('error'))}</p><button id="guestRetry">${esc(t('reload'))}</button></div>`;
+  $('guest-storefront').innerHTML=`<div class="sf-loading" role="alert"><strong>IMSG</strong><p>${esc(t('error'))}</p><button id="guestRetry">${esc(t('reload'))}</button></div>`;
   document.getElementById('guestRetry')?.addEventListener('click',()=>void load());
 }
 
@@ -320,7 +320,7 @@ async function requireCustomerAuth(action){
   await ensureGuestUiStyles();
   const isCart=action==='open-cart';
   try{localStorage.setItem(POST_AUTH_KEY,action);}catch{}
-  $('modalKicker').textContent='M Platform';$('modalTitle').textContent=isCart?t('authCartTitle'):t('authRequestTitle');
+  $('modalKicker').textContent='IMSG';$('modalTitle').textContent=isCart?t('authCartTitle'):t('authRequestTitle');
   $('modalBody').innerHTML=`<section class="guest-auth-required"><p>${esc(isCart?t('authCartText'):t('authRequestText'))}</p><div class="guest-auth-required-actions"><button class="secondary-btn" type="button" data-guest-auth-login>${esc(t('continueLogin'))}</button><button class="primary-btn" type="button" data-guest-auth-register>${esc(t('createClient'))}</button></div></section>`;
   $('modal').classList.remove('hidden');
 }
@@ -328,7 +328,7 @@ async function openGuestCart(){
   await ensureGuestUiStyles();
   const rows=cartRows();
   aiChatSignal('cart_open',{cartCount:rows.length,cartTotal:rows.reduce((sum,row)=>sum+Number(row.total||0),0),currency:rows[0]?.currency||''});
-  $('modalKicker').textContent=rows.length?`${rows.length} ${t('products')} · ${rows[0].currency}`:'M Platform';$('modalTitle').textContent=t('cart');
+  $('modalKicker').textContent=rows.length?`${rows.length} ${t('products')} · ${rows[0].currency}`:'IMSG';$('modalTitle').textContent=t('cart');
   if(!rows.length){
     $('modalBody').innerHTML=`<div class="empty-state cart-empty"><span>🛒</span><p>${esc(t('emptyCart'))}</p></div>`;$('modal').classList.remove('hidden');return;
   }

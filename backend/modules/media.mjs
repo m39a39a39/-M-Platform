@@ -76,7 +76,7 @@ function detectedImage(bytes){
 }
 async function fetchImageBytes(url){
   const run=async target=>{
-    const response=await fetch(target,{headers:{'user-agent':'Mozilla/5.0 MPlatformImporter/1.0','accept':'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'},signal:AbortSignal.timeout(20000)});
+    const response=await fetch(target,{headers:{'user-agent':'Mozilla/5.0 IMSGImporter/1.0','accept':'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'},signal:AbortSignal.timeout(20000)});
     assert(response.ok,502,'تعذر تحميل صورة المنتج / Could not download product image');
     const len=Number(response.headers.get('content-length')||0);
     assert(!len||len<=8*1024*1024,413,'صورة المنتج كبيرة جدًا / Product image is too large');
@@ -97,7 +97,7 @@ async function yesidoImages(marker){
   const sku=m[1].toUpperCase(),matches=yesidoBySku.get(sku)||[];
   assert(matches.length===1,409,'تعذر مطابقة منتج Yesido بشكل فريد / Yesido product match is not unique');
   const pageUrl=matches[0].url;
-  const response=await fetch(pageUrl,{headers:{'user-agent':'Mozilla/5.0 MPlatformImporter/1.0','accept-language':'en-US,en;q=0.9'},signal:AbortSignal.timeout(15000)});
+  const response=await fetch(pageUrl,{headers:{'user-agent':'Mozilla/5.0 IMSGImporter/1.0','accept-language':'en-US,en;q=0.9'},signal:AbortSignal.timeout(15000)});
   assert(response.ok,502,'تعذر فتح صفحة منتج Yesido / Could not open Yesido product page');
   const html=(await response.text()).replaceAll('\\/','/');
   const h1Index=Math.max(0,html.search(/<h1\b/i));

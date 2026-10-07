@@ -114,7 +114,7 @@
         <div>
           <span class="mg-ai-feature-tag">${esc(tr('جديد','New'))}</span>
           <h3>${esc(tr('إضافة منتج بالذكاء الاصطناعي','Add product with AI'))}</h3>
-          <p>${esc(tr('ارفع صور المنتج وأدخل السعر والحد الأدنى. MG AI يجهز النصوص والتصنيف، ثم تحفظه كمسودة بعد مراجعتك.','Upload product images and enter price and MOQ. MG AI prepares copy and categorization, then saves only after your review.'))}</p>
+          <p>${esc(tr('ارفع صور المنتج وأدخل السعر والحد الأدنى. IMSG AI يجهز النصوص والتصنيف، ثم تحفظه كمسودة بعد مراجعتك.','Upload product images and enter price and MOQ. IMSG AI prepares copy and categorization, then saves only after your review.'))}</p>
         </div>
         <button type="button" class="primary" data-mg-ai-toggle-product>${esc(creatorOpen?tr('إغلاق','Close'):tr('إضافة منتج','Add product'))}</button>
       </div>
@@ -134,7 +134,7 @@
         <label class="mg-ai-upload full">
           <span>${esc(tr('صور المنتج','Product images'))}</span>
           <input type="file" accept="image/*" multiple data-mg-ai-images ${generating?'disabled':''}>
-          <small>${esc(tr('حتى 5 صور. يبدأ MG AI بصورة واحدة فقط، ويطلب صورًا إضافية تلقائيًا إذا احتاجها. عند الاعتماد تُرفع جميع الصور المختارة.','Up to 5 images. MG AI starts with one image and only uses more when needed; all selected images are uploaded after approval.'))}</small>
+          <small>${esc(tr('حتى 5 صور. يبدأ IMSG AI بصورة واحدة فقط، ويطلب صورًا إضافية تلقائيًا إذا احتاجها. عند الاعتماد تُرفع جميع الصور المختارة.','Up to 5 images. IMSG AI starts with one image and only uses more when needed; all selected images are uploaded after approval.'))}</small>
         </label>
         <div class="full">${fileSummary()}</div>
         <label><span>${esc(tr('SKU / الموديل (اختياري)','SKU / model (optional)'))}</span><input name="sku" maxlength="80" value="${esc(productInput.sku)}" placeholder="MG-825"></label>
@@ -144,7 +144,7 @@
         <label><span>${esc(tr('المخزون (اختياري)','Stock (optional)'))}</span><input name="stock" type="number" min="0" step="1" value="${esc(productInput.stock)}"></label>
         <label><span>${esc(tr('مدة التجهيز بالأيام','Lead time (days)'))}</span><input name="leadDays" type="number" min="1" step="1" required value="${esc(productInput.leadDays)}"></label>
         <label><span>${esc(tr('دولة التوريد','Supply country'))}</span><select name="country" required>${countryOptions()}</select></label>
-        <label class="full"><span>${esc(tr('معلومات إضافية لـ MG AI','Extra information for MG AI'))}</span><textarea name="notes" rows="3" maxlength="1800" placeholder="${esc(tr('مثال: المادة TPU، جميع الموديلات متوفرة، لا تذكر الألوان.','Example: TPU material, all models available, do not mention colors.'))}">${esc(productInput.notes)}</textarea></label>
+        <label class="full"><span>${esc(tr('معلومات إضافية لـ IMSG AI','Extra information for IMSG AI'))}</span><textarea name="notes" rows="3" maxlength="1800" placeholder="${esc(tr('مثال: المادة TPU، جميع الموديلات متوفرة، لا تذكر الألوان.','Example: TPU material, all models available, do not mention colors.'))}">${esc(productInput.notes)}</textarea></label>
       </div>
       ${productError?`<p class="mg-ai-error">${esc(productError)}</p>`:''}
       <div class="mg-ai-product-actions"><button type="submit" class="primary" ${generating?'disabled':''}>${esc(generating?tr('جاري تحليل الصور…','Analyzing images…'):tr('تحليل وتجهيز المسودة','Analyze & prepare draft'))}</button></div>
@@ -158,7 +158,7 @@
         <div><strong>${esc(tr('راجع المنتج قبل الحفظ','Review before saving'))}</strong><small>${esc(tr('لن يتم نشر المنتج. سيُحفظ كمسودة فقط.','The product will not be published. It will be saved as a draft only.'))}</small></div>
         <button type="button" data-mg-ai-redo-product>${esc(tr('إعادة التحليل','Analyze again'))}</button>
       </div>
-      ${d.reviewNotes?`<div class="mg-ai-review-note"><strong>${esc(tr('ملاحظة MG AI','MG AI note'))}</strong><span>${esc(d.reviewNotes)}</span></div>`:''}
+      ${d.reviewNotes?`<div class="mg-ai-review-note"><strong>${esc(tr('ملاحظة IMSG AI','IMSG AI note'))}</strong><span>${esc(d.reviewNotes)}</span></div>`:''}
       <div class="mg-ai-form-grid">
         <label><span>${esc(tr('الاسم بالعربية','Arabic name'))}</span><input name="name" maxlength="100" required value="${esc(d.name)}"></label>
         <label><span>${esc(tr('الاسم بالإنجليزية','English name'))}</span><input name="nameEn" maxlength="100" value="${esc(d.nameEn)}"></label>
@@ -188,7 +188,7 @@
 
   function conversation(){
     if(!messages.length)return `<div class="mg-ai-empty">
-      <strong>${esc(tr('اسأل MG AI عن المتجر','Ask MG AI about the store'))}</strong>
+      <strong>${esc(tr('اسأل IMSG AI عن المتجر','Ask IMSG AI about the store'))}</strong>
       <p>${esc(tr('يمكنه تحليل المنتجات والطلبات والمخزون واقتراح ترتيب الصفحة الرئيسية والتسويق.','It can analyze products, orders and stock, and suggest homepage merchandising and marketing.'))}</p>
     </div>`;
     return messages.map(row=>`<div class="mg-ai-message ${row.role==='user'?'is-user':'is-assistant'}"><div>${replyHtml(row.content)}</div></div>`).join('')+
@@ -200,7 +200,7 @@
     root.innerHTML=`<section class="mg-ai-shell">
       <header class="mg-ai-hero">
         <div>
-          <span class="mg-ai-badge">MG AI · ${esc(tr('تحليل + مسودات','Analysis + drafts'))}</span>
+          <span class="mg-ai-badge">IMSG AI · ${esc(tr('تحليل + مسودات','Analysis + drafts'))}</span>
           <h2>${esc(tr('مساعد الإدارة الذكي','Admin AI Assistant'))}</h2>
           <p>${esc(tr('يحلل المتجر ويجهز منتجات جديدة من الصور، لكن لا ينشر أي منتج أو تغيير تلقائيًا.','Analyzes the store and prepares new products from images, but never publishes products or changes automatically.'))}</p>
         </div>
@@ -243,7 +243,7 @@
       overview=await api();
       if(!productInput.country)productInput.country=selectedCountry();
       error='';
-    }catch(e){error=e?.message||tr('تعذر تحميل MG AI','Could not load MG AI');}
+    }catch(e){error=e?.message||tr('تعذر تحميل IMSG AI','Could not load IMSG AI');}
     finally{loadingOverview=false;draw();}
   }
 
@@ -256,7 +256,7 @@
       const result=await api({message,language:document.documentElement.lang==='en'?'en':'ar',history});
       messages.push({role:'assistant',content:String(result?.reply||tr('لم يصل رد صالح.','No valid response was returned.'))});
       if(result?.overview&&overview)overview={...overview,overview:result.overview};
-    }catch(e){error=e?.message||tr('تعذر الحصول على رد من MG AI','Could not get a response from MG AI');}
+    }catch(e){error=e?.message||tr('تعذر الحصول على رد من IMSG AI','Could not get a response from IMSG AI');}
     finally{loading=false;draw();}
   }
 

@@ -12,4 +12,4 @@ await run('npm',['ci'],'mobile-app');
 await run('npm',['run','build'],'mobile-app');
 await rm('dist',{recursive:true,force:true});
 await cp('mobile-app/dist','dist',{recursive:true});
-console.log('Built the unified M Platform interface from mobile-app into dist/.');
+console.log('Built the unified IMSG interface from mobile-app into dist/.');
