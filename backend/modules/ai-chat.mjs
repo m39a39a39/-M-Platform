@@ -307,10 +307,10 @@ function effectiveUnitPrice(item,quantity=null){
   }
   return Number.isFinite(price)?price:null;
 }
-function intentScore(item,intent){
+function intentScore(item,intent,{ignoreCategory=false}={}){
   const p=productProfile(item);
   let score=0;
-  if(intent.category){
+  if(intent.category&&!ignoreCategory){
     if(p.category===intent.category)score+=32;
     else if(intent.category==='charger'&&['wall_charger','car_charger','charger'].includes(p.category))score+=20;
     else if(intent.category==='audio'&&p.category==='audio')score+=24;
@@ -349,11 +349,11 @@ function intentScore(item,intent){
   if(intent.use==='gaming'&&/(gaming|game|ألعاب|العاب|low latency)/u.test(p.hay))score+=8;
   return score;
 }
-function productScore(item,needles,intent,signals={}){
+function productScore(item,needles,intent,signals={},taxonomy=null){
   const p=productProfile(item),sku=String(item?.sku||'').toLowerCase();
   const lexical=needles.reduce((score,term)=>score+(p.hay.includes(term)?(sku.includes(term)?7:2):0),0);
   const performance=Math.max(0,Math.min(8,Number(signals?.[item?.id]?.score)||0));
-  return lexical+intentScore(item,intent)+performance;
+  return lexical+intentScore(item,intent,{ignoreCategory:!!taxonomy})+performance;
 }
 function rankedProductItems(state,query,signals={}){
   const rows=(state?.publicOffers||[]).filter(x=>x?.status==='published'&&!x?.deletedAt&&!x?.studioArchived);
@@ -364,7 +364,7 @@ function rankedProductItems(state,query,signals={}){
       ||!taxonomy.subcategoryId&&taxonomy.categoryId&&String(item?.categoryId||'')===taxonomy.categoryId;
     return {
       item,
-      score:productScore(item,needles,intent,signals)+(taxonomyCompatible&&taxonomy?18:0),
+      score:productScore(item,needles,intent,signals,taxonomy)+(taxonomyCompatible&&taxonomy?18:0),
       compatible:taxonomyCompatible&&explicitlyCompatible(item,intent,taxonomy),
       effectivePrice:effectiveUnitPrice(item,intent.quantity)
     };
