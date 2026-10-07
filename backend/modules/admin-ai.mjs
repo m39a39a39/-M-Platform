@@ -323,10 +323,10 @@ export async function adminAiOverview(user){
     taxonomy:buildProductDraftReference(state),
     productDraftEnabled:can(user,'offers.edit'),
     quickPrompts:[
+      'حلل تحويلات شات العملاء من الاقتراح إلى إنشاء الطلب',
       'حلل أداء المتجر واقترح أهم 5 إجراءات الآن',
       'اقترح ترتيب الصفحة الرئيسية والمنتجات التي يجب أن تظهر أولًا',
-      'ما المنتجات التي تستحق حملة تسويقية الآن ولماذا؟',
-      'راجع الكتالوج واقترح تحسينات للمنتجات والمخزون'
+      'ما المنتجات التي تستحق حملة تسويقية الآن ولماذا؟'
     ],
     behaviorTrackingAvailable:true
   };
