@@ -241,7 +241,10 @@ function taxonomyMatch(state,message=''){
     }
     for(const alias of TAXONOMY_ALIASES[entry.id]||[]){
       const normalized=normalizeCatalogText(alias);
+      const coverage=phraseMatchScore(q,normalized);
       if(normalized&&q.includes(normalized))score=Math.max(score,normalized.includes(' ')?110:82);
+      else if(coverage===1)score=Math.max(score,normalized.includes(' ')?104:78);
+      else if(coverage>=0.75&&catalogTokens(normalized).length>=2)score=Math.max(score,88);
     }
     return {entry,score};
   }).filter(x=>x.score>=24).sort((a,b)=>b.score-a.score);
@@ -421,14 +424,20 @@ function intentScore(item,intent,{ignoreCategory=false}={}){
   return score;
 }
 function productScore(item,needles,intent,signals={},taxonomy=null){
-  const p=productProfile(item),sku=String(item?.sku||'').toLowerCase();
-  const lexical=needles.reduce((score,term)=>score+(p.hay.includes(term)?(sku.includes(term)?7:2):0),0);
+  const p=productProfile(item),sku=normalizeCatalogText(item?.sku||''),hay=normalizeCatalogText(p.hay),hayTokens=catalogTokens(hay);
+  const lexical=needles.reduce((score,term)=>{
+    const normalized=normalizeCatalogText(term);
+    if(!normalized)return score;
+    if(hay.includes(normalized))return score+(sku.includes(normalized)?7:2);
+    if(hayTokens.some(token=>tokenRelated(normalized,token)))return score+1.5;
+    return score;
+  },0);
   const performance=Math.max(0,Math.min(8,Number(signals?.[item?.id]?.score)||0));
   return lexical+intentScore(item,intent,{ignoreCategory:!!taxonomy})+performance;
 }
 function rankedProductItems(state,query,signals={}){
   const rows=(state?.publicOffers||[]).filter(x=>x?.status==='published'&&!x?.deletedAt&&!x?.studioArchived);
-  const needles=terms(query),intent=productIntent(query),taxonomy=taxonomyMatch(state,query),hard=intentHasHardConstraints(intent)||!!taxonomy;
+  const needles=catalogTokens(query).filter(token=>!STOP_TERMS.has(token)).slice(0,28),intent=productIntent(query),taxonomy=taxonomyMatch(state,query),hard=intentHasHardConstraints(intent)||!!taxonomy;
   const ranked=rows.map(item=>{
     const taxonomyCompatible=!taxonomy
       ||taxonomy.subcategoryId&&String(item?.subcategoryId||'')===taxonomy.subcategoryId
