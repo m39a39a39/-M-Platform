@@ -24,6 +24,12 @@ import {customerConversation,captureGuestLead,adminConversationList,adminConvers
 import {recordChatConversion} from './modules/chat-conversions.mjs';
 
 const NATIVE_ORIGINS=new Set(['capacitor://localhost','http://localhost','https://localhost']);
+const normalizeOrigin=value=>String(value||'').trim().replace(/\/$/,'');
+const extraWebOrigins=()=>new Set(String(process.env.APP_ORIGINS||'').split(',').map(normalizeOrigin).filter(Boolean));
+export const allowedWebOrigin=(origin,primaryOrigin)=>{
+  const normalized=normalizeOrigin(origin),primary=normalizeOrigin(primaryOrigin);
+  return !!normalized&&(normalized===primary||extraWebOrigins().has(normalized));
+};
 const nativeOrigin=req=>NATIVE_ORIGINS.has(String(req.headers.origin||''));
 const setNativeCors=(req,res,isV1)=>{
   if(!isV1||!nativeOrigin(req))return;
@@ -63,7 +69,7 @@ export default async function handler(req,res){
     if(req.method==='POST'){
       const bearer=/^Bearer /.test(req.headers.authorization||''),markedNative=isNativeClient(req),trustedNative=isV1&&nativeOrigin(req)&&markedNative;
       const nativeNoOrigin=markedNative&&!req.headers.origin;
-      assert(req.headers.origin===c.origin||trustedNative||bearer&&nativeNoOrigin||path.startsWith('/api/auth/')&&nativeNoOrigin,403,'مصدر الطلب غير مسموح / Invalid origin');
+      assert(allowedWebOrigin(req.headers.origin,c.origin)||trustedNative||bearer&&nativeNoOrigin||path.startsWith('/api/auth/')&&nativeNoOrigin,403,'مصدر الطلب غير مسموح / Invalid origin');
       assert((req.headers['content-type']||'').includes('application/json'),415);
     }
     const body=req.method==='POST'?await readBody(req,path==='/api/supply-sources/bulk-submit'?3500000:['/api/uploads','/api/payment-receipts'].includes(path)?7500000:1800000):{};
