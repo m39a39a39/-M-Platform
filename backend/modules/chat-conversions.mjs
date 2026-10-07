@@ -78,14 +78,13 @@ export async function recordOrderConversion(user,{orderId,items=[],chatAttributi
   if(!attribution)return null;
   const conversation={id:attribution.conversationId};
   const productIds=[...new Set((items||[]).map(x=>clean(x?.offerId,90)).filter(Boolean))];
-  await insertEvent({
-    conversationId:conversation.id,
-    customerId:user.id,
-    eventName:'order_created',
-    orderId,
-    productId:productIds[0]||'',
-    metadata:{source:'chat',cartCount:productIds.length}
-  });
+  if(!productIds.length){
+    await insertEvent({conversationId:conversation.id,customerId:user.id,eventName:'order_created',orderId,metadata:{source:'chat',cartCount:0}});
+  }else{
+    for(const productId of productIds){
+      await insertEvent({conversationId:conversation.id,customerId:user.id,eventName:'order_created',orderId,productId,metadata:{source:'chat',cartCount:productIds.length}});
+    }
+  }
   return conversation.id;
 }
 async function recentRows(){
