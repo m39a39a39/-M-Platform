@@ -139,6 +139,46 @@ export async function uploadProductImages(user,sources){
   return storePreparedImageBatch(user,prepared.slice(0,5));
 }
 
+export async function migrateExternalProductImages({limit=5}={}) {
+  const batchSize=Math.max(1,Math.min(8,Number(limit)||5));
+  const rows=await db('public_offers','select=id,owner_id,version,data&limit=2000');
+  const external=src=>/^https?:\/\//i.test(String(src||''));
+  const candidates=rows.filter(row=>!row.data?.deletedAt&&Array.isArray(row.data?.images)&&row.data.images.some(external));
+  if(!candidates.length)return {ok:true,processed:0,failed:0,remaining:0,items:[]};
+  const admins=await db('profiles','role=eq.admin&deleted_at=is.null&select=id&limit=1');
+  assert(admins[0]?.id,500,'Admin account required for image migration');
+  const picked=candidates.slice(0,batchSize),items=[];
+  for(const row of picked){
+    try{
+      const images=Array.isArray(row.data.images)?row.data.images:[],unique=[...new Set(images.filter(external))];
+      const prepared=await Promise.all(unique.map(async src=>({src,image:await fetchImageBytes(src)})));
+      const owner={id:row.owner_id||admins[0].id},mapped=new Map();
+      for(let i=0;i<prepared.length;i+=5){
+        const chunk=prepared.slice(i,i+5);
+        const stored=await storePreparedImageBatch(owner,chunk.map(x=>x.image));
+        chunk.forEach((x,index)=>mapped.set(x.src,stored[index]));
+      }
+      const now=new Date().toISOString(),nextData=structuredClone(row.data);
+      nextData.images=images.map(src=>mapped.get(src)||src);
+      nextData.imageStorage='IMSG';
+      nextData.imagesMigratedAt=now;
+      nextData.updatedAt=now;
+      const updated=await db('public_offers',`id=eq.${encodeURIComponent(row.id)}&version=eq.${Number(row.version)}`,{
+        method:'PATCH',
+        body:{data:nextData,version:Number(row.version)+1,updated_at:now},
+        headers:{Prefer:'return=representation'}
+      });
+      assert(updated?.length,409,'Product changed during image migration');
+      items.push({id:row.id,ok:true,count:unique.length});
+    }catch(error){
+      console.error('Product image migration failed',JSON.stringify({id:row.id,error:error?.message||'unknown'}));
+      items.push({id:row.id,ok:false,error:error?.message||'migration_failed'});
+    }
+  }
+  const processed=items.filter(x=>x.ok).length,failed=items.length-processed;
+  return {ok:failed===0,processed,failed,remaining:Math.max(0,candidates.length-processed),items};
+}
+
 export async function uploadPaymentReceipt(user,source){return storeMedia(user,decodePaymentReceipt(source),'تعذر رفع إيصال الدفع / Receipt upload failed');}
 export async function media(user,id,res,{width=0,quality=78}={}){
   assert(/^[a-f0-9-]{36}$/.test(id),404);const m=await one('media',id);assert(m,404);
