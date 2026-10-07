@@ -65,6 +65,17 @@ function publicProductSummary(row){
   if(Array.isArray(d.tiers)&&d.tiers.length)item.tiers=d.tiers;
   return compactPublicValue(item)||item;
 }
+export function publicAiProductSummary(row){
+  const d=row.data||{},translation=d.translation||{},item={...publicProductSummary(row),
+    product:d.product||'',
+    translation:{
+      titleAr:translation.titleAr||'',titleEn:translation.titleEn||'',
+      descriptionAr:translation.descriptionAr||'',descriptionEn:translation.descriptionEn||''
+    },
+    shortDescription:d.shortDescription||'',technicalSpecs:d.technicalSpecs||'',options:d.options||'',leadTime:d.leadTime??''
+  };
+  return compactPublicValue(item)||item;
+}
 export function supplierInterest(row){
   const d=row.data||{},snapshot=d.offerSnapshot||{},terms=d.supplyTerms||{};
   const safeSnapshot={
@@ -152,7 +163,7 @@ async function categoryPageOfferRows(settingsData,categoryId){
   if(sub)query+=`&data->>subcategoryId=eq.${encodeURIComponent(sub.id)}`;
   return rows('public_offers',query);
 }
-export async function snapshot(user,{productId='',pageId='',category='',q=''}={}){
+export async function snapshot(user,{productId='',pageId='',category='',q='',aiCatalog=false}={}){
   let requests=[],quotes=[],publicOffers=[],interests=[],accounts=[],settings,selectedSupplierQuotes=[],supplySources=[];
   if(user?.role==='supplier')supplySources=(await rows('supply_sources',`owner_id=eq.${user.id}`)).filter(open).map(ownSource);
   else if(user?.role==='admin'&&(can(user,'offers.read')||can(user,'offers.edit')||can(user,'publish')||can(user,'requests.edit')))supplySources=(await rows('supply_sources')).filter(open).map(r=>({...ownSource(r),supplierId:r.owner_id}));
@@ -245,7 +256,7 @@ export async function snapshot(user,{productId='',pageId='',category='',q=''}={}
     return item;
   });
   const responseSettings=user?publicSettings(upgradeSettings(settings.data)):publicSettingsForView(settings.data,{pageId,productId,category,q});
-  let responseOffers=publicOffers.map(r=>!user&&r.id!==productId?publicProductSummary(r):anonymous(r,'publicOffers',user));
+  let responseOffers=publicOffers.map(r=>!user&&r.id!==productId?(aiCatalog?publicAiProductSummary(r):publicProductSummary(r)):anonymous(r,'publicOffers',user));
   if(!user&&!productId&&!pageId&&!category&&!q){
     const storefront=responseSettings.storefront||{},sections=(storefront.sections||[]).filter(section=>section?.visible!==false);
     const collections=storefront.collections||[],selected=new Map();

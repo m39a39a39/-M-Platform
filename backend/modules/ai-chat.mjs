@@ -82,7 +82,8 @@ function productIntent(query=''){
     material:'',
     device:'',
     use:'',
-    cheapest:/(أرخص|ارخص|cheapest|lowest price|اقتصادي|budget)/u.test(q)
+    quantity:null,
+    cheapest:/(أرخص|ارخص|cheapest|lowest price|اقل سعر|أقل سعر|اقتصادي|budget)/u.test(q)
   };
   if(/(مكبر|سبيكر|speaker|soundbar)/u.test(q)){intent.category='audio';intent.subtype='speaker';}
   else if(/(سماع(?:ة|ه|ات)|earbud|earphone|headphone|headset|tws)/u.test(q)){
@@ -109,6 +110,11 @@ function productIntent(query=''){
   const watts=[...q.matchAll(/(?:^|\D)(\d{1,3})\s*w(?:att)?\b/gi)].map(m=>Number(m[1])).filter(n=>n>=5&&n<=300);
   if(watts.length)intent.watt=watts[0];
 
+  const qtyAfter=(q.match(/(?:كمية|الكميه|الكمية|عدد|qty|quantity)\s*[:：-]?\s*(\d{1,7})/iu)||[])[1];
+  const qtyBefore=(q.match(/(?:^|\s)(\d{1,7})\s*(?:حبة|حبه|قطعة|قطعه|pcs?|pieces?|units?)(?:\s|$)/iu)||[])[1];
+  const parsedQuantity=Number(qtyAfter||qtyBefore||0);
+  if(Number.isInteger(parsedQuantity)&&parsedQuantity>0)intent.quantity=parsedQuantity;
+
   if(/silicone|سيليكون/u.test(q))intent.material='silicone';
   else if(/\btpu\b/u.test(q))intent.material='tpu';
   else if(/leather|جلد/u.test(q))intent.material='leather';
@@ -126,7 +132,12 @@ function productProfile(item){
   const title=titlePair(item),description=descriptionPair(item);
   const hay=clean([item?.product,title.ar,title.en,description.ar,description.en,item?.technicalSpecs,item?.options,sub,cat].filter(Boolean).join(' ')).toLowerCase();
   let category='',subtype='';
-  if(sub.includes('bluetooth-speaker')||/(مكبر|سبيكر|speaker|soundbar)/u.test(hay)){category='audio';subtype='speaker';}
+  if(sub==='sub-wall-chargers')category='wall_charger';
+  else if(sub==='sub-car-chargers-fm')category='car_charger';
+  else if(sub==='sub-charging-data-cables')category='cable';
+  else if(sub==='sub-wireless-chargers'||sub==='sub-laptop-chargers'||sub==='sub-power-strips-travel')category='charger';
+  else if(sub==='sub-wireless-charging-mounts')category='holder';
+  else if(sub.includes('bluetooth-speaker')||/(مكبر|سبيكر|speaker|soundbar)/u.test(hay)){category='audio';subtype='speaker';}
   else if(sub.includes('tws')||/(\btws\b|earbud)/u.test(hay)){category='audio';subtype='tws';}
   else if(sub.includes('headphone')||/(headphone|headset|سماع(?:ة|ه) (?:رأس|راس))/u.test(hay)){category='audio';subtype='headphone';}
   else if(sub.includes('wired-ear')||/(wired ear|سماعة سلك)/u.test(hay)){category='audio';subtype='wired';}
@@ -149,6 +160,43 @@ function productProfile(item){
   const watts=[...hay.matchAll(/(?:^|\D)(\d{1,3})\s*w(?:att)?\b/gi)].map(m=>Number(m[1])).filter(n=>n>=5&&n<=300);
   const material=/silicone|سيليكون/u.test(hay)?'silicone':/\btpu\b/u.test(hay)?'tpu':/leather|جلد/u.test(hay)?'leather':/acrylic|اكريل|أكريل/u.test(hay)?'acrylic':'';
   return {hay,category,subtype,connector,watts,material};
+}
+
+function intentHasHardConstraints(intent){
+  return !!(intent.category||intent.subtype||intent.connector||intent.watt||intent.material||intent.device||intent.wireless);
+}
+function explicitlyCompatible(item,intent){
+  const p=productProfile(item);
+  if(intent.category&&p.category){
+    const categoryMatch=intent.category==='charger'
+      ?['charger','wall_charger','car_charger'].includes(p.category)
+      :intent.category==='audio'?p.category==='audio':p.category===intent.category;
+    if(!categoryMatch)return false;
+  }
+  if(intent.subtype&&p.subtype){
+    const subtypeMatch=intent.subtype==='personal'
+      ?['tws','headphone','wired'].includes(p.subtype)
+      :p.subtype===intent.subtype;
+    if(!subtypeMatch)return false;
+  }
+  if(intent.wireless&&p.subtype==='wired')return false;
+  if(intent.connector&&p.connector&&p.connector!==intent.connector)return false;
+  if(intent.watt&&p.watts.length&&!p.watts.includes(intent.watt))return false;
+  if(intent.material&&p.material&&p.material!==intent.material)return false;
+  return true;
+}
+function effectiveUnitPrice(item,quantity=null){
+  let price=Number(item?.unitPrice);
+  if(!Number.isFinite(price))return null;
+  const q=Number(quantity);
+  if(Number.isInteger(q)&&q>0&&Array.isArray(item?.tiers)){
+    const tiers=[...item.tiers]
+      .map(t=>({min:Number(t?.min),price:Number(t?.price)}))
+      .filter(t=>Number.isFinite(t.min)&&Number.isFinite(t.price)&&t.min>0)
+      .sort((a,b)=>a.min-b.min);
+    for(const tier of tiers)if(q>=tier.min)price=tier.price;
+  }
+  return Number.isFinite(price)?price:null;
 }
 function intentScore(item,intent){
   const p=productProfile(item);
@@ -200,24 +248,38 @@ function productScore(item,needles,intent,signals={}){
 }
 function rankedProductItems(state,query,signals={}){
   const rows=(state?.publicOffers||[]).filter(x=>x?.status==='published'&&!x?.deletedAt&&!x?.studioArchived);
-  const needles=terms(query),intent=productIntent(query);
-  return rows.map(item=>({item,score:productScore(item,needles,intent,signals)})).sort((a,b)=>{
-    if(a.score!==b.score)return b.score-a.score;
-    if(intent.cheapest&&Number.isFinite(Number(a.item?.unitPrice))&&Number.isFinite(Number(b.item?.unitPrice)))return Number(a.item.unitPrice)-Number(b.item.unitPrice);
+  const needles=terms(query),intent=productIntent(query),hard=intentHasHardConstraints(intent);
+  const ranked=rows.map(item=>({
+    item,
+    score:productScore(item,needles,intent,signals),
+    compatible:explicitlyCompatible(item,intent),
+    effectivePrice:effectiveUnitPrice(item,intent.quantity)
+  })).filter(row=>!hard||row.compatible);
+
+  return ranked.sort((a,b)=>{
+    if(intent.cheapest){
+      const ap=a.effectivePrice,bp=b.effectivePrice;
+      const aHas=Number.isFinite(ap),bHas=Number.isFinite(bp);
+      if(aHas&&bHas&&ap!==bp)return ap-bp;
+      if(aHas!==bHas)return aHas?-1:1;
+      if(a.score!==b.score)return b.score-a.score;
+    }else if(a.score!==b.score)return b.score-a.score;
     return String(b.item?.createdAt||'').localeCompare(String(a.item?.createdAt||''));
   });
 }
 function productContext(state,query,signals={}){
-  const ranked=rankedProductItems(state,query,signals),positive=ranked.filter(x=>x.score>0).slice(0,6);
+  const intent=productIntent(query),ranked=rankedProductItems(state,query,signals),positive=ranked.filter(x=>x.score>0).slice(0,6);
   const selected=positive.length?positive:ranked.slice(0,4);
-  return selected.map(({item})=>{
-    const title=titlePair(item),description=descriptionPair(item);
+  return selected.map(({item,effectivePrice})=>{
+    const title=titlePair(item),description=descriptionPair(item),basePrice=Number.isFinite(Number(item.unitPrice))?Number(item.unitPrice):null;
     return {
       number:item.displayNo||'',
       sku:clamp(item.sku,120),
       title,
       description,
-      price:Number.isFinite(Number(item.unitPrice))?Number(item.unitPrice):null,
+      price:intent.quantity&&Number.isFinite(effectivePrice)?effectivePrice:basePrice,
+      basePrice,
+      requestedQuantity:intent.quantity||null,
       currency:clamp(item.currency,12),
       moq:item.moq??null,
       stock:isUnlimitedStock(item)?null:(item.stock??null),
@@ -230,13 +292,17 @@ function productContext(state,query,signals={}){
   });
 }
 export function customerProductRecommendations(state,query,language='ar',signals={}){
-  return rankedProductItems(state,query,signals).filter(x=>x.score>0).slice(0,6).map(({item})=>{
+  const intent=productIntent(query);
+  return rankedProductItems(state,query,signals).filter(x=>x.score>0).slice(0,6).map(({item,effectivePrice})=>{
     const titles=titlePair(item),image=Array.isArray(item.images)?String(item.images[0]||''):'';
+    const basePrice=Number.isFinite(Number(item.unitPrice))?Number(item.unitPrice):null;
     return {
       id:clamp(item.id,90),
       sku:clamp(item.sku,100),
       title:language==='en'?(titles.en||titles.ar):(titles.ar||titles.en),
-      price:Number.isFinite(Number(item.unitPrice))?Number(item.unitPrice):null,
+      price:intent.quantity&&Number.isFinite(effectivePrice)?effectivePrice:basePrice,
+      basePrice,
+      priceQuantity:intent.quantity||null,
       currency:clamp(item.currency||'SAR',12),
       moq:item.moq??null,
       image:clamp(image,1200),
@@ -249,7 +315,7 @@ function quickRepliesFor(query,cards,language){
   if(!cards.length)return [];
   if(qHas(q,['شاحن','charger']))return language==='en'?['Wall charger','Car charger','Cheapest option','With cable']:['شاحن منزلي','شاحن سيارة','أرخص خيار','مع كابل'];
   if(qHas(q,['كيبل','كابل','cable']))return language==='en'?['Type-C to Type-C','USB to Type-C','Lightning','Cheapest option']:['Type-C to Type-C','USB to Type-C','Lightning','أرخص خيار'];
-  if(qHas(q,['سماعة','سماعات','earbuds','headphones','tws']))return language==='en'?['TWS','Wired','Best for calls','Cheapest option']:['TWS','سلكية','أفضل للمكالمات','أرخص خيار'];
+  if(qHas(q,['سماعة','سماعه','سماعات','earbuds','headphones','tws']))return language==='en'?['TWS','Wired','Best for calls','Cheapest option']:['TWS','سلكية','أفضل للمكالمات','أرخص خيار'];
   if(qHas(q,['كفر','غطاء','case','cover']))return language==='en'?['iPhone','Samsung','TPU','Silicone']:['آيفون','سامسونج','TPU','سيليكون'];
   return language==='en'?['Cheapest option','Compare these','Show more']:['أرخص خيار','قارن بينها','عرض المزيد'];
 }
@@ -351,7 +417,13 @@ function directProductFact(state,message,language,signals={}){
   if(confidence<1||confidence<100&&confidence<=secondConfidence)return null;
   const title=(language==='en'?first.title?.en:first.title?.ar)||first.sku||'Product';
   const facts=[];
-  if(wantsPrice&&Number.isFinite(Number(first.price)))facts.push((language==='en'?'Price: ':'السعر: ')+Number(first.price)+' '+(first.currency||'SAR'));
+  if(wantsPrice&&Number.isFinite(Number(first.price))){
+    const quantity=Number(first.requestedQuantity)||0;
+    const label=quantity
+      ?(language==='en'?('Price at '+quantity+' pcs: '):('السعر لـ '+quantity+' حبة: '))
+      :(language==='en'?'Price: ':'السعر: ');
+    facts.push(label+Number(first.price)+' '+(first.currency||'SAR'));
+  }
   if(wantsMoq&&first.moq!==undefined&&first.moq!==null&&first.moq!=='')facts.push((language==='en'?'MOQ: ':'الحد الأدنى: ')+first.moq+(language==='en'?'':' قطعة'));
   if(wantsStock){
     if(first.stockUnlimited)facts.push(language==='en'?'Availability: Available to order':'التوفر: متوفر للطلب');
@@ -588,7 +660,7 @@ export async function aiChat(user,body={},req=null){
   const model=String(process.env.OPENAI_CHAT_MODEL||DEFAULT_MODEL).replace(/^openai\//,'');
   const policyPageId=policyPageIdForMessage(message);
   const policySignal=!!policyPageId||qHas(message.toLowerCase(),['سياسة','ضمان','policy','warranty']);
-  const state=await snapshot(user||null,!user?(policyPageId?{pageId:policyPageId}:policySignal?{}:{q:message}):{});
+  const state=await snapshot(user||null,!user?(policyPageId?{pageId:policyPageId}:policySignal?{}:{q:message,aiCatalog:true}):{});
   const conversionSignals=await chatProductSignals();
   if(!proactive&&!image){
     const direct=directCustomerAnswer(state,user,message,language,conversionSignals);

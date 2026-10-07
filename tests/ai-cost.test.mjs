@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {directCustomerAnswer,customerProductRecommendations} from '../backend/modules/ai-chat.mjs';
 import {buildAdminAiContext,directAdminAnswer} from '../backend/modules/admin-ai.mjs';
+import {publicAiProductSummary} from '../backend/modules/records.mjs';
 import {normalizeAiUsage,estimateAiCostUsd} from '../backend/modules/ai-usage.mjs';
 
 test('customer price and MOQ questions are answered from catalog without an AI call',()=>{
@@ -178,4 +179,58 @@ test('matching products can use conversion signals as a small tie-breaker',()=>{
   ]};
   const rows=customerProductRecommendations(state,'سماعة TWS بلوتوث','ar',{b:{score:5},a:{score:0}});
   assert.equal(rows[0]?.id,'b');
+});
+
+
+test('guest product summary includes safe customer-facing specifications but not internal notes',()=>{
+  const row={
+    id:'p-safe',display_no:10101,created_at:'2026-10-01T00:00:00Z',
+    data:{
+      status:'published',sku:'SAFE-20',product:'Wall Charger',unitPrice:12,currency:'SAR',moq:10,
+      categoryId:'cat-charging-power',subcategoryId:'sub-wall-chargers',
+      shortDescription:'Fast charging',technicalSpecs:'PD 20W USB-C',options:'UK plug',
+      leadTime:4,productNotes:'INTERNAL SUPPLIER NOTE',
+      translation:{titleAr:'شاحن حائط سريع',titleEn:'Fast Wall Charger',descriptionAr:'شاحن PD بقدرة 20W',descriptionEn:'20W PD charger'}
+    }
+  };
+  const item=publicAiProductSummary(row);
+  assert.equal(item.technicalSpecs,'PD 20W USB-C');
+  assert.equal(item.options,'UK plug');
+  assert.equal(item.translation.descriptionAr,'شاحن PD بقدرة 20W');
+  assert.equal(item.productNotes,undefined);
+});
+
+test('cheapest intent sorts by price after compatibility, not by relevance or popularity score',()=>{
+  const state={publicOffers:[
+    {id:'cheap',status:'published',sku:'CHEAP',unitPrice:8,currency:'SAR',subcategoryId:'sub-wall-chargers',technicalSpecs:'PD 20W USB-C',translation:{titleAr:'شاحن اقتصادي',titleEn:'Budget Charger'}},
+    {id:'expensive',status:'published',sku:'BEST20',unitPrice:16,currency:'SAR',subcategoryId:'sub-wall-chargers',technicalSpecs:'PD 20W USB-C',translation:{titleAr:'شاحن حائط PD 20W سريع',titleEn:'Fast 20W PD Wall Charger'}},
+    {id:'car',status:'published',sku:'CAR20',unitPrice:5,currency:'SAR',subcategoryId:'sub-car-chargers-fm',technicalSpecs:'20W',translation:{titleAr:'شاحن سيارة 20W',titleEn:'20W Car Charger'}}
+  ]};
+  const rows=customerProductRecommendations(state,'أريد أرخص شاحن حائط 20W','ar',{expensive:{score:8}});
+  assert.equal(rows[0]?.id,'cheap');
+  assert.ok(!rows.some(x=>x.id==='car'));
+});
+
+test('cheapest price at a requested quantity uses wholesale tiers',()=>{
+  const state={publicOffers:[
+    {id:'tiered',status:'published',sku:'TIER20',unitPrice:10,currency:'SAR',subcategoryId:'sub-wall-chargers',technicalSpecs:'PD 20W',tiers:[{min:100,price:5}],translation:{titleAr:'شاحن حائط 20W بالجملة',titleEn:'20W Wholesale Wall Charger'}},
+    {id:'flat',status:'published',sku:'FLAT20',unitPrice:6,currency:'SAR',subcategoryId:'sub-wall-chargers',technicalSpecs:'PD 20W',translation:{titleAr:'شاحن حائط 20W',titleEn:'20W Wall Charger'}}
+  ]};
+  const withoutQty=customerProductRecommendations(state,'أريد أرخص شاحن حائط 20W','ar');
+  assert.equal(withoutQty[0]?.id,'flat');
+
+  const withQty=customerProductRecommendations(state,'أريد أرخص شاحن حائط 20W عدد 100','ar');
+  assert.equal(withQty[0]?.id,'tiered');
+  assert.equal(withQty[0]?.price,5);
+  assert.equal(withQty[0]?.priceQuantity,100);
+});
+
+test('technical specs can make a generically titled product match an exact watt request',()=>{
+  const state={publicOffers:[
+    {id:'specOnly',status:'published',sku:'MX-X',unitPrice:7,currency:'SAR',subcategoryId:'sub-wall-chargers',technicalSpecs:'USB-C PD output 20W',translation:{titleAr:'شاحن سريع MX-X',titleEn:'Fast Charger MX-X'}},
+    {id:'wrongWatt',status:'published',sku:'MX-Y',unitPrice:6,currency:'SAR',subcategoryId:'sub-wall-chargers',technicalSpecs:'USB-C PD output 30W',translation:{titleAr:'شاحن سريع MX-Y',titleEn:'Fast Charger MX-Y'}}
+  ]};
+  const rows=customerProductRecommendations(state,'أريد أرخص شاحن حائط 20W','ar');
+  assert.equal(rows[0]?.id,'specOnly');
+  assert.ok(!rows.some(x=>x.id==='wrongWatt'));
 });

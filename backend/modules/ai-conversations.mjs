@@ -11,6 +11,8 @@ function safeMessageMetadata(value={}){
     sku:clean(item?.sku,100),
     title:clean(item?.title,180),
     price:Number.isFinite(Number(item?.price))?Number(item.price):null,
+    basePrice:Number.isFinite(Number(item?.basePrice))?Number(item.basePrice):null,
+    priceQuantity:Number.isInteger(Number(item?.priceQuantity))&&Number(item.priceQuantity)>0?Number(item.priceQuantity):null,
     currency:clean(item?.currency,12),
     moq:item?.moq??null,
     image:clean(item?.image,1200),
