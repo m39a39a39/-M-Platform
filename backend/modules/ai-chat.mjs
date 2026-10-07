@@ -153,17 +153,65 @@ const TAXONOMY_ALIASES={
 function normalizeCatalogText(value=''){
   return clean(value).toLowerCase()
     .normalize('NFKD').replace(/[\u064B-\u065F\u0670]/g,'')
-    .replace(/[أإآ]/g,'ا').replace(/ى/g,'ي').replace(/ؤ/g,'و').replace(/ئ/g,'ي')
+    .replace(/[أإآ]/g,'ا').replace(/ى/g,'ي').replace(/ؤ/g,'و').replace(/ئ]/g,'ي')
     .replace(/ة/g,'ه').replace(/ـ/g,' ')
     .replace(/[^\p{L}\p{N}]+/gu,' ').replace(/\s+/g,' ').trim();
 }
 function catalogTokens(value=''){
   return normalizeCatalogText(value).split(' ').filter(x=>x.length>=3);
 }
+function lightTokenStem(value=''){
+  let token=normalizeCatalogText(value);
+  if(!token)return '';
+  if(/^[\u0600-\u06ff]+$/u.test(token)){
+    if(token.length>=6&&token.startsWith('ال'))token=token.slice(2);
+    for(const suffix of ['كما','هما','كم','كن','هم','هن','نا','ها','ه','ك','ي']){
+      if(token.length-suffix.length>=3&&token.endsWith(suffix)){token=token.slice(0,-suffix.length);break;}
+    }
+    if(token.length>=4&&token.endsWith('ت'))token=token.slice(0,-1)+'ه';
+  }
+  return token;
+}
+function boundedEditDistance(a,b,max=2){
+  a=String(a||'');b=String(b||'');
+  if(a===b)return 0;
+  if(Math.abs(a.length-b.length)>max)return max+1;
+  const prev=Array.from({length:b.length+1},(_,i)=>i),curr=new Array(b.length+1);
+  for(let i=1;i<=a.length;i++){
+    curr[0]=i;let rowMin=curr[0];
+    for(let j=1;j<=b.length;j++){
+      curr[j]=Math.min(prev[j]+1,curr[j-1]+1,prev[j-1]+(a[i-1]===b[j-1]?0:1));
+      rowMin=Math.min(rowMin,curr[j]);
+    }
+    if(rowMin>max)return max+1;
+    for(let j=0;j<=b.length;j++)prev[j]=curr[j];
+  }
+  return prev[b.length];
+}
 function tokenRelated(a,b){
+  a=normalizeCatalogText(a);b=normalizeCatalogText(b);
+  if(!a||!b)return false;
   if(a===b)return true;
   if(Math.min(a.length,b.length)>=4&&(a.startsWith(b)||b.startsWith(a)))return true;
-  return false;
+  const sa=lightTokenStem(a),sb=lightTokenStem(b);
+  if(sa&&sb&&(sa===sb||Math.min(sa.length,sb.length)>=4&&(sa.startsWith(sb)||sb.startsWith(sa))))return true;
+  const maxLen=Math.max(a.length,b.length);
+  if(Math.min(a.length,b.length)<3||maxLen>24)return false;
+  const maxEdits=maxLen<=8?1:2;
+  const distance=boundedEditDistance(a,b,maxEdits);
+  return distance<=maxEdits&&distance/Math.max(1,maxLen)<=0.28;
+}
+function phraseMatchScore(message,phrase){
+  const q=normalizeCatalogText(message),p=normalizeCatalogText(phrase);
+  if(!q||!p)return 0;
+  if(q.includes(p))return 1;
+  const qTokens=catalogTokens(q),pTokens=catalogTokens(p);
+  if(!pTokens.length)return 0;
+  const matched=pTokens.filter(token=>qTokens.some(queryToken=>tokenRelated(token,queryToken))).length;
+  return matched/pTokens.length;
+}
+function fuzzyHas(message,patterns=[],threshold=1){
+  return patterns.some(pattern=>phraseMatchScore(message,pattern)>=threshold);
 }
 function taxonomyEntries(state){
   const settings=state?.settings||{};
