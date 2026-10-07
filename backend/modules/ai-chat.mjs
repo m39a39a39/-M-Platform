@@ -687,14 +687,18 @@ function wantsHumanSupport(message=''){
   ]);
 }
 function policyPageIdForMessage(message=''){
-  const q=clean(message).toLowerCase();
-  if(qHas(q,['الشحن','شحن','التوصيل','توصيل','ناقل','shipping','delivery','freight','carrier']))return 'policy-shipping';
-  if(qHas(q,['استرجاع','استرداد','ارجاع','إرجاع','refund','return']))return 'policy-returns';
-  if(qHas(q,['إلغاء','الغاء','cancel','cancellation']))return 'policy-cancellation';
-  if(qHas(q,['الدفع','تحويل','عربون','payment','deposit','bank transfer']))return 'policy-payments';
-  if(qHas(q,['خصوصية','privacy']))return 'policy-privacy';
-  if(qHas(q,['ملفات الارتباط','كوكيز','cookies','cookie']))return 'policy-cookies';
-  if(qHas(q,['الشروط','الأحكام','terms','conditions']))return 'policy-terms';
+  const q=normalizeCatalogText(message);
+  if(qHas(q,['الشحن','التوصيل','توصيل','ناقل','shipping','delivery','freight','carrier','تشحن','تشحنون'])
+    ||fuzzyHas(q,['تشحن','تشحنون','التوصيل','شحنه','shipping','delivery','freight'],1))return 'policy-shipping';
+  if(qHas(q,['استرجاع','استرداد','ارجاع','refund','return'])
+    ||fuzzyHas(q,['استرجاع','استرداد','refund','return'],1))return 'policy-returns';
+  if(qHas(q,['الغاء','cancel','cancellation'])
+    ||fuzzyHas(q,['الغاء','cancellation'],1))return 'policy-cancellation';
+  if(qHas(q,['الدفع','تحويل','عربون','payment','deposit','bank transfer'])
+    ||fuzzyHas(q,['الدفع','تحويل','عربون','payment','deposit'],1))return 'policy-payments';
+  if(qHas(q,['خصوصيه','privacy'])||fuzzyHas(q,['خصوصيه','privacy'],1))return 'policy-privacy';
+  if(qHas(q,['ملفات الارتباط','كوكيز','cookies','cookie'])||fuzzyHas(q,['كوكيز','cookies'],1))return 'policy-cookies';
+  if(qHas(q,['الشروط','الاحكام','terms','conditions'])||fuzzyHas(q,['الشروط','الاحكام','terms','conditions'],1))return 'policy-terms';
   return '';
 }
 function isCompanyPolicyQuestion(message=''){
@@ -734,9 +738,47 @@ function isCompanyPolicyFollowup(message='',history=[]){
     'what is its name','what is the name','what is the address','where is it','where are they located','address','location'
   ]);
 }
+function isClarificationFollowup(message=''){
+  const q=normalizeCatalogText(message);
+  if(!q||q.length>120)return false;
+  return fuzzyHas(q,[
+    'ماذا تقصد','وش تقصد','ايش تقصد','شو تقصد','وضح','وضح لي','اشرح','اشرح لي','يعني ايش','يعني ماذا',
+    'كيف','ليش','لماذا','طيب كيف','what do you mean','explain','how so','why'
+  ],0.75);
+}
+function recentPolicyContext(history=[]){
+  for(const row of [...(Array.isArray(history)?history:[])].slice(-8).reverse()){
+    const text=clean(row?.content);
+    if(!text)continue;
+    if(row?.role==='user'){
+      const pageId=policyPageIdForMessage(text);
+      if(pageId)return {pageId,question:text};
+    }
+    if(row?.role==='assistant'){
+      const q=normalizeCatalogText(text);
+      if(fuzzyHas(q,['سياسه الشحن','shipping and delivery','التوصيل حاليا داخل السعوديه'],0.7))return {pageId:'policy-shipping',question:''};
+      if(fuzzyHas(q,['سياسه الاسترجاع','returns and refunds'],0.7))return {pageId:'policy-returns',question:''};
+      if(fuzzyHas(q,['سياسه الدفع','payment policy'],0.7))return {pageId:'policy-payments',question:''};
+      if(fuzzyHas(q,['سياسه الغاء','order cancellation'],0.7))return {pageId:'policy-cancellation',question:''};
+    }
+  }
+  return {pageId:'',question:''};
+}
+function resolvedPolicyPageId(message='',history=[]){
+  const current=policyPageIdForMessage(message);
+  if(current)return current;
+  if(!isClarificationFollowup(message))return '';
+  return recentPolicyContext(history).pageId;
+}
+function resolvedPolicyQuery(message='',history=[]){
+  const current=policyPageIdForMessage(message);
+  if(current||!isClarificationFollowup(message))return message;
+  const recent=recentPolicyContext(history);
+  return recent.question?recent.question+' '+message:message;
+}
 function policyQuestionSignal(message='',history=[]){
-  const q=clean(message).toLowerCase();
-  return !!policyPageIdForMessage(message)||isCompanyPolicyQuestion(message)||isCompanyPolicyFollowup(message,history)||qHas(q,['سياسة','السياسة','ضمان','warranty','policy']);
+  const q=normalizeCatalogText(message);
+  return !!resolvedPolicyPageId(message,history)||isCompanyPolicyQuestion(message)||isCompanyPolicyFollowup(message,history)||fuzzyHas(q,['سياسه','ضمان','warranty','policy'],1);
 }
 function selectedPolicyPage(state,pageId){
   return (state?.settings?.storefront?.pages||[]).find(page=>page?.id===pageId&&page?.active!==false)||null;
@@ -753,6 +795,19 @@ function policyPagesForLanguage(state,language){
 }
 function policyChunks(value=''){
   return String(value||'').replace(/\r/g,'\n').split(/\n+|[.!؟。؛]+\s*/u).map(clean).filter(chunk=>chunk.length>=4);
+}
+function policySegments(value=''){
+  return String(value||'').replace(/\r/g,'\n').split(/\n{2,}/u).map(block=>{
+    const lines=String(block||'').split(/\n+/u).map(clean).filter(Boolean);
+    if(!lines.length)return null;
+    const heading=lines.length>1&&lines[0].length<=90?lines[0]:'';
+    const text=clean((heading?lines.slice(1):lines).join(' '));
+    return {heading,text,raw:clean(block)};
+  }).filter(segment=>segment?.text);
+}
+function policyMetadataOnly(value=''){
+  const q=normalizeCatalogText(value);
+  return /^(?:تاريخ التحديث|اخر تحديث|last updated)\b/iu.test(q);
 }
 function policyLines(value=''){
   return String(value||'').replace(/\r/g,'\n').split(/\n+/u).map(clean).filter(Boolean);
@@ -856,37 +911,41 @@ function directPolicyAnswer(state,message,language,history=[]){
   if(!policyQuestionSignal(message,history))return null;
   const company=directCompanyPolicyAnswer(state,message,language,history);
   if(company)return company;
-  const shipping=directShippingPolicyAnswer(state,message,language);
+  const effectiveMessage=resolvedPolicyQuery(message,history);
+  const shipping=directShippingPolicyAnswer(state,effectiveMessage,language);
   if(shipping)return shipping;
   const pages=policyPagesForLanguage(state,language);
   if(!pages.length)return null;
-  const pageId=policyPageIdForMessage(message);
+  const pageId=resolvedPolicyPageId(message,history);
   const selected=pageId?pages.filter(page=>page.id===pageId):pages;
+  const qTokens=catalogTokens(effectiveMessage).filter(token=>!['سياسه','policy','ماذا','تقصد','كيف','what','mean','how'].includes(token));
   const candidates=[];
-  const qTokens=catalogTokens(message).filter(token=>!['سياسه','policy','ماذا','كيف','what','how'].includes(token));
   for(const page of selected.length?selected:pages){
     const titleTokens=catalogTokens(page.title);
-    for(const chunk of policyChunks(page.content)){
-      const chunkTokens=catalogTokens(chunk);
-      let score=pageId&&page.id===pageId?4:0;
+    for(const segment of policySegments(page.content)){
+      const headingTokens=catalogTokens(segment.heading),bodyTokens=catalogTokens(segment.text);
+      let score=pageId&&page.id===pageId?5:0;
+      if(policyMetadataOnly(segment.raw))score-=30;
       for(const token of qTokens){
-        if(chunkTokens.some(value=>tokenRelated(token,value)))score+=3;
-        if(titleTokens.some(value=>tokenRelated(token,value)))score+=2;
+        if(bodyTokens.some(value=>tokenRelated(token,value)))score+=4;
+        if(headingTokens.some(value=>tokenRelated(token,value)))score+=3;
+        if(titleTokens.some(value=>tokenRelated(token,value)))score+=1;
       }
-      candidates.push({page,chunk,score});
+      if(segment.text.length>=35)score+=1;
+      candidates.push({page,segment,score});
     }
   }
-  candidates.sort((a,b)=>b.score-a.score);
+  candidates.sort((a,b)=>b.score-a.score||b.segment.text.length-a.segment.text.length);
   const top=candidates[0];
-  if(top&&top.score>=4){
-    const body=clamp(top.chunk,650);
-    return top.page.title?top.page.title+': '+body:body;
+  if(top&&top.score>=6){
+    const body=clamp(top.segment.text,650);
+    return top.segment.heading?top.segment.heading+': '+body:body;
   }
   if(pageId){
-    const page=(selected.length?selected:pages)[0];
-    if(page?.content){
-      const body=clamp(page.content,650);
-      return page.title?page.title+': '+body:body;
+    const fallback=candidates.find(item=>item.page.id===pageId&&!policyMetadataOnly(item.segment.raw)&&item.segment.text.length>=30);
+    if(fallback){
+      const body=clamp(fallback.segment.text,650);
+      return fallback.segment.heading?fallback.segment.heading+': '+body:body;
     }
   }
   return null;
