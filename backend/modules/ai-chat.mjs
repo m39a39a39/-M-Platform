@@ -315,7 +315,7 @@ function quickRepliesFor(query,cards,language){
   if(!cards.length)return [];
   if(qHas(q,['شاحن','charger']))return language==='en'?['Wall charger','Car charger','Cheapest option','With cable']:['شاحن منزلي','شاحن سيارة','أرخص خيار','مع كابل'];
   if(qHas(q,['كيبل','كابل','cable']))return language==='en'?['Type-C to Type-C','USB to Type-C','Lightning','Cheapest option']:['Type-C to Type-C','USB to Type-C','Lightning','أرخص خيار'];
-  if(qHas(q,['سماعة','سماعات','earbuds','headphones','tws']))return language==='en'?['TWS','Wired','Best for calls','Cheapest option']:['TWS','سلكية','أفضل للمكالمات','أرخص خيار'];
+  if(qHas(q,['سماعة','سماعه','سماعات','earbuds','headphones','tws']))return language==='en'?['TWS','Wired','Best for calls','Cheapest option']:['TWS','سلكية','أفضل للمكالمات','أرخص خيار'];
   if(qHas(q,['كفر','غطاء','case','cover']))return language==='en'?['iPhone','Samsung','TPU','Silicone']:['آيفون','سامسونج','TPU','سيليكون'];
   return language==='en'?['Cheapest option','Compare these','Show more']:['أرخص خيار','قارن بينها','عرض المزيد'];
 }
@@ -417,7 +417,13 @@ function directProductFact(state,message,language,signals={}){
   if(confidence<1||confidence<100&&confidence<=secondConfidence)return null;
   const title=(language==='en'?first.title?.en:first.title?.ar)||first.sku||'Product';
   const facts=[];
-  if(wantsPrice&&Number.isFinite(Number(first.price)))facts.push((language==='en'?'Price: ':'السعر: ')+Number(first.price)+' '+(first.currency||'SAR'));
+  if(wantsPrice&&Number.isFinite(Number(first.price))){
+    const quantity=Number(first.requestedQuantity)||0;
+    const label=quantity
+      ?(language==='en'?('Price at '+quantity+' pcs: '):('السعر لـ '+quantity+' حبة: '))
+      :(language==='en'?'Price: ':'السعر: ');
+    facts.push(label+Number(first.price)+' '+(first.currency||'SAR'));
+  }
   if(wantsMoq&&first.moq!==undefined&&first.moq!==null&&first.moq!=='')facts.push((language==='en'?'MOQ: ':'الحد الأدنى: ')+first.moq+(language==='en'?'':' قطعة'));
   if(wantsStock){
     if(first.stockUnlimited)facts.push(language==='en'?'Availability: Available to order':'التوفر: متوفر للطلب');
