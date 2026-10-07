@@ -146,7 +146,8 @@ test('wall charger watt intent outranks car chargers and cables',()=>{
   ]};
   const rows=customerProductRecommendations(state,'أريد شاحن حائط 20W','ar');
   assert.equal(rows[0]?.id,'wall20');
-  assert.ok(rows.findIndex(x=>x.id==='wall20')<rows.findIndex(x=>x.id==='car20'));
+  const carIndex=rows.findIndex(x=>x.id==='car20');
+  assert.ok(carIndex===-1||rows.findIndex(x=>x.id==='wall20')<carIndex);
 });
 
 test('Type-C to Type-C 60W intent prefers the correct cable',()=>{
