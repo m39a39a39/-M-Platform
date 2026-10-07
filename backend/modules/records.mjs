@@ -60,8 +60,16 @@ function publicSettingsForView(data={},route={}){
 }
 function publicProductSummary(row){
   const d=row.data||{},translation=d.translation||{},item={id:row.id,displayNo:row.display_no,createdAt:row.created_at,status:'published',
-    sku:d.sku||'',translation:{titleAr:translation.titleAr||'',titleEn:translation.titleEn||''},images:Array.isArray(d.images)?d.images.filter(Boolean).slice(0,1):[],
-    country:d.country||'',categoryId:d.categoryId||'',subcategoryId:d.subcategoryId||'',unitPrice:d.unitPrice??'',currency:d.currency||'',moq:d.moq??'',stock:d.stock??'',stockUnlimited:d.stockUnlimited!==false};
+    sku:d.sku||'',product:d.product||'',
+    translation:{
+      titleAr:translation.titleAr||'',titleEn:translation.titleEn||'',
+      descriptionAr:translation.descriptionAr||'',descriptionEn:translation.descriptionEn||''
+    },
+    images:Array.isArray(d.images)?d.images.filter(Boolean).slice(0,1):[],
+    country:d.country||'',categoryId:d.categoryId||'',subcategoryId:d.subcategoryId||'',
+    shortDescription:d.shortDescription||'',technicalSpecs:d.technicalSpecs||'',options:d.options||'',leadTime:d.leadTime??'',
+    unitPrice:d.unitPrice??'',currency:d.currency||'',moq:d.moq??'',stock:d.stock??'',stockUnlimited:d.stockUnlimited!==false
+  };
   if(Array.isArray(d.tiers)&&d.tiers.length)item.tiers=d.tiers;
   return compactPublicValue(item)||item;
 }
