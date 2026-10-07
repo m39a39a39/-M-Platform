@@ -85,11 +85,11 @@ function productIntent(query=''){
     cheapest:/(أرخص|ارخص|cheapest|lowest price|اقتصادي|budget)/u.test(q)
   };
   if(/(مكبر|سبيكر|speaker|soundbar)/u.test(q)){intent.category='audio';intent.subtype='speaker';}
-  else if(/(سماعة|سماعات|earbud|earphone|headphone|headset|tws)/u.test(q)){
+  else if(/(سماع(?:ة|ه|ات)|earbud|earphone|headphone|headset|tws)/u.test(q)){
     intent.category='audio';
-    if(/(tws|ايربود|earbud)/u.test(q))intent.subtype='tws';
+    if(/(tws|ايربود|إيربود|earbud)/u.test(q))intent.subtype='tws';
     else if(/(سلكي|سلكية|wired)/u.test(q))intent.subtype='wired';
-    else if(/(رأس|headphone|headset)/u.test(q))intent.subtype='headphone';
+    else if(/(رأس|راس|headphone|headset)/u.test(q))intent.subtype='headphone';
     else intent.subtype='personal';
   }else if(/(باور ?بانك|شاحن متنقل|power ?bank)/u.test(q))intent.category='powerbank';
   else if(/(شاحن سيارة|car charger)/u.test(q))intent.category='car_charger';
@@ -128,7 +128,7 @@ function productProfile(item){
   let category='',subtype='';
   if(sub.includes('bluetooth-speaker')||/(مكبر|سبيكر|speaker|soundbar)/u.test(hay)){category='audio';subtype='speaker';}
   else if(sub.includes('tws')||/(\btws\b|earbud)/u.test(hay)){category='audio';subtype='tws';}
-  else if(sub.includes('headphone')||/(headphone|headset|سماعة رأس)/u.test(hay)){category='audio';subtype='headphone';}
+  else if(sub.includes('headphone')||/(headphone|headset|سماع(?:ة|ه) (?:رأس|راس))/u.test(hay)){category='audio';subtype='headphone';}
   else if(sub.includes('wired-ear')||/(wired ear|سماعة سلك)/u.test(hay)){category='audio';subtype='wired';}
   else if(/power ?bank|باور ?بانك|شاحن متنقل/u.test(hay))category='powerbank';
   else if(/car charger|شاحن سيارة/u.test(hay))category='car_charger';
