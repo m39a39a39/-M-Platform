@@ -82,3 +82,7 @@ export async function migrateAmayaImages(signature){
   }
   return {ok:true,products,images,failures:failures.slice(0,20),remainingExternal:failures.length};
 }
+
+export async function runAmayaImageMigrationAtBuild(){
+  return migrateAmayaImages(migrationSignature());
+}
