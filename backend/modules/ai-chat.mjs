@@ -240,7 +240,7 @@ function catalogReferenceMatch(state,message=''){
 }
 export function isCustomerProductQuery(state,message='',history=[],resolvedQuery=''){
   const current=clean(message),resolved=clean(resolvedQuery||resolveCustomerProductQuery(state,current,history));
-  if(!current)return false;
+  if(!current||policyQuestionSignal(current))return false;
   if(hasExplicitProductType(state,resolved))return true;
   if(catalogReferenceMatch(state,current))return true;
   return false;
@@ -690,10 +690,66 @@ function directCompanyPolicyAnswer(state,message,language){
   candidates.sort((a,b)=>b.score-a.score);
   return candidates[0]?.chunk?clamp(candidates[0].chunk,520):null;
 }
+function directShippingPolicyAnswer(state,message,language){
+  const page=selectedPolicyPage(state,'policy-shipping');
+  if(!page)return null;
+  const raw=String(language==='en'?(page.contentEn||page.content||''):(page.content||page.contentEn||''));
+  const content=clean(raw),q=clean(message).toLowerCase();
+  if(!content)return null;
+  const asksDuration=qHas(q,['مدة الشحن','وقت الشحن','كم مدة','shipping time','delivery time','how long']);
+  if(asksDuration){
+    const durationChunk=policyChunks(raw).find(chunk=>/\b\d+\s*(?:يوم|ايام|أيام|days?|weeks?|اسبوع|أسبوع)\b/iu.test(chunk));
+    if(durationChunk)return clamp(durationChunk,420);
+    return language==='en'
+      ?'The shipping duration is not specified in the current store policy. The expected duration is confirmed before shipping.'
+      :'مدة الشحن غير محددة حاليًا في سياسة المتجر، ويتم تأكيد المدة المتوقعة لك قبل الشحن.';
+  }
+  const asksSaudi=qHas(q,['السعودية','saudi','ksa']);
+  const asksCost=qHas(q,['كم تكلفة الشحن','كم سعر الشحن','تكلفة الشحن','سعر الشحن','رسوم الشحن','shipping cost','shipping price','shipping fee','freight cost']);
+  const hasSaudi=/السعودية|saudi arabia|\bksa\b/iu.test(content);
+  if(asksSaudi&&hasSaudi){
+    if(asksCost){
+      const separate=/بشكل منفصل|separately/iu.test(content);
+      const afterPrep=/بعد تجهيز|after preparation|after the goods are prepared/iu.test(content);
+      const weight=/وزن|weight/iu.test(content),volume=/حجم|volume/iu.test(content);
+      const includesCustoms=/جمارك|customs/iu.test(content),includesTaxes=/ضرائب|tax/iu.test(content),includesClearance=/تخليص|clearance/iu.test(content),includesDelivery=/التوصيل|delivery/iu.test(content);
+      if(language==='en'){
+        let reply='Shipping cost is confirmed';
+        if(separate)reply+=' separately';
+        if(afterPrep)reply+=' after the goods are prepared';
+        if(weight||volume)reply+=' based on '+[weight?'weight':'',volume?'volume':''].filter(Boolean).join(' and ');
+        reply+='.';
+        const included=[includesCustoms?'customs':'',includesTaxes?'taxes':'',includesClearance?'clearance':'',includesDelivery?'delivery':''].filter(Boolean);
+        if(included.length)reply+=' The policy states that the shipping quote includes '+included.join(', ')+'.';
+        return reply;
+      }
+      let reply='تُحدد تكلفة الشحن';
+      if(separate)reply+=' بشكل منفصل';
+      if(afterPrep)reply+=' بعد تجهيز البضاعة';
+      if(weight||volume)reply+=' حسب '+[weight?'الوزن':'',volume?'الحجم':''].filter(Boolean).join(' و');
+      reply+='.';
+      const included=[includesCustoms?'الجمارك':'',includesTaxes?'الضرائب':'',includesClearance?'التخليص':'',includesDelivery?'التوصيل':''].filter(Boolean);
+      if(included.length)reply+=' ويذكر نص السياسة أن عرض الشحن يشمل '+included.join(' و')+'.';
+      return reply;
+    }
+    const hasAir=/جوي|air freight|air shipping/iu.test(content),hasSea=/بحري|sea freight|sea shipping/iu.test(content);
+    if(language==='en'){
+      let reply='Yes. Delivery to Saudi Arabia is available according to the store shipping policy.';
+      if(hasAir||hasSea)reply+=' Available methods include '+[hasAir?'air':'',hasSea?'sea':''].filter(Boolean).join(' or ')+' freight.';
+      return reply;
+    }
+    let reply='نعم، نوفر التوصيل حاليًا إلى السعودية.';
+    if(hasAir||hasSea)reply+=' ويمكن ترتيب الشحن '+[hasAir?'الجوي':'',hasSea?'البحري':''].filter(Boolean).join(' أو ')+'.';
+    return reply;
+  }
+  return null;
+}
 function directPolicyAnswer(state,message,language){
   if(!policyQuestionSignal(message))return null;
   const company=directCompanyPolicyAnswer(state,message,language);
   if(company)return company;
+  const shipping=directShippingPolicyAnswer(state,message,language);
+  if(shipping)return shipping;
   const pages=policyPagesForLanguage(state,language);
   if(!pages.length)return null;
   const pageId=policyPageIdForMessage(message);
