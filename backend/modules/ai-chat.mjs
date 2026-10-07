@@ -660,7 +660,7 @@ export async function aiChat(user,body={},req=null){
   const model=String(process.env.OPENAI_CHAT_MODEL||DEFAULT_MODEL).replace(/^openai\//,'');
   const policyPageId=policyPageIdForMessage(message);
   const policySignal=!!policyPageId||qHas(message.toLowerCase(),['سياسة','ضمان','policy','warranty']);
-  const state=await snapshot(user||null,!user?(policyPageId?{pageId:policyPageId}:policySignal?{}:{q:message}):{});
+  const state=await snapshot(user||null,!user?(policyPageId?{pageId:policyPageId}:policySignal?{}:{q:message,aiCatalog:true}):{});
   const conversionSignals=await chatProductSignals();
   if(!proactive&&!image){
     const direct=directCustomerAnswer(state,user,message,language,conversionSignals);
