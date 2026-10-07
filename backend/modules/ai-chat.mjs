@@ -167,18 +167,26 @@ function intentHasHardConstraints(intent){
 }
 function explicitlyCompatible(item,intent){
   const p=productProfile(item);
-  if(intent.category&&p.category){
+
+  // Personal-audio requests must never fall back to generic Bluetooth accessories
+  // such as transmitters/receivers just because they contain "Bluetooth".
+  if(intent.category==='audio'){
+    if(p.category!=='audio')return false;
+  }else if(intent.category&&p.category){
     const categoryMatch=intent.category==='charger'
       ?['charger','wall_charger','car_charger'].includes(p.category)
-      :intent.category==='audio'?p.category==='audio':p.category===intent.category;
+      :p.category===intent.category;
     if(!categoryMatch)return false;
   }
-  if(intent.subtype&&p.subtype){
-    const subtypeMatch=intent.subtype==='personal'
-      ?['tws','headphone','wired'].includes(p.subtype)
-      :p.subtype===intent.subtype;
-    if(!subtypeMatch)return false;
+
+  if(intent.subtype==='personal'){
+    if(!['tws','headphone','wired'].includes(p.subtype))return false;
+  }else if(intent.subtype==='speaker'){
+    if(p.subtype!=='speaker')return false;
+  }else if(intent.subtype){
+    if(p.subtype!==intent.subtype)return false;
   }
+
   if(intent.wireless&&p.subtype==='wired')return false;
   if(intent.connector&&p.connector&&p.connector!==intent.connector)return false;
   if(intent.watt&&p.watts.length&&!p.watts.includes(intent.watt))return false;
