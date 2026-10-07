@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {latestAssistantQuickReplies} from '../src/ai-chat.js';
+import {latestAssistantQuickReplies} from '../src/ai-chat-state.js';
 
 test('product quick replies come only from the latest assistant response',()=>{
   const messages=[
