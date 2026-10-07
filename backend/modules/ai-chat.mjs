@@ -589,11 +589,15 @@ export async function aiChat(user,body={},req=null){
   const policyPageId=policyPageIdForMessage(message);
   const policySignal=!!policyPageId||qHas(message.toLowerCase(),['سياسة','ضمان','policy','warranty']);
   const state=await snapshot(user||null,!user?(policyPageId?{pageId:policyPageId}:policySignal?{}:{q:message}):{});
+  const conversionSignals=await chatProductSignals();
   if(!proactive&&!image){
-    const direct=directCustomerAnswer(state,user,message,language);
+    const direct=directCustomerAnswer(state,user,message,language,conversionSignals);
     if(direct){
-      const ui=chatUiMetadata(state,message,language);
-      if(conversation)await saveAiMessage(conversation,direct,ui);
+      const ui=chatUiMetadata(state,message,language,conversionSignals);
+      if(conversation){
+        await saveAiMessage(conversation,direct,ui);
+        await recordRecommendationImpressions({conversation,user,products:ui.products});
+      }
       await recordAiUsage({surface:'customer',source:'database',user,conversationId:conversation?.id,model});
       return {reply:direct,source:'database',recommendations:ui.products,quickReplies:ui.quickReplies,...(conversation?{conversationId:conversation.id,humanMode:false,waitingHuman:!!conversation.handoff_requested_at}:{})};
     }
@@ -616,19 +620,22 @@ export async function aiChat(user,body={},req=null){
   const policyPage=policyPageId?selectedPolicyPage(state,policyPageId):null;
   const context={
     viewer:user?{signedIn:true}:{signedIn:false},
-    products:productContext(state,productQuery),
+    products:productContext(state,productQuery,conversionSignals),
     ...(policyPage?{policy:{id:policyPage.id,title:language==='en'?(policyPage.titleEn||policyPage.title):(policyPage.title||policyPage.titleEn),content:clamp(language==='en'?(policyPage.contentEn||policyPage.content):(policyPage.content||policyPage.contentEn),1800)}}:{}),
     ...(imageSearch?{imageSearch}:{}),
     ...(marketingSignal?{shoppingSignal:marketingSignal}:{}),
     ...(personalContextNeeded?clientContext(state):{})
   };
-  const ui=chatUiMetadata(state,productQuery,language);
+  const ui=chatUiMetadata(state,productQuery,language,conversionSignals);
   const cacheable=!user&&!proactive&&!imageSearch&&history.length===0;
   const cacheKey=cacheable?cacheKeyFor(language,message,context):'';
   if(cacheKey){
     const cached=await getCachedReply(cacheKey);
     if(cached){
-      if(conversation)await saveAiMessage(conversation,cached,ui);
+      if(conversation){
+        await saveAiMessage(conversation,cached,ui);
+        await recordRecommendationImpressions({conversation,user,products:ui.products});
+      }
       await recordAiUsage({surface:'customer',source:'cache',user,conversationId:conversation?.id,model});
       return {reply:cached,source:'cache',recommendations:ui.products,quickReplies:ui.quickReplies,...(conversation?{conversationId:conversation.id,humanMode:false,waitingHuman:!!conversation.handoff_requested_at}:{})};
     }
@@ -689,6 +696,7 @@ If PLATFORM_CONTEXT_JSON contains shoppingSignal, write a very short proactive m
     const current=await ensureConversation(user,{conversationId:conversation.id,guestKey:body.guestKey,language},false);
     if(current?.status==='human')return {conversationId:current.id,humanMode:true};
     await saveAiMessage(current||conversation,reply,ui);
+    await recordRecommendationImpressions({conversation:current||conversation,user,products:ui.products});
   }
   await recordAiUsage({surface:'customer',source:'openai',user,conversationId:conversation?.id,model,usage:data?.usage});
   return {reply,source:'openai',usage:data?.usage||null,recommendations:ui.products,quickReplies:ui.quickReplies,...(conversation?{conversationId:conversation.id,humanMode:false,waitingHuman:!!conversation.handoff_requested_at}:{})};
