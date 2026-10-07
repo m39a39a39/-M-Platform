@@ -1111,7 +1111,7 @@ export async function aiChat(user,body={},req=null){
   let gatewayUser='';
   const model=String(process.env.OPENAI_CHAT_MODEL||DEFAULT_MODEL).replace(/^openai\//,'');
   const history=normalizeHistory(body.history);
-  const policyPageId=policyPageIdForMessage(message);
+  const policyPageId=resolvedPolicyPageId(message,history);
   const policySignal=policyQuestionSignal(message,history);
   const guestSnapshotOptions=policySignal
     ?{...(policyPageId?{pageId:policyPageId}:{}),aiPolicies:true}
