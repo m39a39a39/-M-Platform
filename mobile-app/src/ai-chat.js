@@ -8,6 +8,8 @@ const signalTimers=new Map();
 const MARKETING_KEY='m-platform.ai-marketing.v2';
 const GUEST_KEY='m-platform.ai-guest-key.v1';
 const CONVERSATION_KEY='m-platform.ai-conversation.v1';
+const ATTRIBUTION_KEY='m-platform.ai-chat-attribution.v1';
+const ATTRIBUTION_TTL=7*24*60*60*1000;
 const MAX_PROACTIVE_MESSAGES=3;
 const PROACTIVE_COOLDOWN=90000;
 
@@ -52,6 +54,31 @@ function storedConversationId(mode){return String(conversationStore()[mode]||'')
 function storeConversationId(mode,id){
   try{const state=conversationStore();if(id)state[mode]=id;else delete state[mode];localStorage.setItem(CONVERSATION_KEY,JSON.stringify(state));}catch{}
 }
+
+function readAttribution(){
+  try{
+    const row=JSON.parse(localStorage.getItem(ATTRIBUTION_KEY)||'null');
+    if(!row?.conversationId||!row?.at||Date.now()-Number(row.at)>ATTRIBUTION_TTL){localStorage.removeItem(ATTRIBUTION_KEY);return null;}
+    return row;
+  }catch{return null;}
+}
+function saveAttribution(productId=''){
+  if(!controller?.conversationId)return null;
+  const row={conversationId:String(controller.conversationId),guestKey:visitorKey(),productId:String(productId||''),at:Date.now()};
+  try{localStorage.setItem(ATTRIBUTION_KEY,JSON.stringify(row));}catch{}
+  return row;
+}
+export function chatAttributionForOrder(){
+  const row=readAttribution();
+  return row?{conversationId:row.conversationId,guestKey:row.guestKey||'',productId:row.productId||''}:null;
+}
+async function trackConversion(eventName,{productId='',metadata={}}={}){
+  const attribution=readAttribution();
+  const conversationId=attribution?.conversationId||controller?.conversationId||'';
+  const guestKey=attribution?.guestKey||visitorKey();
+  if(!conversationId||typeof controller?.trackConversion!=='function')return;
+  try{await controller.trackConversion({eventName,conversationId,guestKey,productId,metadata});}catch{}
+}
 function marketingState(){
   try{const parsed=JSON.parse(sessionStorage.getItem(MARKETING_KEY)||'{}');return parsed&&typeof parsed==='object'?parsed:{};}catch{return{};}
 }
@@ -92,6 +119,17 @@ function ensureHost(){
     const button=event.target.closest('button[data-prompt]');if(!button)return;
     host.querySelector('textarea').value=button.dataset.prompt;host.querySelector('.m-ai-form').requestSubmit();
   });
+  host.querySelector('.m-ai-messages').addEventListener('click',event=>{
+    const card=event.target.closest('[data-chat-product]');if(!card)return;
+    const productId=String(card.dataset.chatProduct||'');if(!productId)return;
+    const href=card.getAttribute('href')||'';
+    event.preventDefault();
+    saveAttribution(productId);
+    Promise.race([
+      trackConversion('product_click',{productId,metadata:{source:'chat_card'}}),
+      new Promise(resolve=>setTimeout(resolve,220))
+    ]).finally(()=>{if(href)location.assign(href);});
+  });
   return host;
 }
 function markEngaged(){const state=marketingState();state.chatEngaged=true;saveMarketingState(state);}
@@ -115,7 +153,7 @@ function productCardsHtml(products=[]){
   if(!rows.length)return '';
   return `<div class="m-ai-products" aria-label="${esc(language()==='ar'?'منتجات مقترحة':'Suggested products')}">${rows.map(product=>{
     const image=safeProductImage(product.image),price=Number.isFinite(Number(product.price))?Number(product.price):null;
-    return `<a class="m-ai-product-card" href="${esc(product.href||('/?product='+encodeURIComponent(product.id||'')))}">
+    return `<a class="m-ai-product-card" data-chat-product="${esc(product.id||'')}" href="${esc(product.href||('/?product='+encodeURIComponent(product.id||'')))}">
       <span class="m-ai-product-image">${image?`<img src="${esc(image)}" alt="" loading="lazy" decoding="async">`:'<span class="m-ai-product-placeholder">M</span>'}</span>
       <strong>${esc(product.title||product.sku||'')}</strong>
       ${price!==null?`<span class="m-ai-product-price">${esc(new Intl.NumberFormat(language()==='ar'?'ar-SA':'en',{maximumFractionDigits:2}).format(price))} ${esc(product.currency||'SAR')}</span>`:''}
@@ -314,15 +352,23 @@ export function aiChatSignal(type,detail={}){
     scheduleSignal('search',1100,()=>{if(Number(detail.results)===0)return requestProactive({type:'search_no_results',...detail});if(Number(detail.results)<=3)return requestProactive({type:'narrow_search',...detail});});
     return;
   }
-  if(type==='cart_add'){scheduleSignal('cart-add',Number(detail.cartCount)>=2?5000:11000,()=>requestProactive({type:'cart_interest',...detail}));return;}
+  if(type==='cart_add'){
+    const attr=readAttribution();
+    if(attr)void trackConversion('add_to_cart',{productId:String(detail.productId||''),metadata:{quantity:detail.quantity,cartCount:detail.cartCount,price:detail.price,currency:detail.currency}});
+    scheduleSignal('cart-add',Number(detail.cartCount)>=2?5000:11000,()=>requestProactive({type:'cart_interest',...detail}));return;
+  }
+  if(type==='checkout_started'){
+    if(readAttribution())void trackConversion('checkout_started',{metadata:{cartCount:detail.cartCount,cartTotal:detail.cartTotal,currency:detail.currency}});
+    return;
+  }
   if(type==='cart_open'&&Number(detail.cartCount)>0)scheduleSignal('cart-open',15000,()=>requestProactive({type:'cart_hesitation',...detail}));
 }
-export function mountAiChat({mode='guest',language:languageGetter=()=> 'ar',send,fetchConversation,captureLead}={}){
+export function mountAiChat({mode='guest',language:languageGetter=()=> 'ar',send,fetchConversation,captureLead,trackConversion:trackConversionHandler}={}){
   if(typeof send!=='function')return;
   const sameMode=controller?.mode===mode,stored=storedConversationId(mode);
   stopPolling();clearTimeout(waitingTimer);waitingTimer=null;
   controller={
-    mode,language:languageGetter,send,fetchConversation,captureLead,
+    mode,language:languageGetter,send,fetchConversation,captureLead,trackConversion:trackConversionHandler,
     messages:sameMode?controller.messages:[],loading:false,
     humanMode:sameMode?controller.humanMode:false,waitingHuman:sameMode?controller.waitingHuman:false,
     waitingSince:sameMode?controller.waitingSince||'':'',leadCaptured:sameMode?controller.leadCaptured:false,
