@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {directCustomerAnswer,customerProductRecommendations} from '../backend/modules/ai-chat.mjs';
 import {buildAdminAiContext,directAdminAnswer} from '../backend/modules/admin-ai.mjs';
-import {publicProductSummary} from '../backend/modules/records.mjs';
+import {publicAiProductSummary} from '../backend/modules/records.mjs';
 import {normalizeAiUsage,estimateAiCostUsd} from '../backend/modules/ai-usage.mjs';
 
 test('customer price and MOQ questions are answered from catalog without an AI call',()=>{
@@ -193,7 +193,7 @@ test('guest product summary includes safe customer-facing specifications but not
       translation:{titleAr:'شاحن حائط سريع',titleEn:'Fast Wall Charger',descriptionAr:'شاحن PD بقدرة 20W',descriptionEn:'20W PD charger'}
     }
   };
-  const item=publicProductSummary(row);
+  const item=publicAiProductSummary(row);
   assert.equal(item.technicalSpecs,'PD 20W USB-C');
   assert.equal(item.options,'UK plug');
   assert.equal(item.translation.descriptionAr,'شاحن PD بقدرة 20W');
