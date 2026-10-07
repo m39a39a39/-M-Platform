@@ -20,13 +20,13 @@ test('unified browser bearer login is limited to the configured first-party orig
    SUPABASE_URL:'https://example.supabase.co',
    SUPABASE_ANON_KEY:'anon',
    SUPABASE_SERVICE_ROLE_KEY:'service',
-   APP_ORIGIN:'https://m-platform-tan.vercel.app'
+   APP_ORIGIN:'https://www.imsgsource.com'
  });
  try{
-   assert.equal(isNativeClient({headers:{'x-m-client':'native',origin:'https://m-platform-tan.vercel.app'}}),true);
+   assert.equal(isNativeClient({headers:{'x-m-client':'native',origin:'https://www.imsgsource.com'}}),true);
    assert.equal(isNativeClient({headers:{'x-m-client':'native',origin:'capacitor://localhost'}}),true);
    assert.equal(isNativeClient({headers:{'x-m-client':'native',origin:'https://evil.example'}}),false);
-   assert.equal(isNativeClient({headers:{origin:'https://m-platform-tan.vercel.app'}}),false);
+   assert.equal(isNativeClient({headers:{origin:'https://www.imsgsource.com'}}),false);
  }finally{
    for(const key of keys){
      if(previous[key]===undefined)delete process.env[key];
