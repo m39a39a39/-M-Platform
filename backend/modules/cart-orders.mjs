@@ -5,6 +5,7 @@ import {active,open} from './records.mjs';
 import {checkoutDetails} from './order-management.mjs';
 import {priceForQuantity} from './studio.mjs';
 import {isUnlimitedStock,stockAllows} from '../../shared/inventory.mjs';
+import {resolveChatAttribution,recordOrderConversion} from './chat-conversions.mjs';
 
 const MAX_CART_ITEMS=10;
 const SUPPORTED_CURRENCIES=new Set(['USD','SAR','AED','CNY','EUR']);
@@ -49,6 +50,7 @@ export async function createCartOrder(user,body={}){
   const currency=currencies[0],cartTotal=validated.reduce((sum,x)=>sum+x.total,0);
   assert(Number.isFinite(cartTotal)&&cartTotal>0&&cartTotal<=1e12,400,'إجمالي الطلب غير صالح / Invalid order total');
 
+  const chatAttribution=administrative?null:await resolveChatAttribution(user,body.chatAttribution||{});
   const now=new Date().toISOString(),orderId=randomUUID();
   const lines=validated.map((x,index)=>{
     const d=x.offer.data||{},interestId=randomUUID();
@@ -72,6 +74,7 @@ export async function createCartOrder(user,body={}){
   const firstImages=lines.flatMap(x=>x.snapshot.images||[]).slice(0,5);
   const orderData={
     orderType:'cart',
+    ...(chatAttribution?{chatAttribution:{source:'ai_chat',conversationId:chatAttribution.conversationId}}:{}),
     ...(administrative?{orderAudit:[{at:now,actorId:user.id,action:'admin_create',changes:[]}]}:{}),
     requiresAssignment:true,orderFlowVersion:2,orderStage:0,delivery,orderHistory:[{at:now,stage:0}],
     product:'Product order',
@@ -131,6 +134,10 @@ export async function createCartOrder(user,body={}){
   }))];
 
   await rpc('commit_changes',{actor:user.id,changes});
+  if(chatAttribution){
+    try{await recordOrderConversion(user,{orderId,items,chatAttribution:body.chatAttribution||{}});}
+    catch(error){console.warn('chat_order_conversion_failed',error?.message||'unknown');}
+  }
   const created=await one('requests',orderId);
   return {ok:true,orderId,displayNo:created?.display_no||null,currency,cartTotal,itemCount:lines.length};
 }

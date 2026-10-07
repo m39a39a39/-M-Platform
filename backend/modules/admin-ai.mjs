@@ -2,6 +2,7 @@ import {snapshot} from './records.mjs';
 import {can} from './auth.mjs';
 import {assert,HttpError} from '../lib/supabase.mjs';
 import {recordAiUsage,aiUsageSummary} from './ai-usage.mjs';
+import {chatConversionSummary} from './chat-conversions.mjs';
 import {isUnlimitedStock} from '../../shared/inventory.mjs';
 
 const OPENAI_URL='https://api.openai.com/v1/chat/completions';
@@ -311,20 +312,23 @@ export async function adminAiOverview(user){
   assert(can(user,'settings'),403,'لا تملك صلاحية MG AI / MG AI permission required');
   const state=await snapshot(user);
   const context=buildAdminAiContext(state);
-  let usage=null;try{usage=await aiUsageSummary();}catch(error){console.warn('AI usage summary failed',error?.message||'unknown');}
+  let usage=null,conversion=null;
+  try{[usage,conversion]=await Promise.all([aiUsageSummary(),chatConversionSummary()]);}
+  catch(error){console.warn('MG AI metrics summary failed',error?.message||'unknown');}
   return {
     mode:'proposal',
     overview:context.overview,
     usage,
+    conversion,
     taxonomy:buildProductDraftReference(state),
     productDraftEnabled:can(user,'offers.edit'),
     quickPrompts:[
+      'حلل تحويلات شات العملاء من الاقتراح إلى إنشاء الطلب',
       'حلل أداء المتجر واقترح أهم 5 إجراءات الآن',
       'اقترح ترتيب الصفحة الرئيسية والمنتجات التي يجب أن تظهر أولًا',
-      'ما المنتجات التي تستحق حملة تسويقية الآن ولماذا؟',
-      'راجع الكتالوج واقترح تحسينات للمنتجات والمخزون'
+      'ما المنتجات التي تستحق حملة تسويقية الآن ولماذا؟'
     ],
-    behaviorTrackingAvailable:false
+    behaviorTrackingAvailable:true
   };
 }
 
@@ -345,13 +349,15 @@ export async function adminAi(user,body={}){
   const direct=directAdminAnswer(context,message,language);
   if(direct){
     await recordAiUsage({surface:'admin',source:'database',user,model});
-    return {reply:direct,mode:'database',overview:context.overview,behaviorTrackingAvailable:false};
+    return {reply:direct,mode:'database',overview:context.overview,behaviorTrackingAvailable:true};
   }
   const llmContext=leanAdminContext(context,message);
+  let conversion=null;try{conversion=await chatConversionSummary();}catch{}
+  if(conversion)llmContext.chatConversions=conversion;
 
   const system=language==='en'
-    ?`You are MG AI, the read-only admin merchandising and business analyst inside M Platform. Use only ADMIN_CONTEXT_JSON. Never invent metrics, customer behavior, views, searches, cart events, margins, or profit. Behavioral event tracking is not enabled yet, so say that clearly whenever the request depends on it. Never reveal or request customer names, emails, phone numbers, addresses, or other personal data. Distinguish data-backed findings from recommendations. For homepage merchandising, prioritize wholesale relevance, product diversity, observed order history, stock and catalog quality. You cannot directly edit, publish, reorder or launch campaigns. Product creation is available only through the separate reviewed draft workflow in the admin UI. If the admin asks you to make a store change, provide a precise proposal and require admin approval. Keep answers practical and concise.`
-    :`أنت MG AI، محلل المتجر والتسويق وترتيب المنتجات داخل لوحة إدارة M Platform بوضع قراءة فقط. اعتمد فقط على ADMIN_CONTEXT_JSON ولا تخترع أي أرقام أو سلوك للعملاء أو مشاهدات أو عمليات بحث أو إضافات للسلة أو هامش ربح. تتبع أحداث سلوك العملاء غير مفعل بعد، لذلك اذكر هذا بوضوح عندما يعتمد السؤال عليه. لا تعرض ولا تطلب أسماء العملاء أو البريد أو الهاتف أو العنوان أو أي بيانات شخصية. فرّق بوضوح بين النتائج المبنية على البيانات وبين الاقتراحات. عند اقتراح الصفحة الرئيسية راعِ طبيعة الجملة، تنويع فئات المنتجات، سجل الطلبات المتاح، المخزون وجودة الكتالوج. لا تستطيع تعديل أو نشر أو إعادة ترتيب أو تشغيل حملة مباشرة. إضافة المنتجات متاحة فقط عبر مسار مسودة منفصل داخل لوحة الإدارة وبعد مراجعة المسؤول. إذا طُلب منك تغيير المتجر فاعرض الاقتراح بدقة واطلب الاعتماد. اجعل الإجابة عملية ومختصرة.`;
+    ?`You are MG AI, the read-only admin merchandising and business analyst inside M Platform. Use only ADMIN_CONTEXT_JSON. Never invent metrics, customer behavior, views, searches, cart events, margins, or profit. When ADMIN_CONTEXT_JSON contains chatConversions, use those real aggregated chat-funnel events for behavior and conversion analysis. Never reveal or request customer names, emails, phone numbers, addresses, or other personal data. Distinguish data-backed findings from recommendations. For homepage merchandising, prioritize wholesale relevance, product diversity, observed order history, stock and catalog quality. You cannot directly edit, publish, reorder or launch campaigns. Product creation is available only through the separate reviewed draft workflow in the admin UI. If the admin asks you to make a store change, provide a precise proposal and require admin approval. Keep answers practical and concise.`
+    :`أنت MG AI، محلل المتجر والتسويق وترتيب المنتجات داخل لوحة إدارة M Platform بوضع قراءة فقط. اعتمد فقط على ADMIN_CONTEXT_JSON ولا تخترع أي أرقام أو سلوك للعملاء أو مشاهدات أو عمليات بحث أو إضافات للسلة أو هامش ربح. عندما يحتوي ADMIN_CONTEXT_JSON على chatConversions فاستخدم بيانات التحويل الحقيقية والمجمعة لتحليل أداء شات العملاء. لا تعرض ولا تطلب أسماء العملاء أو البريد أو الهاتف أو العنوان أو أي بيانات شخصية. فرّق بوضوح بين النتائج المبنية على البيانات وبين الاقتراحات. عند اقتراح الصفحة الرئيسية راعِ طبيعة الجملة، تنويع فئات المنتجات، سجل الطلبات المتاح، المخزون وجودة الكتالوج. لا تستطيع تعديل أو نشر أو إعادة ترتيب أو تشغيل حملة مباشرة. إضافة المنتجات متاحة فقط عبر مسار مسودة منفصل داخل لوحة الإدارة وبعد مراجعة المسؤول. إذا طُلب منك تغيير المتجر فاعرض الاقتراح بدقة واطلب الاعتماد. اجعل الإجابة عملية ومختصرة.`;
 
   const payload={
     model,
@@ -383,5 +389,5 @@ export async function adminAi(user,body={}){
   const reply=extractReply(data);
   if(!reply)throw new HttpError(502,'لم يصل رد صالح من MG AI. / MG AI returned an empty response.');
   await recordAiUsage({surface:'admin',source:'openai',user,model,usage:data?.usage});
-  return {reply,mode:'readonly',usage:data?.usage||null,overview:context.overview,behaviorTrackingAvailable:false};
+  return {reply,mode:'readonly',usage:data?.usage||null,overview:context.overview,behaviorTrackingAvailable:true};
 }

@@ -59,6 +59,29 @@
     </section>`;
   }
 
+  function conversionPanel(){
+    const x=overview?.conversion;
+    if(!x)return '';
+    const rate=Number(x.conversionRate||0);
+    return `<section class="mg-ai-conversion">
+      <div class="mg-ai-conversion-head">
+        <div><strong>${esc(tr('تحويلات شات العملاء','Customer chat conversions'))}</strong><small>${esc(tr('آخر 30 يومًا · بيانات فعلية من رحلة العميل','Last 30 days · actual customer journey data'))}</small></div>
+        <span>${esc(tr('محادثة → طلب','Chat → order'))}: ${rate.toFixed(1)}%</span>
+      </div>
+      <div class="mg-ai-conversion-flow">
+        <article><small>${esc(tr('اقتراحات منتجات','Recommendations'))}</small><strong>${number(x.recommendations)}</strong></article>
+        <b>→</b>
+        <article><small>${esc(tr('ضغط على المنتج','Product clicks'))}</small><strong>${number(x.productClicks)}</strong></article>
+        <b>→</b>
+        <article><small>${esc(tr('إضافة للسلة','Add to cart'))}</small><strong>${number(x.addToCart)}</strong></article>
+        <b>→</b>
+        <article><small>${esc(tr('بدأ الطلب','Checkout started'))}</small><strong>${number(x.checkoutStarted)}</strong></article>
+        <b>→</b>
+        <article><small>${esc(tr('طلبات منشأة','Orders created'))}</small><strong>${number(x.orders)}</strong></article>
+      </div>
+    </section>`;
+  }
+
   function quickPrompts(){
     const prompts=overview?.quickPrompts||[
       tr('حلل أداء المتجر واقترح أهم الإجراءات الآن','Analyze store performance and suggest the most important actions now'),
@@ -185,6 +208,7 @@
       </header>
       ${overview?cards():`<div class="mg-ai-loading">${esc(loadingOverview?tr('جاري تحميل ملخص المتجر…','Loading store overview…'):tr('تعذر تحميل ملخص المتجر','Could not load store overview'))}</div>`}
       ${usagePanel()}
+      ${conversionPanel()}
       ${creatorIntro()}
       <section class="mg-ai-panel">
         <div class="mg-ai-panel-head">
@@ -197,7 +221,7 @@
           <textarea name="message" rows="3" maxlength="2500" placeholder="${esc(tr('مثال: اختر لي المنتجات التي يجب أن تظهر أول الصفحة هذا الأسبوع','Example: choose which products should appear first on the homepage this week'))}" ${loading?'disabled':''}></textarea>
           <button type="submit" class="primary" ${loading?'disabled':''}>${esc(tr('إرسال','Send'))}</button>
         </form>
-        <footer>${esc(tr('تتبع المشاهدات والبحث والإضافة للسلة غير مفعّل بعد، لذلك لن يخترع MG AI هذه البيانات.','Views, searches and add-to-cart event tracking is not enabled yet, so MG AI will not invent those metrics.'))}</footer>
+        <footer>${esc(tr('تحويلات شات العملاء تُحسب من أحداث فعلية ومجمعة بدون حفظ نص المحادثة داخل سجل التحويل.','Customer chat conversions are calculated from real aggregated events; chat text is not stored in the conversion log.'))}</footer>
       </section>
     </section>`;
     requestAnimationFrame(()=>{const chat=root?.querySelector('[data-mg-ai-chat]');if(chat)chat.scrollTop=chat.scrollHeight;});

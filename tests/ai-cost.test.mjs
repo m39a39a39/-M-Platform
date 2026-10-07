@@ -136,3 +136,46 @@ test('explicit Bluetooth speaker intent prefers speakers over earbuds',()=>{
   assert.equal(rows[0]?.id,'speaker');
   assert.ok(!rows.some(x=>x.id==='earbuds'));
 });
+
+
+test('wall charger watt intent outranks car chargers and cables',()=>{
+  const state={publicOffers:[
+    {id:'wall20',status:'published',sku:'W20',unitPrice:20,currency:'SAR',translation:{titleAr:'شاحن حائط PD 20W',titleEn:'20W PD Wall Charger'},specs:'USB-C PD 20W'},
+    {id:'car20',status:'published',sku:'C20',unitPrice:18,currency:'SAR',translation:{titleAr:'شاحن سيارة 20W',titleEn:'20W Car Charger'},specs:'USB-C 20W'},
+    {id:'cable60',status:'published',sku:'CB60',unitPrice:8,currency:'SAR',translation:{titleAr:'كيبل Type-C 60W',titleEn:'60W Type-C Cable'},specs:'Type-C to Type-C 60W'}
+  ]};
+  const rows=customerProductRecommendations(state,'أريد شاحن حائط 20W','ar');
+  assert.equal(rows[0]?.id,'wall20');
+  const carIndex=rows.findIndex(x=>x.id==='car20');
+  assert.ok(carIndex===-1||rows.findIndex(x=>x.id==='wall20')<carIndex);
+});
+
+test('Type-C to Type-C 60W intent prefers the correct cable',()=>{
+  const state={publicOffers:[
+    {id:'cc60',status:'published',sku:'CC60',unitPrice:9,currency:'SAR',translation:{titleAr:'كيبل Type-C إلى Type-C 60W',titleEn:'Type-C to Type-C 60W Cable'},specs:'PD 60W C-C'},
+    {id:'usbC',status:'published',sku:'UC3',unitPrice:7,currency:'SAR',translation:{titleAr:'كيبل USB إلى Type-C 3A',titleEn:'USB to Type-C 3A Cable'},specs:'USB to Type-C 3A'},
+    {id:'wall60',status:'published',sku:'W60',unitPrice:28,currency:'SAR',translation:{titleAr:'شاحن حائط 60W',titleEn:'60W Wall Charger'},specs:'PD 60W'}
+  ]};
+  const rows=customerProductRecommendations(state,'أريد كيبل Type-C to Type-C 60W','ar');
+  assert.equal(rows[0]?.id,'cc60');
+});
+
+test('conversion popularity cannot override a clear product-category mismatch',()=>{
+  const state={publicOffers:[
+    {id:'earbuds',status:'published',sku:'TWS1',unitPrice:30,currency:'SAR',subcategoryId:'sub-tws-earbuds',translation:{titleAr:'سماعة TWS بلوتوث',titleEn:'Bluetooth TWS Earbuds'}},
+    {id:'speaker',status:'published',sku:'SP1',unitPrice:30,currency:'SAR',subcategoryId:'sub-bluetooth-speakers',translation:{titleAr:'مكبر صوت بلوتوث',titleEn:'Bluetooth Speaker'}}
+  ]};
+  const signals={speaker:{score:8},earbuds:{score:0}};
+  const rows=customerProductRecommendations(state,'أريد سماعة بلوتوث','ar',signals);
+  assert.equal(rows[0]?.id,'earbuds');
+  assert.ok(!rows.some(x=>x.id==='speaker'));
+});
+
+test('matching products can use conversion signals as a small tie-breaker',()=>{
+  const state={publicOffers:[
+    {id:'a',status:'published',sku:'A',unitPrice:30,currency:'SAR',subcategoryId:'sub-tws-earbuds',translation:{titleAr:'سماعة TWS بلوتوث A',titleEn:'Bluetooth TWS Earbuds A'}},
+    {id:'b',status:'published',sku:'B',unitPrice:30,currency:'SAR',subcategoryId:'sub-tws-earbuds',translation:{titleAr:'سماعة TWS بلوتوث B',titleEn:'Bluetooth TWS Earbuds B'}}
+  ]};
+  const rows=customerProductRecommendations(state,'سماعة TWS بلوتوث','ar',{b:{score:5},a:{score:0}});
+  assert.equal(rows[0]?.id,'b');
+});
