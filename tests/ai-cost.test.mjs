@@ -40,17 +40,24 @@ test('shipping policy questions use the stored policy text locally',()=>{
 });
 
 test('company and policy questions are never classified as product-card queries',()=>{
-  const state={settings:chatTaxonomy,publicOffers:[
+  const state={settings:{
+    categories:[{id:'cat-cables-adapters',active:true,nameAr:'الكيابل والمحولات',nameEn:'Cables & Adapters'}],
+    subcategories:[{id:'sub-charging-data-cables',parentId:'cat-cables-adapters',active:true,nameAr:'كيابل الشحن والبيانات',nameEn:'Charging & Data Cables'}]
+  },publicOffers:[
     {id:'cable',status:'published',sku:'C1',unitPrice:2,currency:'SAR',subcategoryId:'sub-charging-data-cables',categoryId:'cat-cables-adapters',translation:{titleAr:'كابل شحن',titleEn:'Charging Cable'}}
   ]};
   assert.equal(isCustomerProductQuery(state,'عنوان شركتكم',[]),false);
   assert.equal(isCustomerProductQuery(state,'أين مقركم',[]),false);
+  assert.equal(isCustomerProductQuery(state,'عنوانك',[]),false);
   assert.equal(isCustomerProductQuery(state,'سياسة الشحن',[]),false);
   assert.equal(isCustomerProductQuery(state,'أريد كابل رخيص',[]),true);
 });
 
 test('local-first product discovery answers from catalog without needing prose generation',()=>{
-  const state={settings:chatTaxonomy,publicOffers:[
+  const state={settings:{
+    categories:[{id:'cat-cables-adapters',active:true,nameAr:'الكيابل والمحولات',nameEn:'Cables & Adapters'}],
+    subcategories:[{id:'sub-charging-data-cables',parentId:'cat-cables-adapters',active:true,nameAr:'كيابل الشحن والبيانات',nameEn:'Charging & Data Cables'}]
+  },publicOffers:[
     {id:'cheap',status:'published',sku:'C1',unitPrice:2.5,currency:'SAR',moq:100,subcategoryId:'sub-charging-data-cables',categoryId:'cat-cables-adapters',translation:{titleAr:'كابل شحن اقتصادي',titleEn:'Budget Charging Cable'}},
     {id:'expensive',status:'published',sku:'C2',unitPrice:4,currency:'SAR',moq:100,subcategoryId:'sub-charging-data-cables',categoryId:'cat-cables-adapters',translation:{titleAr:'كابل شحن سريع',titleEn:'Fast Charging Cable'}}
   ]};
