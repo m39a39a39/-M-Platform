@@ -9,7 +9,7 @@ import {config,HttpError,assert} from './lib/supabase.mjs';
 import {identify,authRoute,isNativeClient,updateOwnCurrency} from './modules/auth.mjs';
 import {snapshot} from './modules/records.mjs';
 import {mutate,moderate,saveSettings,updateAccount,bulkUpdatePublicOffers} from './modules/mutations.mjs';
-import {upload,media} from './modules/media.mjs';
+import {upload,media,migrateExternalProductImages} from './modules/media.mjs';
 import {team} from './modules/team.mjs';
 import {listNotifications,markNotificationsRead} from './modules/notifications.mjs';
 import {registerPushDevice,unregisterPushDevice} from './modules/push.mjs';
@@ -64,6 +64,13 @@ export default async function handler(req,res){
     const c=config();
     if(path==='/api/app-config'){
       assert(req.method==='GET',405);res.setHeader('Content-Type','application/json; charset=utf-8');res.end(JSON.stringify(publicAppConfig(c.origin)));return;
+    }
+    if(path==='/api/internal/migrate-product-images'){
+      assert(req.method==='GET',405);
+      assert(process.env.MIGRATION_TOKEN&&url.searchParams.get('token')===process.env.MIGRATION_TOKEN,404);
+      const result=await migrateExternalProductImages({limit:url.searchParams.get('limit')});
+      res.setHeader('Content-Type','application/json; charset=utf-8');
+      res.end(JSON.stringify(result));return;
     }
     assert(['GET','POST'].includes(req.method),405);
     if(req.method==='POST'){
