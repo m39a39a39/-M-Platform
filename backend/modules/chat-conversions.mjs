@@ -27,21 +27,22 @@ function safeMetadata(value={}){
   }
   return result;
 }
-async function insertEvent({conversationId,customerId=null,eventName,productId='',orderId='',metadata={}}){
-  await db('chat_conversion_events','',{
-    method:'POST',
-    body:{
-      conversation_id:conversationId,
-      customer_id:customerId||null,
-      event_name:eventName,
-      product_id:clean(productId,90)||null,
-      order_id:clean(orderId,90)||null,
-      metadata:safeMetadata(metadata)
-    },
-    headers:{Prefer:'return=minimal'}
-  });
+function eventRow({conversationId,customerId=null,eventName,productId='',orderId='',metadata={}}){
+  return {
+    conversation_id:conversationId,
+    customer_id:customerId||null,
+    event_name:eventName,
+    product_id:clean(productId,90)||null,
+    order_id:clean(orderId,90)||null,
+    metadata:safeMetadata(metadata)
+  };
+}
+async function insertEvents(events=[]){
+  const rows=events.filter(Boolean).map(eventRow);if(!rows.length)return;
+  await db('chat_conversion_events','',{method:'POST',body:rows,headers:{Prefer:'return=minimal'}});
   signalCache.at=0;
 }
+async function insertEvent(event){return insertEvents([event]);}
 export async function resolveChatAttribution(user,body={}){
   const conversation=await conversationById(clean(body?.conversationId,80));
   if(!canAttribute(user,conversation,clean(body?.guestKey,120)))return null;
@@ -67,10 +68,10 @@ export async function recordChatConversion(user,body={}){
 export async function recordRecommendationImpressions({conversation,user,products=[]}={}){
   if(!conversation?.id||!Array.isArray(products)||!products.length)return;
   const customerId=user?.role==='client'?user.id:null;
-  for(const product of products.slice(0,6)){
-    const productId=clean(product?.id,90);if(!productId)continue;
-    await insertEvent({conversationId:conversation.id,customerId,eventName:'recommendation_impression',productId,metadata:{source:'chat'}});
-  }
+  await insertEvents(products.slice(0,6).map(product=>{
+    const productId=clean(product?.id,90);if(!productId)return null;
+    return {conversationId:conversation.id,customerId,eventName:'recommendation_impression',productId,metadata:{source:'chat'}};
+  }));
 }
 export async function recordOrderConversion(user,{orderId,items=[],chatAttribution={}}={}){
   if(user?.role!=='client'||!orderId)return null;
@@ -78,13 +79,9 @@ export async function recordOrderConversion(user,{orderId,items=[],chatAttributi
   if(!attribution)return null;
   const conversation={id:attribution.conversationId};
   const productIds=[...new Set((items||[]).map(x=>clean(x?.offerId,90)).filter(Boolean))];
-  if(!productIds.length){
-    await insertEvent({conversationId:conversation.id,customerId:user.id,eventName:'order_created',orderId,metadata:{source:'chat',cartCount:0}});
-  }else{
-    for(const productId of productIds){
-      await insertEvent({conversationId:conversation.id,customerId:user.id,eventName:'order_created',orderId,productId,metadata:{source:'chat',cartCount:productIds.length}});
-    }
-  }
+  await insertEvents(productIds.length
+    ?productIds.map(productId=>({conversationId:conversation.id,customerId:user.id,eventName:'order_created',orderId,productId,metadata:{source:'chat',cartCount:productIds.length}}))
+    :[{conversationId:conversation.id,customerId:user.id,eventName:'order_created',orderId,metadata:{source:'chat',cartCount:0}}]);
   return conversation.id;
 }
 async function recentRows(){
