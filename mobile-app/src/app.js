@@ -19,7 +19,7 @@ import { parseBulkProductWorkbook, validateBulkProductRows, normalizeSupplyCount
 import { categoryRows, subcategoryRows, supplyCountryRows, taxonomyLabel } from './catalog-taxonomy.js';
 import './image-viewer.js';
 import { downloadInvoicePdf } from './invoice-pdf.js';
-import { mountAiChat, unmountAiChat, aiChatSignal } from './ai-chat.js';
+import { mountAiChat, unmountAiChat, aiChatSignal, chatAttributionForOrder } from './ai-chat.js';
 
 let currentUser=null;
 let platformState=null;
@@ -296,7 +296,7 @@ function addToCart(offer,quantity){
   if(!existing&&cartItems.length>=10)throw new Error(tr('الحد الأقصى 10 منتجات في الطلب الواحد.','Maximum 10 products per cart order.'));
   if(existing)existing.quantity=q;else cartItems.push({offerId:offer.id,quantity:q});
   saveCart();
-  if(currentUser?.role==='client')aiChatSignal('cart_add',{productSku:offer.sku||'',productTitle:titleOf(offer),price:Number(offer.unitPrice)||0,currency:offer.currency||'',moq:Number(offer.moq)||0,quantity:q,cartCount:cartItems.length});
+  if(currentUser?.role==='client')aiChatSignal('cart_add',{productId:offer.id,productSku:offer.sku||'',productTitle:titleOf(offer),price:Number(offer.unitPrice)||0,currency:offer.currency||'',moq:Number(offer.moq)||0,quantity:q,cartCount:cartItems.length});
 }
 function productSearchBar(){
   return `<label class="product-search-bar"><span>⌕</span><input type="search" inputmode="search" enterkeyhint="search" data-product-search value="${esc(readySearch)}" placeholder="${esc(tr('ابحث عن منتج أو SKU','Search products or SKU'))}" aria-label="${esc(tr('البحث عن المنتجات','Search products'))}"></label>`;
@@ -387,7 +387,8 @@ function syncClientAiChat(){
     mode:'client',
     language:()=>lang,
     send:body=>request('/api/v1/ai-chat',{method:'POST',auth:true,body}),
-    fetchConversation:params=>request('/api/v1/ai-conversation?'+new URLSearchParams({conversationId:String(params.conversationId||''),guestKey:String(params.guestKey||''),language:String(params.language||lang)}),{auth:true})
+    fetchConversation:params=>request('/api/v1/ai-conversation?'+new URLSearchParams({conversationId:String(params.conversationId||''),guestKey:String(params.guestKey||''),language:String(params.language||lang)}),{auth:true}),
+    trackConversion:body=>request('/api/v1/ai-conversion',{method:'POST',auth:true,body})
   });
 }
 async function mutate(collection,itemId,version,patch){return request('/api/v1/mutations',{method:'POST',auth:true,body:{collection,id:itemId,version:Number(version||0),patch}});}
@@ -936,10 +937,12 @@ function openCart(){
   $('modalBody').querySelector('[data-cart-clear]')?.addEventListener('click',()=>{cartItems=[];saveCart();openCart();});
 }
 async function createCartOrderRequest(items,delivery){
-  return request('/api/v1/cart-orders',{method:'POST',auth:true,body:{items,delivery}});
+  const chatAttribution=chatAttributionForOrder();
+  return request('/api/v1/cart-orders',{method:'POST',auth:true,body:{items,delivery,...(chatAttribution?{chatAttribution}:{})}});
 }
 function reviewCart(){
   const rows=cartRows();if(!rows.length)return openCart();const total=rows.reduce((n,r)=>n+r.total,0);
+  aiChatSignal('checkout_started',{cartCount:rows.length,cartTotal:total,currency:rows[0]?.currency||''});
   openModal(tr('مراجعة وإرسال الطلب','Review and submit order'),' ',`<form id="orderReviewForm" class="checkout-review"><ul>${rows.map(r=>`<li>${esc(titleOf(r.offer))} — ${r.quantity} × ${money(r.unitPrice,r.currency)} = ${money(r.total,r.currency)}</li>`).join('')}</ul><h3>${money(total,rows[0].currency)}</h3><p>${esc(tr('الأسعار مبدئية. يتم اعتماد الإجمالي بعد التحقق من توفر المنتجات، ثم نطلب الدفع.','Prices are preliminary. Payment is requested only after availability and the final total are confirmed.'))}</p>${[['name',tr('اسم العميل','Customer name'),currentUser.name||''],['phone',tr('رقم التواصل','Phone'),currentUser.phone||''],['country',tr('دولة التسليم','Delivery country'),currentUser.country||''],['address',tr('عنوان التسليم','Delivery address'),'']].map(([k,label,v])=>`<label>${esc(label)}<input name="${k}" value="${esc(v)}" required maxlength="${k==='address'?1000:100}"></label>`).join('')}<label>${esc(tr('ملاحظات الطلب','Order notes'))}<textarea name="notes" maxlength="2000"></textarea></label><p id="cartMessage" class="form-message" role="alert"></p><button type="submit" class="primary-btn full">${esc(tr('إرسال الطلب للتحقق من التوفر','Submit order for availability check'))}</button><button type="button" id="backToCart" class="secondary-btn full">${esc(tr('العودة إلى السلة','Back to cart'))}</button></form>`);
   $('orderReviewForm').addEventListener('submit',submitCartOrder);$('backToCart').addEventListener('click',openCart);
 }
