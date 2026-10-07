@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {directCustomerAnswer,customerProductRecommendations,resolveCustomerProductQuery} from '../backend/modules/ai-chat.mjs';
+import {directCustomerAnswer,customerProductRecommendations,customerProductSearch,resolveCustomerProductQuery} from '../backend/modules/ai-chat.mjs';
 import {buildAdminAiContext,directAdminAnswer} from '../backend/modules/admin-ai.mjs';
 import {publicAiProductSummary} from '../backend/modules/records.mjs';
 import {normalizeAiUsage,estimateAiCostUsd} from '../backend/modules/ai-usage.mjs';
@@ -262,6 +262,7 @@ const chatTaxonomy={
     {id:'sub-charging-data-cables',parentId:'cat-cables-adapters',active:true,nameAr:'كيابل الشحن والبيانات',nameEn:'Charging & Data Cables'},
     {id:'sub-audio-cables-adapters',parentId:'cat-cables-adapters',active:true,nameAr:'كيابل ومحولات الصوت',nameEn:'Audio Cables & Adapters'},
     {id:'sub-power-banks',parentId:'cat-charging-power',active:true,nameAr:'الشواحن المتنقلة',nameEn:'Power Banks'},
+    {id:'sub-wall-chargers',parentId:'cat-charging-power',active:true,nameAr:'شواحن الحائط',nameEn:'Wall Chargers'},
     {id:'sub-microphones',parentId:'cat-audio',active:true,nameAr:'الميكروفونات',nameEn:'Microphones'},
     {id:'sub-stylus-pens',parentId:'cat-computer-tablet',active:true,nameAr:'أقلام اللمس',nameEn:'Stylus Pens'}
   ]
@@ -326,4 +327,70 @@ test('store taxonomy enables product types not hardcoded in the old intent list'
   };
   assert.deepEqual(customerProductRecommendations(state,'مايكروفون رخيص','ar').map(x=>x.id),['mic']);
   assert.deepEqual(customerProductRecommendations(state,'قلم لمس رخيص','ar').map(x=>x.id),['stylus']);
+});
+
+
+test('cheapest followup after a cable request stays inside cables',()=>{
+  const state={
+    settings:chatTaxonomy,
+    publicOffers:[
+      {id:'cableCheap',status:'published',sku:'C1',unitPrice:2.5,currency:'SAR',subcategoryId:'sub-charging-data-cables',categoryId:'cat-cables-adapters',translation:{titleAr:'كابل USB اقتصادي',titleEn:'Budget USB Cable'}},
+      {id:'cableExpensive',status:'published',sku:'C2',unitPrice:4,currency:'SAR',subcategoryId:'sub-charging-data-cables',categoryId:'cat-cables-adapters',translation:{titleAr:'كابل Type-C سريع',titleEn:'Fast Type-C Cable'}},
+      {id:'tws',status:'published',sku:'T1',unitPrice:1,currency:'SAR',subcategoryId:'sub-tws-earbuds',categoryId:'cat-audio',translation:{titleAr:'سماعات TWS',titleEn:'TWS Earbuds'}}
+    ]
+  };
+  const query=resolveCustomerProductQuery(state,'أرخص',[{role:'user',content:'أريد كابل'}]);
+  const rows=customerProductRecommendations(state,query,'ar');
+  assert.equal(rows[0]?.id,'cableCheap');
+  assert.ok(rows.every(x=>x.id.startsWith('cable')));
+});
+
+test('quantity followup after a charger request uses the matching wholesale tier',()=>{
+  const state={
+    settings:chatTaxonomy,
+    publicOffers:[
+      {id:'tiered',status:'published',sku:'W20-TIER',unitPrice:10,currency:'SAR',subcategoryId:'sub-wall-chargers',categoryId:'cat-charging-power',technicalSpecs:'PD 20W USB-C',tiers:[{min:100,price:5}],translation:{titleAr:'شاحن حائط 20W بالجملة',titleEn:'20W Wholesale Wall Charger'}},
+      {id:'flat',status:'published',sku:'W20-FLAT',unitPrice:6,currency:'SAR',subcategoryId:'sub-wall-chargers',categoryId:'cat-charging-power',technicalSpecs:'PD 20W USB-C',translation:{titleAr:'شاحن حائط 20W',titleEn:'20W Wall Charger'}},
+      {id:'cable',status:'published',sku:'C20',unitPrice:2,currency:'SAR',subcategoryId:'sub-charging-data-cables',categoryId:'cat-cables-adapters',technicalSpecs:'20W cable',translation:{titleAr:'كابل شحن',titleEn:'Charging Cable'}}
+    ]
+  };
+  const query=resolveCustomerProductQuery(state,'100 حبة',[{role:'user',content:'أريد أرخص شاحن حائط 20W'}]);
+  const rows=customerProductRecommendations(state,query,'ar');
+  assert.equal(rows[0]?.id,'tiered');
+  assert.equal(rows[0]?.price,5);
+  assert.equal(rows[0]?.priceQuantity,100);
+  assert.ok(rows.every(x=>x.id!=='cable'));
+});
+
+test('live storefront taxonomy matches a new future subcategory without hardcoded product rules',()=>{
+  const taxonomy={
+    categories:[{id:'cat-protection',active:true,nameAr:'حماية الجوال',nameEn:'Phone Protection'}],
+    subcategories:[{id:'sub-screen-protectors',parentId:'cat-protection',active:true,nameAr:'واقيات الشاشة',nameEn:'Screen Protectors'}]
+  };
+  const state={
+    settings:taxonomy,
+    publicOffers:[
+      {id:'glass',status:'published',sku:'GL1',unitPrice:3,currency:'SAR',subcategoryId:'sub-screen-protectors',categoryId:'cat-protection',translation:{titleAr:'زجاج مقوى شفاف',titleEn:'Clear Tempered Glass'}},
+      {id:'other',status:'published',sku:'OT1',unitPrice:1,currency:'SAR',subcategoryId:'sub-other',categoryId:'cat-other',translation:{titleAr:'منتج آخر',titleEn:'Other Product'}}
+    ]
+  };
+  assert.deepEqual(customerProductRecommendations(state,'أريد واقيات الشاشة الأرخص','ar').map(x=>x.id),['glass']);
+});
+
+test('AI context and product cards share the exact same ranked first product and tier price',()=>{
+  const state={
+    settings:chatTaxonomy,
+    publicOffers:[
+      {id:'tiered',status:'published',sku:'W20-TIER',product:'Wall Charger',unitPrice:10,currency:'SAR',moq:20,leadTime:4,subcategoryId:'sub-wall-chargers',categoryId:'cat-charging-power',technicalSpecs:'PD 20W USB-C',options:'UK plug',tiers:[{min:100,price:5}],translation:{titleAr:'شاحن حائط 20W بالجملة',titleEn:'20W Wholesale Wall Charger',descriptionAr:'شاحن سريع',descriptionEn:'Fast charger'}},
+      {id:'flat',status:'published',sku:'W20-FLAT',product:'Wall Charger',unitPrice:6,currency:'SAR',subcategoryId:'sub-wall-chargers',categoryId:'cat-charging-power',technicalSpecs:'PD 20W USB-C',translation:{titleAr:'شاحن حائط 20W',titleEn:'20W Wall Charger'}}
+    ]
+  };
+  const search=customerProductSearch(state,'أريد أرخص شاحن حائط 20W عدد 100','ar');
+  assert.equal(search.context[0]?.id,'tiered');
+  assert.equal(search.recommendations[0]?.id,'tiered');
+  assert.equal(search.context[0]?.price,5);
+  assert.equal(search.recommendations[0]?.price,5);
+  assert.equal(search.context[0]?.technicalSpecs,'PD 20W USB-C');
+  assert.equal(search.context[0]?.options,'UK plug');
+  assert.deepEqual(search.context[0]?.tiers,[{min:100,price:5}]);
 });
