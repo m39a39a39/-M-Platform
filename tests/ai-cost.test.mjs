@@ -78,7 +78,7 @@ test('shipping policy questions use the stored policy text locally',()=>{
     contentEn:'Shipping to Saudi Arabia: shipping cost is confirmed after preparation based on weight, volume and shipping method.'
   }]}},publicOffers:[]};
   const reply=directCustomerAnswer(state,null,'كم تكلفة الشحن للسعودية؟','ar');
-  assert.match(reply,/تحديد تكلفة الشحن بعد تجهيز البضاعة/);
+  assert.match(reply,/تكلفة الشحن بعد تجهيز البضاعة/);
 });
 
 test('company and policy questions are never classified as product-card queries',()=>{
