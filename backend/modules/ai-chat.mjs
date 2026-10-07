@@ -132,7 +132,12 @@ function productProfile(item){
   const title=titlePair(item),description=descriptionPair(item);
   const hay=clean([item?.product,title.ar,title.en,description.ar,description.en,item?.technicalSpecs,item?.options,sub,cat].filter(Boolean).join(' ')).toLowerCase();
   let category='',subtype='';
-  if(sub.includes('bluetooth-speaker')||/(مكبر|سبيكر|speaker|soundbar)/u.test(hay)){category='audio';subtype='speaker';}
+  if(sub==='sub-wall-chargers')category='wall_charger';
+  else if(sub==='sub-car-chargers-fm')category='car_charger';
+  else if(sub==='sub-charging-data-cables')category='cable';
+  else if(sub==='sub-wireless-chargers'||sub==='sub-laptop-chargers'||sub==='sub-power-strips-travel')category='charger';
+  else if(sub==='sub-wireless-charging-mounts')category='holder';
+  else if(sub.includes('bluetooth-speaker')||/(مكبر|سبيكر|speaker|soundbar)/u.test(hay)){category='audio';subtype='speaker';}
   else if(sub.includes('tws')||/(\btws\b|earbud)/u.test(hay)){category='audio';subtype='tws';}
   else if(sub.includes('headphone')||/(headphone|headset|سماع(?:ة|ه) (?:رأس|راس))/u.test(hay)){category='audio';subtype='headphone';}
   else if(sub.includes('wired-ear')||/(wired ear|سماعة سلك)/u.test(hay)){category='audio';subtype='wired';}
