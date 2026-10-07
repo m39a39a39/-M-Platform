@@ -160,7 +160,7 @@ function productCardsHtml(products=[]){
       <span class="m-ai-product-image">${image?`<img src="${esc(image)}" alt="" loading="lazy" decoding="async">`:'<span class="m-ai-product-placeholder">M</span>'}</span>
       <strong>${esc(product.title||product.sku||'')}</strong>
       ${price!==null?`<span class="m-ai-product-price">${esc(new Intl.NumberFormat(language()==='ar'?'ar-SA':'en',{maximumFractionDigits:2}).format(price))} ${esc(product.currency||'SAR')}</span>`:''}
-      ${product.moq!==null&&product.moq!==undefined&&product.moq!==''?`<small>MOQ ${esc(product.moq)}</small>`:''}
+      ${Number(product.priceQuantity)>0?`<small>${esc(language()==='ar'?('سعر '+product.priceQuantity+' حبة'):('Price at '+product.priceQuantity+' pcs'))}</small>`:product.moq!==null&&product.moq!==undefined&&product.moq!==''?`<small>MOQ ${esc(product.moq)}</small>`:''}
       <i aria-hidden="true">↗</i>
     </a>`;
   }).join('')}</div>`;
