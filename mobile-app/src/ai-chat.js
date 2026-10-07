@@ -170,13 +170,17 @@ function messageHtml(row){
   const hasProducts=row.role!=='user'&&Array.isArray(meta.products)&&meta.products.length;
   return `<div class="m-ai-row ${row.role==='user'?'user':'assistant'}${hasProducts?' has-products':''}"><div>${sender}<span class="m-ai-message-text">${esc(row.content)}</span>${row.role!=='user'?productCardsHtml(meta.products):''}</div></div>`;
 }
+export function latestAssistantQuickReplies(messages=[],humanMode=false){
+  if(humanMode)return [];
+  const latest=[...(Array.isArray(messages)?messages:[])].reverse().find(row=>row?.role==='assistant');
+  if(!latest)return [];
+  const products=latest?.metadata?.products;
+  const rows=latest?.metadata?.quickReplies;
+  if(!Array.isArray(products)||!products.length||!Array.isArray(rows)||!rows.length)return [];
+  return rows.slice(0,4);
+}
 function latestQuickReplies(){
-  if(controller?.humanMode)return [];
-  for(let i=(controller?.messages?.length||0)-1;i>=0;i--){
-    const rows=controller.messages[i]?.metadata?.quickReplies;
-    if(Array.isArray(rows)&&rows.length)return rows.slice(0,4);
-  }
-  return [];
+  return latestAssistantQuickReplies(controller?.messages||[],!!controller?.humanMode);
 }
 function latestProductSku(){
   for(let i=(controller?.messages?.length||0)-1;i>=0;i--){
