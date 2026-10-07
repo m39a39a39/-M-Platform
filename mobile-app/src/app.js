@@ -19,7 +19,7 @@ import { parseBulkProductWorkbook, validateBulkProductRows, normalizeSupplyCount
 import { categoryRows, subcategoryRows, supplyCountryRows, taxonomyLabel } from './catalog-taxonomy.js';
 import './image-viewer.js';
 import { downloadInvoicePdf } from './invoice-pdf.js';
-import { mountAiChat, unmountAiChat, aiChatSignal, chatAttributionForOrder } from './ai-chat.js';
+import { mountAiChat, unmountAiChat, aiChatSignal, chatAttributionForOrder, clearChatAttribution } from './ai-chat.js';
 
 let currentUser=null;
 let platformState=null;
@@ -955,6 +955,7 @@ async function submitCartOrder(e){
     const items=rows.map(row=>({offerId:row.offer.id,quantity:row.quantity}));
     const fd=new FormData(e.currentTarget),delivery=Object.fromEntries(['name','phone','country','address','notes'].map(k=>[k,String(fd.get(k)||'').trim()]));
     const result=await createCartOrderRequest(items,delivery);
+    clearChatAttribution();
     cartItems=[];saveCart();await loadData({render:false});closeModal();activeScreen='requests';renderScreen();
     showToast(tr(`تم إنشاء الطلب #${result.displayNo||''} بنجاح.`,`Order #${result.displayNo||''} created successfully.`));
   }catch(error){if(message)message.textContent=error.message||tr('تعذر إنشاء الطلب.','Could not create order.');if(button)button.disabled=false;}
