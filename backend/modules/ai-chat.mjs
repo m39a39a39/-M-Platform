@@ -83,7 +83,7 @@ function productIntent(query=''){
     device:'',
     use:'',
     quantity:null,
-    cheapest:/(أرخص|ارخص|cheapest|lowest price|اقل سعر|أقل سعر|اقتصادي|budget)/u.test(q)
+    cheapest:/(أرخص|ارخص|رخيص|رخيصة|cheap|cheapest|lowest price|اقل سعر|أقل سعر|اقتصادي|budget)/u.test(q)
   };
   if(/(مكبر|سبيكر|speaker|soundbar)/u.test(q)){intent.category='audio';intent.subtype='speaker';}
   else if(/(سماع(?:ة|ه|ات)|earbud|earphone|headphone|headset|tws)/u.test(q)){
@@ -224,6 +224,29 @@ export function resolveCustomerProductQuery(state,message='',history=[]){
   if(!isProductFollowup(current))return current;
   const prior=[...(Array.isArray(history)?history:[])].reverse().find(row=>row?.role==='user'&&hasExplicitProductType(state,row.content));
   return prior?.content?clean(prior.content)+' '+current:current;
+}
+function catalogReferenceMatch(state,message=''){
+  const q=normalizeCatalogText(message);
+  if(!q)return false;
+  return (state?.publicOffers||[]).some(item=>{
+    const sku=normalizeCatalogText(item?.sku||'');
+    if(sku&&sku.length>=3&&q.includes(sku))return true;
+    const title=titlePair(item);
+    return [title.ar,title.en].some(value=>{
+      const normalized=normalizeCatalogText(value);
+      return normalized.length>=7&&q.includes(normalized);
+    });
+  });
+}
+export function isCustomerProductQuery(state,message='',history=[],resolvedQuery=''){
+  const current=clean(message),resolved=clean(resolvedQuery||resolveCustomerProductQuery(state,current,history));
+  if(!current||policyQuestionSignal(current))return false;
+  if(hasExplicitProductType(state,resolved))return true;
+  if(catalogReferenceMatch(state,current))return true;
+  return false;
+}
+function emptyProductSearch(query=''){
+  return {query:clean(query),context:[],recommendations:[]};
 }
 function productProfile(item){
   const sub=String(item?.subcategoryId||'').toLowerCase(),cat=String(item?.categoryId||'').toLowerCase();
@@ -569,6 +592,35 @@ function directProductFact(state,message,language,signals={},productQuery=messag
   if(!facts.length)return null;
   return title+' — '+facts.join(' · ');
 }
+function productCardSummary(card,language){
+  const parts=[card?.title||''];
+  if(Number.isFinite(Number(card?.price)))parts.push(Number(card.price)+' '+(card.currency||'SAR'));
+  if(card?.moq!==undefined&&card?.moq!==null&&card?.moq!=='')parts.push((language==='en'?'MOQ ':'الحد الأدنى ')+card.moq);
+  return parts.filter(Boolean).join(' — ');
+}
+function directProductDiscoveryAnswer(message,language,productSearch){
+  const cards=productSearch?.recommendations||[];
+  if(!cards.length)return language==='en'
+    ?'I could not find a matching product in the current store catalog. You can send a special sourcing request.'
+    :'لم أجد منتجًا مطابقًا في كتالوج المتجر الحالي. يمكنك إرسال طلب توريد خاص.';
+  const q=clean(message).toLowerCase(),intent=productIntent(productSearch?.query||message);
+  if(qHas(q,['قارن','مقارنة','compare'])&&cards.length>=2){
+    const rows=cards.slice(0,3).map(card=>productCardSummary(card,language)).join(language==='en'?'; ':'؛ ');
+    return (language==='en'?'Quick comparison: ':'مقارنة سريعة: ')+rows+'.';
+  }
+  const first=cards[0];
+  if(intent.cheapest&&Number.isFinite(Number(first?.price))){
+    const quantity=Number(first?.priceQuantity)||0;
+    if(language==='en')return (quantity?'At '+quantity+' pcs, the cheapest matching option is ':'The cheapest matching option is ')+first.title+' — '+Number(first.price)+' '+(first.currency||'SAR')+'.';
+    return (quantity?'عند كمية '+quantity+' حبة، أرخص خيار مطابق هو ':'أرخص خيار مطابق حاليًا هو ')+first.title+' — '+Number(first.price)+' '+(first.currency||'SAR')+'.';
+  }
+  if(intent.quantity){
+    return language==='en'
+      ?'These are the matching store options with pricing calculated for '+intent.quantity+' pcs where quantity tiers are available.'
+      :'هذه الخيارات المطابقة من المتجر، وتم احتساب سعر كمية '+intent.quantity+' حبة عند توفر شرائح أسعار للكميات.';
+  }
+  return language==='en'?'These are the best matching options currently available in the store.':'هذه أنسب الخيارات المتوفرة حاليًا في المتجر.';
+}
 function wantsHumanSupport(message=''){
   const q=clean(message).toLowerCase();
   return qHas(q,[
@@ -588,57 +640,150 @@ function policyPageIdForMessage(message=''){
   if(qHas(q,['الشروط','الأحكام','terms','conditions']))return 'policy-terms';
   return '';
 }
+function isCompanyPolicyQuestion(message=''){
+  const q=normalizeCatalogText(message);
+  return qHas(q,[
+    'اسم الشركه','اسم شركتكم','اسمكم','اسمكم التجاري','عنوان الشركه','عنوان شركتكم','عنوانكم','عنوانك',
+    'اين مقركم','وين مقركم','مقر الشركه','مقركم','اين موقعكم','وين موقعكم','موقع الشركه','موقعكم',
+    'من انتم','عن الشركه','company name','company address','registered address','office address','head office',
+    'where are you located','where is your office','who are you','about the company','location'
+  ]);
+}
+function policyQuestionSignal(message=''){
+  const q=clean(message).toLowerCase();
+  return !!policyPageIdForMessage(message)||isCompanyPolicyQuestion(message)||qHas(q,['سياسة','السياسة','ضمان','warranty','policy']);
+}
 function selectedPolicyPage(state,pageId){
   return (state?.settings?.storefront?.pages||[]).find(page=>page?.id===pageId&&page?.active!==false)||null;
 }
-function directShippingAnswer(state,message,language){
+function policyPagesForLanguage(state,language){
+  return (state?.settings?.storefront?.pages||[])
+    .filter(page=>page?.active!==false)
+    .map(page=>({
+      id:String(page?.id||''),
+      title:clean(language==='en'?(page?.titleEn||page?.title):(page?.title||page?.titleEn)),
+      content:String(language==='en'?(page?.contentEn||page?.content||''):(page?.content||page?.contentEn||''))
+    }))
+    .filter(page=>clean(page.content));
+}
+function policyChunks(value=''){
+  return String(value||'').replace(/\r/g,'\n').split(/\n+|[.!؟。؛]+\s*/u).map(clean).filter(chunk=>chunk.length>=4);
+}
+function directCompanyPolicyAnswer(state,message,language){
+  if(!isCompanyPolicyQuestion(message))return null;
+  const q=normalizeCatalogText(message);
+  const asksAddress=qHas(q,['عنوان','مقر','وين','اين','where','address','office','located']);
+  const cues=(asksAddress
+    ?['عنوان الشركة','العنوان','company address','registered address','office address','head office','address']
+    :['اسم الشركة','company name','legal name','guangzhou mig trading','广州米各贸易有限公司']
+  ).map(normalizeCatalogText);
+  const candidates=[];
+  for(const page of policyPagesForLanguage(state,language)){
+    for(const chunk of policyChunks(page.content)){
+      const normalized=normalizeCatalogText(chunk);
+      const cueScore=cues.reduce((score,cue)=>score+(cue&&normalized.includes(cue)?12:0),0);
+      if(!cueScore)continue;
+      const queryScore=catalogTokens(q).reduce((score,token)=>score+(catalogTokens(normalized).some(value=>tokenRelated(token,value))?2:0),0);
+      candidates.push({chunk,score:cueScore+queryScore});
+    }
+  }
+  candidates.sort((a,b)=>b.score-a.score);
+  return candidates[0]?.chunk?clamp(candidates[0].chunk,520):null;
+}
+function directShippingPolicyAnswer(state,message,language){
   const page=selectedPolicyPage(state,'policy-shipping');
-  if(!page)return '';
-  const content=clean(language==='en'?(page.contentEn||page.content):(page.content||page.contentEn));
-  const q=clean(message).toLowerCase();
-  if(!content)return '';
-  const saudi=language==='en'?/saudi arabia/i.test(content):content.includes('السعودية');
-  if(qHas(q,['مدة الشحن','وقت الشحن','كم مدة','shipping time','delivery time','how long'])){
+  if(!page)return null;
+  const raw=String(language==='en'?(page.contentEn||page.content||''):(page.content||page.contentEn||''));
+  const content=clean(raw),q=clean(message).toLowerCase();
+  if(!content)return null;
+  const asksDuration=qHas(q,['مدة الشحن','وقت الشحن','كم مدة','shipping time','delivery time','how long']);
+  if(asksDuration){
+    const durationChunk=policyChunks(raw).find(chunk=>/\b\d+\s*(?:يوم|ايام|أيام|days?|weeks?|اسبوع|أسبوع)\b/iu.test(chunk));
+    if(durationChunk)return clamp(durationChunk,420);
     return language==='en'
-      ?'The shipping duration is not fixed in the store policy right now. We will confirm the expected duration before shipping.'
+      ?'The shipping duration is not specified in the current store policy. The expected duration is confirmed before shipping.'
       :'مدة الشحن غير محددة حاليًا في سياسة المتجر، ويتم تأكيد المدة المتوقعة لك قبل الشحن.';
   }
-  if(saudi&&qHas(q,['السعودية','saudi','ksa'])){
-    const asksCost=qHas(q,['كم تكلفة','كم سعر الشحن','تكلفة الشحن','سعر الشحن','رسوم الشحن','shipping cost','shipping price','shipping fee','freight cost']);
-    if(language==='en'){
-      return asksCost
-        ?'Yes. We currently deliver to Saudi Arabia. Shipping is quoted separately after the goods are prepared, based on weight, volume and shipping method. Our approved shipping quote includes transport, customs duties, taxes, clearance and delivery to the agreed address.'
-        :'Yes. We currently deliver to Saudi Arabia. We can arrange air or sea freight, and the shipping quote is confirmed separately after the goods are prepared.';
+  const asksSaudi=qHas(q,['السعودية','saudi','ksa']);
+  const asksCost=qHas(q,['كم تكلفة الشحن','كم سعر الشحن','تكلفة الشحن','سعر الشحن','رسوم الشحن','shipping cost','shipping price','shipping fee','freight cost']);
+  const hasSaudi=/السعودية|saudi arabia|\bksa\b/iu.test(content);
+  if(asksSaudi&&hasSaudi){
+    if(asksCost){
+      const separate=/بشكل منفصل|separately/iu.test(content);
+      const afterPrep=/بعد تجهيز|after preparation|after the goods are prepared/iu.test(content);
+      const weight=/وزن|weight/iu.test(content),volume=/حجم|volume/iu.test(content);
+      const includesCustoms=/جمارك|customs/iu.test(content),includesTaxes=/ضرائب|tax/iu.test(content),includesClearance=/تخليص|clearance/iu.test(content),includesDelivery=/التوصيل|delivery/iu.test(content);
+      if(language==='en'){
+        let reply='Shipping cost is confirmed';
+        if(separate)reply+=' separately';
+        if(afterPrep)reply+=' after the goods are prepared';
+        if(weight||volume)reply+=' based on '+[weight?'weight':'',volume?'volume':''].filter(Boolean).join(' and ');
+        reply+='.';
+        const included=[includesCustoms?'customs':'',includesTaxes?'taxes':'',includesClearance?'clearance':'',includesDelivery?'delivery':''].filter(Boolean);
+        if(included.length)reply+=' The policy states that the shipping quote includes '+included.join(', ')+'.';
+        return reply;
+      }
+      let reply='تُحدد تكلفة الشحن';
+      if(separate)reply+=' بشكل منفصل';
+      if(afterPrep)reply+=' بعد تجهيز البضاعة';
+      if(weight||volume)reply+=' حسب '+[weight?'الوزن':'',volume?'الحجم':''].filter(Boolean).join(' و');
+      reply+='.';
+      const included=[includesCustoms?'الجمارك':'',includesTaxes?'الضرائب':'',includesClearance?'التخليص':'',includesDelivery?'التوصيل':''].filter(Boolean);
+      if(included.length)reply+=' ويذكر نص السياسة أن عرض الشحن يشمل '+included.join(' و')+'.';
+      return reply;
     }
-    return asksCost
-      ?'نعم، نوفر التوصيل حاليًا إلى السعودية. تُحدد تكلفة الشحن بشكل منفصل بعد تجهيز البضاعة ومعرفة الوزن والحجم وطريقة الشحن، ويشمل عرض الشحن المعتمد النقل والجمارك والضرائب والتخليص والتوصيل إلى العنوان المتفق عليه.'
-      :'نعم، نوفر التوصيل حاليًا إلى السعودية. يمكن ترتيب الشحن الجوي أو البحري، وتُحدد تكلفة الشحن بشكل منفصل بعد تجهيز البضاعة ومعرفة الوزن والحجم.';
+    const hasAir=/جوي|air freight|air shipping/iu.test(content),hasSea=/بحري|sea freight|sea shipping/iu.test(content);
+    if(language==='en'){
+      let reply='Yes. Delivery to Saudi Arabia is available according to the store shipping policy.';
+      if(hasAir||hasSea)reply+=' Available methods include '+[hasAir?'air':'',hasSea?'sea':''].filter(Boolean).join(' or ')+' freight.';
+      return reply;
+    }
+    let reply='نعم، نوفر التوصيل حاليًا إلى السعودية.';
+    if(hasAir||hasSea)reply+=' ويمكن ترتيب الشحن '+[hasAir?'الجوي':'',hasSea?'البحري':''].filter(Boolean).join(' أو ')+'.';
+    return reply;
   }
-  if(qHas(q,['شركة شحن أخرى','ناقل آخر','carrier','own carrier','another carrier'])){
-    return language==='en'
-      ?'Yes. You may appoint another carrier to collect the prepared goods after the goods value is fully paid.'
-      :'نعم، يمكنك اختيار شركة شحن أخرى لاستلام البضاعة بعد تجهيزها وسداد كامل قيمة البضاعة.';
-  }
-  return '';
+  return null;
 }
 function directPolicyAnswer(state,message,language){
-  const pages=state?.settings?.storefront?.pages||[];
+  if(!policyQuestionSignal(message))return null;
+  const company=directCompanyPolicyAnswer(state,message,language);
+  if(company)return company;
+  const shipping=directShippingPolicyAnswer(state,message,language);
+  if(shipping)return shipping;
+  const pages=policyPagesForLanguage(state,language);
   if(!pages.length)return null;
-  const needles=terms(message).filter(x=>!['هل','ماذا','كيف','what','how','the','is','are'].includes(x));
-  if(!needles.length)return null;
-  const ranked=pages.map(page=>{
-    const title=clean(language==='en'?(page.titleEn||page.title):(page.title||page.titleEn)).toLowerCase();
-    const content=clean(language==='en'?(page.contentEn||page.content):(page.content||page.contentEn)).toLowerCase();
-    const score=needles.reduce((n,t)=>n+(title.includes(t)?4:content.includes(t)?1:0),0);
-    return {page,score,content};
-  }).sort((a,b)=>b.score-a.score);
-  const top=ranked[0];
-  if(!top||top.score<4||!top.content)return null;
-  const body=clamp(top.content,650);
-  const title=clean(language==='en'?(top.page.titleEn||top.page.title):(top.page.title||top.page.titleEn));
-  return title?title+': '+body:body;
+  const pageId=policyPageIdForMessage(message);
+  const selected=pageId?pages.filter(page=>page.id===pageId):pages;
+  const candidates=[];
+  const qTokens=catalogTokens(message).filter(token=>!['سياسه','policy','ماذا','كيف','what','how'].includes(token));
+  for(const page of selected.length?selected:pages){
+    const titleTokens=catalogTokens(page.title);
+    for(const chunk of policyChunks(page.content)){
+      const chunkTokens=catalogTokens(chunk);
+      let score=pageId&&page.id===pageId?4:0;
+      for(const token of qTokens){
+        if(chunkTokens.some(value=>tokenRelated(token,value)))score+=3;
+        if(titleTokens.some(value=>tokenRelated(token,value)))score+=2;
+      }
+      candidates.push({page,chunk,score});
+    }
+  }
+  candidates.sort((a,b)=>b.score-a.score);
+  const top=candidates[0];
+  if(top&&top.score>=4){
+    const body=clamp(top.chunk,650);
+    return top.page.title?top.page.title+': '+body:body;
+  }
+  if(pageId){
+    const page=(selected.length?selected:pages)[0];
+    if(page?.content){
+      const body=clamp(page.content,650);
+      return page.title?page.title+': '+body:body;
+    }
+  }
+  return null;
 }
-export function directCustomerAnswer(state,user,message,language='ar',signals={},productQuery=message,productSearch=null){
+export function directCustomerAnswer(state,user,message,language='ar',signals={},productQuery=message,productSearch=null,productActive=false){
   const normalized=clean(message).toLowerCase();
   if(user&&qHas(normalized,['طلبي','الطلب','وين الطلب','اين الطلب','أين الطلب','حالة الطلب','تتبع','tracking','my order','order status'])){
     const order=matchingOwnOrder(state,normalized);
@@ -653,7 +798,11 @@ export function directCustomerAnswer(state,user,message,language='ar',signals={}
       if(parts.length)return (language==='en'?'Order ':'الطلب ')+(number||'')+' — '+parts.join(' · ');
     }
   }
-  return directProductFact(state,normalized,language,signals,productQuery,productSearch)||directShippingAnswer(state,normalized,language)||null;
+  const policy=directPolicyAnswer(state,normalized,language);
+  if(policy)return policy;
+  const fact=directProductFact(state,normalized,language,signals,productQuery,productSearch);
+  if(fact)return fact;
+  return productActive?directProductDiscoveryAnswer(normalized,language,productSearch):null;
 }
 function cacheKeyFor(language,message,context){
   const compact={language,message:clean(message).toLowerCase(),products:context?.products||[],shoppingSignal:context?.shoppingSignal||null};
@@ -792,17 +941,21 @@ export async function aiChat(user,body={},req=null){
       return {reply,source:'database',conversationId:conversation.id,humanMode:false,waitingHuman:true,leadPrompt:!user};
     }
   }
-  const gatewayUser=enforceRateLimit(user,req);
+  let gatewayUser='';
   const model=String(process.env.OPENAI_CHAT_MODEL||DEFAULT_MODEL).replace(/^openai\//,'');
   const policyPageId=policyPageIdForMessage(message);
-  const policySignal=!!policyPageId||qHas(message.toLowerCase(),['سياسة','ضمان','policy','warranty']);
-  const state=await snapshot(user||null,!user?(policyPageId?{pageId:policyPageId}:policySignal?{}:{q:message,aiCatalog:true}):{});
+  const policySignal=policyQuestionSignal(message);
+  const guestSnapshotOptions=policySignal
+    ?{...(policyPageId?{pageId:policyPageId}:{}),aiPolicies:true}
+    :{q:message,aiCatalog:true};
+  const state=await snapshot(user||null,!user?guestSnapshotOptions:{});
   const conversionSignals=await chatProductSignals();
   const history=normalizeHistory(body.history);
   const resolvedTextQuery=resolveCustomerProductQuery(state,message,history);
-  const resolvedProductSearch=customerProductSearch(state,resolvedTextQuery,language,conversionSignals);
+  const productActive=!policySignal&&(!!marketingSignal||isCustomerProductQuery(state,message,history,resolvedTextQuery));
+  const resolvedProductSearch=productActive?customerProductSearch(state,resolvedTextQuery,language,conversionSignals):emptyProductSearch(resolvedTextQuery);
   if(!proactive&&!image){
-    const direct=directCustomerAnswer(state,user,message,language,conversionSignals,resolvedTextQuery,resolvedProductSearch);
+    const direct=directCustomerAnswer(state,user,message,language,conversionSignals,resolvedTextQuery,resolvedProductSearch,productActive);
     if(direct){
       const ui=chatUiMetadata(state,resolvedTextQuery,language,conversionSignals,resolvedProductSearch);
       if(conversation){
@@ -815,7 +968,7 @@ export async function aiChat(user,body={},req=null){
   }
   const apiKey=openAiApiKey();
   if(!apiKey)throw new HttpError(503,'لم يتم تفعيل مفتاح OpenAI بعد. / OpenAI API key is not configured yet.');
-  const imageSearch=image?await analyzeProductImage({image,message,language,apiKey,model,gatewayUser}):null;
+  const imageSearch=image?await analyzeProductImage({image,message,language,apiKey,model,gatewayUser:gatewayUser||(gatewayUser=enforceRateLimit(user,req))}):null;
   if(imageSearch?.confidence==='none'||imageSearch&&!imageSearch.query){
     const reply=language==='ar'
       ?'لم أستطع تحديد المنتج بوضوح من هذه الصورة. جرّب صورة أوضح للمنتج من الأمام أو أضف اسمه أو مواصفته.'
@@ -825,15 +978,20 @@ export async function aiChat(user,body={},req=null){
     return {reply,source:'openai',usage:null,...(conversation?{conversationId:conversation.id,humanMode:false}:{})};
   }
   const productQuery=[imageSearch?.query,imageSearch?.productType,imageSearch?.visibleText,marketingSignal?.query,marketingSignal?.productSku,marketingSignal?.productTitle,resolvedTextQuery].filter(Boolean).join(' ');
-  const productSearch=productQuery===resolvedTextQuery&&!imageSearch&&!marketingSignal
-    ?resolvedProductSearch
-    :customerProductSearch(state,productQuery,language,conversionSignals);
+  const shouldSearchProducts=productActive||!!imageSearch||!!marketingSignal;
+  const productSearch=!shouldSearchProducts
+    ?emptyProductSearch(productQuery)
+    :productQuery===resolvedTextQuery&&!imageSearch&&!marketingSignal
+      ?resolvedProductSearch
+      :customerProductSearch(state,productQuery,language,conversionSignals);
   const personalContextNeeded=!!user&&qHas(message.toLowerCase(),['طلبي','الطلب','الدفع','فاتورة','عرض','تتبع','order','payment','invoice','quote','tracking']);
   const policyPage=policyPageId?selectedPolicyPage(state,policyPageId):null;
+  const fallbackPolicies=policySignal&&!policyPage?policyPagesForLanguage(state,language).slice(0,8).map(page=>({id:page.id,title:page.title,content:clamp(page.content,1800)})):[];
   const context={
     viewer:user?{signedIn:true}:{signedIn:false},
     products:productSearch.context,
     ...(policyPage?{policy:{id:policyPage.id,title:language==='en'?(policyPage.titleEn||policyPage.title):(policyPage.title||policyPage.titleEn),content:clamp(language==='en'?(policyPage.contentEn||policyPage.content):(policyPage.content||policyPage.contentEn),1800)}}:{}),
+    ...(fallbackPolicies.length?{policies:fallbackPolicies}:{}),
     ...(imageSearch?{imageSearch}:{}),
     ...(marketingSignal?{shoppingSignal:marketingSignal}:{}),
     ...(personalContextNeeded?clientContext(state):{})
@@ -854,7 +1012,7 @@ export async function aiChat(user,body={},req=null){
   }
   const system=language==='ar'
     ?`أنت مستشار مبيعات وتوريد محترف داخل IMSG. هدفك فهم ما يحتاجه العميل ومساعدته على اتخاذ قرار شراء مناسب، بدون ضغط أو مبالغة.
-اعتمد على PLATFORM_CONTEXT_JSON في معلومات المنتجات والأسعار والمخزون والطلبات والعروض والسياسات. إذا احتوى السياق على policy فاعتبره المصدر الرسمي للسؤال المتعلق بالسياسة، وأجب منه مباشرة وباختصار. لا تخترع أي سعر أو خصم أو مخزون أو حالة أو ميزة غير موجودة.
+اعتمد على PLATFORM_CONTEXT_JSON في معلومات المنتجات والأسعار والمخزون والطلبات والعروض والسياسات. إذا احتوى السياق على policy أو policies فاعتبرها المصدر الرسمي للسؤال المتعلق بالسياسة، وأجب منها مباشرة وباختصار. لا تخترع أي سعر أو خصم أو مخزون أو حالة أو ميزة غير موجودة.
 افهم احتياج العميل من كلامه وسلوكه الشرائي غير الحساس فقط، مثل البحث، المنتجات التي يقارنها، أو السلة. لا تستنتج أو تستخدم صفات حساسة شخصية.
 أجب عن السؤال الحالي فقط. الرد العادي جملة أو جملتان قصيرتان، ولا تشرح سياسة كاملة ما لم يطلب العميل التفاصيل.
 إذا احتجت توضيحًا، اسأل سؤالًا واحدًا فقط في الرد، ولا تجمع عدة أسئلة معًا. لا تسأل عن الكمية في البداية إلا إذا كانت ضرورية للسعر أو الحد الأدنى للطلب، ولا تكرر سؤالًا أجاب عنه العميل سابقًا.
@@ -868,7 +1026,7 @@ export async function aiChat(user,body={},req=null){
 لا تدّع أنك عدلت طلبًا أو دفعت أو وافقت على عرض. أنت تشرح وتقترح فقط.
 إذا كان PLATFORM_CONTEXT_JSON يحتوي shoppingSignal، فأنت تكتب رسالة استباقية قصيرة جدًا: جملة أو جملتان، طبيعية وغير مزعجة، لا تذكر أنك تراقب العميل، وتقدّم مساعدة مرتبطة مباشرة بما يبدو أنه يبحث عنه. لا تبدأ بتحية طويلة.`
     :`You are a professional sales and sourcing advisor inside IMSG. Your goal is to understand what the customer needs and help them make a suitable purchase decision without pressure or exaggeration.
-Use PLATFORM_CONTEXT_JSON for product, price, stock, order, quote, and policy facts. If the context contains policy, treat it as the official source for policy questions and answer from it directly and concisely. Never invent a price, discount, stock level, status, feature, or promotion.
+Use PLATFORM_CONTEXT_JSON for product, price, stock, order, quote, and policy facts. If the context contains policy or policies, treat them as the official source for policy questions and answer from them directly and concisely. Never invent a price, discount, stock level, status, feature, or promotion.
 Understand needs only from the customer's words and non-sensitive shopping behavior such as searches, compared products, or cart activity. Never infer or use sensitive personal traits.
 Answer only the current question. Normal replies should be one or two short sentences; never paste a full policy unless the customer asks for details.
 If clarification is necessary, ask at most one question per reply. Never bundle multiple questions. Do not ask for quantity early unless price or MOQ truly requires it, and never repeat a question the customer already answered.
@@ -893,6 +1051,7 @@ If PLATFORM_CONTEXT_JSON contains shoppingSignal, write a very short proactive m
     temperature:0.2,
     reasoning_effort:'none'
   };
+  if(!gatewayUser)gatewayUser=enforceRateLimit(user,req);
   let response;
   try{
     ({response}=await openAiRequest({apiKey,payload,timeoutMs:26000}));
