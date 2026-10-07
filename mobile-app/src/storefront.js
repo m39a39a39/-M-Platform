@@ -11,7 +11,8 @@ export {selectSectionProducts};
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const title=(p,lang=document.documentElement.lang)=>p.translation?.[lang==='en'?'titleEn':'titleAr']||p.translation?.titleAr||p.product||'';
 const OFFICIAL_MOXOM_IMAGE=/^https:\/\/ueeshop\.ly200-cdn\.com\//i;
-const media=src=>(/^\/api\/media\/[a-f0-9-]{36}$/.test(src||'')||OFFICIAL_MOXOM_IMAGE.test(src||''))?src:'';
+const OFFICIAL_AMAYA_IMAGE=/^https:\/\/(?:www\.)?amaya\.com\.cn\/static\/upload\//i;
+const media=src=>(/^\/api\/media\/[a-f0-9-]{36}$/.test(src||'')||OFFICIAL_MOXOM_IMAGE.test(src||'')||OFFICIAL_AMAYA_IMAGE.test(src||''))?src:'';
 const LOCAL_MEDIA=/^\/api\/media\/[a-f0-9-]{36}$/;
 const imageVariant=(src,width,quality=78)=>{
  const w=Math.round(width);
