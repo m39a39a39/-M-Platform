@@ -641,11 +641,12 @@ function policyPageIdForMessage(message=''){
   return '';
 }
 function isCompanyPolicyQuestion(message=''){
-  const q=clean(message).toLowerCase();
+  const q=normalizeCatalogText(message);
   return qHas(q,[
-    'اسم الشركة','اسم شركتكم','اسمكم التجاري','عنوان الشركة','عنوان شركتكم','عنوانكم',
-    'أين مقركم','اين مقركم','وين مقركم','مقر الشركة','مقركم','من أنتم','من انتم','عن الشركة',
-    'company name','company address','registered address','office address','head office','where are you located','who are you','about the company'
+    'اسم الشركه','اسم شركتكم','اسمكم','اسمكم التجاري','عنوان الشركه','عنوان شركتكم','عنوانكم','عنوانك',
+    'اين مقركم','وين مقركم','مقر الشركه','مقركم','اين موقعكم','وين موقعكم','موقع الشركه','موقعكم',
+    'من انتم','عن الشركه','company name','company address','registered address','office address','head office',
+    'where are you located','where is your office','who are you','about the company','location'
   ]);
 }
 function policyQuestionSignal(message=''){
