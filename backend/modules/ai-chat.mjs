@@ -429,7 +429,7 @@ function productScore(item,needles,intent,signals={},taxonomy=null){
     const normalized=normalizeCatalogText(term);
     if(!normalized)return score;
     if(hay.includes(normalized))return score+(sku.includes(normalized)?7:2);
-    if(hayTokens.some(token=>tokenRelated(normalized,token)))return score+1.5;
+    if(hayTokens.some(token=>tokenRelated(normalized,token)))return score+2;
     return score;
   },0);
   const performance=Math.max(0,Math.min(8,Number(signals?.[item?.id]?.score)||0));
