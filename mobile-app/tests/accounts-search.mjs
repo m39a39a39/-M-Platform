@@ -15,7 +15,7 @@ for(const [engine,type] of Object.entries({chromium,webkit}))for(const language 
 const publicOffers=[{id:'product1',displayNo:701,sku:'ALPHA-SKU',product:'Alpha',specs:'Search fixture product',status:'pending',supplierId:'supplier',images:[],version:1}];
  page.on('pageerror',e=>errors.push(e.message));
  await page.addInitScript(lang=>localStorage.setItem('CapacitorStorage.language',lang),language);
- await page.route('https://m-platform-tan.vercel.app/**',async route=>{
+ await page.route('https://www.imsgsource.com/**',async route=>{
    const req=route.request(),path=new URL(req.url()).pathname;
    const role=(req.headers().authorization||'').replace('Bearer ','');
    let body={};
