@@ -162,8 +162,8 @@ function intentScore(item,intent){
   if(intent.subtype){
     if(p.subtype===intent.subtype)score+=24;
     else if(intent.subtype==='personal'&&['tws','headphone','wired'].includes(p.subtype))score+=16;
-    else if(intent.subtype==='personal'&&p.subtype==='speaker')score-=42;
-    else if(intent.subtype==='speaker'&&p.subtype!=='speaker'&&p.category==='audio')score-=30;
+    else if(intent.subtype==='personal'&&p.subtype==='speaker')score-=58;
+    else if(intent.subtype==='speaker'&&p.subtype!=='speaker'&&p.category==='audio')score-=48;
   }
   if(intent.wireless){
     if(/bluetooth|wireless|لاسلك|بلوتوث|\btws\b/u.test(p.hay))score+=9;
