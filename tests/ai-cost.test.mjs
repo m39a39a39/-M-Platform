@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {directCustomerAnswer,customerProductRecommendations,customerProductSearch,resolveCustomerProductQuery} from '../backend/modules/ai-chat.mjs';
+import {directCustomerAnswer,customerProductRecommendations,customerProductSearch,resolveCustomerProductQuery,isCustomerProductQuery} from '../backend/modules/ai-chat.mjs';
 import {buildAdminAiContext,directAdminAnswer} from '../backend/modules/admin-ai.mjs';
 import {publicAiProductSummary} from '../backend/modules/records.mjs';
 import {normalizeAiUsage,estimateAiCostUsd} from '../backend/modules/ai-usage.mjs';
@@ -13,6 +13,53 @@ test('customer price and MOQ questions are answered from catalog without an AI c
   const reply=directCustomerAnswer(state,null,'كم سعر MG-825 وأقل كمية؟','ar');
   assert.match(reply,/28 SAR/);
   assert.match(reply,/20/);
+});
+
+test('company name and address are answered locally from active policy content',()=>{
+  const state={settings:{storefront:{pages:[{
+    id:'policy-terms',active:true,title:'الشروط والأحكام',titleEn:'Terms',
+    content:'اسم الشركة: GUANGZHOU MIG TRADING CO., LTD.\nالعنوان: 广州彩尊企业管理咨询公司（金沙大都会二期2栋1730房)',
+    contentEn:'Company name: GUANGZHOU MIG TRADING CO., LTD.\nCompany address: Guangzhou, China'
+  }]}},publicOffers:[
+    {id:'noise',status:'published',sku:'BT-1',unitPrice:6.25,currency:'SAR',translation:{titleAr:'مرسل Bluetooth',titleEn:'Bluetooth Transmitter'}}
+  ]};
+  const name=directCustomerAnswer(state,null,'اسم الشركة','ar');
+  const address=directCustomerAnswer(state,null,'عنوان شركتكم','ar');
+  assert.match(name,/GUANGZHOU MIG TRADING CO/i);
+  assert.match(address,/广州彩尊企业管理咨询公司/);
+});
+
+test('shipping policy questions use the stored policy text locally',()=>{
+  const state={settings:{storefront:{pages:[{
+    id:'policy-shipping',active:true,title:'سياسة الشحن',titleEn:'Shipping Policy',
+    content:'الشحن إلى السعودية: يتم تحديد تكلفة الشحن بعد تجهيز البضاعة حسب الوزن والحجم وطريقة الشحن.',
+    contentEn:'Shipping to Saudi Arabia: shipping cost is confirmed after preparation based on weight, volume and shipping method.'
+  }]}},publicOffers:[]};
+  const reply=directCustomerAnswer(state,null,'كم تكلفة الشحن للسعودية؟','ar');
+  assert.match(reply,/تحديد تكلفة الشحن بعد تجهيز البضاعة/);
+});
+
+test('company and policy questions are never classified as product-card queries',()=>{
+  const state={settings:chatTaxonomy,publicOffers:[
+    {id:'cable',status:'published',sku:'C1',unitPrice:2,currency:'SAR',subcategoryId:'sub-charging-data-cables',categoryId:'cat-cables-adapters',translation:{titleAr:'كابل شحن',titleEn:'Charging Cable'}}
+  ]};
+  assert.equal(isCustomerProductQuery(state,'عنوان شركتكم',[]),false);
+  assert.equal(isCustomerProductQuery(state,'أين مقركم',[]),false);
+  assert.equal(isCustomerProductQuery(state,'سياسة الشحن',[]),false);
+  assert.equal(isCustomerProductQuery(state,'أريد كابل رخيص',[]),true);
+});
+
+test('local-first product discovery answers from catalog without needing prose generation',()=>{
+  const state={settings:chatTaxonomy,publicOffers:[
+    {id:'cheap',status:'published',sku:'C1',unitPrice:2.5,currency:'SAR',moq:100,subcategoryId:'sub-charging-data-cables',categoryId:'cat-cables-adapters',translation:{titleAr:'كابل شحن اقتصادي',titleEn:'Budget Charging Cable'}},
+    {id:'expensive',status:'published',sku:'C2',unitPrice:4,currency:'SAR',moq:100,subcategoryId:'sub-charging-data-cables',categoryId:'cat-cables-adapters',translation:{titleAr:'كابل شحن سريع',titleEn:'Fast Charging Cable'}}
+  ]};
+  const query=resolveCustomerProductQuery(state,'أريد كابل رخيص',[]);
+  const search=customerProductSearch(state,query,'ar');
+  const reply=directCustomerAnswer(state,null,'أريد كابل رخيص','ar',{},query,search,true);
+  assert.equal(search.recommendations[0]?.id,'cheap');
+  assert.match(reply,/أرخص خيار مطابق/);
+  assert.match(reply,/2.5 SAR/);
 });
 
 test('customer order status is answered from own order only',()=>{
