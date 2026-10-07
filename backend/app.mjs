@@ -21,6 +21,7 @@ import {createCartOrder} from './modules/cart-orders.mjs';
 import {aiChat} from './modules/ai-chat.mjs';
 import {adminAi,adminAiOverview} from './modules/admin-ai.mjs';
 import {customerConversation,captureGuestLead,adminConversationList,adminConversationRead,adminConversationAction} from './modules/ai-conversations.mjs';
+import {recordChatConversion} from './modules/chat-conversions.mjs';
 
 const NATIVE_ORIGINS=new Set(['capacitor://localhost','http://localhost','https://localhost']);
 const nativeOrigin=req=>NATIVE_ORIGINS.has(String(req.headers.origin||''));
@@ -70,7 +71,7 @@ export default async function handler(req,res){
     if(path.startsWith('/api/auth/')){
       assert(req.method==='POST',405);result=await authRoute(path.split('/').at(-1),req,res,body);
     }else{
-      const user=await identify(req,res,path==='/api/state'||path==='/api/ai-chat'||path==='/api/ai-conversation'||path.startsWith('/api/media/')&&req.method==='GET');
+      const user=await identify(req,res,path==='/api/state'||path==='/api/ai-chat'||path==='/api/ai-conversation'||path==='/api/ai-conversion'||path.startsWith('/api/media/')&&req.method==='GET');
       if(path==='/api/state'){
         assert(req.method==='GET',405);
         if(!user){
@@ -80,6 +81,7 @@ export default async function handler(req,res){
         result=await snapshot(user,{productId:url.searchParams.get('product')||'',pageId:url.searchParams.get('page')||'',category:url.searchParams.get('category')||'',q:url.searchParams.get('q')||''});
       }
       else if(path==='/api/ai-chat'){assert(req.method==='POST',405);result=await aiChat(user,body,req);}
+      else if(path==='/api/ai-conversion'){assert(req.method==='POST',405);result=await recordChatConversion(user,body);}
       else if(path==='/api/admin-ai'){result=req.method==='GET'?await adminAiOverview(user):await adminAi(user,body);}
       else if(path==='/api/ai-conversation'){
         result=req.method==='GET'
