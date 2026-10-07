@@ -240,7 +240,7 @@ function catalogReferenceMatch(state,message=''){
 }
 export function isCustomerProductQuery(state,message='',history=[],resolvedQuery=''){
   const current=clean(message),resolved=clean(resolvedQuery||resolveCustomerProductQuery(state,current,history));
-  if(!current||policyQuestionSignal(current))return false;
+  if(!current||policyQuestionSignal(current,history))return false;
   if(hasExplicitProductType(state,resolved))return true;
   if(catalogReferenceMatch(state,current))return true;
   return false;
@@ -649,9 +649,31 @@ function isCompanyPolicyQuestion(message=''){
     'where are you located','where is your office','who are you','about the company','location'
   ]);
 }
-function policyQuestionSignal(message=''){
+function recentCompanyContext(history=[]){
+  return [...(Array.isArray(history)?history:[])].slice(-5).reverse().some(row=>{
+    const text=clean(row?.content);
+    if(!text)return false;
+    if(row?.role==='user'&&isCompanyPolicyQuestion(text))return true;
+    if(row?.role==='assistant'){
+      const q=normalizeCatalogText(text);
+      return qHas(q,['guangzhou mig trading','广州米各贸易有限公司','اسم الشركه','عنوان','قوانزو','guangzhou']);
+    }
+    return false;
+  });
+}
+function isCompanyPolicyFollowup(message='',history=[]){
+  if(!recentCompanyContext(history))return false;
+  const q=normalizeCatalogText(message);
+  if(!q||q.length>80)return false;
+  return qHas(q,[
+    'العنوان','والعنوان','عنوانها','عنوانه','عنوانهم','موقعها','موقعه','موقعهم','موقعكم','الموقع',
+    'اين موقعها','وين موقعها','اين موقعه','وين موقعه','اين مقرها','وين مقرها','مقرها','مقره',
+    'اسمها','اسمه','اسمهم','what is the address','where is it','where are they located','address','location'
+  ]);
+}
+function policyQuestionSignal(message='',history=[]){
   const q=clean(message).toLowerCase();
-  return !!policyPageIdForMessage(message)||isCompanyPolicyQuestion(message)||qHas(q,['سياسة','السياسة','ضمان','warranty','policy']);
+  return !!policyPageIdForMessage(message)||isCompanyPolicyQuestion(message)||isCompanyPolicyFollowup(message,history)||qHas(q,['سياسة','السياسة','ضمان','warranty','policy']);
 }
 function selectedPolicyPage(state,pageId){
   return (state?.settings?.storefront?.pages||[]).find(page=>page?.id===pageId&&page?.active!==false)||null;
@@ -669,16 +691,39 @@ function policyPagesForLanguage(state,language){
 function policyChunks(value=''){
   return String(value||'').replace(/\r/g,'\n').split(/\n+|[.!؟。؛]+\s*/u).map(clean).filter(chunk=>chunk.length>=4);
 }
-function directCompanyPolicyAnswer(state,message,language){
-  if(!isCompanyPolicyQuestion(message))return null;
+function policyLines(value=''){
+  return String(value||'').replace(/\r/g,'\n').split(/\n+/u).map(clean).filter(Boolean);
+}
+function labeledPolicyField(raw,labels=[],kind=''){
+  const normalizedLabels=labels.map(normalizeCatalogText);
+  for(const line of policyLines(raw)){
+    const normalized=normalizeCatalogText(line);
+    if(!normalizedLabels.some(label=>label&&normalized.includes(label)))continue;
+    let value=line.replace(/^\s*[^:：]{1,80}[:：]\s*/u,'').trim();
+    if(kind==='name')value=value.replace(/[،,]?\s*(?:ويشار\s+إليها\s+باسم|ويشار\s+اليها\s+باسم|hereinafter\s+referred\s+to\s+as).*$/iu,'').trim();
+    if(value&&value!==line)return clamp(value,520);
+    return clamp(line,520);
+  }
+  return '';
+}
+function directCompanyPolicyAnswer(state,message,language,history=[]){
+  const companyQuestion=isCompanyPolicyQuestion(message)||isCompanyPolicyFollowup(message,history);
+  if(!companyQuestion)return null;
   const q=normalizeCatalogText(message);
-  const asksAddress=qHas(q,['عنوان','مقر','وين','اين','where','address','office','located']);
+  const asksAddress=qHas(q,['عنوان','مقر','موقع','وين','اين','where','address','office','located','location']);
+  const pages=policyPagesForLanguage(state,language);
+  const nameLabels=['اسم الشركة','اسم الشركة القانوني','الاسم القانوني للشركة','company name','legal company name','legal name'];
+  const addressLabels=['عنوان الشركة','العنوان','العنوان المسجل','company address','registered address','office address','head office'];
+  for(const page of pages){
+    const field=labeledPolicyField(page.content,asksAddress?addressLabels:nameLabels,asksAddress?'address':'name');
+    if(field)return field;
+  }
   const cues=(asksAddress
     ?['عنوان الشركة','العنوان','company address','registered address','office address','head office','address']
     :['اسم الشركة','company name','legal name','guangzhou mig trading','广州米各贸易有限公司']
   ).map(normalizeCatalogText);
   const candidates=[];
-  for(const page of policyPagesForLanguage(state,language)){
+  for(const page of pages){
     for(const chunk of policyChunks(page.content)){
       const normalized=normalizeCatalogText(chunk);
       const cueScore=cues.reduce((score,cue)=>score+(cue&&normalized.includes(cue)?12:0),0);
@@ -744,9 +789,9 @@ function directShippingPolicyAnswer(state,message,language){
   }
   return null;
 }
-function directPolicyAnswer(state,message,language){
-  if(!policyQuestionSignal(message))return null;
-  const company=directCompanyPolicyAnswer(state,message,language);
+function directPolicyAnswer(state,message,language,history=[]){
+  if(!policyQuestionSignal(message,history))return null;
+  const company=directCompanyPolicyAnswer(state,message,language,history);
   if(company)return company;
   const shipping=directShippingPolicyAnswer(state,message,language);
   if(shipping)return shipping;
@@ -783,7 +828,7 @@ function directPolicyAnswer(state,message,language){
   }
   return null;
 }
-export function directCustomerAnswer(state,user,message,language='ar',signals={},productQuery=message,productSearch=null,productActive=false){
+export function directCustomerAnswer(state,user,message,language='ar',signals={},productQuery=message,productSearch=null,productActive=false,history=[]){
   const normalized=clean(message).toLowerCase();
   if(user&&qHas(normalized,['طلبي','الطلب','وين الطلب','اين الطلب','أين الطلب','حالة الطلب','تتبع','tracking','my order','order status'])){
     const order=matchingOwnOrder(state,normalized);
@@ -798,7 +843,7 @@ export function directCustomerAnswer(state,user,message,language='ar',signals={}
       if(parts.length)return (language==='en'?'Order ':'الطلب ')+(number||'')+' — '+parts.join(' · ');
     }
   }
-  const policy=directPolicyAnswer(state,normalized,language);
+  const policy=directPolicyAnswer(state,normalized,language,history);
   if(policy)return policy;
   const fact=directProductFact(state,normalized,language,signals,productQuery,productSearch);
   if(fact)return fact;
@@ -943,19 +988,19 @@ export async function aiChat(user,body={},req=null){
   }
   let gatewayUser='';
   const model=String(process.env.OPENAI_CHAT_MODEL||DEFAULT_MODEL).replace(/^openai\//,'');
+  const history=normalizeHistory(body.history);
   const policyPageId=policyPageIdForMessage(message);
-  const policySignal=policyQuestionSignal(message);
+  const policySignal=policyQuestionSignal(message,history);
   const guestSnapshotOptions=policySignal
     ?{...(policyPageId?{pageId:policyPageId}:{}),aiPolicies:true}
     :{q:message,aiCatalog:true};
   const state=await snapshot(user||null,!user?guestSnapshotOptions:{});
   const conversionSignals=await chatProductSignals();
-  const history=normalizeHistory(body.history);
   const resolvedTextQuery=resolveCustomerProductQuery(state,message,history);
   const productActive=!policySignal&&(!!marketingSignal||isCustomerProductQuery(state,message,history,resolvedTextQuery));
   const resolvedProductSearch=productActive?customerProductSearch(state,resolvedTextQuery,language,conversionSignals):emptyProductSearch(resolvedTextQuery);
   if(!proactive&&!image){
-    const direct=directCustomerAnswer(state,user,message,language,conversionSignals,resolvedTextQuery,resolvedProductSearch,productActive);
+    const direct=directCustomerAnswer(state,user,message,language,conversionSignals,resolvedTextQuery,resolvedProductSearch,productActive,history);
     if(direct){
       const ui=chatUiMetadata(state,resolvedTextQuery,language,conversionSignals,resolvedProductSearch);
       if(conversation){
