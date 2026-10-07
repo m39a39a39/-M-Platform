@@ -41,9 +41,15 @@ test('short company followups keep policy context and return labeled fields loca
   ];
   const address=directCustomerAnswer(state,null,'أين موقعها','ar',{},'أين موقعها',null,false,history);
   const shortAddress=directCustomerAnswer(state,null,'والعنوان','ar',{},'والعنوان',null,false,history);
+  const naturalAddress=directCustomerAnswer(state,null,'شركتكم وين','ar',{},'شركتكم وين',null,false,history);
+  const pronounName=directCustomerAnswer(state,null,'ما اسمها','ar',{},'ما اسمها',null,false,history);
   assert.match(address,/广州彩尊企业管理咨询公司/);
   assert.match(shortAddress,/广州彩尊企业管理咨询公司/);
+  assert.match(naturalAddress,/广州彩尊企业管理咨询公司/);
   assert.doesNotMatch(address,/لا تتوفر لدي/);
+  assert.match(pronounName,/GUANGZHOU MIG TRADING CO., LTD/);
+  assert.match(pronounName,/广州米各贸易有限公司/);
+  assert.doesNotMatch(pronounName,/IMSG منصة تابعة/);
 
   const name=directCustomerAnswer(state,null,'اسم الشركة','ar');
   assert.match(name,/GUANGZHOU MIG TRADING CO., LTD/);
@@ -61,6 +67,8 @@ test('company followups are not treated as product queries when recent history i
   const history=[{role:'user',content:'اسم الشركة'},{role:'assistant',content:'GUANGZHOU MIG TRADING CO., LTD.'}];
   assert.equal(isCustomerProductQuery(state,'العنوان',history),false);
   assert.equal(isCustomerProductQuery(state,'أين موقعها',history),false);
+  assert.equal(isCustomerProductQuery(state,'شركتكم وين',history),false);
+  assert.equal(isCustomerProductQuery(state,'ما اسمها',history),false);
 });
 
 test('shipping policy questions use the stored policy text locally',()=>{
@@ -83,6 +91,7 @@ test('company and policy questions are never classified as product-card queries'
   assert.equal(isCustomerProductQuery(state,'عنوان شركتكم',[]),false);
   assert.equal(isCustomerProductQuery(state,'أين مقركم',[]),false);
   assert.equal(isCustomerProductQuery(state,'عنوانك',[]),false);
+  assert.equal(isCustomerProductQuery(state,'شركتكم وين',[]),false);
   assert.equal(isCustomerProductQuery(state,'سياسة الشحن',[]),false);
   assert.equal(isCustomerProductQuery(state,'أريد كابل رخيص',[]),true);
 });

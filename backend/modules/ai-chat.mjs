@@ -642,12 +642,16 @@ function policyPageIdForMessage(message=''){
 }
 function isCompanyPolicyQuestion(message=''){
   const q=normalizeCatalogText(message);
-  return qHas(q,[
+  const explicit=qHas(q,[
     'اسم الشركه','اسم شركتكم','اسمكم','اسمكم التجاري','عنوان الشركه','عنوان شركتكم','عنوانكم','عنوانك',
     'اين مقركم','وين مقركم','مقر الشركه','مقركم','اين موقعكم','وين موقعكم','موقع الشركه','موقعكم',
     'من انتم','عن الشركه','company name','company address','registered address','office address','head office',
     'where are you located','where is your office','who are you','about the company','location'
   ]);
+  if(explicit)return true;
+  const companyRef=qHas(q,['شركتكم','الشركه','الشركة','imsg','company']);
+  const companyFact=qHas(q,['وين','اين','أين','عنوان','موقع','مقر','اسم','where','address','location','office','name']);
+  return companyRef&&companyFact;
 }
 function recentCompanyContext(history=[]){
   return [...(Array.isArray(history)?history:[])].slice(-5).reverse().some(row=>{
@@ -668,7 +672,9 @@ function isCompanyPolicyFollowup(message='',history=[]){
   return qHas(q,[
     'العنوان','والعنوان','عنوانها','عنوانه','عنوانهم','موقعها','موقعه','موقعهم','موقعكم','الموقع',
     'اين موقعها','وين موقعها','اين موقعه','وين موقعه','اين مقرها','وين مقرها','مقرها','مقره',
-    'اسمها','اسمه','اسمهم','what is the address','where is it','where are they located','address','location'
+    'اسمها','اسمه','اسمهم','ما اسمها','وش اسمها','ايش اسمها','شو اسمها','ما اسمه','وش اسمه',
+    'شركتكم وين','وين شركتكم','الشركه وين','وين الشركه',
+    'what is its name','what is the name','what is the address','where is it','where are they located','address','location'
   ]);
 }
 function policyQuestionSignal(message='',history=[]){
