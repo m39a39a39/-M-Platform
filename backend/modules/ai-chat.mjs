@@ -83,7 +83,7 @@ function productIntent(query=''){
     device:'',
     use:'',
     quantity:null,
-    cheapest:/(أرخص|ارخص|رخيص|رخيصة|cheap|cheapest|lowest price|اقل سعر|أقل سعر|اقتصادي|budget)/u.test(q)
+    cheapest:/(أرخص|ارخص|رخيص|رخيصة|cheap|cheapest|lowest price|اقل سعر|أقل سعر|اقتصادي|budget)/u.test(q)||fuzzyHas(q,['ارخص','رخيص','cheap','cheapest'],1)
   };
   if(/(مكبر|سبيكر|speaker|soundbar)/u.test(q)){intent.category='audio';intent.subtype='speaker';}
   else if(/(سماع(?:ة|ه|ات)|earbud|earphone|headphone|headset|tws)/u.test(q)){
@@ -710,8 +710,8 @@ function isCompanyPolicyQuestion(message=''){
     'where are you located','where is your office','who are you','about the company','location'
   ]);
   if(explicit)return true;
-  const companyRef=qHas(q,['شركتكم','الشركه','الشركة','imsg','company']);
-  const companyFact=qHas(q,['وين','اين','أين','عنوان','موقع','مقر','اسم','where','address','location','office','name']);
+  const companyRef=fuzzyHas(q,['شركه','شركتكم','imsg','company'],0.8);
+  const companyFact=fuzzyHas(q,['وين','اين','عنوان','موقع','مقر','اسم','where','address','location','office','name'],0.8);
   return companyRef&&companyFact;
 }
 function recentCompanyContext(history=[]){
@@ -730,13 +730,13 @@ function isCompanyPolicyFollowup(message='',history=[]){
   if(!recentCompanyContext(history))return false;
   const q=normalizeCatalogText(message);
   if(!q||q.length>80)return false;
-  return qHas(q,[
+  return fuzzyHas(q,[
     'العنوان','والعنوان','عنوانها','عنوانه','عنوانهم','موقعها','موقعه','موقعهم','موقعكم','الموقع',
     'اين موقعها','وين موقعها','اين موقعه','وين موقعه','اين مقرها','وين مقرها','مقرها','مقره',
     'اسمها','اسمه','اسمهم','ما اسمها','وش اسمها','ايش اسمها','شو اسمها','ما اسمه','وش اسمه',
     'شركتكم وين','وين شركتكم','الشركه وين','وين الشركه',
     'what is its name','what is the name','what is the address','where is it','where are they located','address','location'
-  ]);
+  ],0.75);
 }
 function isClarificationFollowup(message=''){
   const q=normalizeCatalogText(message);
@@ -807,7 +807,7 @@ function policySegments(value=''){
 }
 function policyMetadataOnly(value=''){
   const q=normalizeCatalogText(value);
-  return /^(?:تاريخ التحديث|اخر تحديث|last updated)\b/iu.test(q);
+  return q.startsWith('تاريخ التحديث')||q.startsWith('اخر تحديث')||q.startsWith('last updated');
 }
 function policyLines(value=''){
   return String(value||'').replace(/\r/g,'\n').split(/\n+/u).map(clean).filter(Boolean);
@@ -867,8 +867,9 @@ function directShippingPolicyAnswer(state,message,language){
       ?'The shipping duration is not specified in the current store policy. The expected duration is confirmed before shipping.'
       :'مدة الشحن غير محددة حاليًا في سياسة المتجر، ويتم تأكيد المدة المتوقعة لك قبل الشحن.';
   }
-  const asksSaudi=qHas(q,['السعودية','saudi','ksa']);
-  const asksCost=qHas(q,['كم تكلفة الشحن','كم سعر الشحن','تكلفة الشحن','سعر الشحن','رسوم الشحن','shipping cost','shipping price','shipping fee','freight cost']);
+  const asksSaudi=fuzzyHas(q,['السعوديه','saudi','ksa'],1);
+  const asksCost=qHas(q,['كم تكلفة الشحن','كم سعر الشحن','تكلفة الشحن','سعر الشحن','رسوم الشحن','shipping cost','shipping price','shipping fee','freight cost'])
+    ||fuzzyHas(q,['تكلفه الشحن','سعر الشحن','shipping cost','shipping fee','freight cost'],0.75);
   const hasSaudi=/السعودية|saudi arabia|\bksa\b/iu.test(content);
   if(asksSaudi&&hasSaudi){
     if(asksCost){
