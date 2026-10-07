@@ -165,7 +165,7 @@ function lightTokenStem(value=''){
   if(!token)return '';
   if(/^[\u0600-\u06ff]+$/u.test(token)){
     if(token.length>=6&&token.startsWith('ال'))token=token.slice(2);
-    for(const suffix of ['كما','هما','كم','كن','هم','هن','نا','ها','ه','ك','ي']){
+    for(const suffix of ['كما','هما','كم','كن','هم','هن','نا','ات','ها','ه','ك','ي']){
       if(token.length-suffix.length>=3&&token.endsWith(suffix)){token=token.slice(0,-suffix.length);break;}
     }
     if(token.length>=4&&token.endsWith('ت'))token=token.slice(0,-1)+'ه';
@@ -747,20 +747,23 @@ function isClarificationFollowup(message=''){
   ],0.75);
 }
 function recentPolicyContext(history=[]){
-  for(const row of [...(Array.isArray(history)?history:[])].slice(-8).reverse()){
+  const recent=[...(Array.isArray(history)?history:[])].slice(-8).reverse();
+  for(const row of recent){
+    if(row?.role!=='user')continue;
     const text=clean(row?.content);
     if(!text)continue;
-    if(row?.role==='user'){
-      const pageId=policyPageIdForMessage(text);
-      if(pageId)return {pageId,question:text};
-    }
-    if(row?.role==='assistant'){
-      const q=normalizeCatalogText(text);
-      if(fuzzyHas(q,['سياسه الشحن','shipping and delivery','التوصيل حاليا داخل السعوديه'],0.7))return {pageId:'policy-shipping',question:''};
-      if(fuzzyHas(q,['سياسه الاسترجاع','returns and refunds'],0.7))return {pageId:'policy-returns',question:''};
-      if(fuzzyHas(q,['سياسه الدفع','payment policy'],0.7))return {pageId:'policy-payments',question:''};
-      if(fuzzyHas(q,['سياسه الغاء','order cancellation'],0.7))return {pageId:'policy-cancellation',question:''};
-    }
+    const pageId=policyPageIdForMessage(text);
+    if(pageId)return {pageId,question:text};
+  }
+  for(const row of recent){
+    if(row?.role!=='assistant')continue;
+    const text=clean(row?.content);
+    if(!text)continue;
+    const q=normalizeCatalogText(text);
+    if(fuzzyHas(q,['سياسه الشحن','shipping and delivery','التوصيل حاليا داخل السعوديه'],0.7))return {pageId:'policy-shipping',question:''};
+    if(fuzzyHas(q,['سياسه الاسترجاع','returns and refunds'],0.7))return {pageId:'policy-returns',question:''};
+    if(fuzzyHas(q,['سياسه الدفع','payment policy'],0.7))return {pageId:'policy-payments',question:''};
+    if(fuzzyHas(q,['سياسه الغاء','order cancellation'],0.7))return {pageId:'policy-cancellation',question:''};
   }
   return {pageId:'',question:''};
 }
