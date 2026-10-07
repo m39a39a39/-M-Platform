@@ -13,7 +13,7 @@ for(const [engine,type] of Object.entries({chromium,webkit})) for(const language
   page.on('pageerror',e=>errors.push(e.message));
   await page.addInitScript(lang=>localStorage.setItem('CapacitorStorage.language',lang),language);
   const supplier={id:'supplier',role:'supplier',name:'QA Supplier',company:'QA Company',email:'supplier@example.test'};
-  await page.route('https://m-platform-tan.vercel.app/**',async route=>{
+  await page.route('https://www.imsgsource.com/**',async route=>{
     const req=route.request(),path=new URL(req.url()).pathname;
     const auth=req.headers().authorization||'';
     let body={};
