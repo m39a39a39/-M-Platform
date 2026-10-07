@@ -42,11 +42,17 @@ async function insertEvent({conversationId,customerId=null,eventName,productId='
   });
   signalCache.at=0;
 }
+export async function resolveChatAttribution(user,body={}){
+  const conversation=await conversationById(clean(body?.conversationId,80));
+  if(!canAttribute(user,conversation,clean(body?.guestKey,120)))return null;
+  return {conversationId:conversation.id,customerId:user?.role==='client'?user.id:null};
+}
 export async function recordChatConversion(user,body={}){
   const eventName=clean(body.eventName,40);
   assert(ALLOWED_EVENTS.has(eventName),400,'حدث تتبع غير صالح / Invalid tracking event');
-  const conversation=await conversationById(clean(body.conversationId,80));
-  assert(canAttribute(user,conversation,clean(body.guestKey,120)),403,'تعذر ربط الحدث بالمحادثة / Could not attribute event to conversation');
+  const attribution=await resolveChatAttribution(user,body);
+  assert(attribution,403,'تعذر ربط الحدث بالمحادثة / Could not attribute event to conversation');
+  const conversation={id:attribution.conversationId};
   const productId=clean(body.productId,90);
   if(['product_click','add_to_cart'].includes(eventName))assert(productId,400,'المنتج مطلوب / Product is required');
   await insertEvent({
@@ -68,8 +74,9 @@ export async function recordRecommendationImpressions({conversation,user,product
 }
 export async function recordOrderConversion(user,{orderId,items=[],chatAttribution={}}={}){
   if(user?.role!=='client'||!orderId)return null;
-  const conversation=await conversationById(clean(chatAttribution?.conversationId,80));
-  if(!canAttribute(user,conversation,clean(chatAttribution?.guestKey,120)))return null;
+  const attribution=await resolveChatAttribution(user,chatAttribution);
+  if(!attribution)return null;
+  const conversation={id:attribution.conversationId};
   const productIds=[...new Set((items||[]).map(x=>clean(x?.offerId,90)).filter(Boolean))];
   await insertEvent({
     conversationId:conversation.id,
