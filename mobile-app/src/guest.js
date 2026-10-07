@@ -221,7 +221,11 @@ function loadAiModule(){
   if(!aiTask)aiTask=import('./ai-chat.js').then(mod=>(aiModule=mod)).finally(()=>{aiTask=null;});
   return aiTask;
 }
-function aiChatSignal(...args){aiModule?.aiChatSignal(...args);}
+function aiChatSignal(...args){
+  if(aiModule){aiModule.aiChatSignal(...args);return;}
+  const type=String(args[0]||'');
+  if(type==='cart_add'||type==='checkout_started')void loadAiModule().then(mod=>mod.aiChatSignal(...args)).catch(()=>{});
+}
 async function mountGuestAiChat(){
   const mod=await loadAiModule();
   if(!$('guestView').classList.contains('hidden'))mod.mountAiChat({mode:'guest',language:()=>lang,send:aiSend,fetchConversation:aiConversation,captureLead:aiLead,trackConversion:aiConversion});
