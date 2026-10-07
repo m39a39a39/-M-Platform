@@ -234,3 +234,17 @@ test('technical specs can make a generically titled product match an exact watt 
   assert.equal(rows[0]?.id,'specOnly');
   assert.ok(!rows.some(x=>x.id==='wrongWatt'));
 });
+
+
+test('cheapest Bluetooth headset request excludes cheaper transmitters and receivers',()=>{
+  const state={publicOffers:[
+    {id:'tx',status:'published',sku:'BT-TX',unitPrice:6.25,currency:'SAR',translation:{titleAr:'مرسل Bluetooth',titleEn:'Bluetooth Transmitter'},technicalSpecs:'Bluetooth transmitter USB'},
+    {id:'rx',status:'published',sku:'BT-RX',unitPrice:9.41,currency:'SAR',translation:{titleAr:'مستقبل لاسلكي للسيارة',titleEn:'Wireless Car Receiver'},technicalSpecs:'Bluetooth receiver for car'},
+    {id:'tws1',status:'published',sku:'TWS-A',unitPrice:9.5,currency:'SAR',subcategoryId:'sub-tws-earbuds',translation:{titleAr:'سماعات TWS رياضية لاسلكية',titleEn:'Wireless TWS Sports Earbuds'}},
+    {id:'tws2',status:'published',sku:'TWS-B',unitPrice:11,currency:'SAR',subcategoryId:'sub-tws-earbuds',translation:{titleAr:'سماعات TWS لاسلكية',titleEn:'Wireless TWS Earbuds'}}
+  ]};
+  const rows=customerProductRecommendations(state,'اريد ارخص سماعة بلوتوث','ar');
+  assert.equal(rows[0]?.id,'tws1');
+  assert.equal(rows[0]?.price,9.5);
+  assert.ok(rows.every(x=>['tws1','tws2'].includes(x.id)));
+});
