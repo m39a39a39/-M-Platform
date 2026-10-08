@@ -9,7 +9,7 @@ export const active=p=>p&&!p.blocked_at&&!p.deleted_at;
 export const open=r=>r&&!r.data.deletedAt&&!r.data.suspendedAt;
 export function unpack(row,kind){return {...row.data,id:row.id,displayNo:row.display_no,version:row.version,createdAt:row.created_at,...(kind==='requests'||kind==='interests'?{customerId:row.owner_id}:{supplierId:row.owner_id}),...(row.request_id?{requestId:row.request_id}:{}),...(row.offer_id?{offerId:row.offer_id}:{})};}
 export function ownRecord(row,kind){const item=unpack(row,kind);delete item.supplierIds;delete item.moderationHistory;delete item.reviewedAt;delete item.internalNotes;delete item.orderAudit;delete item.supplierAssignmentHistory;delete item.assignedSupplierId;delete item.createdByAdmin;delete item.supplyTerms;delete item.supplySourceId;return item;}
-function publicSettings(data={}){const safe={...data};delete safe.bankAccounts;delete safe.studioDraft;return safe;}
+function publicSettings(data={},options={}){const safe={...data};delete safe.bankAccounts;delete safe.studioDraft;if(!options.includeKnowledge)delete safe.knowledgeBase;return safe;}
 function compactPublicValue(value){
   if(Array.isArray(value)){
     const rows=value.map(compactPublicValue).filter(item=>item!==undefined);
@@ -41,7 +41,7 @@ function publicSectionForView(section={}){
   return compactPublicValue(next)||{id:section.id,type};
 }
 function publicSettingsForView(data={},route={}){
-  const {pageId='',productId='',category='',q='',aiPolicies=false}=route,safe=publicSettings(upgradeSettings(data));
+  const {pageId='',productId='',category='',q='',aiPolicies=false,aiKnowledge=false}=route,safe=publicSettings(upgradeSettings(data),{includeKnowledge:aiKnowledge});
   if(safe.storefront){
     const routePage=aiPolicies?'':productId?'product':category?'category':(q||['products','search'].includes(pageId))?'search':pageId?'':'home';
     const sections=(safe.storefront.sections||[]).filter(section=>{
@@ -163,7 +163,7 @@ async function categoryPageOfferRows(settingsData,categoryId){
   if(sub)query+=`&data->>subcategoryId=eq.${encodeURIComponent(sub.id)}`;
   return rows('public_offers',query);
 }
-export async function snapshot(user,{productId='',pageId='',category='',q='',aiCatalog=false,aiPolicies=false}={}){
+export async function snapshot(user,{productId='',pageId='',category='',q='',aiCatalog=false,aiPolicies=false,aiKnowledge=false}={}){
   let requests=[],quotes=[],publicOffers=[],interests=[],accounts=[],settings,selectedSupplierQuotes=[],supplySources=[];
   if(user?.role==='supplier')supplySources=(await rows('supply_sources',`owner_id=eq.${user.id}`)).filter(open).map(ownSource);
   else if(user?.role==='admin'&&(can(user,'offers.read')||can(user,'offers.edit')||can(user,'publish')||can(user,'requests.edit')))supplySources=(await rows('supply_sources')).filter(open).map(r=>({...ownSource(r),supplierId:r.owner_id}));
@@ -255,7 +255,7 @@ export async function snapshot(user,{productId='',pageId='',category='',q='',aiC
     }
     return item;
   });
-  const responseSettings=user?publicSettings(upgradeSettings(settings.data)):publicSettingsForView(settings.data,{pageId,productId,category,q,aiPolicies});
+  const responseSettings=user?publicSettings(upgradeSettings(settings.data),{includeKnowledge:aiKnowledge}):publicSettingsForView(settings.data,{pageId,productId,category,q,aiPolicies,aiKnowledge});
   let responseOffers=publicOffers.map(r=>!user&&r.id!==productId?(aiCatalog?publicAiProductSummary(r):publicProductSummary(r)):anonymous(r,'publicOffers',user));
   if(!user&&!productId&&!pageId&&!category&&!q){
     const storefront=responseSettings.storefront||{},sections=(storefront.sections||[]).filter(section=>section?.visible!==false);
