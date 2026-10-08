@@ -235,9 +235,10 @@ function startPolling(){
 function stopPolling(){clearInterval(pollTimer);pollTimer=null;}
 async function syncRemote(silent=false){
   if(!controller?.conversationId||typeof controller.fetchConversation!=='function')return;
+  const active=controller,conversationId=controller.conversationId;
   try{
-    const result=await controller.fetchConversation({conversationId:controller.conversationId,guestKey:visitorKey(),language:language()});
-    if(!result?.conversation)return;
+    const result=await active.fetchConversation({conversationId:controller.conversationId,guestKey:visitorKey(),language:language()});
+    if(controller!==active||active.conversationId!==conversationId||!result?.conversation)return;
     controller.humanMode=result.conversation.status==='human';
     controller.waitingHuman=!!result.conversation.waitingHuman;
     controller.waitingSince=String(result.conversation.waitingSince||'');
@@ -277,17 +278,20 @@ async function submitLead(event){
   const form=event.currentTarget,contact=form.elements.contact.value.trim(),name=form.elements.name.value.trim();
   if(!contact)return;
   const button=form.querySelector('button');button.disabled=true;
+  const active=controller;
   try{
     const result=await controller.captureLead({
       conversationId:controller.conversationId,guestKey:visitorKey(),language:language(),
       contact,name,productSku:latestProductSku()
     });
+    if(controller!==active)return;
     controller.leadCaptured=!!result?.leadCaptured;
     if(result?.reply)controller.messages.push({role:'assistant',content:String(result.reply),metadata:{}});
     await syncRemote(true);
   }catch(error){
+    if(controller!==active)return;
     controller.messages.push({role:'assistant',content:String(error?.message||t('error')),metadata:{}});
-  }finally{button.disabled=false;render();}
+  }finally{button.disabled=false;if(controller===active)render();}
 }
 async function submit(event){
   event.preventDefault();
@@ -297,9 +301,11 @@ async function submit(event){
   const visibleMessage=message||t('imageSearch');
   controller.messages.push({role:'user',content:visibleMessage,metadata:{}});controller.messages=controller.messages.slice(-40);
   controller.loading=true;render();
+  const active=controller;
   try{
     const history=controller.messages.slice(0,-1).slice(-6).map(x=>({role:x.role==='user'?'user':'assistant',content:x.content}));
     const result=await controller.send({message:message||t('imageSearch'),history,language:language(),guestKey:visitorKey(),conversationId:controller.conversationId||'',...(image?{image}: {})});
+    if(controller!==active)return;
     if(result?.conversationId)setConversationId(result.conversationId);
     controller.humanMode=!!result?.humanMode;
     controller.waitingHuman=!!result?.waitingHuman||controller.waitingHuman&&!controller.humanMode;
@@ -308,9 +314,10 @@ async function submit(event){
     if(result?.reply)controller.messages.push({role:'assistant',content:String(result.reply),metadata:{products:result.recommendations||[],quickReplies:result.quickReplies||[],...(result.waitingHuman?{handoff:'waiting'}:{}),...(result.leadPrompt?{leadPrompt:true}:{})}});
     await syncRemote(true);
   }catch(error){
+    if(controller!==active)return;
     controller.messages.push({role:'assistant',content:String(error?.message||t('error')),metadata:{}});
   }finally{
-    controller.loading=false;controller.messages=controller.messages.slice(-40);render();
+    if(controller===active){controller.loading=false;controller.messages=controller.messages.slice(-40);render();}
   }
 }
 function scheduleSignal(key,delay,fn){clearTimeout(signalTimers.get(key));signalTimers.set(key,setTimeout(()=>{signalTimers.delete(key);fn();},delay));}
@@ -324,12 +331,14 @@ function eligibleForProactive(){
 async function requestProactive(signal){
   if(!eligibleForProactive())return;
   const state=marketingState();state.count=Number(state.count||0)+1;state.lastAt=Date.now();saveMarketingState(state);
+  const active=controller;
   try{
     const result=await controller.send({
       message:language()==='ar'?'أنشئ رسالة مساعدة استباقية مناسبة لهذا العميل.':'Create a suitable proactive sales-assistance message for this customer.',
       history:controller.messages.slice(-6).map(x=>({role:x.role==='user'?'user':'assistant',content:x.content})),
       language:language(),marketingSignal:signal
     });
+    if(controller!==active)return;
     const reply=String(result?.reply||'').trim();if(!reply)return;
     controller.messages.push({role:'assistant',content:reply});controller.messages=controller.messages.slice(-40);
     showNudge(reply);render();
@@ -366,14 +375,15 @@ export function mountAiChat({mode='guest',language:languageGetter=()=> 'ar',send
   if(typeof send!=='function')return;
   const sameMode=controller?.mode===mode,stored=storedConversationId(mode);
   stopPolling();clearTimeout(waitingTimer);waitingTimer=null;
-  controller={
+  const next={
     mode,language:languageGetter,send,fetchConversation,captureLead,trackConversion:trackConversionHandler,
-    messages:sameMode?controller.messages:[],loading:false,
+    messages:sameMode?controller.messages:[],loading:sameMode?controller.loading:false,
     humanMode:sameMode?controller.humanMode:false,waitingHuman:sameMode?controller.waitingHuman:false,
     waitingSince:sameMode?controller.waitingSince||'':'',leadCaptured:sameMode?controller.leadCaptured:false,
     conversationId:sameMode?controller.conversationId||stored:stored,lastRemoteId:sameMode?controller.lastRemoteId||0:0,
     pendingImage:sameMode?controller.pendingImage||'':''
   };
+  controller=sameMode?Object.assign(controller,next):next;
   const host=ensureHost();host.classList.remove('hidden');render();
   if(controller.conversationId){startPolling();setTimeout(()=>void syncRemote(true),120);}
 }

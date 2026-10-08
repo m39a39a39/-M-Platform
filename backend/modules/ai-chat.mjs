@@ -88,8 +88,9 @@ function productIntent(query=''){
   if(/(مكبر|سبيكر|speaker|soundbar)/u.test(q)){intent.category='audio';intent.subtype='speaker';}
   else if(/(سماع(?:ة|ه|ات)|earbud|earphone|headphone|headset|tws)/u.test(q)){
     intent.category='audio';
-    if(/(tws|ايربود|إيربود|earbud)/u.test(q))intent.subtype='tws';
-    else if(/(سلكي|سلكية|wired)/u.test(q))intent.subtype='wired';
+    if(/(ows|neckband|الرقبة|الرقبه)/u.test(q))intent.subtype='ows';
+    else if(/(tws|ايربود|إيربود|earbud)/u.test(q))intent.subtype='tws';
+    else if(/(?:^|\s)(?:سلكي|سلكية|سلكيه)(?:\s|$)|\bwired\b/u.test(q))intent.subtype='wired';
     else if(/(رأس|راس|headphone|headset)/u.test(q))intent.subtype='headphone';
     else intent.subtype='personal';
   }else if(/(باور ?بانك|شاحن متنقل|power ?bank)/u.test(q))intent.category='powerbank';
@@ -227,6 +228,12 @@ function taxonomyMatch(state,message=''){
   const q=normalizeCatalogText(message);
   if(!q)return null;
   const qTokens=catalogTokens(q);
+  // A broad headphones request must not be narrowed to whichever audio
+  // subcategory happens to repeat the word headphones most often.
+  const intent=productIntent(message);
+  if(intent.category==='audio'&&intent.subtype==='personal'&&taxonomyEntries(state).some(x=>x.id==='cat-audio')){
+    return {categoryId:'cat-audio',subcategoryId:'',score:70,source:'taxonomy'};
+  }
   const scored=taxonomyEntries(state).map(entry=>{
     const names=[entry.nameAr,entry.nameEn,entry.id.replace(/^(?:sub|cat)-/,'').replace(/-/g,' ')].map(normalizeCatalogText).filter(Boolean);
     let score=0;
@@ -304,7 +311,14 @@ function productProfile(item){
   const title=titlePair(item),description=descriptionPair(item);
   const hay=clean([item?.product,title.ar,title.en,description.ar,description.en,item?.technicalSpecs,item?.options,sub,cat].filter(Boolean).join(' ')).toLowerCase();
   let category='',subtype='';
-  if(sub==='sub-wall-chargers')category='wall_charger';
+  // The assigned type takes precedence over component words in descriptions
+  // (e.g. an earbud's 'speaker specifications' does not make it a speaker).
+  if(sub==='sub-ows-neckband'){category='audio';subtype='ows';}
+  else if(sub==='sub-tws-earbuds'){category='audio';subtype='tws';}
+  else if(sub==='sub-headphones-gaming'){category='audio';subtype='headphone';}
+  else if(sub==='sub-wired-earphones'){category='audio';subtype='wired';}
+  else if(sub==='sub-bluetooth-speakers'){category='audio';subtype='speaker';}
+  else if(sub==='sub-wall-chargers')category='wall_charger';
   else if(sub==='sub-car-chargers-fm')category='car_charger';
   else if(sub==='sub-charging-data-cables')category='cable';
   else if(sub==='sub-wireless-chargers'||sub==='sub-laptop-chargers'||sub==='sub-power-strips-travel')category='charger';
@@ -355,7 +369,7 @@ function explicitlyCompatible(item,intent,taxonomy=null){
   }
 
   if(intent.subtype==='personal'){
-    if(!['tws','headphone','wired'].includes(p.subtype))return false;
+    if(!['tws','headphone','wired','ows'].includes(p.subtype))return false;
   }else if(intent.subtype==='speaker'){
     if(p.subtype!=='speaker')return false;
   }else if(intent.subtype){
@@ -392,7 +406,7 @@ function intentScore(item,intent,{ignoreCategory=false}={}){
   }
   if(intent.subtype){
     if(p.subtype===intent.subtype)score+=24;
-    else if(intent.subtype==='personal'&&['tws','headphone','wired'].includes(p.subtype))score+=16;
+    else if(intent.subtype==='personal'&&['tws','headphone','wired','ows'].includes(p.subtype))score+=16;
     else if(intent.subtype==='personal'&&p.subtype==='speaker')score-=58;
     else if(intent.subtype==='speaker'&&p.subtype!=='speaker'&&p.category==='audio')score-=48;
   }
@@ -678,13 +692,19 @@ function directProductDiscoveryAnswer(message,language,productSearch){
   }
   return language==='en'?'These are the best matching options currently available in the store.':'هذه أنسب الخيارات المتوفرة حاليًا في المتجر.';
 }
-function wantsHumanSupport(message=''){
-  const q=clean(message).toLowerCase();
-  return qHas(q,[
-    'خدمة العملاء','موظف','موظفه','موظفة','موظفين','شخص حقيقي','انسان','إنسان','بشري',
-    'حولني','حوّلني','حولني لموظف','اكلم موظف','أكلم موظف','اتكلم مع موظف','أتكلم مع موظف',
-    'customer service','human agent','human support','live agent','talk to a person','speak to an agent','representative'
-  ]);
+export function wantsHumanSupport(message=''){
+  const q=clean(message).toLowerCase().normalize('NFKD').replace(/[\u064B-\u065F\u0670]/g,'').replace(/[أإآ]/g,'ا').replace(/’/g,"'");
+  // Evaluate separate clauses so a denial does not trigger a handoff, while
+  // a later explicit correction ("but connect me now") can still request one.
+  return q.split(/[.!?؟،,;؛\n]+|\bbut\b|لكن|ولكن/u).some(clause=>{
+    const target=/(?:موظف(?:ه|ة|ين)?|خدمه العملاء|خدمة العملاء|شخص حقيقي|انسان|بشري|\bcustomer service\b|\bhuman(?: agent| support)?\b|\blive agent\b|\brepresentative\b|\b(?:person|agent)\b)/u;
+    if(!target.test(clause)&&!/(?:^|\s)حولني(?:\s|$)/u.test(clause))return false;
+    const negative=/(?:^|\s)(?:لا|بدون|دون|ما ابي|ما ابغى|ماني|مش|مو)(?:\s|$)|\b(?:do not|don't|dont|no|not|without|never)\b/u;
+    if(negative.test(clause))return false;
+    const request=/(?:حولني|حولها|تحويل|اكلم|اتكلم|تحدث|تواصل|وصلني|اربطني|(?:اريد|احتاج|ابغى|ابي|ممكن)\s+(?:موظف|خدمة العملاء|شخص|انسان|دعم بشري))|\b(?:want|need|connect|transfer|speak|talk|contact|get|request)\b/u;
+    const bare=clause.trim().replace(/^(?:من فضلك|لو سمحت|please)\s+/u,'');
+    return request.test(clause)||/^(?:موظف(?:ه|ة)?|خدمة العملاء|شخص حقيقي|انسان|دعم بشري|human(?: agent| support)?|customer service|live agent|representative)$/u.test(bare);
+  });
 }
 function policyPageIdForMessage(message=''){
   const q=normalizeCatalogText(message);
@@ -892,7 +912,8 @@ function knowledgeQuestionScore(message,row){
   for(const rawKeyword of row.keywords){
     const keyword=normalizeCatalogText(rawKeyword);
     if(!keyword)continue;
-    if(q.includes(keyword))score+=keyword.includes(' ')?20:14;
+    if(q===keyword)score+=48;
+    else if(q.includes(keyword))score+=keyword.includes(' ')?20:14;
     else{
       const coverage=phraseMatchScore(q,keyword);
       if(coverage===1)score+=12;
