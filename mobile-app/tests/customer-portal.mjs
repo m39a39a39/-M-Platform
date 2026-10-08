@@ -18,8 +18,8 @@ for(const [engine,type] of Object.entries({chromium,webkit})){
   await page.addInitScript(lang=>localStorage.setItem('CapacitorStorage.language',lang),language);
   const user={id:'client',role:'client',name:'Customer عميل',company:'Example company',email:'client@example.test',country:'UAE',preferredCurrency:'SAR'};
   const base={version:1,quantity:100,currency:'SAR',images:[],createdAt:'2026-10-01',updatedAt:'2026-10-05'};
-  const product={id:'p1',sku:'SKU-1',status:'published',product:'دفتر',translation:{titleAr:'دفتر',titleEn:'Notebook'},unitPrice:10,currency:'SAR',moq:1,stock:1000,images:[]};
-  const state={user,settings:{storefront:defaultStore(),currencies:[{code:'SAR',rate:1,nameAr:'ريال',nameEn:'Riyal',active:true},{code:'USD',rate:.2667,nameAr:'دولار',nameEn:'Dollar',active:true}]},publicOffers:[product],accounts:[user],supplySources:[],requests:[
+  const product={id:'p1',categoryId:'cat1',sku:'SKU-1',status:'published',product:'دفتر',translation:{titleAr:'دفتر',titleEn:'Notebook'},unitPrice:10,currency:'SAR',moq:1,stock:1000,images:[]};
+  const state={user,settings:{storefront:defaultStore(),categories:[{id:'cat1',nameAr:'مكتبية',nameEn:'Office',active:true}],currencies:[{code:'SAR',rate:1,nameAr:'ريال',nameEn:'Riyal',active:true},{code:'USD',rate:.2667,nameAr:'دولار',nameEn:'Dollar',active:true}]},publicOffers:[product],accounts:[user],supplySources:[],requests:[
    {...base,id:'pay',displayNo:12001,product:'سماعات',translation:{titleAr:'سماعات',titleEn:'Headphones'},trackingStatus:'payment_confirmation',paymentStatus:'awaiting_receipt',selectedQuoteId:'q1'},
    {...base,id:'done',displayNo:12002,product:'Completed',trackingStatus:'completed',paymentStatus:'reupload_requested'},
    {...base,id:'cancel',displayNo:12003,product:'Cancelled',status:'cancelled',paymentStatus:'reupload_requested'},
@@ -44,21 +44,30 @@ for(const [engine,type] of Object.entries({chromium,webkit})){
   const filter=async key=>{await page.locator(`[data-client-order-filter="${key}"]`).click();};
   const cards=()=>page.locator('#clientOrderResults .client-order-card');
   try{
+   const storefront=()=>page.locator('#guestView:not(.hidden) #guest-storefront, #appView:not(.hidden) #customer-storefront');
+   const signature=async()=>({text:(await storefront().innerText()).replace(/\s+/g,' ').trim(),sections:await storefront().locator('[data-layout-section]').evaluateAll(nodes=>nodes.map(n=>n.dataset.layoutSection))});
+   await page.goto(baseURL+'/');await page.locator('#guest-storefront .published-storefront').waitFor();const guestHome=await signature();
+   await page.goto(baseURL+'/?category=cat1');await page.locator('.sf-product').first().waitFor();const guestCategory=await signature();
    await page.goto(baseURL+'/?page=products');
    await page.locator('.sf-product').first().waitFor();
    await page.locator('.sf-product-name').first().click();
    await page.locator('[data-product-purchase]').waitFor();
-   await page.locator('[data-product-purchase] button[type="submit"]').click();
+   const guestProduct=await signature();await page.locator('[data-product-purchase] button[type="submit"]').click();
    await page.locator('.sf-header [data-store-action="cart"]').click();
    await page.locator('#guestCartForm .cart-line').waitFor();
-   await page.locator('[data-guest-cart-clear]').click();
    await close();
-   await page.goto(baseURL+'/customer.html?screen=account');
+   await page.locator('.sf-header [data-store-action="login"]').click();await page.waitForURL(url=>url.pathname==='/customer.html'&&url.searchParams.has('returnTo'));
    await page.locator('#email').fill(user.email);await page.locator('#password').fill('fixture-password');await page.locator('#loginBtn').click();
+   await page.locator('#customer-storefront [data-product-purchase]').waitFor();assert.equal(new URL(page.url()).searchParams.get('product'),'p1');assert.deepEqual(await signature(),guestProduct);
+   await page.locator('.sf-header [data-store-action="cart"]').click();await page.locator('#cartCheckoutForm .cart-line').waitFor();assert.equal(await page.locator('#cartCheckoutForm .cart-line').count(),1);await close();
+   await page.goto(baseURL+'/?category=cat1');await page.locator('#customer-storefront .sf-product').waitFor();assert.deepEqual(await signature(),guestCategory);
+   await page.goto(baseURL+'/');await page.locator('#customer-storefront .published-storefront').waitFor();assert.equal(new URL(page.url()).pathname,'/');assert.deepEqual(await signature(),guestHome);await geometry();
+   await page.locator('.sf-header [data-store-action="account"]').click();await page.waitForURL(url=>url.pathname==='/customer.html'&&url.searchParams.get('screen')==='account');
    await page.locator('.client-account-layout .profile-card').waitFor();
+   assert.equal(await page.locator('#site-header .sf-header').count(),1);assert.equal(await page.locator('.portal-header').count(),0);assert.equal(await page.locator('#site-header form[data-store-search]').count(),1);
    assert.equal(await page.locator('.client-account-overview,.client-account-stats').count(),0);
    assert.equal(await page.locator('html').getAttribute('dir'),language==='ar'?'rtl':'ltr');
-   const navigate=async screen=>{await page.locator(width<600?`#bottomNav [data-screen="${screen}"]`:`.portal-header a[href$="screen=${screen}"]`).click();await page.locator(screen==='account'?'.profile-card':'#clientOrderResults').waitFor();};
+   const navigate=async screen=>{await page.locator(width<600?`#bottomNav [data-screen="${screen}"]`:`.customer-account-nav a[href$="screen=${screen}"]`).click();await page.locator(screen==='account'?'.profile-card':'#clientOrderResults').waitFor();};
    await geometry();await page.screenshot({path:`${output}/${label}-account.png`,fullPage:true});
    await navigate('requests');assert.equal(await cards().count(),2);assert.equal(await page.locator('[data-action="new-request"]').count(),0);
    await page.locator('.client-order-title[data-cart-order="cart"]').click();await page.locator('#modal .cart-order-line').waitFor();await close();

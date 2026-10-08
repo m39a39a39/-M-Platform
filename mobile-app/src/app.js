@@ -3,12 +3,12 @@ import {isUnlimitedStock,trackedStock} from '../../shared/inventory.mjs';
 import './styles.css';
 import './customer-account.css';
 import {filterClientOrders, clientOrderCounts, isClosedClientOrder} from './client-orders.js';
-import {portalRole,portalPaths,portalScreen,portalUrl,portalRedirect} from './portal-routes.js';
+import {portalRole,portalPaths,portalScreen,portalUrl,portalRedirect,storeReturnUrl} from './portal-routes.js';
 import {mountSupplierCatalog,supplierProduct,resetSupplierCatalog} from './supplier-catalog.js';
 import {mountSiteChrome} from './site-chrome.js';
 import './storefront.css';
 import {Capacitor} from '@capacitor/core';
-import {storeRoute,renderStoreRoute,renderStorefront,bindStorefront,productExtras,orderTimeline,stageLabel,tierPrice,homeConfig,storeProductCard} from './storefront.js';
+import {formatStoreMoney,storeRoute,renderStoreRoute,renderStorefront,bindStorefront,productExtras,orderTimeline,stageLabel,tierPrice,homeConfig,storeProductCard} from './storefront.js';
 import { session } from './session.js';
 import { languageReady, getLanguage, onLanguageChange, toggleLanguage } from './language.js';
 import { showView } from './views.js';
@@ -69,7 +69,7 @@ function convertedMoney(value,sourceCurrency=''){
   if(!src||!dst||!Number(src.rate)||!Number(dst.rate))return {value:n,currency:source};
   return {value:n/Number(src.rate)*Number(dst.rate),currency:target};
 }
-const money=(value,currency='')=>{if(value===undefined||value===null||value==='')return '—';const x=convertedMoney(value,currency);if(!x)return '—';const digits=Math.abs(x.value)>=100?2:4;return `${esc(x.currency)} ${esc(Number(x.value.toFixed(digits)).toLocaleString(lang==='ar'?'ar':'en',{maximumFractionDigits:digits}))}`;};
+const money=(value,currency='')=>{if(value==null||value==='')return '—';const x=convertedMoney(value,currency);return x?formatStoreMoney(x.value,x.currency,lang):'—';};
 const exactMoney=(value,currency='')=>{const n=Number(value);if(!Number.isFinite(n))return '—';const digits=Math.abs(n)>=100?2:4;return `${esc(String(currency||'').toUpperCase())} ${esc(Number(n.toFixed(digits)).toLocaleString(lang==='ar'?'ar':'en',{maximumFractionDigits:digits}))}`.trim();};
 function frozenOrderMoney(item,value,sourceCurrency=''){
   const invoice=item?.finalInvoice||item?.proformaInvoice,fx=invoice?.fxSnapshot,n=Number(value),source=String(sourceCurrency||'SAR').toUpperCase();
@@ -708,12 +708,9 @@ function supplierRequestAnswered(request,quotes=platformState?.quotes||[]){retur
 function renderHome(){
   const role=currentUser.role;
   if(role==='client'){
-    if(readyCategory!=='all'&&!categories().some(cat=>cat.id===readyCategory))readyCategory='all';
-    const products=productResultsHtml();
-    const h=homeConfig(platformState.settings);
-    const catalog=`<section class="ready-products-section">${h.showSearch?productSearchBar():''}<div id="readyProductFilters">${productFiltersHtml()}</div><div id="readyProductsGrid" class="public-offers-grid">${products.grid}</div><div id="readyProductsPagination">${products.pagination}</div></section>`;
-    $('screen').innerHTML=`<div id="customer-storefront">${renderStorefront(platformState,Capacitor.isNativePlatform()?'app':'web',{money,chrome:false,client:true,catalog,cartCount:cartItems.length})}</div>`;
-    bindStorefront($('customer-storefront'),platformState,{chrome:false,observe:aiChatSignal,money,hydrate:hydrateImages,product:openPublicOffer,add:(id,quantity)=>{try{const p=platformState.publicOffers.find(p=>p.id===id);addToCart(p,(quantity??(Number(p.moq)||1))+(cartItems.find(x=>x.offerId===id)?.quantity||0));if(!storeRoute().product)showToast(tr('تمت الإضافة إلى السلة','Added to cart'));}catch(e){showToast(e.message);}},page:(title,html)=>openModal(title,'',html),category:id=>{readyCategory=id;renderHome();},catalog:()=>document.getElementById('store-catalog')?.scrollIntoView({behavior:'smooth'}),action:action=>{if(action==='cart')openCart();if(action==='request')openNewRequest();}});
+    document.body.classList.add('customer-shopping');
+    $('screen').innerHTML=`<div id="customer-storefront">${renderStorefront(platformState,Capacitor.isNativePlatform()?'app':'web',{money,chrome:false,role:'client',cartCount:cartItems.length})}</div>`;
+    bindStorefront($('customer-storefront'),platformState,{chrome:false,observe:aiChatSignal,money,hydrate:hydrateImages,product:openPublicOffer,add:(id,quantity)=>{try{const p=platformState.publicOffers.find(p=>p.id===id);addToCart(p,(quantity??(Number(p.moq)||1))+(cartItems.find(x=>x.offerId===id)?.quantity||0));if(!storeRoute().product)showToast(tr('تمت الإضافة إلى السلة','Added to cart'));}catch(e){showToast(e.message);}},page:(title,html)=>openModal(title,'',html),category:id=>{location.assign('/?category='+encodeURIComponent(id));},catalog:()=>document.getElementById('store-catalog')?.scrollIntoView({behavior:'smooth'}),action:action=>{if(action==='cart')openCart();if(action==='request')openNewRequest();}});
     updateCartBadge();
   }else if(role==='supplier'){
     const quotes=platformState.quotes||[],invites=(platformState.requests||[]).filter(r=>!supplierRequestAnswered(r,quotes));
@@ -785,7 +782,7 @@ function renderAccount(){
   $('screen').innerHTML=pageHeader(t('account'),u.role==='client'?tr('بياناتك الشخصية وتفضيلاتك.','Your personal details and preferences.'):'')+`<div class="${u.role==='client'?'client-account-layout':''}"><section class="profile-card"><div class="avatar">${esc((u.name||u.company||u.email||'M').charAt(0).toUpperCase())}</div><h2>${esc(u.name||u.company||'IMSG')}</h2><p>${esc(t(u.role))}</p><dl><div><dt>${esc(t('email'))}</dt><dd>${esc(u.email||'—')}</dd></div>${u.company?`<div><dt>${tr('الشركة','Company')}</dt><dd>${esc(u.company)}</dd></div>`:''}${u.country?`<div><dt>${esc(t('country'))}</dt><dd>${esc(u.country)}</dd></div>`:''}</dl>${settingsGroup}<p class="session-note">${esc(t('sessionNote'))}</p><button class="danger-btn" data-action="logout">${esc(t('logout'))}</button></section></div>`;
 }
 function renderAdminCollection(kind){const rows=kind==='requests'?(platformState.requests||[]):[...(platformState.quotes||[]),...(platformState.publicOffers||[])];$('screen').innerHTML=pageHeader(kind==='requests'?t('requests'):t('offers'),t('adminMobile'))+`<div class="list-stack">${rows.slice(0,50).map(x=>itemCard(x,{subtitle:descriptionOf(x),badge:cardBadge(x.status),meta:`#${ref(x)} · ${date(x.createdAt)}`})).join('')||empty()}</div>`;}
-function renderScreen(){if(!currentUser||!platformState)return;syncPortalScreen();updateShell();const route=storeRoute();if(activeScreen==='home'&&(route.page||route.category||route.product||route.q)&&currentUser.role!=='client'){const isCatalog=route.category||route.page==='products';$('screen').innerHTML=renderStoreRoute(platformState,route,{chrome:false,money});if(isCatalog&&currentUser.role==='supplier'){const host=$('screen').querySelector('[data-store-catalog-slot]');mountSupplierCatalog(host,{state:platformState,request,language:lang,card:p=>itemCard(p,{subtitle:descriptionOf(p),action:`data-public-offer="${esc(p.id)}"`}),hydrate:hydrateImages,sourceButton:p=>`<button class="secondary-btn" data-supply-product="${esc(p.id)}">${tr('أستطيع توريد هذا المنتج','I can supply this product')}</button>`,fixedCategory:route.category});}else bindStorefront($('screen'),platformState,{chrome:false,money,hydrate:hydrateImages,product:openPublicOffer});hydrateImages($('screen'));return;}if(renderAdminScreen(activeScreen))return;if(activeScreen==='home')renderHome();else if(activeScreen==='orders')renderSupplierOrders();else if(activeScreen==='requests')renderRequests();else if(activeScreen==='offers')renderOffers();else if(activeScreen==='notifications')renderNotifications();else renderAccount();hydrateImages($('screen'));}
+function renderScreen(){if(!currentUser||!platformState)return;document.body.classList.toggle('customer-shopping',currentUser.role==='client'&&activeScreen==='home');if(syncPortalScreen())return;updateShell();const route=storeRoute();if(activeScreen==='home'&&(route.page||route.category||route.product||route.q)&&currentUser.role!=='client'){const isCatalog=route.category||route.page==='products';$('screen').innerHTML=renderStoreRoute(platformState,route,{chrome:false,money});if(isCatalog&&currentUser.role==='supplier'){const host=$('screen').querySelector('[data-store-catalog-slot]');mountSupplierCatalog(host,{state:platformState,request,language:lang,card:p=>itemCard(p,{subtitle:descriptionOf(p),action:`data-public-offer="${esc(p.id)}"`}),hydrate:hydrateImages,sourceButton:p=>`<button class="secondary-btn" data-supply-product="${esc(p.id)}">${tr('أستطيع توريد هذا المنتج','I can supply this product')}</button>`,fixedCategory:route.category});}else bindStorefront($('screen'),platformState,{chrome:false,money,hydrate:hydrateImages,product:openPublicOffer});hydrateImages($('screen'));return;}if(renderAdminScreen(activeScreen))return;if(activeScreen==='home')renderHome();else if(activeScreen==='orders')renderSupplierOrders();else if(activeScreen==='requests')renderRequests();else if(activeScreen==='offers')renderOffers();else if(activeScreen==='notifications')renderNotifications();else renderAccount();hydrateImages($('screen'));}
 
 function quoteTotal(q,r){
   const unit=Number(q?.unitPrice),quantity=Number(r?.quantity);
@@ -1342,7 +1339,8 @@ async function handleAction(target){
 
 function syncPortalScreen(){
   if(Capacitor.isNativePlatform())return;
-  if(!portalRole(location.pathname)){if(activeScreen!=='home')location.assign(portalUrl(currentUser.role,activeScreen));return;}
+  if(currentUser.role==='client'&&activeScreen==='home'&&portalRole(location.pathname)==='client'){location.assign('/');return true;}
+  if(!portalRole(location.pathname)){if(activeScreen!=='home'){location.assign(portalUrl(currentUser.role,activeScreen));return true;}return false;}
   const next=portalUrl(currentUser.role,activeScreen);
   if(location.pathname+location.search!==next)history.pushState(null,'',next);
 }
@@ -1383,7 +1381,8 @@ async function logout(){
 async function enterWorkspace(){
   await loadData({render:false,includeNotifications:false});
   if(!currentUser)return;
-  const redirect=portalRedirect(currentUser.role,location.pathname,location.search,Capacitor.isNativePlatform());
+  const returnTo=currentUser.role==='client'&&!Capacitor.isNativePlatform()?storeReturnUrl(new URLSearchParams(location.search).get('returnTo')):null;
+  const redirect=returnTo||portalRedirect(currentUser.role,location.pathname,location.search,Capacitor.isNativePlatform());
   if(redirect){location.replace(redirect);return;}
   const postAuth=takePostAuthAction();
   showView('appView');activeScreen=Capacitor.isNativePlatform()?(new URLSearchParams(location.search).get('screen')==='notifications'?'notifications':new URLSearchParams(location.search).get('screen')==='account'?'account':'home'):portalScreen(currentUser.role,location.search);activeSub='primary';renderScreen();syncClientAiChat();
