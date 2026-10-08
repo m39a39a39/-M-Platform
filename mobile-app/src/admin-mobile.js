@@ -543,19 +543,24 @@ async function openChatConversation(id){
       :`<button type="button" class="primary-btn" data-admin-chat-action="takeover" data-chat-id="${esc(row.id)}">${esc(row.status==='closed'?tr('إعادة فتح واستلام المحادثة','Reopen & take over'):tr('استلام المحادثة','Take over chat'))}</button>`;
     const reply=row.status==='closed'?'':`<form id="adminChatReplyForm" class="admin-chat-reply" data-chat-id="${esc(row.id)}"><textarea name="message" maxlength="4000" required placeholder="${esc(tr('اكتب ردك للعميل...','Write your reply...'))}"></textarea><button type="submit" class="primary-btn">${esc(tr('إرسال الرد','Send reply'))}</button></form>`;
     modal(row.leadName||who.name,chatStatusLabel(row),`<section class="admin-chat-thread"><div class="admin-chat-customer"><strong>${esc(row.leadName||who.name)}</strong><small>${esc(row.leadContact||who.detail)}</small>${row.leadFollowupNeeded?`<div class="admin-chat-lead-details"><b>🔥 ${esc(tr('عميل محتمل – يحتاج متابعة','Lead – follow-up needed'))}</b>${row.leadCountry?`<span>${esc(tr('الدولة','Country'))}: ${esc(row.leadCountry)}</span>`:''}${row.leadProductSku?`<span>SKU: ${esc(row.leadProductSku)}</span>`:''}${row.leadQuantity?`<span>${esc(tr('الكمية','Quantity'))}: ${esc(row.leadQuantity)}</span>`:''}</div>`:''}</div><div class="admin-chat-messages">${messagesHtml||empty()}</div><div class="admin-chat-controls">${controls}${row.status!=='closed'?'<button type="button" class="danger-text" data-admin-chat-action="close" data-chat-id="'+esc(row.id)+'">'+esc(tr('إغلاق المحادثة','Close chat'))+'</button>':'<button type="button" class="secondary-btn" data-admin-chat-action="ai" data-chat-id="'+esc(row.id)+'">'+esc(tr('إعادة فتح بالذكاء الاصطناعي','Reopen with AI'))+'</button>'}</div>${reply}</section>`);
+    requestAnimationFrame(()=>{
+      const messageList=document.querySelector('.chat-conversation-dialog .admin-chat-messages');
+      if(messageList)messageList.scrollTop=messageList.scrollHeight;
+    });
     revision++;if(activeView()==='conversations')chats();
   }catch(e){toast(e.message);}
 }
 async function runChatAction(id,action,message=''){
   try{
     await api('/api/v1/ai-conversations',{method:'POST',body:{conversationId:id,action,message}});
-    await refreshConversationsSummary(false);await openChatConversation(id);
-  }catch(e){toast(e.message);}
+    await refreshConversationsSummary(false);await openChatConversation(id);return true;
+  }catch(e){toast(e.message);return false;}
 }
 async function submitChatReply(form){
   const text=form.message.value.trim();if(!text)return;
   const button=form.querySelector('button');button.disabled=true;
-  await runChatAction(form.dataset.chatId,'reply',text);
+  const ok=await runChatAction(form.dataset.chatId,'reply',text);
+  if(!ok&&button.isConnected)button.disabled=false;
 }
 
 function accounts(section='account'){const u=me(),rows=(state?.accounts||[]).filter(a=>(section==='customers'?a.role==='client':section==='suppliers'?a.role==='supplier':['client','supplier'].includes(a.role))&&!a.deletedAt&&matches(a,'account'));const specialized={team:()=>teamPanel(),currencies:()=>currencyPanel(),banks:()=>bankAccountPanel(),categories:()=>categoryPanel()+subcategoryPanel(),countries:()=>supplyCountryPanel()};
