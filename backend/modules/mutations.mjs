@@ -66,6 +66,25 @@ export function normalizeCategories(input){
     return {id,nameAr,nameEn,active:raw.active!==false,order:index};
   });
 }
+export function normalizeKnowledgeBase(input){
+  assert(Array.isArray(input)&&input.length<=300,400,'بنك المعلومات غير صالح / Invalid knowledge base');
+  const ids=new Set();
+  return input.map((raw,index)=>{
+    assert(raw&&typeof raw==='object'&&!Array.isArray(raw),400,'عنصر بنك المعلومات غير صالح / Invalid knowledge item');
+    const id=String(raw.id||'').trim();
+    const category=String(raw.category||'general').trim().slice(0,80)||'general';
+    const questionAr=String(raw.questionAr||'').trim(),questionEn=String(raw.questionEn||'').trim();
+    const answerAr=String(raw.answerAr||'').trim(),answerEn=String(raw.answerEn||'').trim();
+    assert(/^[A-Za-z0-9_-]{1,80}$/.test(id)&&!ids.has(id),400,'معرّف بنك المعلومات غير صالح أو مكرر / Invalid or duplicate knowledge id');
+    assert((questionAr||questionEn)&&(answerAr||answerEn),400,'أدخل سؤالًا وإجابة لعنصر بنك المعلومات / Add a question and answer');
+    assert(questionAr.length<=500&&questionEn.length<=500&&answerAr.length<=5000&&answerEn.length<=5000,400,'نص بنك المعلومات طويل جدًا / Knowledge text is too long');
+    const keywords=(Array.isArray(raw.keywords)?raw.keywords:[])
+      .map(value=>String(value||'').trim()).filter(Boolean).slice(0,30);
+    assert(keywords.every(value=>value.length<=80),400,'إحدى كلمات بنك المعلومات طويلة جدًا / A knowledge keyword is too long');
+    ids.add(id);
+    return {id,category,questionAr,questionEn,answerAr,answerEn,keywords:[...new Set(keywords)],active:raw.active!==false,order:index};
+  });
+}
 export function normalizeSubcategories(input,categories=[]){
   assert(Array.isArray(input)&&input.length<=300,400,'تصنيفات فرعية غير صالحة / Invalid subcategories');
   const parentIds=new Set((categories||[]).map(x=>x.id)),ids=new Set();
@@ -657,6 +676,7 @@ export async function saveSettings(user,body){
     }
     if(k==='bankAccounts'){data.bankAccounts=normalizeBankAccounts(v);continue;}
     if(k==='currencies'){data.currencies=normalizeCurrencies(v);continue;}
+    if(k==='knowledgeBase'){data.knowledgeBase=normalizeKnowledgeBase(v);continue;}
     assert(['logo','logoText',...prefixes.flatMap(k=>[k+'Ar',k+'En'])].includes(k)&&typeof v==='string'&&v.length<=10000,400);
     if(k==='logo'&&v)await checkImages([v],user,row.data.logo?[row.data.logo]:[]);
     data[k]=v;
