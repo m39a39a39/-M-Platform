@@ -40,7 +40,7 @@
           <label class="full"><span>${esc(tr('سؤال العميل بالعربية','Customer question in Arabic'))}</span><input name="questionAr" maxlength="500" required value="${esc(editor.questionAr||'')}" placeholder="${esc(tr('مثال: وين موقع شركتكم؟','Example: Where is your company located?'))}"></label>
           <label class="full"><span>${esc(tr('الإجابة بالعربية','Arabic answer'))}</span><textarea name="answerAr" rows="4" maxlength="5000" required>${esc(editor.answerAr||'')}</textarea></label>
           <label class="full"><span>${esc(tr('السؤال بالإنجليزية — اختياري','English question — optional'))}</span><input name="questionEn" maxlength="500" value="${esc(editor.questionEn||'')}"></label>
-          <label class="full"><span>${esc(tr('الإجابة بالإنجليزية — اختياري','English answer — optional'))}</span><textarea name="answerEn" rows="3" maxlength="5000>${esc(editor.answerEn||'')}</textarea></label>
+          <label class="full"><span>${esc(tr('الإجابة بالإنجليزية — اختياري','English answer — optional'))}</span><textarea name="answerEn" rows="3" maxlength="5000">${esc(editor.answerEn||'')}</textarea></label>
           <label class="full"><span>${esc(tr('كلمات مفتاحية وصيغ أخرى','Keywords and alternate phrasing'))}</span><textarea name="keywords" rows="2" placeholder="${esc(tr('مثال: عنوان الشركة، موقعكم، وين مقرّكم، company address','Example: company address, office location, where are you located'))}">${esc((editor.keywords||[]).join('، '))}</textarea><small>${esc(tr('افصل الكلمات بفاصلة أو سطر جديد.','Separate keywords with commas or new lines.'))}</small></label>
         </div>
         ${error?`<p class="kb-error">${esc(error)}</p>`:''}
