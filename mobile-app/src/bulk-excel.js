@@ -319,14 +319,14 @@ export function buildBulkProductTemplate(){
   return zipStoredFiles(files);
 }
 export async function downloadBulkProductTemplate(){
-  const name='M-Platform-products-template.xlsx';
+  const name='IMSG-products-template.xlsx';
   const type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
   const bytes=buildBulkProductTemplate();
   const file=new File([bytes],name,{type});
   if(typeof navigator!=='undefined'&&typeof navigator.share==='function'&&
      (!navigator.canShare||navigator.canShare({files:[file]}))){
     try{
-      await navigator.share({files:[file],title:'M Platform Excel template'});
+      await navigator.share({files:[file],title:'IMSG Excel template'});
       return {method:'share'};
     }catch(error){
       if(error?.name==='AbortError')return {method:'cancelled'};

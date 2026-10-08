@@ -3,18 +3,39 @@ import { SecureStoragePlugin } from 'capacitor-secure-storage-plugin';
 import { createSession } from './session-core.js';
 
 const key = 'm-platform.session.v1';
-// On the web, keep credentials only for the current browser tab so refreshes do not sign the user out.
+// Web sessions persist across browser restarts and tabs. sessionStorage remains a
+// one-release migration fallback for sessions created by older deployments.
 let webSession = null;
+function parseStored(raw){
+  if(!raw)return null;
+  try{return JSON.parse(raw);}catch{return null;}
+}
 function webRead(){
-  if(typeof sessionStorage==='undefined')return webSession;
+  let value=null;
+  try{value=parseStored(localStorage.getItem(key));}catch{}
+  if(value){webSession=value;return value;}
   try{
-    const raw=sessionStorage.getItem(key);return raw?JSON.parse(raw):webSession;
-  }catch{return webSession;}
+    value=parseStored(sessionStorage.getItem(key));
+    if(value){
+      webSession=value;
+      try{localStorage.setItem(key,JSON.stringify(value));sessionStorage.removeItem(key);}catch{}
+      return value;
+    }
+  }catch{}
+  return webSession;
 }
 function webWrite(value){
   webSession=value;
-  if(typeof sessionStorage==='undefined')return;
-  try{if(value)sessionStorage.setItem(key,JSON.stringify(value));else sessionStorage.removeItem(key);}catch{}
+  let persisted=false;
+  try{
+    if(value)localStorage.setItem(key,JSON.stringify(value));
+    else localStorage.removeItem(key);
+    persisted=true;
+  }catch{}
+  try{
+    if(value&&!persisted)sessionStorage.setItem(key,JSON.stringify(value));
+    else sessionStorage.removeItem(key);
+  }catch{}
 }
 
 async function nativeGet() {
@@ -78,3 +99,13 @@ const storage = {
 };
 
 export const session = createSession({ storage });
+
+if (typeof window !== 'undefined' && !Capacitor.isNativePlatform()) {
+  window.addEventListener('storage', event => {
+    if (event.key !== key || event.storageArea !== localStorage) return;
+    // A different tab rotated credentials, changed account, or signed out.
+    // Reloading is deliberate: it cancels account-specific UI work before the
+    // shared session is restored, preventing stale data from another account.
+    location.reload();
+  });
+}

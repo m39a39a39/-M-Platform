@@ -1,10 +1,11 @@
 import {customerQuote,canRespondToQuote} from '../../shared/customer-quote.mjs';
+import {isUnlimitedStock,stockAllows} from '../../shared/inventory.mjs';
 import {one,db,rpc,assert,sb} from '../lib/supabase.mjs';
 import {can} from './auth.mjs';
 import {tables,assertOpenRequest,active,open} from './records.mjs';
 import {issueQuoteProforma,issueInterestProforma,issueCartProforma} from './invoices.mjs';
 const contact=v=>/(?:https?:\/\/|www\.|wa\.me|@[a-z0-9]|[\w.+-]+@[\w.-]+\.[a-z]{2,}|(?:\+|00)\d[\d\s()-]{7,})/i.test(String(v));
-const contentFields={requests:['product','specs','quantity','country','neededDate','images'],quotes:['unitPrice','currency','moq','leadTime','sampleCost','notes','images'],publicOffers:['sku','product','specs','country','unitPrice','currency','moq','stock','leadTime','validUntil','images','categoryId','subcategoryId']};
+const contentFields={requests:['product','specs','quantity','country','neededDate','images'],quotes:['unitPrice','currency','moq','leadTime','sampleCost','notes','images'],publicOffers:['sku','product','specs','country','unitPrice','currency','moq','stock','stockUnlimited','leadTime','validUntil','images','categoryId','subcategoryId']};
 const DEFAULT_SUPPLY_COUNTRIES=[{id:'China',nameAr:'الصين',nameEn:'China',active:true,order:0},{id:'United Arab Emirates',nameAr:'الإمارات',nameEn:'UAE',active:true,order:1}];
 const PAYMENT_CURRENCIES=['USD','SAR','AED','CNY','EUR'];
 const SUPPLIER_ORDER_STATUSES=['confirmed','production','ready_for_inspection','cannot_fulfill'];
@@ -63,6 +64,25 @@ export function normalizeCategories(input){
     assert(!ids.has(id)&&!namesAr.has(ar)&&!namesEn.has(en),400,'التصنيف مكرر / Duplicate category');
     ids.add(id);namesAr.add(ar);namesEn.add(en);
     return {id,nameAr,nameEn,active:raw.active!==false,order:index};
+  });
+}
+export function normalizeKnowledgeBase(input){
+  assert(Array.isArray(input)&&input.length<=300,400,'بنك المعلومات غير صالح / Invalid knowledge base');
+  const ids=new Set();
+  return input.map((raw,index)=>{
+    assert(raw&&typeof raw==='object'&&!Array.isArray(raw),400,'عنصر بنك المعلومات غير صالح / Invalid knowledge item');
+    const id=String(raw.id||'').trim();
+    const category=String(raw.category||'general').trim().slice(0,80)||'general';
+    const questionAr=String(raw.questionAr||'').trim(),questionEn=String(raw.questionEn||'').trim();
+    const answerAr=String(raw.answerAr||'').trim(),answerEn=String(raw.answerEn||'').trim();
+    assert(/^[A-Za-z0-9_-]{1,80}$/.test(id)&&!ids.has(id),400,'معرّف بنك المعلومات غير صالح أو مكرر / Invalid or duplicate knowledge id');
+    assert((questionAr||questionEn)&&(answerAr||answerEn),400,'أدخل سؤالًا وإجابة لعنصر بنك المعلومات / Add a question and answer');
+    assert(questionAr.length<=500&&questionEn.length<=500&&answerAr.length<=5000&&answerEn.length<=5000,400,'نص بنك المعلومات طويل جدًا / Knowledge text is too long');
+    const keywords=(Array.isArray(raw.keywords)?raw.keywords:[])
+      .map(value=>String(value||'').trim()).filter(Boolean).slice(0,30);
+    assert(keywords.every(value=>value.length<=80),400,'إحدى كلمات بنك المعلومات طويلة جدًا / A knowledge keyword is too long');
+    ids.add(id);
+    return {id,category,questionAr,questionEn,answerAr,answerEn,keywords:[...new Set(keywords)],active:raw.active!==false,order:index};
   });
 }
 export function normalizeSubcategories(input,categories=[]){
@@ -144,6 +164,7 @@ export function validateContent(kind,d){
   if(kind==='publicOffers'){
     if(d.sku!==undefined)assert(/^[A-Za-z0-9._-]{1,80}$/.test(String(d.sku||'').trim()),400,'تحقق من SKU / Check SKU');
     assert(typeof d.country==='string'&&d.country.trim()&&d.country.length<=80,400,'اختر دولة التوريد / Choose a supply country');
+    if(d.stockUnlimited!==undefined)assert(typeof d.stockUnlimited==='boolean',400,'نوع المخزون غير صالح / Invalid inventory mode');
   }
   for(const key of ['country','neededDate','validUntil','stock'])if(d[key]!==undefined)assert(typeof d[key]==='string'&&d[key].length<=100,400);
   if(d.categoryId!==undefined)assert(typeof d.categoryId==='string'&&d.categoryId.length<=80,400,'تصنيف غير صالح / Invalid category');
@@ -197,9 +218,12 @@ function cartReplacementChildData(child,quote,previousSupplierId,now,termsChange
 export async function checkImages(images,user,old=[]){
   assert(Array.isArray(images)&&images.length<=5,400,'الحد الأقصى خمس صور / Maximum five images');
   for(const src of images){
+    // Legacy catalog rows may contain older image URLs. They are safe to keep unchanged,
+    // but every newly added image must be a platform-owned media reference.
+    if(old.includes(src))continue;
     assert(typeof src==='string'&&/^\/api\/media\/[a-f0-9-]{36}$/.test(src),400,'صورة غير صالحة / Invalid image');
     const m=await one('media',src.split('/').at(-1));
-    assert(m&&(m.owner_id===user.id||old.includes(src)),403);
+    assert(m&&m.owner_id===user.id,403);
   }
 }
 export async function mutate(user,body){
@@ -249,10 +273,10 @@ export async function mutate(user,body){
     }else if(collection==='interests'){
       const offer=await one('public_offers',patch.offerId);
       assert(open(offer)&&offer.data.status==='published'&&(offer.data.storeOwned||active(await one('profiles',offer.owner_id)))&&(!offer.data.validUntil||offer.data.validUntil>=now.slice(0,10)),409);
-      const quantity=Number(patch.quantity),moq=Number(offer.data.moq),unitPrice=Number(offer.data.unitPrice),stock=Number(offer.data.stock);
+      const quantity=Number(patch.quantity),moq=Number(offer.data.moq),unitPrice=Number(offer.data.unitPrice);
       assert(Number.isFinite(quantity)&&Number.isInteger(quantity)&&quantity>0&&quantity<=1e9,400,'أدخل كمية صحيحة / Enter a valid quantity');
       assert(Number.isFinite(moq)&&quantity>=moq,400,'الكمية أقل من الحد الأدنى للطلب / Quantity is below the minimum order');
-      if(Number.isFinite(stock)&&stock>0)assert(quantity<=stock,400,'الكمية المطلوبة أكبر من المخزون المتاح / Requested quantity exceeds available stock');
+      if(!isUnlimitedStock(offer.data))assert(stockAllows(offer.data,quantity),400,'الكمية المطلوبة أكبر من المخزون المتاح / Requested quantity exceeds available stock');
       const repeatedFromInterestId=String(patch.repeatedFromInterestId||'').trim();
       if(repeatedFromInterestId){
         assert(/^[A-Za-z0-9-]{1,80}$/.test(repeatedFromInterestId),400,'مرجع الطلب السابق غير صالح / Invalid previous order reference');
@@ -268,7 +292,7 @@ export async function mutate(user,body){
       data.currency=String(offer.data.currency||'').toUpperCase();
       data.moq=moq;
       data.total=quantity*unitPrice;
-      data.offerSnapshot={unitPrice, currency:data.currency, moq, stock:offer.data.stock||'', sku:offer.data.sku||'', product:offer.data.product||'', translation:offer.data.translation||{}};
+      data.offerSnapshot={unitPrice, currency:data.currency, moq, stock:offer.data.stock||'', stockUnlimited:isUnlimitedStock(offer.data), sku:offer.data.sku||'', product:offer.data.product||'', translation:offer.data.translation||{}};
       data.proformaInvoice=await issueInterestProforma(user,data,id,now);
     }
     if(collection!=='interests'){
@@ -513,7 +537,9 @@ export async function mutate(user,body){
         assert(typeof patch[key]==='string'&&patch[key].trim()&&patch[key].trim().length<=2000,400,'اكتب رسالة الدفع للعميل / Add a payment message');
         data.paymentMessage=patch[key].trim();
       }else if((contentFields[collection]||[]).includes(key)){
-        assert(can(user,editPermission));data[key]=patch[key];
+        assert(can(user,editPermission));
+        if(collection==='publicOffers'&&key==='stockUnlimited')assert(typeof patch[key]==='boolean',400,'نوع المخزون غير صالح / Invalid inventory mode');
+        data[key]=patch[key];
       }else assert(false,400,'حقل غير قابل للتعديل / Field not editable');
     }
     if((collection==='requests'||collection==='interests')&&(changes.includes('trackingStatus')||changes.includes('trackingNote'))){
@@ -650,6 +676,7 @@ export async function saveSettings(user,body){
     }
     if(k==='bankAccounts'){data.bankAccounts=normalizeBankAccounts(v);continue;}
     if(k==='currencies'){data.currencies=normalizeCurrencies(v);continue;}
+    if(k==='knowledgeBase'){data.knowledgeBase=normalizeKnowledgeBase(v);continue;}
     assert(['logo','logoText',...prefixes.flatMap(k=>[k+'Ar',k+'En'])].includes(k)&&typeof v==='string'&&v.length<=10000,400);
     if(k==='logo'&&v)await checkImages([v],user,row.data.logo?[row.data.logo]:[]);
     data[k]=v;
@@ -667,7 +694,7 @@ export async function bulkUpdatePublicOffers(user,body={}){
     assert(!seen.has(id),400,'منتج مكرر في العملية');seen.add(id);
     assert(Number(item.version)===row.version,409,'تغيّرت بيانات أحد المنتجات؛ حدّث الصفحة / A product changed; refresh and try again');
     const data=structuredClone(row.data||{}),keys=Object.keys(patch);
-    const editable=new Set(['product','specs','sku','unitPrice','currency','moq','stock','leadTime','categoryId','subcategoryId','country']);
+    const editable=new Set(['product','specs','sku','unitPrice','currency','moq','stock','stockUnlimited','leadTime','categoryId','subcategoryId','country']);
     assert(item.delete||keys.length,400,'لا توجد تغييرات / No changes');
     if(item.delete){
       assert(can(user,'trash'),403);

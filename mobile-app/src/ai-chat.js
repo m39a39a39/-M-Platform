@@ -1,32 +1,36 @@
 import './ai-chat.css';
 import {filesToCompressedSources} from './image-upload.js';
+import {latestAssistantQuickReplies} from './ai-chat-state.js';
 
 let controller=null;
 let pollTimer=null;
+let waitingTimer=null;
 const signalTimers=new Map();
 const MARKETING_KEY='m-platform.ai-marketing.v2';
 const GUEST_KEY='m-platform.ai-guest-key.v1';
 const CONVERSATION_KEY='m-platform.ai-conversation.v1';
+const ATTRIBUTION_KEY='m-platform.ai-chat-attribution.v1';
+const ATTRIBUTION_TTL=7*24*60*60*1000;
 const MAX_PROACTIVE_MESSAGES=3;
 const PROACTIVE_COOLDOWN=90000;
 
 const esc=value=>String(value??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 const copy={
   ar:{
-    title:'مساعد M الذكي',subtitle:'مستشار مشتريات وتوريد',humanSubtitle:'فريق M يتولى المحادثة الآن',team:'فريق M',
+    title:'مساعد M الذكي',subtitle:'مستشار مشتريات وتوريد',waitingSubtitle:'بانتظار موظف · المساعد مستمر معك',humanSubtitle:'فريق M يتولى المحادثة الآن',team:'فريق M',
     placeholder:'اكتب ماذا تبحث عنه...',send:'إرسال',close:'إغلاق',photo:'إضافة صورة من الكاميرا أو الاستديو',imageReady:'الصورة جاهزة للبحث',imageError:'تعذر قراءة الصورة. اختر صورة أخرى.',imageSearch:'📷 بحث بصورة',
     guestHello:'مرحبًا 👋 أخبرني ماذا تريد شراءه، وسأساعدك في اختيار الأنسب من المنتجات المتاحة.',
     clientHello:'مرحبًا 👋 أخبرني ماذا تحتاج، وسأساعدك في مشترياتك وطلبات التوريد.',
-    error:'تعذر الحصول على رد الآن. حاول مرة أخرى.',thinking:'جاري البحث...',
+    error:'تعذر الحصول على رد الآن. حاول مرة أخرى.',thinking:'جاري البحث...',leadTitle:'هل تريد أن نتواصل معك؟',leadText:'حتى لا نفقد التواصل إذا أغلقت الصفحة، اترك رقم واتساب أو وسيلة تواصل وسيتابع معك الموظف.',leadContact:'رقم واتساب أو وسيلة التواصل',leadName:'الاسم (اختياري)',leadSave:'حفظ وسيلة التواصل',leadSaved:'تم حفظ وسيلة التواصل',waitingLong:'فريق خدمة العملاء مشغول حاليًا، لكن طلبك محفوظ ويمكنني الاستمرار في مساعدتك حتى يستلم الموظف.',
     chipsGuest:['أبحث عن أفضل منتج لسوقي','قارن لي بين المنتجات المناسبة','لم أجد المنتج الذي أريده'],
     chipsClient:['اقترح لي منتجًا مناسبًا','ما حالة طلب التوريد؟','أين وصل طلبي؟']
   },
   en:{
-    title:'M AI Assistant',subtitle:'Smart buying & sourcing advisor',humanSubtitle:'M Team is handling this conversation',team:'M Team',
+    title:'M AI Assistant',subtitle:'Smart buying & sourcing advisor',waitingSubtitle:'Waiting for an agent · AI can still help',humanSubtitle:'M Team is handling this conversation',team:'M Team',
     placeholder:'Tell me what you are looking for...',send:'Send',close:'Close',photo:'Add image from camera or photo library',imageReady:'Image ready to search',imageError:'Could not read this image. Choose another image.',imageSearch:'📷 Image search',
     guestHello:'Hi 👋 Tell me what you want to buy and I will help you choose the best fit from available products.',
     clientHello:'Hi 👋 Tell me what you need and I can help with your purchases and sourcing requests.',
-    error:'I could not get a response right now. Please try again.',thinking:'Searching...',
+    error:'I could not get a response right now. Please try again.',thinking:'Searching...',leadTitle:'Want us to contact you?',leadText:'If you leave the page, add a WhatsApp number or contact method so our team can follow up.',leadContact:'WhatsApp or contact method',leadName:'Name (optional)',leadSave:'Save contact',leadSaved:'Contact saved',waitingLong:'Our customer service team is busy right now. Your request is saved and I can keep helping until an agent takes over.',
     chipsGuest:['Find the best product for my market','Compare suitable products','I cannot find the product I need'],
     chipsClient:['Recommend a suitable product','What is my sourcing request status?','Where is my order?']
   }
@@ -51,6 +55,34 @@ function storedConversationId(mode){return String(conversationStore()[mode]||'')
 function storeConversationId(mode,id){
   try{const state=conversationStore();if(id)state[mode]=id;else delete state[mode];localStorage.setItem(CONVERSATION_KEY,JSON.stringify(state));}catch{}
 }
+
+function readAttribution(){
+  try{
+    const row=JSON.parse(localStorage.getItem(ATTRIBUTION_KEY)||'null');
+    if(!row?.conversationId||!row?.at||Date.now()-Number(row.at)>ATTRIBUTION_TTL){localStorage.removeItem(ATTRIBUTION_KEY);return null;}
+    return row;
+  }catch{return null;}
+}
+function saveAttribution(productId=''){
+  if(!controller?.conversationId)return null;
+  const row={conversationId:String(controller.conversationId),guestKey:visitorKey(),productId:String(productId||''),at:Date.now()};
+  try{localStorage.setItem(ATTRIBUTION_KEY,JSON.stringify(row));}catch{}
+  return row;
+}
+export function chatAttributionForOrder(){
+  const row=readAttribution();
+  return row?{conversationId:row.conversationId,guestKey:row.guestKey||'',productId:row.productId||''}:null;
+}
+export function clearChatAttribution(){
+  try{localStorage.removeItem(ATTRIBUTION_KEY);}catch{}
+}
+async function trackConversion(eventName,{productId='',metadata={}}={}){
+  const attribution=readAttribution();
+  const conversationId=attribution?.conversationId||controller?.conversationId||'';
+  const guestKey=attribution?.guestKey||visitorKey();
+  if(!conversationId||typeof controller?.trackConversion!=='function')return;
+  try{await controller.trackConversion({eventName,conversationId,guestKey,productId,metadata});}catch{}
+}
 function marketingState(){
   try{const parsed=JSON.parse(sessionStorage.getItem(MARKETING_KEY)||'{}');return parsed&&typeof parsed==='object'?parsed:{};}catch{return{};}
 }
@@ -68,6 +100,8 @@ function ensureHost(){
       <header class="m-ai-head"><div><strong></strong><small></small></div><button class="m-ai-close" type="button">×</button></header>
       <div class="m-ai-messages" aria-live="polite"></div>
       <div class="m-ai-chips"></div>
+      <form class="m-ai-lead hidden"><div><strong></strong><p></p></div><input name="contact" maxlength="160" required><input name="name" maxlength="120"><button type="submit"></button></form>
+      <div class="m-ai-waiting-note hidden"></div>
       <div class="m-ai-image-preview hidden"><img alt=""><span></span><button type="button" aria-label="Remove image">×</button></div>
       <form class="m-ai-form"><label class="m-ai-photo" title=""><span>📷</span><input type="file" accept="image/*"></label><textarea rows="1" maxlength="2000"></textarea><button type="submit"></button></form>
     </section>`;
@@ -79,6 +113,7 @@ function ensureHost(){
     markEngaged();hideNudge();setOpen(true);
   });
   host.querySelector('.m-ai-form').addEventListener('submit',submit);
+  host.querySelector('.m-ai-lead').addEventListener('submit',submitLead);
   host.querySelector('.m-ai-photo input').addEventListener('change',selectImage);
   host.querySelector('.m-ai-image-preview button').addEventListener('click',clearPendingImage);
   host.querySelector('textarea').addEventListener('keydown',event=>{
@@ -87,6 +122,17 @@ function ensureHost(){
   host.querySelector('.m-ai-chips').addEventListener('click',event=>{
     const button=event.target.closest('button[data-prompt]');if(!button)return;
     host.querySelector('textarea').value=button.dataset.prompt;host.querySelector('.m-ai-form').requestSubmit();
+  });
+  host.querySelector('.m-ai-messages').addEventListener('click',event=>{
+    const card=event.target.closest('[data-chat-product]');if(!card)return;
+    const productId=String(card.dataset.chatProduct||'');if(!productId)return;
+    const href=card.getAttribute('href')||'';
+    event.preventDefault();
+    saveAttribution(productId);
+    Promise.race([
+      trackConversion('product_click',{productId,metadata:{source:'chat_card'}}),
+      new Promise(resolve=>setTimeout(resolve,220))
+    ]).finally(()=>{if(href)location.assign(href);});
   });
   return host;
 }
@@ -102,12 +148,49 @@ function setOpen(open){
   panel.classList.toggle('hidden',!open);button.setAttribute('aria-expanded',String(open));
   if(open){hideNudge();render();void syncRemote(true);setTimeout(()=>host.querySelector('textarea')?.focus(),30);}
 }
+function safeProductImage(src){
+  const value=String(src||'');
+  return /^\/api\/media\/[a-f0-9-]{36}$/i.test(value)||/^https:\/\/ueeshop\.ly200-cdn\.com\//i.test(value)?value:'';
+}
+function productCardsHtml(products=[]){
+  const rows=Array.isArray(products)?products.slice(0,6):[];
+  if(!rows.length)return '';
+  return `<div class="m-ai-products" aria-label="${esc(language()==='ar'?'منتجات مقترحة':'Suggested products')}">${rows.map(product=>{
+    const image=safeProductImage(product.image),price=Number.isFinite(Number(product.price))?Number(product.price):null;
+    return `<a class="m-ai-product-card" data-chat-product="${esc(product.id||'')}" href="${esc(product.href||('/?product='+encodeURIComponent(product.id||'')))}">
+      <span class="m-ai-product-image">${image?`<img src="${esc(image)}" alt="" loading="lazy" decoding="async">`:'<span class="m-ai-product-placeholder">M</span>'}</span>
+      <strong>${esc(product.title||product.sku||'')}</strong>
+      ${price!==null?`<span class="m-ai-product-price">${esc(new Intl.NumberFormat(language()==='ar'?'ar-SA':'en',{maximumFractionDigits:2}).format(price))} ${esc(product.currency||'SAR')}</span>`:''}
+      ${Number(product.priceQuantity)>0?`<small>${esc(language()==='ar'?('سعر '+product.priceQuantity+' حبة'):('Price at '+product.priceQuantity+' pcs'))}</small>`:product.moq!==null&&product.moq!==undefined&&product.moq!==''?`<small>MOQ ${esc(product.moq)}</small>`:''}
+      <i aria-hidden="true">↗</i>
+    </a>`;
+  }).join('')}</div>`;
+}
+function messageHtml(row){
+  const meta=row?.metadata||{},sender=row.role==='admin'?'<small class="m-ai-sender">'+esc(t('team'))+'</small>':'';
+  const hasProducts=row.role!=='user'&&Array.isArray(meta.products)&&meta.products.length;
+  return `<div class="m-ai-row ${row.role==='user'?'user':'assistant'}${hasProducts?' has-products':''}"><div>${sender}<span class="m-ai-message-text">${esc(row.content)}</span>${row.role!=='user'?productCardsHtml(meta.products):''}</div></div>`;
+}
+function latestQuickReplies(){
+  return latestAssistantQuickReplies(controller?.messages||[],!!controller?.humanMode);
+}
+function latestProductSku(){
+  for(let i=(controller?.messages?.length||0)-1;i>=0;i--){
+    const sku=controller.messages[i]?.metadata?.products?.[0]?.sku;
+    if(sku)return String(sku);
+  }
+  return '';
+}
+function waitingTooLong(){
+  const at=Date.parse(controller?.waitingSince||'');
+  return !!at&&Date.now()-at>=5*60*1000;
+}
 function render(){
   if(!controller)return;
   const host=ensureHost(),lang=language(),rtl=lang==='ar';
   host.dir=rtl?'rtl':'ltr';
   host.querySelector('.m-ai-head strong').textContent=t('title');
-  host.querySelector('.m-ai-head small').textContent=controller.humanMode?t('humanSubtitle'):t('subtitle');
+  host.querySelector('.m-ai-head small').textContent=controller.humanMode?t('humanSubtitle'):controller.waitingHuman?t('waitingSubtitle'):t('subtitle');
   host.querySelector('.m-ai-close').setAttribute('aria-label',t('close'));
   host.querySelector('textarea').placeholder=t('placeholder');
   host.querySelector('.m-ai-form button').textContent=t('send');
@@ -115,13 +198,28 @@ function render(){
   const preview=host.querySelector('.m-ai-image-preview');
   preview.classList.toggle('hidden',!controller.pendingImage);
   if(controller.pendingImage){preview.querySelector('img').src=controller.pendingImage;preview.querySelector('span').textContent=t('imageReady');}
+
   const messages=host.querySelector('.m-ai-messages');
   const greeting=controller.mode==='client'?t('clientHello'):t('guestHello');
-  const rows=[{role:'assistant',content:greeting},...controller.messages];
-  messages.innerHTML=rows.map(row=>`<div class="m-ai-row ${row.role==='user'?'user':'assistant'}"><div>${row.role==='admin'?'<small class="m-ai-sender">'+esc(t('team'))+'</small>':''}${esc(row.content)}</div></div>`).join('');
+  const rows=[{role:'assistant',content:greeting,metadata:{}},...controller.messages];
+  messages.innerHTML=rows.map(messageHtml).join('');
   if(controller.loading&&!controller.humanMode)messages.insertAdjacentHTML('beforeend',`<div class="m-ai-row assistant"><div class="m-ai-thinking"><span></span><span></span><span></span> ${esc(t('thinking'))}</div></div>`);
-  const chips=controller.mode==='client'?t('chipsClient'):t('chipsGuest');
-  host.querySelector('.m-ai-chips').innerHTML=controller.messages.length?'':chips.map(label=>`<button type="button" data-prompt="${esc(label)}">${esc(label)}</button>`).join('');
+
+  const dynamic=latestQuickReplies(),initial=controller.mode==='client'?t('chipsClient'):t('chipsGuest'),chips=dynamic.length?dynamic:controller.messages.length?[]:initial;
+  host.querySelector('.m-ai-chips').innerHTML=chips.map(label=>`<button type="button" data-prompt="${esc(label)}">${esc(label)}</button>`).join('');
+
+  const lead=host.querySelector('.m-ai-lead'),showLead=controller.mode==='guest'&&controller.waitingHuman&&!controller.leadCaptured&&typeof controller.captureLead==='function';
+  lead.classList.toggle('hidden',!showLead);
+  if(showLead){
+    lead.querySelector('strong').textContent=t('leadTitle');lead.querySelector('p').textContent=t('leadText');
+    lead.elements.contact.placeholder=t('leadContact');lead.elements.name.placeholder=t('leadName');lead.querySelector('button').textContent=t('leadSave');
+  }
+
+  const waiting=host.querySelector('.m-ai-waiting-note'),showWaiting=controller.waitingHuman&&waitingTooLong()&&!controller.humanMode;
+  waiting.classList.toggle('hidden',!showWaiting);waiting.textContent=showWaiting?t('waitingLong'):'';
+  clearTimeout(waitingTimer);waitingTimer=null;
+  if(controller.waitingHuman&&!controller.humanMode&&!showWaiting)waitingTimer=setTimeout(()=>render(),Math.max(1000,5*60*1000-(Date.now()-Date.parse(controller.waitingSince||Date.now()))));
+
   const input=host.querySelector('textarea'),send=host.querySelector('.m-ai-form button'),photoInput=host.querySelector('.m-ai-photo input');
   input.disabled=controller.loading;send.disabled=controller.loading;photoInput.disabled=controller.loading;
   requestAnimationFrame(()=>{messages.scrollTop=messages.scrollHeight;});
@@ -141,7 +239,15 @@ async function syncRemote(silent=false){
     const result=await controller.fetchConversation({conversationId:controller.conversationId,guestKey:visitorKey(),language:language()});
     if(!result?.conversation)return;
     controller.humanMode=result.conversation.status==='human';
-    const incoming=(result.messages||[]).map(row=>({id:Number(row.id)||0,role:row.sender==='customer'?'user':row.sender==='admin'?'admin':'assistant',content:String(row.content||'')})).filter(x=>x.content);
+    controller.waitingHuman=!!result.conversation.waitingHuman;
+    controller.waitingSince=String(result.conversation.waitingSince||'');
+    controller.leadCaptured=!!result.conversation.leadCaptured;
+    const incoming=(result.messages||[]).map(row=>({
+      id:Number(row.id)||0,
+      role:row.sender==='customer'?'user':row.sender==='admin'?'admin':'assistant',
+      content:String(row.content||''),
+      metadata:row.metadata&&typeof row.metadata==='object'?row.metadata:{}
+    })).filter(x=>x.content);
     const latestId=incoming.reduce((m,x)=>Math.max(m,x.id||0),0);
     const lastAdmin=[...incoming].reverse().find(x=>x.role==='admin'&&(x.id||0)>Number(controller.lastRemoteId||0));
     if(lastAdmin&&!silent&&ensureHost().querySelector('.m-ai-panel').classList.contains('hidden'))showNudge(lastAdmin.content);
@@ -165,23 +271,44 @@ async function selectImage(event){
 function clearPendingImage(){
   if(!controller)return;controller.pendingImage='';render();
 }
+async function submitLead(event){
+  event.preventDefault();
+  if(!controller||controller.loading||typeof controller.captureLead!=='function'||!controller.conversationId)return;
+  const form=event.currentTarget,contact=form.elements.contact.value.trim(),name=form.elements.name.value.trim();
+  if(!contact)return;
+  const button=form.querySelector('button');button.disabled=true;
+  try{
+    const result=await controller.captureLead({
+      conversationId:controller.conversationId,guestKey:visitorKey(),language:language(),
+      contact,name,productSku:latestProductSku()
+    });
+    controller.leadCaptured=!!result?.leadCaptured;
+    if(result?.reply)controller.messages.push({role:'assistant',content:String(result.reply),metadata:{}});
+    await syncRemote(true);
+  }catch(error){
+    controller.messages.push({role:'assistant',content:String(error?.message||t('error')),metadata:{}});
+  }finally{button.disabled=false;render();}
+}
 async function submit(event){
   event.preventDefault();
   if(!controller||controller.loading)return;
   const host=ensureHost(),input=host.querySelector('textarea'),message=input.value.trim(),image=controller.pendingImage||'';if(!message&&!image)return;
   markEngaged();hideNudge();input.value='';controller.pendingImage='';
   const visibleMessage=message||t('imageSearch');
-  controller.messages.push({role:'user',content:visibleMessage});controller.messages=controller.messages.slice(-40);
+  controller.messages.push({role:'user',content:visibleMessage,metadata:{}});controller.messages=controller.messages.slice(-40);
   controller.loading=true;render();
   try{
-    const history=controller.messages.slice(0,-1).slice(-10).map(x=>({role:x.role==='user'?'user':'assistant',content:x.content}));
+    const history=controller.messages.slice(0,-1).slice(-6).map(x=>({role:x.role==='user'?'user':'assistant',content:x.content}));
     const result=await controller.send({message:message||t('imageSearch'),history,language:language(),guestKey:visitorKey(),conversationId:controller.conversationId||'',...(image?{image}: {})});
     if(result?.conversationId)setConversationId(result.conversationId);
     controller.humanMode=!!result?.humanMode;
-    if(result?.reply)controller.messages.push({role:'assistant',content:String(result.reply)});
+    controller.waitingHuman=!!result?.waitingHuman||controller.waitingHuman&&!controller.humanMode;
+    if(result?.waitingHuman&&!controller.waitingSince)controller.waitingSince=new Date().toISOString();
+    if(result?.leadPrompt===true)controller.leadCaptured=false;
+    if(result?.reply)controller.messages.push({role:'assistant',content:String(result.reply),metadata:{products:result.recommendations||[],quickReplies:result.quickReplies||[],...(result.waitingHuman?{handoff:'waiting'}:{}),...(result.leadPrompt?{leadPrompt:true}:{})}});
     await syncRemote(true);
   }catch(error){
-    controller.messages.push({role:'assistant',content:String(error?.message||t('error'))});
+    controller.messages.push({role:'assistant',content:String(error?.message||t('error')),metadata:{}});
   }finally{
     controller.loading=false;controller.messages=controller.messages.slice(-40);render();
   }
@@ -224,17 +351,32 @@ export function aiChatSignal(type,detail={}){
     scheduleSignal('search',1100,()=>{if(Number(detail.results)===0)return requestProactive({type:'search_no_results',...detail});if(Number(detail.results)<=3)return requestProactive({type:'narrow_search',...detail});});
     return;
   }
-  if(type==='cart_add'){scheduleSignal('cart-add',Number(detail.cartCount)>=2?5000:11000,()=>requestProactive({type:'cart_interest',...detail}));return;}
+  if(type==='cart_add'){
+    const attr=readAttribution();
+    if(attr)void trackConversion('add_to_cart',{productId:String(detail.productId||''),metadata:{quantity:detail.quantity,cartCount:detail.cartCount,price:detail.price,currency:detail.currency}});
+    scheduleSignal('cart-add',Number(detail.cartCount)>=2?5000:11000,()=>requestProactive({type:'cart_interest',...detail}));return;
+  }
+  if(type==='checkout_started'){
+    if(readAttribution())void trackConversion('checkout_started',{metadata:{cartCount:detail.cartCount,cartTotal:detail.cartTotal,currency:detail.currency}});
+    return;
+  }
   if(type==='cart_open'&&Number(detail.cartCount)>0)scheduleSignal('cart-open',15000,()=>requestProactive({type:'cart_hesitation',...detail}));
 }
-export function mountAiChat({mode='guest',language:languageGetter=()=> 'ar',send,fetchConversation}={}){
+export function mountAiChat({mode='guest',language:languageGetter=()=> 'ar',send,fetchConversation,captureLead,trackConversion:trackConversionHandler}={}){
   if(typeof send!=='function')return;
   const sameMode=controller?.mode===mode,stored=storedConversationId(mode);
-  stopPolling();
-  controller={mode,language:languageGetter,send,fetchConversation,messages:sameMode?controller.messages:[],loading:false,humanMode:sameMode?controller.humanMode:false,conversationId:sameMode?controller.conversationId||stored:stored,lastRemoteId:sameMode?controller.lastRemoteId||0:0,pendingImage:sameMode?controller.pendingImage||'':''};
+  stopPolling();clearTimeout(waitingTimer);waitingTimer=null;
+  controller={
+    mode,language:languageGetter,send,fetchConversation,captureLead,trackConversion:trackConversionHandler,
+    messages:sameMode?controller.messages:[],loading:false,
+    humanMode:sameMode?controller.humanMode:false,waitingHuman:sameMode?controller.waitingHuman:false,
+    waitingSince:sameMode?controller.waitingSince||'':'',leadCaptured:sameMode?controller.leadCaptured:false,
+    conversationId:sameMode?controller.conversationId||stored:stored,lastRemoteId:sameMode?controller.lastRemoteId||0:0,
+    pendingImage:sameMode?controller.pendingImage||'':''
+  };
   const host=ensureHost();host.classList.remove('hidden');render();
   if(controller.conversationId){startPolling();setTimeout(()=>void syncRemote(true),120);}
 }
 export function unmountAiChat(){
-  controller=null;stopPolling();for(const timer of signalTimers.values())clearTimeout(timer);signalTimers.clear();document.getElementById('mAiChat')?.remove();
+  controller=null;stopPolling();clearTimeout(waitingTimer);waitingTimer=null;for(const timer of signalTimers.values())clearTimeout(timer);signalTimers.clear();document.getElementById('mAiChat')?.remove();
 }

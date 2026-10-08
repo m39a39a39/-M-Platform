@@ -9,7 +9,7 @@ export const active=p=>p&&!p.blocked_at&&!p.deleted_at;
 export const open=r=>r&&!r.data.deletedAt&&!r.data.suspendedAt;
 export function unpack(row,kind){return {...row.data,id:row.id,displayNo:row.display_no,version:row.version,createdAt:row.created_at,...(kind==='requests'||kind==='interests'?{customerId:row.owner_id}:{supplierId:row.owner_id}),...(row.request_id?{requestId:row.request_id}:{}),...(row.offer_id?{offerId:row.offer_id}:{})};}
 export function ownRecord(row,kind){const item=unpack(row,kind);delete item.supplierIds;delete item.moderationHistory;delete item.reviewedAt;delete item.internalNotes;delete item.orderAudit;delete item.supplierAssignmentHistory;delete item.assignedSupplierId;delete item.createdByAdmin;delete item.supplyTerms;delete item.supplySourceId;return item;}
-function publicSettings(data={}){const safe={...data};delete safe.bankAccounts;delete safe.studioDraft;return safe;}
+function publicSettings(data={},options={}){const safe={...data};delete safe.bankAccounts;delete safe.studioDraft;if(!options.includeKnowledge)delete safe.knowledgeBase;return safe;}
 function compactPublicValue(value){
   if(Array.isArray(value)){
     const rows=value.map(compactPublicValue).filter(item=>item!==undefined);
@@ -41,16 +41,16 @@ function publicSectionForView(section={}){
   return compactPublicValue(next)||{id:section.id,type};
 }
 function publicSettingsForView(data={},route={}){
-  const {pageId='',productId='',category='',q=''}=route,safe=publicSettings(upgradeSettings(data));
+  const {pageId='',productId='',category='',q='',aiPolicies=false,aiKnowledge=false}=route,safe=publicSettings(upgradeSettings(data),{includeKnowledge:aiKnowledge});
   if(safe.storefront){
-    const routePage=productId?'product':category?'category':(q||['products','search'].includes(pageId))?'search':pageId?'':'home';
+    const routePage=aiPolicies?'':productId?'product':category?'category':(q||['products','search'].includes(pageId))?'search':pageId?'':'home';
     const sections=(safe.storefront.sections||[]).filter(section=>{
       const page=section.page||(['header','footer'].includes(section.type)?'global':'home');
       return page==='global'||(routePage&&page===routePage);
     }).map(publicSectionForView);
     safe.storefront={...safe.storefront,
       pages:(safe.storefront.pages||[]).map(page=>{
-        if(page.id===pageId)return page;
+        if(aiPolicies||page.id===pageId)return page;
         const next={...page};delete next.content;delete next.contentEn;return next;
       }),
       sections
@@ -61,8 +61,19 @@ function publicSettingsForView(data={},route={}){
 function publicProductSummary(row){
   const d=row.data||{},translation=d.translation||{},item={id:row.id,displayNo:row.display_no,createdAt:row.created_at,status:'published',
     sku:d.sku||'',translation:{titleAr:translation.titleAr||'',titleEn:translation.titleEn||''},images:Array.isArray(d.images)?d.images.filter(Boolean).slice(0,1):[],
-    country:d.country||'',categoryId:d.categoryId||'',subcategoryId:d.subcategoryId||'',unitPrice:d.unitPrice??'',currency:d.currency||'',moq:d.moq??'',stock:d.stock??''};
+    country:d.country||'',categoryId:d.categoryId||'',subcategoryId:d.subcategoryId||'',unitPrice:d.unitPrice??'',currency:d.currency||'',moq:d.moq??'',stock:d.stock??'',stockUnlimited:d.stockUnlimited!==false};
   if(Array.isArray(d.tiers)&&d.tiers.length)item.tiers=d.tiers;
+  return compactPublicValue(item)||item;
+}
+export function publicAiProductSummary(row){
+  const d=row.data||{},translation=d.translation||{},item={...publicProductSummary(row),
+    product:d.product||'',
+    translation:{
+      titleAr:translation.titleAr||'',titleEn:translation.titleEn||'',
+      descriptionAr:translation.descriptionAr||'',descriptionEn:translation.descriptionEn||''
+    },
+    shortDescription:d.shortDescription||'',technicalSpecs:d.technicalSpecs||'',options:d.options||'',leadTime:d.leadTime??''
+  };
   return compactPublicValue(item)||item;
 }
 export function supplierInterest(row){
@@ -77,7 +88,7 @@ export function supplierInterest(row){
 export function anonymous(row,kind,user){
   const d=row.data;
   const result={id:row.id,displayNo:row.display_no,version:row.version,createdAt:row.created_at,status:d.status,translation:d.translation||{},images:d.images||[],country:d.country||''};
-  const fields=kind==='requests'?['quantity','neededDate']:['sku','subcategoryId','unitPrice','currency','moq','leadTime','sampleCost','stock','validUntil','categoryId','shortDescription','productNotes','options','technicalSpecs','tiers'];
+  const fields=kind==='requests'?['quantity','neededDate']:['sku','subcategoryId','unitPrice','currency','moq','leadTime','sampleCost','stock','stockUnlimited','validUntil','categoryId','shortDescription','productNotes','options','technicalSpecs','tiers'];
   for(const key of fields)if(d[key]!==undefined)result[key]=d[key];
   if(kind==='requests'){result.supplierIds=[user.id];result.quoteSelected=!!d.selectedQuoteId;result.paymentConfirmed=d.paymentStatus==='confirmed';}
   if(kind==='quotes')result.publishedAt=d.publishedAt||d.updatedAt||d.reviewedAt||row.created_at;
@@ -152,7 +163,7 @@ async function categoryPageOfferRows(settingsData,categoryId){
   if(sub)query+=`&data->>subcategoryId=eq.${encodeURIComponent(sub.id)}`;
   return rows('public_offers',query);
 }
-export async function snapshot(user,{productId='',pageId='',category='',q=''}={}){
+export async function snapshot(user,{productId='',pageId='',category='',q='',aiCatalog=false,aiPolicies=false,aiKnowledge=false}={}){
   let requests=[],quotes=[],publicOffers=[],interests=[],accounts=[],settings,selectedSupplierQuotes=[],supplySources=[];
   if(user?.role==='supplier')supplySources=(await rows('supply_sources',`owner_id=eq.${user.id}`)).filter(open).map(ownSource);
   else if(user?.role==='admin'&&(can(user,'offers.read')||can(user,'offers.edit')||can(user,'publish')||can(user,'requests.edit')))supplySources=(await rows('supply_sources')).filter(open).map(r=>({...ownSource(r),supplierId:r.owner_id}));
@@ -201,8 +212,8 @@ export async function snapshot(user,{productId='',pageId='',category='',q=''}={}
     });
   }else{
     settings=await one('settings','site');
-    const homepageOnly=!productId&&!pageId&&!category&&!q;
-    const policyOnly=!!pageId&&!['products','search'].includes(pageId)&&!productId&&!category&&!q;
+    const homepageOnly=!productId&&!pageId&&!category&&!q&&!aiPolicies;
+    const policyOnly=(aiPolicies||!!pageId&&!['products','search'].includes(pageId))&&!productId&&!category&&!q;
     if(homepageOnly)publicOffers=await homepageOfferRows(settings.data);
     else if(productId)publicOffers=await productPageOfferRows(productId);
     else if(category)publicOffers=await categoryPageOfferRows(settings.data,category);
@@ -244,8 +255,8 @@ export async function snapshot(user,{productId='',pageId='',category='',q=''}={}
     }
     return item;
   });
-  const responseSettings=user?publicSettings(upgradeSettings(settings.data)):publicSettingsForView(settings.data,{pageId,productId,category,q});
-  let responseOffers=publicOffers.map(r=>!user&&r.id!==productId?publicProductSummary(r):anonymous(r,'publicOffers',user));
+  const responseSettings=user?publicSettings(upgradeSettings(settings.data),{includeKnowledge:aiKnowledge}):publicSettingsForView(settings.data,{pageId,productId,category,q,aiPolicies,aiKnowledge});
+  let responseOffers=publicOffers.map(r=>!user&&r.id!==productId?(aiCatalog?publicAiProductSummary(r):publicProductSummary(r)):anonymous(r,'publicOffers',user));
   if(!user&&!productId&&!pageId&&!category&&!q){
     const storefront=responseSettings.storefront||{},sections=(storefront.sections||[]).filter(section=>section?.visible!==false);
     const collections=storefront.collections||[],selected=new Map();

@@ -16,12 +16,20 @@ import {registerPushDevice,unregisterPushDevice} from './modules/push.mjs';
 import {publicAppConfig} from './modules/app-config.mjs';
 import {submitPaymentReceipt,reviewPaymentReceipt} from './modules/payments.mjs';
 import {manageOrder} from './modules/order-management.mjs';
-import {saveStudio} from './modules/studio.mjs';
+import {saveStudio,saveStudioProduct} from './modules/studio.mjs';
 import {createCartOrder} from './modules/cart-orders.mjs';
 import {aiChat} from './modules/ai-chat.mjs';
-import {customerConversation,adminConversationList,adminConversationRead,adminConversationAction} from './modules/ai-conversations.mjs';
+import {adminAi,adminAiOverview} from './modules/admin-ai.mjs';
+import {customerConversation,captureGuestLead,adminConversationList,adminConversationRead,adminConversationAction} from './modules/ai-conversations.mjs';
+import {recordChatConversion} from './modules/chat-conversions.mjs';
 
 const NATIVE_ORIGINS=new Set(['capacitor://localhost','http://localhost','https://localhost']);
+const normalizeOrigin=value=>String(value||'').trim().replace(/\/$/,'');
+const extraWebOrigins=()=>new Set(String(process.env.APP_ORIGINS||'').split(',').map(normalizeOrigin).filter(Boolean));
+export const allowedWebOrigin=(origin,primaryOrigin)=>{
+  const normalized=normalizeOrigin(origin),primary=normalizeOrigin(primaryOrigin);
+  return !!normalized&&(normalized===primary||extraWebOrigins().has(normalized));
+};
 const nativeOrigin=req=>NATIVE_ORIGINS.has(String(req.headers.origin||''));
 const setNativeCors=(req,res,isV1)=>{
   if(!isV1||!nativeOrigin(req))return;
@@ -61,7 +69,7 @@ export default async function handler(req,res){
     if(req.method==='POST'){
       const bearer=/^Bearer /.test(req.headers.authorization||''),markedNative=isNativeClient(req),trustedNative=isV1&&nativeOrigin(req)&&markedNative;
       const nativeNoOrigin=markedNative&&!req.headers.origin;
-      assert(req.headers.origin===c.origin||trustedNative||bearer&&nativeNoOrigin||path.startsWith('/api/auth/')&&nativeNoOrigin,403,'مصدر الطلب غير مسموح / Invalid origin');
+      assert(allowedWebOrigin(req.headers.origin,c.origin)||trustedNative||bearer&&nativeNoOrigin||path.startsWith('/api/auth/')&&nativeNoOrigin,403,'مصدر الطلب غير مسموح / Invalid origin');
       assert((req.headers['content-type']||'').includes('application/json'),415);
     }
     const body=req.method==='POST'?await readBody(req,path==='/api/supply-sources/bulk-submit'?3500000:['/api/uploads','/api/payment-receipts'].includes(path)?7500000:1800000):{};
@@ -69,7 +77,7 @@ export default async function handler(req,res){
     if(path.startsWith('/api/auth/')){
       assert(req.method==='POST',405);result=await authRoute(path.split('/').at(-1),req,res,body);
     }else{
-      const user=await identify(req,res,path==='/api/state'||path==='/api/ai-chat'||path==='/api/ai-conversation'&&req.method==='GET'||path.startsWith('/api/media/')&&req.method==='GET');
+      const user=await identify(req,res,path==='/api/state'||path==='/api/ai-chat'||path==='/api/ai-conversation'||path==='/api/ai-conversion'||path.startsWith('/api/media/')&&req.method==='GET');
       if(path==='/api/state'){
         assert(req.method==='GET',405);
         if(!user){
@@ -79,11 +87,15 @@ export default async function handler(req,res){
         result=await snapshot(user,{productId:url.searchParams.get('product')||'',pageId:url.searchParams.get('page')||'',category:url.searchParams.get('category')||'',q:url.searchParams.get('q')||''});
       }
       else if(path==='/api/ai-chat'){assert(req.method==='POST',405);result=await aiChat(user,body,req);}
+      else if(path==='/api/ai-conversion'){assert(req.method==='POST',405);result=await recordChatConversion(user,body);}
+      else if(path==='/api/admin-ai'){result=req.method==='GET'?await adminAiOverview(user):await adminAi(user,body);}
       else if(path==='/api/ai-conversation'){
-        assert(req.method==='GET',405);result=await customerConversation(user,{conversationId:url.searchParams.get('conversationId')||'',guestKey:url.searchParams.get('guestKey')||'',language:url.searchParams.get('language')||'ar'});
+        result=req.method==='GET'
+          ?await customerConversation(user,{conversationId:url.searchParams.get('conversationId')||'',guestKey:url.searchParams.get('guestKey')||'',language:url.searchParams.get('language')||'ar'})
+          :await captureGuestLead(user,body);
       }
-      else if(path==='/api/ai-conversations'){
-        assert(req.method==='GET',405);result=url.searchParams.get('conversationId')?await adminConversationRead(user,url.searchParams.get('conversationId')):await adminConversationList(user);
+      else if(path==='/api/ai-conversations'&&req.method==='GET'){
+        result=url.searchParams.get('conversationId')?await adminConversationRead(user,url.searchParams.get('conversationId')):await adminConversationList(user);
       }
       else if(path==='/api/supplier-catalog'){assert(req.method==='GET',405);result=await supplierCatalog(user,url.searchParams);}
       else if(path.startsWith('/api/media/')){assert(req.method==='GET',405);await media(user,path.split('/').at(-1),res,{width:url.searchParams.get('width'),quality:url.searchParams.get('quality')});return;}
@@ -105,6 +117,7 @@ export default async function handler(req,res){
         else if(path==='/api/orders/assign')result=await assignSupplier(user,body);
         else if(path==='/api/order-management')result=await manageOrder(user,body);
         else if(path==='/api/studio')result=await saveStudio(user,body);
+        else if(path==='/api/studio-product')result=await saveStudioProduct(user,body);
         else if(path==='/api/settings')result=await saveSettings(user,body);
         else if(path==='/api/team')result=await team(user,body);
         else if(path==='/api/uploads')result=await upload(user,body);

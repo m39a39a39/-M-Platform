@@ -38,13 +38,23 @@ export function setCookies(res,tokens){
 }
 export async function identify(req,res,optional=false){
   const c=cookies(req),bearer=req.headers.authorization?.match(/^Bearer (.+)$/)?.[1];
+  const cookieSession=!bearer&&!!(c.m_access||c.m_refresh);
   let token=bearer||c.m_access,identity;
   if(!token&&!c.m_refresh){if(optional)return null;throw new HttpError(401,'سجّل الدخول / Sign in');}
   try { if(token)identity=await sb('/auth/v1/user',{token,publicKey:true}); } catch {}
   if(!identity&&!bearer&&c.m_refresh){
-    try {const refreshed=await sb('/auth/v1/token?grant_type=refresh_token',{method:'POST',body:{refresh_token:c.m_refresh},publicKey:true});setCookies(res,refreshed);token=refreshed.access_token;identity=await sb('/auth/v1/user',{token,publicKey:true});}catch{}
+    try {
+      const refreshed=await sb('/auth/v1/token?grant_type=refresh_token',{method:'POST',body:{refresh_token:c.m_refresh},publicKey:true});
+      setCookies(res,refreshed);token=refreshed.access_token;
+      identity=await sb('/auth/v1/user',{token,publicKey:true});
+    } catch { setCookies(res,null); }
   }
-  if(!identity){if(optional)return null;throw new HttpError(401,'انتهت الجلسة / Session expired');}
+  if(!identity){
+    // Do not retry a known-bad cookie pair on every optional/public request.
+    if(cookieSession)setCookies(res,null);
+    if(optional)return null;
+    throw new HttpError(401,'انتهت الجلسة / Session expired');
+  }
   const p=await one('profiles',identity.id);
   assert(p&&!p.blocked_at&&!p.deleted_at,403,'الحساب غير متاح / Account unavailable');
   return {...p,token};
@@ -52,8 +62,21 @@ export async function identify(req,res,optional=false){
 export async function authRoute(action,req,res,body){
   const native=isNativeClient(req),bearer=req.headers.authorization?.match(/^Bearer (.+)$/)?.[1];
   if(action==='logout'){
-    const token=bearer||cookies(req).m_access;
-    if(token)try{await sb('/auth/v1/logout',{method:'POST',token,publicKey:true});}catch{}
+    let token=bearer||cookies(req).m_access,revoked=false;
+    if(token)try{
+      await sb('/auth/v1/logout?scope=local',{method:'POST',token,publicKey:true});
+      revoked=true;
+    }catch{}
+    // An expired access token must not leave its still-valid refresh token alive.
+    // Browser/Capacitor bearer clients send it only for this best-effort revocation.
+    const refreshToken=native?String(body.refreshToken||''):'';
+    if(!revoked&&refreshToken.length>=20&&refreshToken.length<=4096){
+      try{
+        const refreshed=await sb('/auth/v1/token?grant_type=refresh_token',{method:'POST',body:{refresh_token:refreshToken},publicKey:true});
+        token=refreshed.access_token;
+        if(token)await sb('/auth/v1/logout?scope=local',{method:'POST',token,publicKey:true});
+      }catch{}
+    }
     if(!native)setCookies(res,null);return {ok:true};
   }
   if(action==='refresh'){

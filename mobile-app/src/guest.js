@@ -7,7 +7,7 @@ import { showView } from './views.js';
 import { categoryRows, subcategoryRows, supplyCountryRows, taxonomyLabel } from './catalog-taxonomy.js';
 
 const browserOrigin=typeof location!=='undefined'&&/^https?:$/.test(location.protocol)&&!['localhost','127.0.0.1','::1','[::1]'].includes(location.hostname)?location.origin:'';
-const API=String(import.meta.env?.VITE_API_ORIGIN||browserOrigin||'https://m-platform-tan.vercel.app').replace(/\/$/,'');
+const API=String(import.meta.env?.VITE_API_ORIGIN||browserOrigin||'https://www.imsgsource.com').replace(/\/$/,'');
 const storefrontStylesReady=import('./storefront-styles.js');
 const $=id=>document.getElementById(id);
 const mediaCache=new Map();
@@ -54,7 +54,7 @@ const text={
     reload:'تحديث',loading:'جارٍ تحميل المنتجات...',empty:'لا توجد منتجات منشورة حاليًا.',price:'السعر',unitPrice:'سعر الحبة',moq:'الحد الأدنى',
     production:'الإنتاج',days:'يوم',stock:'المخزون',details:'تفاصيل المنتج',back:'العودة للرئيسية',error:'تعذر تحميل المنتجات. تحقق من اتصال الإنترنت.',
     previous:'السابق',next:'التالي',page:'صفحة',companyDescription:'تسوق المنتجات وتابع مشترياتك وطلبات التوريد.',
-    contact:'تواصل معنا',copyright:'© 2026 MIG COMPANY — جميع الحقوق محفوظة',allCategories:'الكل',supplyCountry:'بلد التوريد',allCountries:'الكل',
+    contact:'تواصل معنا',copyright:'© 2026 IMSG — جميع الحقوق محفوظة',allCategories:'الكل',supplyCountry:'بلد التوريد',allCountries:'الكل',
     search:'ابحث عن منتج أو SKU',quantity:'الكمية',productTotal:'إجمالي هذا المنتج',addCart:'إضافة إلى السلة',updateCart:'تحديث الكمية في السلة',
     added:'تمت إضافة المنتج إلى السلة.',cart:'سلة الطلب',products:'منتجات',total:'الإجمالي',grandTotal:'الإجمالي الكلي',remove:'حذف',
     clearCart:'إفراغ السلة',submitOrder:'إرسال الطلب',emptyCart:'السلة فارغة. أضف منتجات من الصفحة الرئيسية.',
@@ -71,7 +71,7 @@ const text={
     reload:'Refresh',loading:'Loading products...',empty:'No products are currently published.',price:'Price',unitPrice:'Unit price',moq:'MOQ',
     production:'Production',days:'days',stock:'Stock',details:'Product details',back:'Back to home',error:'Could not load products. Check your internet connection.',
     previous:'Previous',next:'Next',page:'Page',companyDescription:'Shop products and track your purchases and sourcing requests.',
-    contact:'Contact us',copyright:'© 2026 MIG COMPANY — All rights reserved.',allCategories:'All',supplyCountry:'Supply country',allCountries:'All',
+    contact:'Contact us',copyright:'© 2026 IMSG — All rights reserved.',allCategories:'All',supplyCountry:'Supply country',allCountries:'All',
     search:'Search products or SKU',quantity:'Quantity',productTotal:'This product total',addCart:'Add to cart',updateCart:'Update quantity in cart',
     added:'Product added to cart.',cart:'Order cart',products:'products',total:'Total',grandTotal:'Grand total',remove:'Remove',
     clearCart:'Clear cart',submitOrder:'Submit order',emptyCart:'Your cart is empty. Add products from the home page.',
@@ -144,7 +144,7 @@ function addToCart(offer,quantity){
   if(!existing&&cartItems.length>=10)throw new Error(t('maxProducts'));
   if(existing)existing.quantity=q;else cartItems.push({offerId:offer.id,quantity:q});
   saveCart();
-  aiChatSignal('cart_add',{productSku:offer.sku||'',productTitle:title(offer),price:Number(offer.unitPrice)||0,currency:offer.currency||'',moq:Number(offer.moq)||0,quantity:q,cartCount:cartItems.length});
+  aiChatSignal('cart_add',{productId:offer.id,productSku:offer.sku||'',productTitle:title(offer),price:Number(offer.unitPrice)||0,currency:offer.currency||'',moq:Number(offer.moq)||0,quantity:q,cartCount:cartItems.length});
 }
 
 function renderCategories(){
@@ -183,7 +183,7 @@ function loadingSkeleton(){
 }
 function renderLoading(error=false){
   if(!error){$('guest-storefront').innerHTML=loadingSkeleton();return;}
-  $('guest-storefront').innerHTML=`<div class="sf-loading" role="alert"><strong>M Platform</strong><p>${esc(t('error'))}</p><button id="guestRetry">${esc(t('reload'))}</button></div>`;
+  $('guest-storefront').innerHTML=`<div class="sf-loading" role="alert"><strong>IMSG</strong><p>${esc(t('error'))}</p><button id="guestRetry">${esc(t('reload'))}</button></div>`;
   document.getElementById('guestRetry')?.addEventListener('click',()=>void load());
 }
 
@@ -203,16 +203,32 @@ async function aiConversation(params={}){
   if(!r.ok)throw new Error(data?.error||t('error'));
   return data;
 }
+async function aiLead(body){
+  const r=await fetch(API+'/api/v1/ai-conversation',{method:'POST',credentials:'omit',headers:{'Content-Type':'application/json','X-M-Client':'native'},body:JSON.stringify(body)});
+  let data={};try{data=await r.json();}catch{}
+  if(!r.ok)throw new Error(data?.error||t('error'));
+  return data;
+}
+async function aiConversion(body){
+  const r=await fetch(API+'/api/v1/ai-conversion',{method:'POST',credentials:'omit',keepalive:true,headers:{'Content-Type':'application/json','X-M-Client':'native'},body:JSON.stringify(body)});
+  let data={};try{data=await r.json();}catch{}
+  if(!r.ok)throw new Error(data?.error||t('error'));
+  return data;
+}
 let aiModule=null,aiTask=null,aiIdleHandle=null;
 function loadAiModule(){
   if(aiModule)return Promise.resolve(aiModule);
   if(!aiTask)aiTask=import('./ai-chat.js').then(mod=>(aiModule=mod)).finally(()=>{aiTask=null;});
   return aiTask;
 }
-function aiChatSignal(...args){aiModule?.aiChatSignal(...args);}
+function aiChatSignal(...args){
+  if(aiModule){aiModule.aiChatSignal(...args);return;}
+  const type=String(args[0]||'');
+  if(type==='cart_add'||type==='checkout_started')void loadAiModule().then(mod=>mod.aiChatSignal(...args)).catch(()=>{});
+}
 async function mountGuestAiChat(){
   const mod=await loadAiModule();
-  if(!$('guestView').classList.contains('hidden'))mod.mountAiChat({mode:'guest',language:()=>lang,send:aiSend,fetchConversation:aiConversation});
+  if(!$('guestView').classList.contains('hidden'))mod.mountAiChat({mode:'guest',language:()=>lang,send:aiSend,fetchConversation:aiConversation,captureLead:aiLead,trackConversion:aiConversion});
 }
 function scheduleGuestAiChat(){
   if(aiIdleHandle)return;
@@ -304,7 +320,7 @@ async function requireCustomerAuth(action){
   await ensureGuestUiStyles();
   const isCart=action==='open-cart';
   try{localStorage.setItem(POST_AUTH_KEY,action);}catch{}
-  $('modalKicker').textContent='M Platform';$('modalTitle').textContent=isCart?t('authCartTitle'):t('authRequestTitle');
+  $('modalKicker').textContent='IMSG';$('modalTitle').textContent=isCart?t('authCartTitle'):t('authRequestTitle');
   $('modalBody').innerHTML=`<section class="guest-auth-required"><p>${esc(isCart?t('authCartText'):t('authRequestText'))}</p><div class="guest-auth-required-actions"><button class="secondary-btn" type="button" data-guest-auth-login>${esc(t('continueLogin'))}</button><button class="primary-btn" type="button" data-guest-auth-register>${esc(t('createClient'))}</button></div></section>`;
   $('modal').classList.remove('hidden');
 }
@@ -312,7 +328,7 @@ async function openGuestCart(){
   await ensureGuestUiStyles();
   const rows=cartRows();
   aiChatSignal('cart_open',{cartCount:rows.length,cartTotal:rows.reduce((sum,row)=>sum+Number(row.total||0),0),currency:rows[0]?.currency||''});
-  $('modalKicker').textContent=rows.length?`${rows.length} ${t('products')} · ${rows[0].currency}`:'M Platform';$('modalTitle').textContent=t('cart');
+  $('modalKicker').textContent=rows.length?`${rows.length} ${t('products')} · ${rows[0].currency}`:'IMSG';$('modalTitle').textContent=t('cart');
   if(!rows.length){
     $('modalBody').innerHTML=`<div class="empty-state cart-empty"><span>🛒</span><p>${esc(t('emptyCart'))}</p></div>`;$('modal').classList.remove('hidden');return;
   }
@@ -339,7 +355,11 @@ async function openGuestCart(){
   }));
   $('modalBody').querySelectorAll('[data-guest-cart-remove]').forEach(button=>button.addEventListener('click',()=>{cartItems=cartItems.filter(x=>x.offerId!==button.dataset.guestCartRemove);saveCart();openGuestCart();}));
   $('modalBody').querySelector('[data-guest-cart-clear]')?.addEventListener('click',()=>{cartItems=[];saveCart();openGuestCart();});
-  $('guestCartForm')?.addEventListener('submit',e=>{e.preventDefault();requireCustomerAuth('open-cart');});
+  $('guestCartForm')?.addEventListener('submit',e=>{
+    e.preventDefault();
+    aiChatSignal('checkout_started',{cartCount:rows.length,cartTotal:total,currency});
+    requireCustomerAuth('open-cart');
+  });
 }
 
 $('backToGuestBtn').addEventListener('click',showGuest);

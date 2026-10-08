@@ -4,7 +4,7 @@ import { downloadInvoicePdf } from './invoice-pdf.js';
 import { categoryRows, subcategoryRows, supplyCountryRows, taxonomyLabel } from './catalog-taxonomy.js';
 let state=null,revision=0;
 let requestFilter='all',offerTab='pending',timer=null;
-let chatRows=[],chatTimer=null;
+let chatRows=[],chatTimer=null,chatFilter='all';
 let selectedProducts=new Set();
 const searches=new Map(),mediaCache=new Map(),mediaTasks=new Map();
 const MEDIA_CONCURRENCY=6;
@@ -12,7 +12,7 @@ let reloadWorkspace=async()=>{},adapter=null;
 export function configureAdmin({reload,bridge=null,modal:modalFn=null,close:closeFn=null,toast:toastFn=null,view:viewFn=null}) { reloadWorkspace=reload; adapter=bridge||((modalFn||closeFn||toastFn||viewFn)?{modal:modalFn,close:closeFn,toast:toastFn,view:viewFn}:null); }
 export function resetAdmin() {
   clearTimeout(timer);clearTimeout(chatTimer);chatTimer=null; state=null; revision++;
-  requestFilter='all'; offerTab='pending'; chatRows=[]; searches.clear(); selectedProducts.clear();
+  requestFilter='all'; offerTab='pending'; chatRows=[]; chatFilter='all'; searches.clear(); selectedProducts.clear();
   document.getElementById('navChatUnread')?.classList.add('hidden');
   for(const url of mediaCache.values()) URL.revokeObjectURL(url);
   mediaCache.clear();mediaTasks.clear();
@@ -355,7 +355,7 @@ function bulkSubcategoryOptionRows(selected,parentId){return activeSubcategories
 function bulkCountryOptionRows(selected){return activeSupplyCountries().map(x=>`<option value="${esc(x.id)}" ${selected===x.id?'selected':''}>${esc(taxonomyLabel(x,lang()))}</option>`).join('');}
 function bulkProductEditorRow(x){
   const t=x.translation||{};
-  return `<tr data-bulk-product-row="${esc(x.id)}"><td class="sticky-col"><strong>#${esc(ref(x))}</strong><small>${esc(x.sku||'')}</small></td><td><input data-bulk-edit="product" value="${esc(x.product||'')}" maxlength="300"></td><td><textarea data-bulk-edit="specs" maxlength="10000">${esc(x.specs||'')}</textarea></td><td><input data-bulk-edit="unitPrice" type="number" step="0.01" min="0.01" value="${esc(x.unitPrice||'')}"></td><td><input data-bulk-edit="moq" type="number" min="1" value="${esc(x.moq||'')}"></td><td><input data-bulk-edit="stock" type="number" min="0" value="${esc(x.stock||'')}"></td><td><select data-bulk-edit="categoryId"><option value="">—</option>${bulkCategoryOptionRows(x.categoryId)}</select></td><td><select data-bulk-edit="subcategoryId"><option value="">—</option>${bulkSubcategoryOptionRows(x.subcategoryId,x.categoryId)}</select></td><td><select data-bulk-edit="country"><option value="">—</option>${bulkCountryOptionRows(x.country)}</select></td><td><select data-bulk-edit="status"><option value="published" ${x.status==='published'?'selected':''}>${esc(tr('منشور','Published'))}</option><option value="pending" ${x.status==='pending'?'selected':''}>${esc(tr('مخفي / قيد المراجعة','Hidden / pending'))}</option></select></td><td><input data-bulk-edit="titleAr" value="${esc(t.titleAr||'')}"></td><td><input data-bulk-edit="titleEn" value="${esc(t.titleEn||'')}"></td><td><textarea data-bulk-edit="descriptionAr">${esc(t.descriptionAr||'')}</textarea></td><td><textarea data-bulk-edit="descriptionEn">${esc(t.descriptionEn||'')}</textarea></td></tr>`;
+  return `<tr data-bulk-product-row="${esc(x.id)}"><td class="sticky-col"><strong>#${esc(ref(x))}</strong><small>${esc(x.sku||'')}</small></td><td><input data-bulk-edit="product" value="${esc(x.product||'')}" maxlength="300"></td><td><textarea data-bulk-edit="specs" maxlength="10000">${esc(x.specs||'')}</textarea></td><td><input data-bulk-edit="unitPrice" type="number" step="0.01" min="0.01" value="${esc(x.unitPrice||'')}"></td><td><input data-bulk-edit="moq" type="number" min="1" value="${esc(x.moq||'')}"></td><td><select data-bulk-edit="stockUnlimited"><option value="true" ${x.stockUnlimited!==false?'selected':''}>${esc(tr('غير محدود','Unlimited'))}</option><option value="false" ${x.stockUnlimited===false?'selected':''}>${esc(tr('تتبع الكمية','Track quantity'))}</option></select></td><td><input data-bulk-edit="stock" type="number" min="0" value="${esc(x.stock||'')}"></td><td><select data-bulk-edit="categoryId"><option value="">—</option>${bulkCategoryOptionRows(x.categoryId)}</select></td><td><select data-bulk-edit="subcategoryId"><option value="">—</option>${bulkSubcategoryOptionRows(x.subcategoryId,x.categoryId)}</select></td><td><select data-bulk-edit="country"><option value="">—</option>${bulkCountryOptionRows(x.country)}</select></td><td><select data-bulk-edit="status"><option value="published" ${x.status==='published'?'selected':''}>${esc(tr('منشور','Published'))}</option><option value="pending" ${x.status==='pending'?'selected':''}>${esc(tr('مخفي / قيد المراجعة','Hidden / pending'))}</option></select></td><td><input data-bulk-edit="titleAr" value="${esc(t.titleAr||'')}"></td><td><input data-bulk-edit="titleEn" value="${esc(t.titleEn||'')}"></td><td><textarea data-bulk-edit="descriptionAr">${esc(t.descriptionAr||'')}</textarea></td><td><textarea data-bulk-edit="descriptionEn">${esc(t.descriptionEn||'')}</textarea></td></tr>`;
 }
 function syncBulkProductSubcategory(row){
   const cat=row.querySelector('[data-bulk-edit="categoryId"]')?.value||'',sub=row.querySelector('[data-bulk-edit="subcategoryId"]');if(!sub)return;
@@ -375,7 +375,7 @@ function friendlyBulkError(error){
 function openBulkProductEditor(mode='all'){
   const rows=selectedProductRows();if(!rows.length)return;
   const translationOnly=mode==='translation';
-  const headers=translationOnly?[tr('المنتج','Product'),tr('الاسم AR','Name AR'),tr('الاسم EN','Name EN'),tr('الوصف AR','Description AR'),tr('الوصف EN','Description EN')]:[tr('المنتج','Product'),tr('الاسم الأصلي','Original name'),tr('الوصف الأصلي','Original description'),tr('السعر','Price'),'MOQ',tr('المخزون','Stock'),tr('الرئيسي','Main'),tr('الفرعي','Sub'),tr('دولة التوريد','Supply country'),tr('النشر','Status'),tr('الاسم AR','Name AR'),tr('الاسم EN','Name EN'),tr('الوصف AR','Description AR'),tr('الوصف EN','Description EN')];
+  const headers=translationOnly?[tr('المنتج','Product'),tr('الاسم AR','Name AR'),tr('الاسم EN','Name EN'),tr('الوصف AR','Description AR'),tr('الوصف EN','Description EN')]:[tr('المنتج','Product'),tr('الاسم الأصلي','Original name'),tr('الوصف الأصلي','Original description'),tr('السعر','Price'),'MOQ',tr('نوع المخزون','Inventory mode'),tr('المخزون','Stock'),tr('الرئيسي','Main'),tr('الفرعي','Sub'),tr('دولة التوريد','Supply country'),tr('النشر','Status'),tr('الاسم AR','Name AR'),tr('الاسم EN','Name EN'),tr('الوصف AR','Description AR'),tr('الوصف EN','Description EN')];
   const body=translationOnly?rows.map(x=>{const t=x.translation||{};return `<tr data-bulk-product-row="${esc(x.id)}"><td class="sticky-col"><strong>#${esc(ref(x))}</strong><small>${esc(x.sku||'')}</small></td><td><input data-bulk-edit="titleAr" value="${esc(t.titleAr||'')}"></td><td><input data-bulk-edit="titleEn" value="${esc(t.titleEn||'')}"></td><td><textarea data-bulk-edit="descriptionAr">${esc(t.descriptionAr||'')}</textarea></td><td><textarea data-bulk-edit="descriptionEn">${esc(t.descriptionEn||'')}</textarea></td></tr>`}).join(''):rows.map(bulkProductEditorRow).join('');
   modal(translationOnly?tr('تحديث الترجمة جماعيًا','Bulk translation update'):tr('تعديل المنتجات جماعيًا','Bulk edit products'),tr(`${rows.length} منتجات محددة`,`${rows.length} products selected`),`<form id="adminBulkProductsForm" class="form-stack admin-bulk-products-form" data-mode="${translationOnly?'translation':'all'}"><div class="admin-bulk-table-wrap"><table class="admin-bulk-table"><thead><tr>${headers.map(x=>`<th>${esc(x)}</th>`).join('')}</tr></thead><tbody>${body}</tbody></table></div><label class="admin-category-toggle-label"><input type="checkbox" name="reviewed" required><span>${esc(tr('راجعت النصوص والتعديلات وأؤكد جاهزيتها للنشر.','I reviewed the content and confirm it is ready to publish.'))}</span></label><p class="form-message" data-admin-bulk-message></p><button class="primary-btn" type="submit">${esc(tr('حفظ جميع التعديلات','Save all changes'))}</button></form>`);
 }
@@ -393,6 +393,8 @@ async function submitBulkProducts(form){
       for(const field of ['product','specs','unitPrice','moq','stock','categoryId','subcategoryId','country','status']){
         const next=v(field);if(next!==undefined&&!same(next,original[field]))patch[field]=next;
       }
+      const stockUnlimited=v('stockUnlimited');
+      if(stockUnlimited!==undefined&&!same(stockUnlimited,original.stockUnlimited!==false))patch.stockUnlimited=stockUnlimited==='true';
     }
     if(Object.keys(patch).length)items.push({id:original.id,version:original.version,patch});
   }
@@ -491,11 +493,40 @@ function chatCustomer(row){
   if(!row?.customerId)return {name:tr('زائر','Visitor'),detail:tr('غير مسجل','Not signed in')};
   const a=account(row.customerId);return {name:a?.company||a?.name||tr('عميل','Customer'),detail:a?.email||a?.phone||('#'+String(row.customerId).slice(0,8))};
 }
-function chatStatusLabel(value){return value==='human'?tr('فريق M يرد','M Team replying'):value==='closed'?tr('مغلقة','Closed'):tr('الذكاء الاصطناعي','AI active');}
+function chatStatusLabel(row){
+  if(row?.status==='human')return tr('الموظف يرد','Agent replying');
+  if(row?.status==='closed')return tr('مغلقة','Closed');
+  if(row?.waitingHuman)return tr('بانتظار موظف','Waiting for agent');
+  return tr('الذكاء الاصطناعي','AI active');
+}
+function chatFilterMatch(row){
+  if(chatFilter==='waiting')return !!row.waitingHuman;
+  if(chatFilter==='human')return row.status==='human';
+  if(chatFilter==='ai')return row.status==='ai'&&!row.waitingHuman;
+  if(chatFilter==='unanswered')return Number(row.unreadAdmin||0)>0;
+  if(chatFilter==='closed')return row.status==='closed';
+  return true;
+}
+function chatPriority(row){
+  if(row.waitingHuman)return 5;
+  if(row.leadFollowupNeeded)return 4;
+  if(Number(row.unreadAdmin||0)>0)return 3;
+  if(row.status==='human')return 2;
+  if(row.status==='ai')return 1;
+  return 0;
+}
 function chats(){
-  const rows=[...chatRows].sort((a,b)=>String(b.lastMessageAt||'').localeCompare(String(a.lastMessageAt||'')));
-  setRoot('conversations',page(tr('محادثات العملاء','Customer conversations'),tr('شاهد محادثات الذكاء الاصطناعي واستلم أي محادثة للرد بنفسك.','View AI conversations and take over any conversation to reply yourself.'))+
-    `<div class="list-stack admin-chat-list" data-admin-results>${rows.map(row=>{const who=chatCustomer(row),unread=Number(row.unreadAdmin||0);return `<button type="button" class="admin-chat-card ${unread?'unread':''}" data-admin-conversation="${esc(row.id)}"><div class="admin-chat-avatar">${esc(who.name.charAt(0)||'M')}</div><div class="admin-chat-card-copy"><div><strong>${esc(who.name)}</strong><span class="status-pill ${row.status==='human'?'status-review':row.status==='closed'?'status-cancelled':'status-published'}">${esc(chatStatusLabel(row.status))}</span></div><small>${esc(who.detail)} · ${esc(date(row.lastMessageAt))}</small></div>${unread?`<i>${unread>99?'99+':unread}</i>`:''}</button>`;}).join('')||empty()}</div>`);
+  const rows=[...chatRows].filter(chatFilterMatch).sort((a,b)=>chatPriority(b)-chatPriority(a)||String(b.lastMessageAt||'').localeCompare(String(a.lastMessageAt||'')));
+  const filters=[['all',tr('الكل','All')],['waiting',tr('بانتظار موظف','Waiting')],['human',tr('قيد الرد','Agent')],['ai','AI'],['unanswered',tr('لم يتم الرد','Unread')],['closed',tr('مغلقة','Closed')]];
+  setRoot('conversations',page(tr('المحادثات','Conversations'),tr('تابع العملاء المحتملين واستلم المحادثات عند الحاجة.','Follow customer leads and take over conversations when needed.'))+
+    `<div class="admin-chat-filters">${filters.map(([key,label])=>`<button type="button" class="${chatFilter===key?'active':''}" data-admin-chat-filter="${key}">${esc(label)}</button>`).join('')}</div>
+    <div class="list-stack admin-chat-list" data-admin-results>${rows.map(row=>{
+      const who=chatCustomer(row),unread=Number(row.unreadAdmin||0),waitingOld=row.waitingHuman&&Date.now()-Date.parse(row.handoffRequestedAt||0)>=5*60*1000;
+      const statusClass=row.status==='human'?'status-review':row.status==='closed'?'status-cancelled':row.waitingHuman?'status-pending':'status-published';
+      const lead=row.leadFollowupNeeded?`<span class="admin-chat-lead">🔥 ${esc(tr('عميل محتمل','Lead'))}</span>`:'';
+      const wait=waitingOld?`<span class="admin-chat-wait">${esc(tr('بانتظار الرد منذ أكثر من 5 دقائق','Waiting over 5 min'))}</span>`:'';
+      return `<button type="button" class="admin-chat-card ${unread?'unread':''} ${waitingOld?'urgent':''}" data-admin-conversation="${esc(row.id)}"><div class="admin-chat-avatar">${esc(who.name.charAt(0)||'M')}</div><div class="admin-chat-card-copy"><div><strong>${esc(row.leadName||who.name)}</strong><span class="status-pill ${statusClass}">${esc(chatStatusLabel(row))}</span></div><small>${esc(row.leadContact||who.detail)} · ${esc(date(row.lastMessageAt))}</small><div class="admin-chat-flags">${lead}${wait}</div></div>${unread?`<i>${unread>99?'99+':unread}</i>`:''}</button>`;
+    }).join('')||empty()}</div>`);
 }
 async function openChatConversation(id){
   try{
@@ -511,20 +542,25 @@ async function openChatConversation(id){
       ?`<button type="button" class="secondary-btn" data-admin-chat-action="ai" data-chat-id="${esc(row.id)}">${esc(tr('إرجاع الرد للذكاء الاصطناعي','Return to AI'))}</button>`
       :`<button type="button" class="primary-btn" data-admin-chat-action="takeover" data-chat-id="${esc(row.id)}">${esc(row.status==='closed'?tr('إعادة فتح واستلام المحادثة','Reopen & take over'):tr('استلام المحادثة','Take over chat'))}</button>`;
     const reply=row.status==='closed'?'':`<form id="adminChatReplyForm" class="admin-chat-reply" data-chat-id="${esc(row.id)}"><textarea name="message" maxlength="4000" required placeholder="${esc(tr('اكتب ردك للعميل...','Write your reply...'))}"></textarea><button type="submit" class="primary-btn">${esc(tr('إرسال الرد','Send reply'))}</button></form>`;
-    modal(who.name,chatStatusLabel(row.status),`<section class="admin-chat-thread"><div class="admin-chat-customer"><strong>${esc(who.name)}</strong><small>${esc(who.detail)}</small></div><div class="admin-chat-messages">${messagesHtml||empty()}</div><div class="admin-chat-controls">${controls}${row.status!=='closed'?'<button type="button" class="danger-text" data-admin-chat-action="close" data-chat-id="'+esc(row.id)+'">'+esc(tr('إغلاق المحادثة','Close chat'))+'</button>':'<button type="button" class="secondary-btn" data-admin-chat-action="ai" data-chat-id="'+esc(row.id)+'">'+esc(tr('إعادة فتح بالذكاء الاصطناعي','Reopen with AI'))+'</button>'}</div>${reply}</section>`);
+    modal(row.leadName||who.name,chatStatusLabel(row),`<section class="admin-chat-thread"><div class="admin-chat-customer"><strong>${esc(row.leadName||who.name)}</strong><small>${esc(row.leadContact||who.detail)}</small>${row.leadFollowupNeeded?`<div class="admin-chat-lead-details"><b>🔥 ${esc(tr('عميل محتمل – يحتاج متابعة','Lead – follow-up needed'))}</b>${row.leadCountry?`<span>${esc(tr('الدولة','Country'))}: ${esc(row.leadCountry)}</span>`:''}${row.leadProductSku?`<span>SKU: ${esc(row.leadProductSku)}</span>`:''}${row.leadQuantity?`<span>${esc(tr('الكمية','Quantity'))}: ${esc(row.leadQuantity)}</span>`:''}</div>`:''}</div><div class="admin-chat-messages">${messagesHtml||empty()}</div><div class="admin-chat-controls">${controls}${row.status!=='closed'?'<button type="button" class="danger-text" data-admin-chat-action="close" data-chat-id="'+esc(row.id)+'">'+esc(tr('إغلاق المحادثة','Close chat'))+'</button>':'<button type="button" class="secondary-btn" data-admin-chat-action="ai" data-chat-id="'+esc(row.id)+'">'+esc(tr('إعادة فتح بالذكاء الاصطناعي','Reopen with AI'))+'</button>'}</div>${reply}</section>`);
+    requestAnimationFrame(()=>{
+      const messageList=document.querySelector('.chat-conversation-dialog .admin-chat-messages');
+      if(messageList)messageList.scrollTop=messageList.scrollHeight;
+    });
     revision++;if(activeView()==='conversations')chats();
   }catch(e){toast(e.message);}
 }
 async function runChatAction(id,action,message=''){
   try{
     await api('/api/v1/ai-conversations',{method:'POST',body:{conversationId:id,action,message}});
-    await refreshConversationsSummary(false);await openChatConversation(id);
-  }catch(e){toast(e.message);}
+    await refreshConversationsSummary(false);await openChatConversation(id);return true;
+  }catch(e){toast(e.message);return false;}
 }
 async function submitChatReply(form){
   const text=form.message.value.trim();if(!text)return;
   const button=form.querySelector('button');button.disabled=true;
-  await runChatAction(form.dataset.chatId,'reply',text);
+  const ok=await runChatAction(form.dataset.chatId,'reply',text);
+  if(!ok&&button.isConnected)button.disabled=false;
 }
 
 function accounts(section='account'){const u=me(),rows=(state?.accounts||[]).filter(a=>(section==='customers'?a.role==='client':section==='suppliers'?a.role==='supplier':['client','supplier'].includes(a.role))&&!a.deletedAt&&matches(a,'account'));const specialized={team:()=>teamPanel(),currencies:()=>currencyPanel(),banks:()=>bankAccountPanel(),categories:()=>categoryPanel()+subcategoryPanel(),countries:()=>supplyCountryPanel()};
@@ -557,7 +593,8 @@ function publicOfferEditor(x){
     <label><span>${esc(tr('اسم المنتج الأصلي','Original product name'))}</span><input name="product" required maxlength="300" value="${esc(x.product||'')}"></label>
     <label><span>${esc(tr('الوصف الأصلي','Original description'))}</span><textarea name="specs" required maxlength="10000">${esc(x.specs||'')}</textarea></label>
     <div class="form-two"><label><span>${esc(tr('السعر','Price'))}</span><input name="unitPrice" type="number" step="0.01" min="0.01" required value="${esc(x.unitPrice||'')}"></label><label><span>${esc(tr('العملة','Currency'))}</span><select name="currency">${['USD','SAR','AED','CNY','EUR'].map(v=>`<option ${x.currency===v?'selected':''}>${v}</option>`).join('')}</select></label></div>
-    <div class="form-two"><label><span>${esc(tr('الحد الأدنى','MOQ'))}</span><input name="moq" type="number" min="1" required value="${esc(x.moq||'')}"></label><label><span>${esc(tr('المخزون','Stock'))}</span><input name="stock" maxlength="100" value="${esc(x.stock||'')}"></label></div>
+    <div class="form-two"><label><span>${esc(tr('الحد الأدنى','MOQ'))}</span><input name="moq" type="number" min="1" required value="${esc(x.moq||'')}"></label><label><span>${esc(tr('الكمية عند تتبع المخزون','Quantity when tracking stock'))}</span><input name="stock" type="number" min="0" step="1" value="${esc(x.stock||'')}"></label></div>
+    <label class="admin-category-toggle-label"><input name="stockUnlimited" type="checkbox" ${x.stockUnlimited!==false?'checked':''}><span>${esc(tr('مخزون غير محدود — المنتج يبقى متاحًا للطلب','Unlimited inventory — product remains available to order'))}</span></label>
     <div class="form-two"><label><span>${esc(tr('مدة الإنتاج بالأيام','Production time (days)'))}</span><input name="leadTime" type="number" min="1" required value="${esc(x.leadTime||'')}"></label><label><span>${esc(tr('دولة التوريد','Supply country'))}</span><select name="country" required><option value="">—</option>${countries.map(v=>`<option value="${esc(v.id)}" ${x.country===v.id?'selected':''}>${esc(taxonomyLabel(v,lang()))}</option>`).join('')}</select></label></div>
     <label><span>${esc(tr('صالح حتى','Valid until'))}</span><input name="validUntil" type="date" value="${esc(x.validUntil||'')}"></label>
     <div class="form-two"><label><span>${esc(tr('التصنيف الرئيسي','Main category'))}</span><select name="categoryId"><option value="">—</option>${cats.map(cat=>`<option value="${esc(cat.id)}" ${x.categoryId===cat.id?'selected':''}>${esc(taxonomyLabel(cat,lang()))}</option>`).join('')}</select></label><label><span>${esc(tr('التصنيف الفرعي','Subcategory'))}</span><select name="subcategoryId"><option value="">—</option>${subs.map(s=>`<option value="${esc(s.id)}" ${x.subcategoryId===s.id?'selected':''}>${esc(taxonomyLabel(s,lang()))}</option>`).join('')}</select></label></div>
@@ -598,7 +635,7 @@ async function savePublicOffer(form){
     const patch={
       product:form.product.value.trim(),specs:form.specs.value.trim(),
       unitPrice:form.unitPrice.value,currency:form.currency.value,moq:form.moq.value,
-      stock:form.stock.value.trim(),leadTime:form.leadTime.value,country:form.country.value.trim(),
+      stock:form.stock.value.trim(),stockUnlimited:form.stockUnlimited.checked,leadTime:form.leadTime.value,country:form.country.value.trim(),
       validUntil:form.validUntil.value,categoryId:form.categoryId.value,subcategoryId:form.subcategoryId.value,images
     };
     if(can('translate')){
@@ -711,7 +748,7 @@ export function openAdminPayment(entityType,id){if(!isAdmin())return;if(entityTy
 function bankAccountDialog(id=''){
   const current=bankAccounts().find(x=>x.id===id),accepted=Array.isArray(current?.acceptedCurrencies)&&current.acceptedCurrencies.length?current.acceptedCurrencies:[current?.currency||'AED'];
   const currencyChecks=['AED','SAR','USD','CNY','EUR'].map(v=>'<label class="admin-category-toggle-label"><input type="checkbox" name="acceptedCurrency" value="'+v+'" '+(accepted.includes(v)?'checked':'')+'><span>'+v+'</span></label>').join('');
-  modal(current?tr('تعديل الحساب البنكي','Edit bank account'):tr('إضافة حساب بنكي','Add bank account'),'M Platform','<form id="adminBankAccountForm" class="form-stack" data-id="'+esc(current?.id||'')+'"><label><span>'+esc(tr('اسم مختصر للحساب','Account label'))+'</span><input name="label" required maxlength="100" value="'+esc(current?.label||'')+'"></label><label><span>'+esc(tr('اسم المستفيد','Beneficiary'))+'</span><input name="beneficiary" required maxlength="160" value="'+esc(current?.beneficiary||'')+'"></label><label><span>'+esc(tr('اسم البنك','Bank name'))+'</span><input name="bankName" required maxlength="160" value="'+esc(current?.bankName||'')+'"></label><label><span>IBAN</span><input name="iban" maxlength="120" value="'+esc(current?.iban||'')+'"></label><label><span>SWIFT / BIC</span><input name="swift" maxlength="40" value="'+esc(current?.swift||'')+'"></label><label><span>'+esc(tr('رقم الحساب','Account number'))+'</span><input name="accountNumber" maxlength="120" value="'+esc(current?.accountNumber||'')+'"></label><div class="form-two"><label><span>'+esc(tr('دولة الحساب','Account country'))+'</span><input name="country" maxlength="100" value="'+esc(current?.country||'')+'"></label><label><span>'+esc(tr('عملة الحساب الأساسية','Base account currency'))+'</span><select name="currency">'+['AED','SAR','USD','CNY','EUR'].map(v=>'<option '+((current?.currency||'AED')===v?'selected':'')+'>'+v+'</option>').join('')+'</select></label></div><div><span>'+esc(tr('العملات التي يقبلها الحساب','Currencies this account can receive'))+'</span><div class="admin-category-actions">'+currencyChecks+'</div></div><label><span>'+esc(tr('دول العملاء المفضلة لهذا الحساب','Preferred customer countries'))+'</span><input name="routingCountries" maxlength="1000" placeholder="'+esc(tr('مثال: Saudi Arabia, UAE','Example: Saudi Arabia, UAE'))+'" value="'+esc((current?.routingCountries||[]).join(', '))+'"><small>'+esc(tr('اختياري. افصل الدول بفاصلة.','Optional. Separate countries with commas.'))+'</small></label><label><span>'+esc(tr('الأولوية','Priority'))+'</span><input name="priority" type="number" min="0" max="999" value="'+esc(current?.priority??100)+'"><small>'+esc(tr('الرقم الأقل له أولوية أعلى.','Lower number has higher priority.'))+'</small></label><label class="admin-category-toggle-label"><input type="checkbox" name="isDefault" '+(current?.isDefault?'checked':'')+'><span>'+esc(tr('حساب افتراضي','Default account'))+'</span></label><label class="admin-category-toggle-label"><input type="checkbox" name="active" '+(current?.active===false?'':'checked')+'><span>'+esc(tr('الحساب نشط','Account active'))+'</span></label><small>'+esc(tr('يجب إدخال IBAN أو رقم الحساب على الأقل.','Enter at least an IBAN or account number.'))+'</small><button class="primary-btn" type="submit">'+esc(tr('حفظ','Save'))+'</button></form>');
+  modal(current?tr('تعديل الحساب البنكي','Edit bank account'):tr('إضافة حساب بنكي','Add bank account'),'IMSG','<form id="adminBankAccountForm" class="form-stack" data-id="'+esc(current?.id||'')+'"><label><span>'+esc(tr('اسم مختصر للحساب','Account label'))+'</span><input name="label" required maxlength="100" value="'+esc(current?.label||'')+'"></label><label><span>'+esc(tr('اسم المستفيد','Beneficiary'))+'</span><input name="beneficiary" required maxlength="160" value="'+esc(current?.beneficiary||'')+'"></label><label><span>'+esc(tr('اسم البنك','Bank name'))+'</span><input name="bankName" required maxlength="160" value="'+esc(current?.bankName||'')+'"></label><label><span>IBAN</span><input name="iban" maxlength="120" value="'+esc(current?.iban||'')+'"></label><label><span>SWIFT / BIC</span><input name="swift" maxlength="40" value="'+esc(current?.swift||'')+'"></label><label><span>'+esc(tr('رقم الحساب','Account number'))+'</span><input name="accountNumber" maxlength="120" value="'+esc(current?.accountNumber||'')+'"></label><div class="form-two"><label><span>'+esc(tr('دولة الحساب','Account country'))+'</span><input name="country" maxlength="100" value="'+esc(current?.country||'')+'"></label><label><span>'+esc(tr('عملة الحساب الأساسية','Base account currency'))+'</span><select name="currency">'+['AED','SAR','USD','CNY','EUR'].map(v=>'<option '+((current?.currency||'AED')===v?'selected':'')+'>'+v+'</option>').join('')+'</select></label></div><div><span>'+esc(tr('العملات التي يقبلها الحساب','Currencies this account can receive'))+'</span><div class="admin-category-actions">'+currencyChecks+'</div></div><label><span>'+esc(tr('دول العملاء المفضلة لهذا الحساب','Preferred customer countries'))+'</span><input name="routingCountries" maxlength="1000" placeholder="'+esc(tr('مثال: Saudi Arabia, UAE','Example: Saudi Arabia, UAE'))+'" value="'+esc((current?.routingCountries||[]).join(', '))+'"><small>'+esc(tr('اختياري. افصل الدول بفاصلة.','Optional. Separate countries with commas.'))+'</small></label><label><span>'+esc(tr('الأولوية','Priority'))+'</span><input name="priority" type="number" min="0" max="999" value="'+esc(current?.priority??100)+'"><small>'+esc(tr('الرقم الأقل له أولوية أعلى.','Lower number has higher priority.'))+'</small></label><label class="admin-category-toggle-label"><input type="checkbox" name="isDefault" '+(current?.isDefault?'checked':'')+'><span>'+esc(tr('حساب افتراضي','Default account'))+'</span></label><label class="admin-category-toggle-label"><input type="checkbox" name="active" '+(current?.active===false?'':'checked')+'><span>'+esc(tr('الحساب نشط','Account active'))+'</span></label><small>'+esc(tr('يجب إدخال IBAN أو رقم الحساب على الأقل.','Enter at least an IBAN or account number.'))+'</small><button class="primary-btn" type="submit">'+esc(tr('حفظ','Save'))+'</button></form>');
 }
 async function saveBankAccounts(rows){
   try{await api('/api/v1/settings',{method:'POST',body:{version:Number(state.settings?._version||0),data:{bankAccounts:rows}}});await reload();schedule();toast(tr('تم حفظ الحسابات البنكية.','Bank accounts saved.'));return true;}catch(e){toast(e.message);return false;}
@@ -726,11 +763,11 @@ async function toggleBankAccount(id){const rows=bankAccounts(),x=rows.find(a=>a.
 async function deleteBankAccount(id){await saveBankAccounts(bankAccounts().filter(x=>x.id!==id));}
 function categoryDialog(id=''){
   const current=categories().find(cat=>cat.id===id);
-  modal(current?tr('تعديل التصنيف','Edit category'):tr('إضافة تصنيف','Add category'),'M Platform',`<form id="adminCategoryForm" class="form-stack" data-id="${esc(current?.id||'')}"><label><span>${esc(tr('الاسم بالعربية','Arabic name'))}</span><input name="nameAr" required maxlength="80" value="${esc(current?.nameAr||'')}"></label><label><span>${esc(tr('الاسم بالإنجليزية','English name'))}</span><input name="nameEn" required maxlength="80" value="${esc(current?.nameEn||'')}"></label><label class="admin-category-toggle-label"><input type="checkbox" name="active" ${current?.active===false?'':'checked'}><span>${esc(tr('إظهار التصنيف للعملاء','Show category to customers'))}</span></label><button class="primary-btn" type="submit">${esc(tr('حفظ','Save'))}</button></form>`);
+  modal(current?tr('تعديل التصنيف','Edit category'):tr('إضافة تصنيف','Add category'),'IMSG',`<form id="adminCategoryForm" class="form-stack" data-id="${esc(current?.id||'')}"><label><span>${esc(tr('الاسم بالعربية','Arabic name'))}</span><input name="nameAr" required maxlength="80" value="${esc(current?.nameAr||'')}"></label><label><span>${esc(tr('الاسم بالإنجليزية','English name'))}</span><input name="nameEn" required maxlength="80" value="${esc(current?.nameEn||'')}"></label><label class="admin-category-toggle-label"><input type="checkbox" name="active" ${current?.active===false?'':'checked'}><span>${esc(tr('إظهار التصنيف للعملاء','Show category to customers'))}</span></label><button class="primary-btn" type="submit">${esc(tr('حفظ','Save'))}</button></form>`);
 }
 function subcategoryDialog(id=''){
   const current=subcategories().find(x=>x.id===id),parents=activeCategories();if(!parents.length){toast(tr('أضف تصنيفًا رئيسيًا أولًا.','Add a main category first.'));return;}
-  modal(current?tr('تعديل التصنيف الفرعي','Edit subcategory'):tr('إضافة تصنيف فرعي','Add subcategory'),'M Platform',`<form id="adminSubcategoryForm" class="form-stack" data-id="${esc(current?.id||'')}"><label><span>${esc(tr('التصنيف الرئيسي','Main category'))}</span><select name="parentId" required>${parents.map(x=>`<option value="${esc(x.id)}" ${current?.parentId===x.id?'selected':''}>${esc(taxonomyLabel(x,lang()))}</option>`).join('')}</select></label><label><span>${esc(tr('الاسم بالعربية','Arabic name'))}</span><input name="nameAr" required maxlength="80" value="${esc(current?.nameAr||'')}"></label><label><span>${esc(tr('الاسم بالإنجليزية','English name'))}</span><input name="nameEn" required maxlength="80" value="${esc(current?.nameEn||'')}"></label><button class="primary-btn" type="submit">${esc(tr('حفظ','Save'))}</button></form>`);
+  modal(current?tr('تعديل التصنيف الفرعي','Edit subcategory'):tr('إضافة تصنيف فرعي','Add subcategory'),'IMSG',`<form id="adminSubcategoryForm" class="form-stack" data-id="${esc(current?.id||'')}"><label><span>${esc(tr('التصنيف الرئيسي','Main category'))}</span><select name="parentId" required>${parents.map(x=>`<option value="${esc(x.id)}" ${current?.parentId===x.id?'selected':''}>${esc(taxonomyLabel(x,lang()))}</option>`).join('')}</select></label><label><span>${esc(tr('الاسم بالعربية','Arabic name'))}</span><input name="nameAr" required maxlength="80" value="${esc(current?.nameAr||'')}"></label><label><span>${esc(tr('الاسم بالإنجليزية','English name'))}</span><input name="nameEn" required maxlength="80" value="${esc(current?.nameEn||'')}"></label><button class="primary-btn" type="submit">${esc(tr('حفظ','Save'))}</button></form>`);
 }
 async function saveSubcategories(rows){try{await api('/api/v1/settings',{method:'POST',body:{version:Number(state.settings?._version||0),data:{subcategories:rows}}});await reload();schedule();return true;}catch(e){toast(e.message);return false;}}
 async function submitSubcategory(form){const id=form.dataset.id||crypto.randomUUID(),rows=subcategories(),next={id,parentId:form.parentId.value,nameAr:form.nameAr.value.trim(),nameEn:form.nameEn.value.trim(),active:true},i=rows.findIndex(x=>x.id===id);if(i>=0)rows[i]={...rows[i],...next};else rows.push(next);if(await saveSubcategories(rows))closeModal();}
@@ -738,7 +775,7 @@ async function toggleSubcategory(id){const rows=subcategories(),x=rows.find(v=>v
 async function deleteSubcategory(id){const used=(state?.publicOffers||[]).some(x=>x.subcategoryId===id&&!x.deletedAt);if(used){toast(tr('غيّر تصنيف المنتجات المرتبطة أولًا.','Reassign linked products first.'));return;}await saveSubcategories(subcategories().filter(x=>x.id!==id));}
 function supplyCountryDialog(id=''){
   const current=supplyCountries().find(x=>x.id===id);
-  modal(current?tr('تعديل دولة التوريد','Edit supply country'):tr('إضافة دولة توريد','Add supply country'),'M Platform',`<form id="adminSupplyCountryForm" class="form-stack" data-id="${esc(current?.id||'')}"><label><span>${esc(tr('الاسم بالعربية','Arabic name'))}</span><input name="nameAr" required maxlength="80" value="${esc(current?.nameAr||'')}"></label><label><span>${esc(tr('الاسم بالإنجليزية','English name'))}</span><input name="nameEn" required maxlength="80" value="${esc(current?.nameEn||'')}"></label><button class="primary-btn" type="submit">${esc(tr('حفظ','Save'))}</button></form>`);
+  modal(current?tr('تعديل دولة التوريد','Edit supply country'):tr('إضافة دولة توريد','Add supply country'),'IMSG',`<form id="adminSupplyCountryForm" class="form-stack" data-id="${esc(current?.id||'')}"><label><span>${esc(tr('الاسم بالعربية','Arabic name'))}</span><input name="nameAr" required maxlength="80" value="${esc(current?.nameAr||'')}"></label><label><span>${esc(tr('الاسم بالإنجليزية','English name'))}</span><input name="nameEn" required maxlength="80" value="${esc(current?.nameEn||'')}"></label><button class="primary-btn" type="submit">${esc(tr('حفظ','Save'))}</button></form>`);
 }
 async function saveSupplyCountries(rows){try{await api('/api/v1/settings',{method:'POST',body:{version:Number(state.settings?._version||0),data:{supplyCountries:rows}}});await reload();schedule();return true;}catch(e){toast(e.message);return false;}}
 async function submitSupplyCountry(form){const id=form.dataset.id||crypto.randomUUID(),rows=supplyCountries(),next={id,nameAr:form.nameAr.value.trim(),nameEn:form.nameEn.value.trim(),active:true},i=rows.findIndex(x=>x.id===id);if(i>=0)rows[i]={...rows[i],...next};else rows.push(next);if(await saveSupplyCountries(rows))closeModal();}
@@ -848,6 +885,7 @@ function go(view,tab){if(view==='offers'&&tab)offerTab=tab;if(adapter){adapter.n
 
 document.addEventListener('click',e=>{
   if(!isAdmin()||(adapter?!adapter.active():document.getElementById('appView')?.classList.contains('hidden')))return;
+  const chatFilterButton=e.target.closest('[data-admin-chat-filter]');if(chatFilterButton){chatFilter=chatFilterButton.dataset.adminChatFilter||'all';chats();return;}
   const chat=e.target.closest('[data-admin-conversation]');if(chat){openChatConversation(chat.dataset.adminConversation);return;}
   const chatAction=e.target.closest('[data-admin-chat-action]');if(chatAction){runChatAction(chatAction.dataset.chatId,chatAction.dataset.adminChatAction);return;}
   const del=e.target.closest('[data-admin-delete-order]');if(del){e.preventDefault();e.stopPropagation();deleteOrderDialog(del.dataset.orderKind,del.dataset.adminDeleteOrder);return;}

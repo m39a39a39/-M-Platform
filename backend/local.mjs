@@ -13,4 +13,4 @@ http.createServer(async(req,res)=>{
     if(!types[path.extname(file)])throw Error();
     res.setHeader('Content-Type',types[path.extname(file)]);res.end(await readFile(file));
   }catch{res.statusCode=404;res.end('Not found');}
-}).listen(Number(process.env.PORT||3000),'127.0.0.1',()=>console.log('M Platform: http://localhost:'+(process.env.PORT||3000)));
+}).listen(Number(process.env.PORT||3000),'127.0.0.1',()=>console.log('IMSG: http://localhost:'+(process.env.PORT||3000)));

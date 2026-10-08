@@ -1,4 +1,5 @@
 import {customerQuote,canRespondToQuote} from '../../shared/customer-quote.mjs';
+import {isUnlimitedStock,trackedStock} from '../../shared/inventory.mjs';
 import './styles.css';
 import './customer-account.css';
 import {filterClientOrders, clientOrderCounts, isClosedClientOrder} from './client-orders.js';
@@ -18,7 +19,7 @@ import { parseBulkProductWorkbook, validateBulkProductRows, normalizeSupplyCount
 import { categoryRows, subcategoryRows, supplyCountryRows, taxonomyLabel } from './catalog-taxonomy.js';
 import './image-viewer.js';
 import { downloadInvoicePdf } from './invoice-pdf.js';
-import { mountAiChat, unmountAiChat, aiChatSignal } from './ai-chat.js';
+import { mountAiChat, unmountAiChat, aiChatSignal, chatAttributionForOrder, clearChatAttribution } from './ai-chat.js';
 
 let currentUser=null;
 let platformState=null;
@@ -280,22 +281,22 @@ function cartCurrency(){return cartRows()[0]?.currency||'';}
 function cartTotal(){return cartRows().reduce((sum,row)=>sum+row.total,0);}
 function setCartQuantity(offerId,quantity){
   const row=cartItems.find(x=>x.offerId===offerId),offer=(platformState?.publicOffers||[]).find(o=>o.id===offerId&&o.status==='published');if(!row||!offer)return false;
-  const q=Number(quantity),moq=Math.max(1,Math.ceil(Number(offer.moq)||1)),stock=Number(offer.stock);
-  if(!Number.isInteger(q)||q<moq||(Number.isFinite(stock)&&stock>0&&q>stock))return false;
+  const q=Number(quantity),moq=Math.max(1,Math.ceil(Number(offer.moq)||1)),stock=trackedStock(offer);
+  if(!Number.isInteger(q)||q<moq||(!isUnlimitedStock(offer)&&q>stock))return false;
   row.quantity=q;saveCart();return true;
 }
 function addToCart(offer,quantity){
-  const q=Number(quantity),moq=Math.max(1,Math.ceil(Number(offer?.moq)||1)),stock=Number(offer?.stock);
+  const q=Number(quantity),moq=Math.max(1,Math.ceil(Number(offer?.moq)||1)),stock=trackedStock(offer);
   if(!offer||offer.status!=='published')throw new Error(tr('هذا المنتج غير متاح حاليًا.','This product is currently unavailable.'));
   if(!Number.isInteger(q)||q<moq)throw new Error(tr('الكمية يجب ألا تقل عن الحد الأدنى للطلب.','Quantity cannot be below the MOQ.'));
-  if(Number.isFinite(stock)&&stock>0&&q>stock)throw new Error(tr('الكمية المطلوبة أكبر من المخزون المتاح.','Requested quantity exceeds available stock.'));
+  if(!isUnlimitedStock(offer)&&q>stock)throw new Error(tr('الكمية المطلوبة أكبر من المخزون المتاح.','Requested quantity exceeds available stock.'));
   const existing=cartItems.find(x=>x.offerId===offer.id);
   const currency=String(offer.currency||'').toUpperCase(),current=cartCurrency();
   if(current&&currency!==current)throw new Error(tr(`السلة الحالية بعملة ${current}. أرسلها أولًا أو أفرغها لإضافة منتج بعملة ${currency}.`,`Your cart uses ${current}. Submit or clear it before adding a ${currency} product.`));
   if(!existing&&cartItems.length>=10)throw new Error(tr('الحد الأقصى 10 منتجات في الطلب الواحد.','Maximum 10 products per cart order.'));
   if(existing)existing.quantity=q;else cartItems.push({offerId:offer.id,quantity:q});
   saveCart();
-  if(currentUser?.role==='client')aiChatSignal('cart_add',{productSku:offer.sku||'',productTitle:titleOf(offer),price:Number(offer.unitPrice)||0,currency:offer.currency||'',moq:Number(offer.moq)||0,quantity:q,cartCount:cartItems.length});
+  if(currentUser?.role==='client')aiChatSignal('cart_add',{productId:offer.id,productSku:offer.sku||'',productTitle:titleOf(offer),price:Number(offer.unitPrice)||0,currency:offer.currency||'',moq:Number(offer.moq)||0,quantity:q,cartCount:cartItems.length});
 }
 function productSearchBar(){
   return `<label class="product-search-bar"><span>⌕</span><input type="search" inputmode="search" enterkeyhint="search" data-product-search value="${esc(readySearch)}" placeholder="${esc(tr('ابحث عن منتج أو SKU','Search products or SKU'))}" aria-label="${esc(tr('البحث عن المنتجات','Search products'))}"></label>`;
@@ -386,7 +387,8 @@ function syncClientAiChat(){
     mode:'client',
     language:()=>lang,
     send:body=>request('/api/v1/ai-chat',{method:'POST',auth:true,body}),
-    fetchConversation:params=>request('/api/v1/ai-conversation?'+new URLSearchParams({conversationId:String(params.conversationId||''),guestKey:String(params.guestKey||''),language:String(params.language||lang)}),{auth:true})
+    fetchConversation:params=>request('/api/v1/ai-conversation?'+new URLSearchParams({conversationId:String(params.conversationId||''),guestKey:String(params.guestKey||''),language:String(params.language||lang)}),{auth:true}),
+    trackConversion:body=>request('/api/v1/ai-conversion',{method:'POST',auth:true,body})
   });
 }
 async function mutate(collection,itemId,version,patch){return request('/api/v1/mutations',{method:'POST',auth:true,body:{collection,id:itemId,version:Number(version||0),patch}});}
@@ -777,7 +779,7 @@ function renderAccount(){
   const u=currentUser,languageControl=u.role==='client'?`<div class="account-setting-row account-language-setting"><div class="account-setting-copy"><small>${esc(tr('اللغة','Language'))}</small><strong>${esc(lang==='ar'?tr('العربية','Arabic'):tr('الإنجليزية','English'))}</strong></div><button type="button" class="secondary-btn" data-action="toggle-language">${esc(lang==='ar'?'English':'العربية')}</button></div>`:'';
   const currencyControl=u.role==='client'?`<div class="account-setting-row account-currency-setting"><div class="account-setting-copy"><small>${esc(tr('العملة','Currency'))}</small><strong>${esc(tr('العملة الحالية','Current currency'))}: ${esc(preferredCurrency())}</strong></div><div class="account-currency-controls"><select data-client-currency aria-label="${esc(tr('العملة','Currency'))}">${activeCurrencies().map(x=>`<option value="${esc(x.code)}" ${x.code===preferredCurrency()?'selected':''}>${esc(x.code+' — '+(lang==='ar'?x.nameAr:x.nameEn))}</option>`).join('')}</select><button type="button" class="secondary-btn" data-save-client-currency>${esc(tr('حفظ العملة','Save currency'))}</button></div></div>`:'';
   const settingsGroup=u.role==='client'?`<div class="account-settings-group">${languageControl}${currencyControl}</div>`:'';
-  $('screen').innerHTML=pageHeader(t('account'),u.role==='client'?tr('بياناتك الشخصية وتفضيلاتك.','Your personal details and preferences.'):'')+`<div class="${u.role==='client'?'client-account-layout':''}"><section class="profile-card"><div class="avatar">${esc((u.name||u.company||u.email||'M').charAt(0).toUpperCase())}</div><h2>${esc(u.name||u.company||'M Platform')}</h2><p>${esc(t(u.role))}</p><dl><div><dt>${esc(t('email'))}</dt><dd>${esc(u.email||'—')}</dd></div>${u.company?`<div><dt>${tr('الشركة','Company')}</dt><dd>${esc(u.company)}</dd></div>`:''}${u.country?`<div><dt>${esc(t('country'))}</dt><dd>${esc(u.country)}</dd></div>`:''}</dl>${settingsGroup}<p class="session-note">${esc(t('sessionNote'))}</p><button class="danger-btn" data-action="logout">${esc(t('logout'))}</button></section></div>`;
+  $('screen').innerHTML=pageHeader(t('account'),u.role==='client'?tr('بياناتك الشخصية وتفضيلاتك.','Your personal details and preferences.'):'')+`<div class="${u.role==='client'?'client-account-layout':''}"><section class="profile-card"><div class="avatar">${esc((u.name||u.company||u.email||'M').charAt(0).toUpperCase())}</div><h2>${esc(u.name||u.company||'IMSG')}</h2><p>${esc(t(u.role))}</p><dl><div><dt>${esc(t('email'))}</dt><dd>${esc(u.email||'—')}</dd></div>${u.company?`<div><dt>${tr('الشركة','Company')}</dt><dd>${esc(u.company)}</dd></div>`:''}${u.country?`<div><dt>${esc(t('country'))}</dt><dd>${esc(u.country)}</dd></div>`:''}</dl>${settingsGroup}<p class="session-note">${esc(t('sessionNote'))}</p><button class="danger-btn" data-action="logout">${esc(t('logout'))}</button></section></div>`;
 }
 function renderAdminCollection(kind){const rows=kind==='requests'?(platformState.requests||[]):[...(platformState.quotes||[]),...(platformState.publicOffers||[])];$('screen').innerHTML=pageHeader(kind==='requests'?t('requests'):t('offers'),t('adminMobile'))+`<div class="list-stack">${rows.slice(0,50).map(x=>itemCard(x,{subtitle:descriptionOf(x),badge:cardBadge(x.status),meta:`#${ref(x)} · ${date(x.createdAt)}`})).join('')||empty()}</div>`;}
 function renderScreen(){if(!currentUser||!platformState)return;document.body.classList.toggle('customer-shopping',currentUser.role==='client'&&activeScreen==='home');if(syncPortalScreen())return;updateShell();const route=storeRoute();if(activeScreen==='home'&&(route.page||route.category||route.product||route.q)&&currentUser.role!=='client'){const isCatalog=route.category||route.page==='products';$('screen').innerHTML=renderStoreRoute(platformState,route,{chrome:false,money});if(isCatalog&&currentUser.role==='supplier'){const host=$('screen').querySelector('[data-store-catalog-slot]');mountSupplierCatalog(host,{state:platformState,request,language:lang,card:p=>itemCard(p,{subtitle:descriptionOf(p),action:`data-public-offer="${esc(p.id)}"`}),hydrate:hydrateImages,sourceButton:p=>`<button class="secondary-btn" data-supply-product="${esc(p.id)}">${tr('أستطيع توريد هذا المنتج','I can supply this product')}</button>`,fixedCategory:route.category});}else bindStorefront($('screen'),platformState,{chrome:false,money,hydrate:hydrateImages,product:openPublicOffer});hydrateImages($('screen'));return;}if(renderAdminScreen(activeScreen))return;if(activeScreen==='home')renderHome();else if(activeScreen==='orders')renderSupplierOrders();else if(activeScreen==='requests')renderRequests();else if(activeScreen==='offers')renderOffers();else if(activeScreen==='notifications')renderNotifications();else renderAccount();hydrateImages($('screen'));}
@@ -846,7 +848,7 @@ function openReadyOrder(interestId){
   const title=o?titleOf(o):tr('منتج جاهز','Ready product');
   const summary=`<section class="client-order-summary"><div class="client-order-summary-title"><small>#${esc(ref(interest))} · ${esc(tr('منتج جاهز','Ready product'))}</small><strong>${esc(title)}</strong></div><div class="client-order-summary-facts"><span>${esc(tr('الكمية','Quantity'))}: ${esc(interest.quantity||'—')}</span><span>${esc(tr('سعر الوحدة','Unit price'))}: ${frozenOrderMoney(interest,unitPrice,currency)}</span><span>${esc(tr('الإجمالي','Total'))}: ${frozenOrderMoney(interest,total,currency)}</span></div></section>`;
   const statusCard=`<section class="client-current-status"><small>${esc(tr('الحالة الحالية','Current status'))}</small><strong>${esc(trackingLabel(status))}</strong>${interest.trackingUpdatedAt?`<span>${esc(tr('آخر تحديث','Last update'))}: ${esc(date(interest.trackingUpdatedAt))}</span>`:''}</section>`;
-  const productInfo=o?`<section class="client-detail-content"><h3>${esc(t('specifications'))}</h3><p class="long-copy">${esc(descriptionOf(o)||'—')}</p><div class="facts"><span>MOQ ${esc(o.moq||'—')}</span>${homeConfig(platformState.settings).showStock?`<span>${esc(t('stock'))}: ${esc(o.stock||'—')}</span>`:''}<span>${esc(t('leadTime'))}: ${esc(o.leadTime||'—')}</span></div>${gallery(o.images)}</section>`:'';
+  const productInfo=o?`<section class="client-detail-content"><h3>${esc(t('specifications'))}</h3><p class="long-copy">${esc(descriptionOf(o)||'—')}</p><div class="facts"><span>MOQ ${esc(o.moq||'—')}</span>${homeConfig(platformState.settings).showStock?`<span>${esc(isUnlimitedStock(o)?tr('متوفر للطلب','Available to order'):`${t('stock')}: ${trackedStock(o)}`)}</span>`:''}<span>${esc(t('leadTime'))}: ${esc(o.leadTime||'—')}</span></div>${gallery(o.images)}</section>`:'';
   openModal(title,`#${ref(interest)}`,`${summary}${clientReadyActionPanel(interest,o)}${statusCard}${paymentPanel(interest,'interest')}${invoicePanel(interest,'interest')}${trackingTimeline(interest,{flow:READY_TRACKING_FLOW,statusResolver:readyTrackingStatus})}${productInfo}`);
 }
 async function offerSupply(productId){
@@ -861,17 +863,17 @@ async function openPublicOffer(offerId){
   let o=(platformState.publicOffers||[]).find(x=>x.id===offerId);if(currentUser?.role==='supplier')try{o=await supplierProduct(offerId,request);}catch(error){showToast(error.message);return;}if(!o)return;
   if(currentUser?.role==='client')aiChatSignal('product_view',{productSku:o.sku||'',productTitle:titleOf(o),price:Number(o.unitPrice)||0,currency:o.currency||'',moq:Number(o.moq)||0});
   const cartItem=cartItems.find(x=>x.offerId===o.id);
-  const moq=Math.max(1,Math.ceil(Number(o.moq)||1)),stock=Number(o.stock),maxAttr=Number.isFinite(stock)&&stock>0?` max="${esc(Math.floor(stock))}"`:'';
+  const moq=Math.max(1,Math.ceil(Number(o.moq)||1)),stock=trackedStock(o),available=isUnlimitedStock(o)||stock>=moq,maxAttr=!isUnlimitedStock(o)?` max="${esc(stock)}"`:'';
   const initialQty=cartItem?.quantity||moq;
-  const requestForm=currentUser.role==='client'&&homeConfig(platformState?.settings).showCart?`<form id="publicInterestForm" class="public-interest-form" data-offer-id="${esc(o.id)}">
+  const requestForm=currentUser.role==='client'&&homeConfig(platformState?.settings).showCart&&available?`<form id="publicInterestForm" class="public-interest-form" data-offer-id="${esc(o.id)}">
     <div class="public-interest-head"><div><strong>${esc(tr('حدد الكمية المطلوبة','Choose requested quantity'))}</strong><small>${esc(tr('الحد الأدنى للطلب','Minimum order'))}: ${esc(o.moq||'—')}</small></div></div>
     <label><span>${esc(tr('الكمية','Quantity'))}</span><input id="publicInterestQuantity" name="quantity" type="number" min="${esc(moq)}" step="1" value="${esc(initialQty)}"${maxAttr} required></label>
     <div class="public-interest-total"><span>${esc(tr('إجمالي هذا المنتج','This product total'))}</span><strong id="publicInterestTotal">${money(initialQty*tierPrice(o,initialQty),o.currency)}</strong></div>
-    ${Number.isFinite(stock)&&stock>0?`<small>${esc(tr('المخزون المتاح','Available stock'))}: ${esc(stock)}</small>`:''}
+    ${isUnlimitedStock(o)?`<small>${esc(tr('متوفر للطلب','Available to order'))}</small>`:stock>0?`<small>${esc(tr('المخزون المتاح','Available stock'))}: ${esc(stock)}</small>`:''}
     <p class="form-message" id="publicInterestMessage"></p>
     <button class="primary-btn full" type="submit">${esc(cartItem?tr('تحديث الكمية في السلة','Update quantity in cart'):tr('إضافة إلى السلة','Add to cart'))}</button>
   </form>`:'';
-  openModal(titleOf(o),`#${ref(o)}`,`${gallery(o.images)}${homeConfig(platformState?.settings).showPrices?`<div class="quote-price">${money(o.unitPrice,o.currency)}</div>`:''}<div class="facts"><span>MOQ ${esc(o.moq||'—')}</span>${homeConfig(platformState.settings).showStock?`<span>${esc(t('stock'))}: ${esc(o.stock||'—')}</span>`:''}<span>${esc(t('leadTime'))}: ${esc(o.leadTime||'—')}</span><span>${esc(tr('بلد التوريد','Supply country'))}: ${esc(supplyCountryLabel(o.country))}</span><span>${esc(t('validUntil'))}: ${esc(o.validUntil||'—')}</span></div><p class="long-copy">${esc(descriptionOf(o)||'—')}</p>${productExtras(o,homeConfig(platformState.settings))}${requestForm}`);
+  openModal(titleOf(o),`#${ref(o)}`,`${gallery(o.images)}${homeConfig(platformState?.settings).showPrices?`<div class="quote-price">${money(o.unitPrice,o.currency)}</div>`:''}<div class="facts"><span>MOQ ${esc(o.moq||'—')}</span>${homeConfig(platformState.settings).showStock?`<span>${esc(isUnlimitedStock(o)?tr('متوفر للطلب','Available to order'):`${t('stock')}: ${trackedStock(o)}`)}</span>`:''}<span>${esc(t('leadTime'))}: ${esc(o.leadTime||'—')}</span><span>${esc(tr('بلد التوريد','Supply country'))}: ${esc(supplyCountryLabel(o.country))}</span><span>${esc(t('validUntil'))}: ${esc(o.validUntil||'—')}</span></div><p class="long-copy">${esc(descriptionOf(o)||'—')}</p>${productExtras(o,homeConfig(platformState.settings))}${requestForm}`);
   if(currentUser.role==='client'){
     const form=$('publicInterestForm'),input=$('publicInterestQuantity'),total=$('publicInterestTotal');
     input?.addEventListener('input',()=>{const q=Number(input.value);total.textContent=money((Number.isFinite(q)?q:0)*tierPrice(o,q),o.currency);});
@@ -904,7 +906,7 @@ function openCart(){
         <span>${esc(tr('صورة المنتج','Image'))}</span><span>${esc(tr('اسم المنتج','Product'))}</span><span>${esc(tr('سعر الحبة','Unit price'))}</span><span>${esc(tr('الكمية','Quantity'))}</span><span>${esc(tr('الإجمالي','Total'))}</span><span>${esc(tr('حذف','Remove'))}</span>
       </div>
       <div class="cart-lines">${rows.map(row=>{
-        const o=row.offer,image=(o.images||[])[0],stock=Number(o.stock),maxAttr=Number.isFinite(stock)&&stock>0?` max="${esc(Math.floor(stock))}"`:'';
+        const o=row.offer,image=(o.images||[])[0],stock=trackedStock(o),maxAttr=!isUnlimitedStock(o)?` max="${esc(stock)}"`:'';
         return `<article class="cart-line" data-cart-line="${esc(o.id)}">
           <div class="cart-line-image">${image?`<img alt="" data-media="${esc(image)}">`:'<div>M</div>'}</div>
           <div class="cart-line-product"><strong>${esc(titleOf(o))}</strong><small>MOQ ${esc(o.moq||'—')}</small></div>
@@ -932,10 +934,12 @@ function openCart(){
   $('modalBody').querySelector('[data-cart-clear]')?.addEventListener('click',()=>{cartItems=[];saveCart();openCart();});
 }
 async function createCartOrderRequest(items,delivery){
-  return request('/api/v1/cart-orders',{method:'POST',auth:true,body:{items,delivery}});
+  const chatAttribution=chatAttributionForOrder();
+  return request('/api/v1/cart-orders',{method:'POST',auth:true,body:{items,delivery,...(chatAttribution?{chatAttribution}:{})}});
 }
 function reviewCart(){
   const rows=cartRows();if(!rows.length)return openCart();const total=rows.reduce((n,r)=>n+r.total,0);
+  aiChatSignal('checkout_started',{cartCount:rows.length,cartTotal:total,currency:rows[0]?.currency||''});
   openModal(tr('مراجعة وإرسال الطلب','Review and submit order'),' ',`<form id="orderReviewForm" class="checkout-review"><ul>${rows.map(r=>`<li>${esc(titleOf(r.offer))} — ${r.quantity} × ${money(r.unitPrice,r.currency)} = ${money(r.total,r.currency)}</li>`).join('')}</ul><h3>${money(total,rows[0].currency)}</h3><p>${esc(tr('الأسعار مبدئية. يتم اعتماد الإجمالي بعد التحقق من توفر المنتجات، ثم نطلب الدفع.','Prices are preliminary. Payment is requested only after availability and the final total are confirmed.'))}</p>${[['name',tr('اسم العميل','Customer name'),currentUser.name||''],['phone',tr('رقم التواصل','Phone'),currentUser.phone||''],['country',tr('دولة التسليم','Delivery country'),currentUser.country||''],['address',tr('عنوان التسليم','Delivery address'),'']].map(([k,label,v])=>`<label>${esc(label)}<input name="${k}" value="${esc(v)}" required maxlength="${k==='address'?1000:100}"></label>`).join('')}<label>${esc(tr('ملاحظات الطلب','Order notes'))}<textarea name="notes" maxlength="2000"></textarea></label><p id="cartMessage" class="form-message" role="alert"></p><button type="submit" class="primary-btn full">${esc(tr('إرسال الطلب للتحقق من التوفر','Submit order for availability check'))}</button><button type="button" id="backToCart" class="secondary-btn full">${esc(tr('العودة إلى السلة','Back to cart'))}</button></form>`);
   $('orderReviewForm').addEventListener('submit',submitCartOrder);$('backToCart').addEventListener('click',openCart);
 }
@@ -948,6 +952,7 @@ async function submitCartOrder(e){
     const items=rows.map(row=>({offerId:row.offer.id,quantity:row.quantity}));
     const fd=new FormData(e.currentTarget),delivery=Object.fromEntries(['name','phone','country','address','notes'].map(k=>[k,String(fd.get(k)||'').trim()]));
     const result=await createCartOrderRequest(items,delivery);
+    clearChatAttribution();
     cartItems=[];saveCart();await loadData({render:false});closeModal();activeScreen='requests';renderScreen();
     showToast(tr(`تم إنشاء الطلب #${result.displayNo||''} بنجاح.`,`Order #${result.displayNo||''} created successfully.`));
   }catch(error){if(message)message.textContent=error.message||tr('تعذر إنشاء الطلب.','Could not create order.');if(button)button.disabled=false;}
@@ -1043,7 +1048,7 @@ function openNewRequest(source=null){
   const repeat=source&&currentUser?.role==='client';
   const existing=repeat&&source.images?.length?`<section class="repeat-images"><strong>${esc(tr('صور الطلب السابق','Previous request images'))}</strong><p>${esc(tr('أزل التحديد عن أي صورة لا تريد استخدامها.','Uncheck any image you do not want to reuse.'))}</p><div class="repeat-image-grid">${source.images.map(src=>`<label><input type="checkbox" data-repeat-image value="${esc(src)}" checked><img alt="" data-media="${esc(src)}"></label>`).join('')}</div></section>`:'';
   const title=repeat?tr('تكرار الطلب','Repeat request'):t('newRequest');
-  const kicker=repeat?'#'+ref(source):'M Platform';
+  const kicker=repeat?'#'+ref(source):'IMSG';
   openModal(title,kicker,`<form id="newRequestForm" class="form-stack" data-repeat-from="${esc(repeat?source.id:'')}"><label><span>${esc(t('product'))}</span><input name="product" required maxlength="300" value="${esc(repeat?source.product||'':'')}" /></label><label><span>${esc(t('specifications'))}</span><textarea name="specs" required maxlength="10000">${esc(repeat?source.specs||'':'')}</textarea></label><div class="form-two"><label><span>${esc(t('quantity'))}</span><input name="quantity" type="number" min="1" required value="${esc(repeat?source.quantity||'':'')}" /></label><label><span>${esc(t('country'))}</span><input name="country" maxlength="100" value="${esc(repeat?source.country||'':'')}" /></label></div><label><span>${esc(t('neededDate'))}</span><input name="neededDate" type="date" value="${esc(repeat?source.neededDate||'':'')}" /></label>${existing}${fileField('requestFiles')}<p class="form-message" id="requestFormMessage"></p><button class="primary-btn" type="submit">${esc(repeat?tr('إنشاء طلب جديد','Create new request'):t('submit'))}</button></form>`);
   $('newRequestForm').addEventListener('submit',submitNewRequest);
 }
@@ -1056,7 +1061,7 @@ function quoteFormHtml(q=null,requestId=''){
 function openQuoteForm(requestId,q=null){openModal(q?t('editQuote'):t('submitQuote'),q?`#${ref(q)}`:`#${ref((platformState.requests||[]).find(r=>r.id===requestId))}`,quoteFormHtml(q,requestId));$('quoteForm').addEventListener('submit',submitQuote);}
 function openNewPublic(){
   const cats=categories(),subs=subcategories(),countries=supplyCountries();
-  openModal(tr('اقتراح منتج للمتجر','Propose a store product'),'M Platform',`<form id="publicForm" class="form-stack"><label><span>SKU</span><input name="sku" required maxlength="80" pattern="[A-Za-z0-9._-]+" /></label><label><span>${esc(t('product'))}</span><input name="product" required maxlength="300" /></label>${cats.length?`<div class="form-two"><label><span>${esc(tr('التصنيف الرئيسي','Main category'))}</span><select name="categoryId" required><option value="">—</option>${cats.map(cat=>`<option value="${esc(cat.id)}">${esc(taxonomyLabel(cat,lang))}</option>`).join('')}</select></label><label><span>${esc(tr('التصنيف الفرعي','Subcategory'))}</span><select name="subcategoryId"><option value="">—</option>${subs.map(s=>`<option value="${esc(s.id)}" data-parent="${esc(s.parentId)}">${esc(taxonomyLabel(s,lang))}</option>`).join('')}</select></label></div>`:''}<label><span>${esc(t('specifications'))}</span><textarea name="specs" required maxlength="10000"></textarea></label><div class="form-two"><label><span>${esc(tr('سعر التوريد الخاص بك','Your supply price'))}</span><input name="unitPrice" type="number" step="0.01" min="0.01" required /></label><label><span>${esc(t('currency'))}</span><select name="currency">${['USD','SAR','AED','CNY','EUR'].map(c=>`<option>${c}</option>`).join('')}</select></label></div><div class="form-two"><label><span>${esc(t('moq'))}</span><input name="moq" type="number" min="1" required /></label><label><span>${esc(t('stock'))}</span><input name="stock" type="number" min="0" step="1" required /></label></div><div class="form-two"><label><span>${esc(t('leadTime'))}</span><input name="leadTime" type="number" min="1" required /></label><label><span>${esc(tr('بلد التوريد','Supply country'))}</span><select name="country" required><option value="">—</option>${countries.map(x=>`<option value="${esc(x.id)}">${esc(taxonomyLabel(x,lang))}</option>`).join('')}</select></label></div><label><span>${esc(t('validUntil'))}</span><input name="validUntil" type="date" /></label>${fileField('publicFiles')}<p class="form-message" id="publicFormMessage"></p><button class="primary-btn" type="submit">${esc(t('submit'))}</button></form>`);
+  openModal(tr('اقتراح منتج للمتجر','Propose a store product'),'IMSG',`<form id="publicForm" class="form-stack"><label><span>SKU</span><input name="sku" required maxlength="80" pattern="[A-Za-z0-9._-]+" /></label><label><span>${esc(t('product'))}</span><input name="product" required maxlength="300" /></label>${cats.length?`<div class="form-two"><label><span>${esc(tr('التصنيف الرئيسي','Main category'))}</span><select name="categoryId" required><option value="">—</option>${cats.map(cat=>`<option value="${esc(cat.id)}">${esc(taxonomyLabel(cat,lang))}</option>`).join('')}</select></label><label><span>${esc(tr('التصنيف الفرعي','Subcategory'))}</span><select name="subcategoryId"><option value="">—</option>${subs.map(s=>`<option value="${esc(s.id)}" data-parent="${esc(s.parentId)}">${esc(taxonomyLabel(s,lang))}</option>`).join('')}</select></label></div>`:''}<label><span>${esc(t('specifications'))}</span><textarea name="specs" required maxlength="10000"></textarea></label><div class="form-two"><label><span>${esc(tr('سعر التوريد الخاص بك','Your supply price'))}</span><input name="unitPrice" type="number" step="0.01" min="0.01" required /></label><label><span>${esc(t('currency'))}</span><select name="currency">${['USD','SAR','AED','CNY','EUR'].map(c=>`<option>${c}</option>`).join('')}</select></label></div><div class="form-two"><label><span>${esc(t('moq'))}</span><input name="moq" type="number" min="1" required /></label><label><span>${esc(t('stock'))}</span><input name="stock" type="number" min="0" step="1" required /></label></div><div class="form-two"><label><span>${esc(t('leadTime'))}</span><input name="leadTime" type="number" min="1" required /></label><label><span>${esc(tr('بلد التوريد','Supply country'))}</span><select name="country" required><option value="">—</option>${countries.map(x=>`<option value="${esc(x.id)}">${esc(taxonomyLabel(x,lang))}</option>`).join('')}</select></label></div><label><span>${esc(t('validUntil'))}</span><input name="validUntil" type="date" /></label>${fileField('publicFiles')}<p class="form-message" id="publicFormMessage"></p><button class="primary-btn" type="submit">${esc(t('submit'))}</button></form>`);
   const form=$('publicForm'),cat=form.categoryId,sub=form.subcategoryId;
   const sync=()=>{if(!sub)return;[...sub.options].forEach(o=>{if(o.value)o.hidden=!!cat?.value&&o.dataset.parent!==cat.value;});if(sub.selectedOptions[0]?.hidden)sub.value='';};
   cat?.addEventListener('change',sync);sync();form.addEventListener('submit',submitPublic);
@@ -1512,10 +1517,19 @@ async function resumeSession(){
 }
 $('sessionRetryBtn').addEventListener('click',resumeSession);
 $('sessionLogoutBtn').addEventListener('click',logout);
-App.addListener('appStateChange',({isActive})=>{
-  if(isActive&&session.active&&!busy&&Date.now()-lastDataLoadedAt>30000){
-    loadData().catch(error=>{if(currentUser)showToast(errorText(error));});
+function refreshAfterResume(){
+  if(session.active&&!busy&&Date.now()-lastDataLoadedAt>30000){
+    loadData().catch(error=>{
+      if(error.code==='session_expired'||error.code==='session_changed')return;
+      if(currentUser)showToast(errorText(error));
+    });
   }
-});
+}
+if(Capacitor.isNativePlatform()){
+  App.addListener('appStateChange',({isActive})=>{if(isActive)refreshAfterResume();});
+}else{
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')refreshAfterResume();});
+  window.addEventListener('pageshow',refreshAfterResume);
+}
 (async function boot(){await languageReady;lang=getLanguage();applyLanguage();setRegisterRole('client');applyResetLanguage();if(recoveryAccessToken()){showView('resetView');return;}if(new URLSearchParams(location.search).get('store')==='1'){showView('guestView');return;}await resumeSession();})();
 
