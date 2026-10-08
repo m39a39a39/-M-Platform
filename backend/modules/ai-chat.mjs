@@ -856,6 +856,80 @@ function directCompanyPolicyAnswer(state,message,language,history=[]){
   candidates.sort((a,b)=>b.score-a.score);
   return candidates[0]?.chunk?clamp(candidates[0].chunk,520):null;
 }
+
+function knowledgeRowsForLanguage(state,language='ar'){
+  return (Array.isArray(state?.settings?.knowledgeBase)?state.settings.knowledgeBase:[])
+    .filter(row=>row&&row.active!==false)
+    .map(row=>({
+      id:String(row.id||''),
+      category:clean(row.category||'general'),
+      question:clean(language==='en'?(row.questionEn||row.questionAr):(row.questionAr||row.questionEn)),
+      answer:clean(language==='en'?(row.answerEn||row.answerAr):(row.answerAr||row.answerEn)),
+      questionAr:clean(row.questionAr),
+      questionEn:clean(row.questionEn),
+      answerAr:clean(row.answerAr),
+      answerEn:clean(row.answerEn),
+      keywords:(Array.isArray(row.keywords)?row.keywords:[]).map(clean).filter(Boolean).slice(0,30)
+    }))
+    .filter(row=>row.question&&row.answer);
+}
+function knowledgeQuestionScore(message,row){
+  const q=normalizeCatalogText(message),question=normalizeCatalogText(row.question);
+  if(!q||!question)return 0;
+  let score=0;
+  if(q===question)score+=100;
+  else if(q.includes(question)||question.includes(q)&&q.length>=8)score+=48;
+  const phrase=phraseMatchScore(q,question);
+  if(phrase===1)score+=36;
+  else if(phrase>=0.75)score+=25;
+  else if(phrase>=0.5)score+=14;
+  const qTokens=catalogTokens(q),questionTokens=catalogTokens(question);
+  if(questionTokens.length){
+    const matched=questionTokens.filter(token=>qTokens.some(queryToken=>tokenRelated(token,queryToken))).length;
+    score+=Math.round((matched/questionTokens.length)*24);
+    if(matched>=2)score+=6;
+  }
+  for(const rawKeyword of row.keywords){
+    const keyword=normalizeCatalogText(rawKeyword);
+    if(!keyword)continue;
+    if(q.includes(keyword))score+=keyword.includes(' ')?20:14;
+    else{
+      const coverage=phraseMatchScore(q,keyword);
+      if(coverage===1)score+=12;
+      else if(coverage>=0.75)score+=8;
+    }
+  }
+  const answerTokens=catalogTokens(row.answer);
+  let answerMatches=0;
+  for(const token of qTokens)if(answerTokens.some(value=>tokenRelated(token,value)))answerMatches+=1;
+  score+=Math.min(6,answerMatches);
+  return score;
+}
+export function searchKnowledgeBase(state,message,language='ar',history=[]){
+  const current=clean(message);
+  if(!current)return {query:'',matches:[]};
+  let query=current;
+  if(isClarificationFollowup(current)){
+    const prior=[...(Array.isArray(history)?history:[])].slice(-8).reverse().find(row=>row?.role==='user'&&clean(row.content)&&!isClarificationFollowup(row.content));
+    if(prior?.content)query=clean(prior.content)+' '+current;
+  }
+  const matches=knowledgeRowsForLanguage(state,language)
+    .map(row=>({...row,score:knowledgeQuestionScore(query,row)}))
+    .filter(row=>row.score>=9)
+    .sort((a,b)=>b.score-a.score||a.question.length-b.question.length)
+    .slice(0,6);
+  return {query,matches};
+}
+export function directKnowledgeAnswer(state,message,language='ar',history=[],prepared=null){
+  if(isClarificationFollowup(message))return null;
+  const result=prepared||searchKnowledgeBase(state,message,language,history);
+  const top=result.matches?.[0],next=result.matches?.[1];
+  if(!top)return null;
+  const margin=top.score-Number(next?.score||0);
+  if(top.score>=38||top.score>=26&&margin>=4)return clamp(top.answer,1200);
+  return null;
+}
+
 function directShippingPolicyAnswer(state,message,language){
   const page=selectedPolicyPage(state,'policy-shipping');
   if(!page)return null;
@@ -954,7 +1028,7 @@ function directPolicyAnswer(state,message,language,history=[]){
   }
   return null;
 }
-export function directCustomerAnswer(state,user,message,language='ar',signals={},productQuery=message,productSearch=null,productActive=false,history=[]){
+export function directCustomerAnswer(state,user,message,language='ar',signals={},productQuery=message,productSearch=null,productActive=false,history=[],knowledgeSearchResult=null){
   const normalized=clean(message).toLowerCase();
   if(user&&qHas(normalized,['طلبي','الطلب','وين الطلب','اين الطلب','أين الطلب','حالة الطلب','تتبع','tracking','my order','order status'])){
     const order=matchingOwnOrder(state,normalized);
@@ -969,6 +1043,8 @@ export function directCustomerAnswer(state,user,message,language='ar',signals={}
       if(parts.length)return (language==='en'?'Order ':'الطلب ')+(number||'')+' — '+parts.join(' · ');
     }
   }
+  const knowledge=directKnowledgeAnswer(state,message,language,history,knowledgeSearchResult);
+  if(knowledge)return knowledge;
   const policy=directPolicyAnswer(state,normalized,language,history);
   if(policy)return policy;
   const fact=directProductFact(state,normalized,language,signals,productQuery,productSearch);
@@ -976,7 +1052,7 @@ export function directCustomerAnswer(state,user,message,language='ar',signals={}
   return productActive?directProductDiscoveryAnswer(normalized,language,productSearch):null;
 }
 function cacheKeyFor(language,message,context){
-  const compact={language,message:clean(message).toLowerCase(),products:context?.products||[],shoppingSignal:context?.shoppingSignal||null};
+  const compact={language,message:clean(message).toLowerCase(),products:context?.products||[],knowledge:context?.knowledge||[],policy:context?.policy||null,policies:context?.policies||[],shoppingSignal:context?.shoppingSignal||null};
   return createHash('sha256').update(JSON.stringify(compact)).digest('hex');
 }
 async function getCachedReply(key){
@@ -1118,15 +1194,17 @@ export async function aiChat(user,body={},req=null){
   const policyPageId=resolvedPolicyPageId(message,history);
   const policySignal=policyQuestionSignal(message,history);
   const guestSnapshotOptions=policySignal
-    ?{...(policyPageId?{pageId:policyPageId}:{}),aiPolicies:true}
-    :{q:message,aiCatalog:true};
-  const state=await snapshot(user||null,!user?guestSnapshotOptions:{});
+    ?{...(policyPageId?{pageId:policyPageId}:{}),aiPolicies:true,aiKnowledge:true}
+    :{q:message,aiCatalog:true,aiKnowledge:true};
+  const state=await snapshot(user||null,!user?guestSnapshotOptions:{aiKnowledge:true});
   const conversionSignals=await chatProductSignals();
+  const knowledgeSearch=searchKnowledgeBase(state,message,language,history);
+  const knowledgeRelevant=Number(knowledgeSearch.matches?.[0]?.score||0)>=16;
   const resolvedTextQuery=resolveCustomerProductQuery(state,message,history);
-  const productActive=!policySignal&&(!!marketingSignal||isCustomerProductQuery(state,message,history,resolvedTextQuery));
+  const productActive=!policySignal&&!knowledgeRelevant&&(!!marketingSignal||isCustomerProductQuery(state,message,history,resolvedTextQuery));
   const resolvedProductSearch=productActive?customerProductSearch(state,resolvedTextQuery,language,conversionSignals):emptyProductSearch(resolvedTextQuery);
   if(!proactive&&!image){
-    const direct=directCustomerAnswer(state,user,message,language,conversionSignals,resolvedTextQuery,resolvedProductSearch,productActive,history);
+    const direct=directCustomerAnswer(state,user,message,language,conversionSignals,resolvedTextQuery,resolvedProductSearch,productActive,history,knowledgeSearch);
     if(direct){
       const ui=chatUiMetadata(state,resolvedTextQuery,language,conversionSignals,resolvedProductSearch);
       if(conversation){
@@ -1158,9 +1236,13 @@ export async function aiChat(user,body={},req=null){
   const personalContextNeeded=!!user&&qHas(message.toLowerCase(),['طلبي','الطلب','الدفع','فاتورة','عرض','تتبع','order','payment','invoice','quote','tracking']);
   const policyPage=policyPageId?selectedPolicyPage(state,policyPageId):null;
   const fallbackPolicies=policySignal&&!policyPage?policyPagesForLanguage(state,language).slice(0,8).map(page=>({id:page.id,title:page.title,content:clamp(page.content,1800)})):[];
+  const knowledgeContext=(knowledgeSearch.matches||[]).slice(0,5).map(row=>({
+    id:row.id,category:row.category,question:row.question,answer:row.answer,keywords:row.keywords,score:row.score
+  }));
   const context={
     viewer:user?{signedIn:true}:{signedIn:false},
     products:productSearch.context,
+    ...(knowledgeContext.length?{knowledge:knowledgeContext}:{}),
     ...(policyPage?{policy:{id:policyPage.id,title:language==='en'?(policyPage.titleEn||policyPage.title):(policyPage.title||policyPage.titleEn),content:clamp(language==='en'?(policyPage.contentEn||policyPage.content):(policyPage.content||policyPage.contentEn),1800)}}:{}),
     ...(fallbackPolicies.length?{policies:fallbackPolicies}:{}),
     ...(imageSearch?{imageSearch}:{}),
@@ -1183,7 +1265,7 @@ export async function aiChat(user,body={},req=null){
   }
   const system=language==='ar'
     ?`أنت مستشار مبيعات وتوريد محترف داخل IMSG. هدفك فهم ما يحتاجه العميل ومساعدته على اتخاذ قرار شراء مناسب، بدون ضغط أو مبالغة.
-اعتمد على PLATFORM_CONTEXT_JSON في معلومات المنتجات والأسعار والمخزون والطلبات والعروض والسياسات. إذا احتوى السياق على policy أو policies فاعتبرها المصدر الرسمي للسؤال المتعلق بالسياسة، وأجب منها مباشرة وباختصار. لا تخترع أي سعر أو خصم أو مخزون أو حالة أو ميزة غير موجودة.
+اعتمد على PLATFORM_CONTEXT_JSON في معلومات المنتجات والأسعار والمخزون والطلبات والعروض والسياسات. إذا احتوى السياق على knowledge فهو بنك المعلومات الرسمي للمتجر ويأخذ الأولوية في الأسئلة العامة عن الشركة والخدمة وطريقة العمل. إذا احتوى السياق على policy أو policies فاعتبرها المصدر الرسمي للسؤال المتعلق بالسياسة. استخدم فقط المعلومات ذات الصلة بالسؤال وأجب مباشرة وباختصار. لا تخترع أي سعر أو خصم أو مخزون أو حالة أو ميزة غير موجودة.
 افهم احتياج العميل من كلامه وسلوكه الشرائي غير الحساس فقط، مثل البحث، المنتجات التي يقارنها، أو السلة. لا تستنتج أو تستخدم صفات حساسة شخصية.
 أجب عن السؤال الحالي فقط. الرد العادي جملة أو جملتان قصيرتان، ولا تشرح سياسة كاملة ما لم يطلب العميل التفاصيل.
 إذا احتجت توضيحًا، اسأل سؤالًا واحدًا فقط في الرد، ولا تجمع عدة أسئلة معًا. لا تسأل عن الكمية في البداية إلا إذا كانت ضرورية للسعر أو الحد الأدنى للطلب، ولا تكرر سؤالًا أجاب عنه العميل سابقًا.
