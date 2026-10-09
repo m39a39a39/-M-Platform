@@ -10,7 +10,6 @@ const OPENAI_URL='https://api.openai.com/v1/chat/completions';
 const DEFAULT_MODEL='gpt-6-luna';
 const usageWindows=new Map();
 const RATE_WINDOW_MS=10*60*1000;
-const IMAGE_MAX_CHARS=700000;
 const responseCache=new Map();
 const RESPONSE_CACHE_TTL_MS=6*60*60*1000;
 
@@ -25,13 +24,6 @@ async function openAiRequest({apiKey,payload,timeoutMs=26000}){
     signal:AbortSignal.timeout(timeoutMs)
   });
   return {response};
-}
-function safeImage(value){
-  if(!value)return '';
-  const text=String(value);
-  assert(text.length<=IMAGE_MAX_CHARS,413,'الصورة كبيرة جدًا / Image is too large');
-  assert(/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/i.test(text),400,'صيغة الصورة غير مدعومة / Unsupported image format');
-  return text;
 }
 function viewerKey(user,req){
   if(user?.id)return 'user:'+user.id;

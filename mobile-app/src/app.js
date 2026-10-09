@@ -278,7 +278,6 @@ function cartRows(){
   }).filter(Boolean);
 }
 function cartCurrency(){return cartRows()[0]?.currency||'';}
-function cartTotal(){return cartRows().reduce((sum,row)=>sum+row.total,0);}
 function setCartQuantity(offerId,quantity){
   const row=cartItems.find(x=>x.offerId===offerId),offer=(platformState?.publicOffers||[]).find(o=>o.id===offerId&&o.status==='published');if(!row||!offer)return false;
   const q=Number(quantity),moq=Math.max(1,Math.ceil(Number(offer.moq)||1)),stock=trackedStock(offer);
@@ -297,9 +296,6 @@ function addToCart(offer,quantity){
   if(existing)existing.quantity=q;else cartItems.push({offerId:offer.id,quantity:q});
   saveCart();
   if(currentUser?.role==='client')aiChatSignal('cart_add',{productId:offer.id,productSku:offer.sku||'',productTitle:titleOf(offer),price:Number(offer.unitPrice)||0,currency:offer.currency||'',moq:Number(offer.moq)||0,quantity:q,cartCount:cartItems.length});
-}
-function productSearchBar(){
-  return `<label class="product-search-bar"><span>⌕</span><input type="search" inputmode="search" enterkeyhint="search" data-product-search value="${esc(readySearch)}" placeholder="${esc(tr('ابحث عن منتج أو SKU','Search products or SKU'))}" aria-label="${esc(tr('البحث عن المنتجات','Search products'))}"></label>`;
 }
 function productResultsHtml(){
   const offers=filteredReadyOffers(),totalPages=Math.max(1,Math.ceil(offers.length/PAGE_SIZE));
@@ -374,8 +370,6 @@ async function openInvoicePdf(target){
 
 function titleOf(item){const x=item?.translation||{};return (lang==='ar'?(x.titleAr||x.titleEn):(x.titleEn||x.titleAr))||item?.product||item?.title||`#${ref(item)}`;}
 function descriptionOf(item){const x=item?.translation||{};return (lang==='ar'?(x.descriptionAr||x.descriptionEn):(x.descriptionEn||x.descriptionAr))||item?.specs||item?.notes||'';}
-function quoteTime(q){return Date.parse(q?.publishedAt||q?.updatedAt||q?.createdAt||0)||0;}
-function newQuoteCount(request){const seen=Date.parse(request?.lastSeenQuoteAt||0)||0;return (platformState?.quotes||[]).filter(q=>q.requestId===request.id&&q.status==='published'&&quoteTime(q)>seen).length;}
 function cardBadge(status,extra=''){const label=TRACKING_FLOW.some(x=>x[0]===status)||TRACKING_EXCEPTIONS[status]?trackingLabel(status):statusLabel(status);return `<span class="status-pill status-${esc(status)}">${esc(label)}</span>${extra}`;}
 function id(){return crypto.randomUUID();}
 
@@ -589,10 +583,6 @@ function statCard(value,label,action=''){return `<button class="stat-card" ${act
 function pageHeader(title,subtitle='',action=''){return `<div class="page-head"><div><h1>${esc(title)}</h1>${subtitle?`<p>${esc(subtitle)}</p>`:''}</div>${action}</div>`;}
 function empty(){return `<div class="empty-state"><span>◇</span><p>${esc(t('empty'))}</p></div>`;}
 function itemCard(item,{subtitle='',meta='',badge='',action='',images=false}={}){return `<article class="list-card" ${action}><div class="list-card-main"><div class="list-card-title"><small>#${esc(ref(item))}</small><h3>${esc(titleOf(item))}</h3></div>${badge}</div>${subtitle?`<p>${esc(subtitle)}</p>`:''}${meta?`<div class="meta-line">${meta}</div>`:''}${images?gallery(item.images):''}<div class="chevron">›</div></article>`;}
-function publicOfferCard(item){
-  const image=(item.images||[])[0];
-  return `<article class="public-offer-card" data-public-offer="${esc(item.id)}"><div class="public-offer-media" data-viewer-gallery>${image?mediaImage(image,'data-image-viewer'):'<div class="public-offer-placeholder">M</div>'}</div><div class="public-offer-content"><div class="public-offer-origin">${esc(supplyCountryLabel(item.country))}</div><h3>${esc(titleOf(item))}</h3><p>${esc(descriptionOf(item)||'—')}</p><div class="public-offer-facts"><span><b>${esc(t('price'))}</b><strong>${money(item.unitPrice,item.currency)}</strong></span><span><b>${esc(t('moq'))}</b><strong>${esc(item.moq||'—')}</strong></span></div></div></article>`;
-}
 const SUPPLIER_ORDER_LABELS={
   pending_confirmation:['بانتظار تأكيد المورد','Awaiting supplier confirmation'],
   confirmed:['تم تأكيد الطلب','Order confirmed'],
@@ -693,9 +683,6 @@ function productPagination(page,totalPages){
   if(totalPages<=1)return '';
   return `<nav class="product-pagination" aria-label="${esc(t('readyProducts'))}"><button class="pagination-btn" type="button" data-action="ready-products-prev" ${page<=1?'disabled':''}>${esc(t('previous'))}</button><span class="pagination-info">${esc(t('page'))} ${page} / ${totalPages}</span><button class="pagination-btn" type="button" data-action="ready-products-next" ${page>=totalPages?'disabled':''}>${esc(t('next'))}</button></nav>`;
 }
-function companyFooterCard(){
-  return `<section class="company-footer-card"><div class="company-footer-brand"><span class="company-footer-mark">M</span><div><h2>MIG COMPANY</h2><p>${esc(t('companyDescription'))}</p></div></div><div class="company-contact"><strong>${esc(t('contactUs'))}</strong><a href="mailto:aljilany6@gmail.com">aljilany6@gmail.com</a><a href="https://wa.me/8618501770037" target="_blank" rel="noopener noreferrer">+86 185 0177 0037</a></div><small>${esc(t('copyright'))}</small></section>`;
-}
 
 function supplierQuoteForRequest(request,quotes=platformState?.quotes||[]){
   const rows=quotes.filter(q=>q.requestId===request?.id);
@@ -714,7 +701,7 @@ function renderHome(){
     updateCartBadge();
   }else if(role==='supplier'){
     const quotes=platformState.quotes||[],invites=(platformState.requests||[]).filter(r=>!supplierRequestAnswered(r,quotes));
-    const pub=platformState.publicOffers||[],orders=supplierOrders(),pendingOrders=orders.filter(o=>o.status==='pending_confirmation'),activeOrders=orders.filter(o=>!['ready_for_inspection','cannot_fulfill'].includes(o.status)),publishedPublic=(platformState.supplySources||[]).filter(o=>o.status==='approved').length,recentOrders=orders.slice(0,3);
+    const orders=supplierOrders(),pendingOrders=orders.filter(o=>o.status==='pending_confirmation'),activeOrders=orders.filter(o=>!['ready_for_inspection','cannot_fulfill'].includes(o.status)),publishedPublic=(platformState.supplySources||[]).filter(o=>o.status==='approved').length,recentOrders=orders.slice(0,3);
     const needed=[...pendingOrders.slice(0,3).map(supplierOrderCard),...invites.slice(0,Math.max(0,3-pendingOrders.length)).map(r=>itemCard(r,{subtitle:descriptionOf(r),meta:`${t('quantity')}: ${r.quantity||'—'} · ${r.country||'—'}`,badge:`<span class="status-pill status-review">${esc(tr('تقديم عرض','Submit quote'))}</span>`,action:`data-supplier-request="${esc(r.id)}"`}))];
     $('screen').innerHTML=pageHeader(`${tr('مرحبًا','Welcome')} ${esc(currentUser.name||currentUser.company||'')}`,tr('ركز على الطلبات التي تحتاج إجراء منك أولًا.','Focus first on the items that need your action.'))+
       `<section class="supplier-public-cta"><div class="supplier-public-cta-copy"><span class="supplier-public-cta-icon">＋</span><div><h2>${esc(tr('إضافة المنتجات','Add products'))}</h2><p>${esc(tr('اقترح منتجات للمراجعة أو قدّم عرض توريد لمنتج موجود. المنتجات المعتمدة ملك للمتجر.','Add one product or import multiple products from one Excel file with embedded images.'))}</p></div></div><div class="supplier-public-cta-actions"><button class="secondary-btn" type="button" data-action="bulk-public-import">${esc(tr('استيراد من Excel','Import from Excel'))}</button><button class="primary-btn" type="button" data-action="new-public">+ ${esc(t('newPublicOffer'))}</button></div></section>`+
@@ -792,15 +779,6 @@ function clientQuoteCard(q,r){
   const total=quoteTotal(q,r),selected=r.selectedQuoteId===q.id,rejected=r.rejectedQuoteId===q.id,respond=canRespondToQuote(r,q);
   return `<section class="quote-card client-price-quote"><h3>${esc(tr('عرض السعر من الإدارة','Price quote from our team'))}</h3><div class="client-quote-price-row"><div><small>${esc(tr('سعر الوحدة','Unit price'))}</small><strong>${money(q.unitPrice,q.currency)}</strong></div>${total!==null?`<div><small>${esc(tr('الإجمالي','Total'))}</small><strong>${money(total,q.currency)}</strong></div>`:''}</div><p>${esc(tr('مدة التجهيز','Preparation time'))}: ${esc(q.leadTime||'—')}</p>${descriptionOf(q)?`<p>${esc(descriptionOf(q))}</p>`:''}${respond?`<div class="client-detail-actions"><button type="button" class="primary-btn" data-select-quote="${esc(q.id)}" data-request-id="${esc(r.id)}">${esc(tr('قبول العرض','Accept quote'))}</button><button type="button" class="secondary-btn" data-reject-quote="${esc(q.id)}" data-request-id="${esc(r.id)}">${esc(tr('رفض العرض','Decline quote'))}</button></div>`:`<p role="status">${esc(selected?tr('تم قبول العرض','Quote accepted'):rejected?tr('تم رفض العرض، وقد أُبلغت الإدارة.','Quote declined. Our team has been notified.'):tr('الطلب مغلق','Request closed'))}</p>`}</section>`;
 }
-async function markClientQuotesSeen(r,quotes){
-  if(newQuoteCount(r)<=0||!quotes.length)return r;
-  try{
-    const latest=new Date(Math.max(...quotes.map(quoteTime))).toISOString();
-    await mutate('requests',r.id,r.version,{lastSeenQuoteAt:new Date().toISOString()});
-    r.version=Number(r.version||0)+1;r.lastSeenQuoteAt=latest;updateShell();
-  }catch{}
-  return r;
-}
 function selectedQuotePanel(r){
   const q=(platformState?.quotes||[]).find(x=>x.id===r.selectedQuoteId&&x.status==='published');
   if(!q)return '';
@@ -832,7 +810,7 @@ async function openClientRequest(requestId){
   const statusCard=`<section class="client-current-status"><small>${esc(tr('الحالة الحالية','Current status'))}</small><strong>${esc(trackingLabel(status))}</strong>${r.trackingUpdatedAt?`<span>${esc(tr('آخر تحديث','Last update'))}: ${esc(date(r.trackingUpdatedAt))}</span>`:''}</section>`;
   openModal(titleOf(r),`#${ref(r)}`,`${summary}${actionPanel}${statusCard}${selectedPanel}${quotePanel}${paymentPanel(r,'request')}${invoicePanel(r,'request')}${trackingTimeline(r)}<section class="client-detail-content"><h3>${esc(t('specifications'))}</h3><p class="long-copy">${esc(descriptionOf(r)||'—')}</p>${gallery(r.images)}</section><button type="button" class="secondary-btn full repeat-request-btn" data-repeat-request="${esc(r.id)}">${esc(tr('تكرار الطلب','Repeat request'))}</button>`);
 }
-function clientReadyActionPanel(interest,offer){
+function clientReadyActionPanel(interest){
   const order=clientOrders().find(o=>o.type==='ready'&&o.id===interest.id),action=order?clientOrderNeedsAction(order):null;
   if(!action)return '';
   return `<section class="client-detail-action ${esc(action.tone||'action')}"><div><small>${esc(tr('الإجراء المطلوب','Action required'))}</small><strong>${esc(action.label)}</strong></div></section>`;
@@ -849,7 +827,7 @@ function openReadyOrder(interestId){
   const summary=`<section class="client-order-summary"><div class="client-order-summary-title"><small>#${esc(ref(interest))} · ${esc(tr('منتج جاهز','Ready product'))}</small><strong>${esc(title)}</strong></div><div class="client-order-summary-facts"><span>${esc(tr('الكمية','Quantity'))}: ${esc(interest.quantity||'—')}</span><span>${esc(tr('سعر الوحدة','Unit price'))}: ${frozenOrderMoney(interest,unitPrice,currency)}</span><span>${esc(tr('الإجمالي','Total'))}: ${frozenOrderMoney(interest,total,currency)}</span></div></section>`;
   const statusCard=`<section class="client-current-status"><small>${esc(tr('الحالة الحالية','Current status'))}</small><strong>${esc(trackingLabel(status))}</strong>${interest.trackingUpdatedAt?`<span>${esc(tr('آخر تحديث','Last update'))}: ${esc(date(interest.trackingUpdatedAt))}</span>`:''}</section>`;
   const productInfo=o?`<section class="client-detail-content"><h3>${esc(t('specifications'))}</h3><p class="long-copy">${esc(descriptionOf(o)||'—')}</p><div class="facts"><span>MOQ ${esc(o.moq||'—')}</span>${homeConfig(platformState.settings).showStock?`<span>${esc(isUnlimitedStock(o)?tr('متوفر للطلب','Available to order'):`${t('stock')}: ${trackedStock(o)}`)}</span>`:''}<span>${esc(t('leadTime'))}: ${esc(o.leadTime||'—')}</span></div>${gallery(o.images)}</section>`:'';
-  openModal(title,`#${ref(interest)}`,`${summary}${clientReadyActionPanel(interest,o)}${statusCard}${paymentPanel(interest,'interest')}${invoicePanel(interest,'interest')}${trackingTimeline(interest,{flow:READY_TRACKING_FLOW,statusResolver:readyTrackingStatus})}${productInfo}`);
+  openModal(title,`#${ref(interest)}`,`${summary}${clientReadyActionPanel(interest)}${statusCard}${paymentPanel(interest,'interest')}${invoicePanel(interest,'interest')}${trackingTimeline(interest,{flow:READY_TRACKING_FLOW,statusResolver:readyTrackingStatus})}${productInfo}`);
 }
 async function offerSupply(productId){
  let fetched;try{fetched=await supplierProduct(productId,request);}catch(error){showToast(error.message);return;}

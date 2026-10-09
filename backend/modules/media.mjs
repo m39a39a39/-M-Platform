@@ -2,7 +2,6 @@ import {randomUUID} from 'node:crypto';
 import {db,one,config,assert} from '../lib/supabase.mjs';
 import {snapshot} from './records.mjs';
 import {storeImages} from './studio.mjs';
-import {can} from './auth.mjs';
 import yesidoCatalog from '../data/yesido-catalog.mjs';
 
 const inIds=ids=>ids.map(x=>`"${String(x).replaceAll('"','')}"`).join(',');
