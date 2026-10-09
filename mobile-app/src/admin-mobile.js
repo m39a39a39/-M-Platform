@@ -64,7 +64,6 @@ const READY_TRACKING=[
 const status=s=>({review:tr('قيد المراجعة','Under review'),sent:tr('تم الإرسال للموردين','Sent to suppliers'),completed:tr('مكتمل','Completed'),pending:tr('قيد المراجعة','Under review'),published:tr('منشور','Published'),coordinating:tr('قيد التنسيق','Coordinating'),accepted:tr('مقبول','Accepted'),cancelled:tr('ملغي','Cancelled'),...Object.fromEntries(TRACKING.map(x=>[x[0],tr(x[1],x[2])]))})[s]||s||'—';
 const requestTracking=x=>x?.trackingStatus||(x?.status==='completed'?'completed':x?.selectedQuoteId?'quote_selected':x?.status==='sent'?'sourcing':'received');
 const interestTracking=x=>x?.trackingStatus||(x?.status==='completed'?'completed':x?.status==='cancelled'?'cancelled':['coordinating','accepted'].includes(x?.status)?'payment_confirmation':'received');
-const activeInterest=x=>!['completed','cancelled'].includes(interestTracking(x));
 const categories=()=>categoryRows(state?.settings,{activeOnly:false});
 const activeCategories=()=>categoryRows(state?.settings);
 const subcategories=()=>subcategoryRows(state?.settings,{activeOnly:false});
@@ -280,7 +279,7 @@ function row(x,kind){
 function matches(x,kind=''){if(!searchText().trim())return true;const q=searchText().trim().toLowerCase(),o=ownerOf(x),linked=kind==='quote'?(state?.requests||[]).find(r=>r.id===x.requestId):null,offer=kind==='interest'?(state?.publicOffers||[]).find(v=>v.id===x.offerId):null,client=linked?account(linked.customerId):null,requestQuotes=kind==='request'?(state?.quotes||[]).filter(v=>v.requestId===x.id):[],quoteSuppliers=requestQuotes.map(v=>account(v.supplierId)),cartChildren=kind==='request'&&x.orderType==='cart'?(state?.interests||[]).filter(v=>v.cartOrderId===x.id):[],cartOffers=cartChildren.map(v=>(state?.publicOffers||[]).find(o=>o.id===v.offerId)).filter(Boolean),cartSuppliers=cartOffers.map(v=>account(v.supplierId));return[ref(x),ref(offer),x.sku,x.name,x.company,x.email,x.phone,x.product,x.specs,x.notes,x.country,offer?title(offer):'',offer?desc(offer):'',o?.name,o?.company,linked?.displayNo,client?.name,client?.company,...requestQuotes.flatMap(v=>[ref(v),v.product,v.specs]),...quoteSuppliers.flatMap(v=>[v?.name,v?.company]),...(x.cartItems||[]).flatMap(v=>[v.sku,v.product,v.translation?.titleAr,v.translation?.titleEn]),...cartOffers.flatMap(v=>[v.sku,title(v),desc(v)]),...cartSuppliers.flatMap(v=>[v?.name,v?.company])].filter(Boolean).join(' ').toLowerCase().includes(q);}
 
 function home(){
-  const req=state?.requests||[],qs=state?.quotes||[],po=state?.publicOffers||[],ints=(state?.interests||[]).filter(activeInterest),acc=state?.accounts||[];
+  const req=state?.requests||[],qs=state?.quotes||[],po=state?.publicOffers||[],acc=state?.accounts||[];
   const pendingRequests=req.filter(x=>!x.deletedAt&&!x.suspendedAt&&x.status==='review');
   const pendingQuotes=qs.filter(x=>!x.deletedAt&&x.status==='pending');
   const pendingProducts=po.filter(x=>!x.deletedAt&&x.status==='pending');
@@ -339,7 +338,7 @@ function offers(){
   let rows=(state?.publicOffers||[]).filter(x=>!x.deletedAt&&matches(x,'public')).map(x=>({...x,__kind:'public'}));
   rows.sort((a,b)=>(a.status==='pending'?0:1)-(b.status==='pending'?0:1)||String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
   if(offerTab==='pending')rows=rows.filter(x=>x.status==='pending');
-  const visibleIds=new Set(rows.map(x=>x.id));for(const id of [...selectedProducts])if(!(state?.publicOffers||[]).some(x=>x.id===id&&!x.deletedAt))selectedProducts.delete(id);
+  for(const id of [...selectedProducts])if(!(state?.publicOffers||[]).some(x=>x.id===id&&!x.deletedAt))selectedProducts.delete(id);
   setRoot('offers',page(tr('المنتجات','Products'),tr('مراجعة وإدارة المنتجات التي يضيفها الموردون.','Review and manage supplier products.'))+search(tr('ابحث برقم المنتج أو SKU أو الاسم أو المورد','Search product number, SKU, name, or supplier'))+offerTabs()+bulkToolbar(rows)+`<div class="list-stack" data-admin-results>${rows.map(productSelectionRow).join('')||empty()}</div>`);
 }
 const selectedProductRows=()=>[...selectedProducts].map(id=>(state?.publicOffers||[]).find(x=>x.id===id&&!x.deletedAt)).filter(Boolean);
@@ -659,11 +658,6 @@ const PAYMENT_STATUS_LABELS={
   reupload_requested:['تم طلب إعادة رفع الإيصال','Receipt re-upload requested']
 };
 function paymentStatusLabel(value){const row=PAYMENT_STATUS_LABELS[value];return row?tr(row[0],row[1]):value||'—';}
-function defaultPaymentMessage(x,kind){
-  if(x?.paymentMessage)return x.paymentMessage;
-  const number=kind==='request'&&ref(x)!=='—'?' #'+ref(x):'';
-  return tr('يرجى إتمام عملية الدفع وإرفاق إيصال الدفع لتأكيد طلبك'+number+'. بعد إرسال الإيصال ستقوم الإدارة بمراجعته وإشعارك عند تأكيد الدفع.','Please complete payment and upload the receipt to confirm your order'+number+'. After submission, the admin will review it and notify you when payment is confirmed.');
-}
 function paymentReviewPanel(x,entityType){
   if(!x?.paymentStatus)return '';
   const receipt=x.paymentReceipt;

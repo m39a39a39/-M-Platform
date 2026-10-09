@@ -52,7 +52,7 @@ export async function createCartOrder(user,body={}){
 
   const chatAttribution=administrative?null:await resolveChatAttribution(user,body.chatAttribution||{});
   const now=new Date().toISOString(),orderId=randomUUID();
-  const lines=validated.map((x,index)=>{
+  const lines=validated.map(x=>{
     const d=x.offer.data||{},interestId=randomUUID();
     const snapshot={
       sku:String(d.sku||''),

@@ -4,7 +4,6 @@ import {defaultOptions,safeStoreLink} from '../../shared/storefront-model.mjs';
 import {upgradeStore} from './storefront-upgrade.mjs';
 import {one,db,rpc,assert} from '../lib/supabase.mjs';
 import {can} from './auth.mjs';
-import {active} from './records.mjs';
 import {checkImages,validateContent,normalizeCategories,normalizeSubcategories} from './mutations.mjs';
 
 const text=(v,max=10000)=>{assert(typeof v==='string'&&v.length<=max,400,'نص غير صالح أو طويل جدًا');return v.trim();};

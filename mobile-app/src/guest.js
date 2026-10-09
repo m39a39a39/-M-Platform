@@ -1,7 +1,7 @@
 import {Capacitor} from '@capacitor/core';
 import './public-shell.css';
 import {mountSiteChrome} from './site-chrome.js';
-import {formatStoreMoney,renderStorefront,bindStorefront,productExtras,tierPrice,homeConfig,storeProductCard} from './storefront.js';
+import {formatStoreMoney,renderStorefront,bindStorefront,tierPrice,homeConfig,storeProductCard} from './storefront.js';
 import { languageReady, getLanguage, onLanguageChange, toggleLanguage } from './language.js';
 import { showView } from './views.js';
 import { categoryRows, subcategoryRows, supplyCountryRows, taxonomyLabel } from './catalog-taxonomy.js';
@@ -91,7 +91,6 @@ const money=(value,currency)=>formatStoreMoney(value,currency,lang);
 const categories=()=>categoryRows(state?.settings);
 const subcategories=(parentId='')=>subcategoryRows(state?.settings,{parentId});
 const countries=()=>supplyCountryRows(state?.settings);
-const countryLabel=value=>taxonomyLabel(supplyCountryRows(state?.settings,{activeOnly:false}).find(x=>x.id===value),lang)||value||'—';
 const publishedOffers=()=>Array.isArray(state?.publicOffers)?state.publicOffers.filter(o=>o.status==='published'):[];
 const filteredOffers=()=>{
   let offers=publishedOffers();
