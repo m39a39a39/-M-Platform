@@ -430,7 +430,8 @@ session.onReset(reason=>{
 
 function updateShell(){
   const role=currentUser?.role||'client',bottom=$('bottomNav'),requestLabel=document.querySelector('#bottomNav [data-nav="requests"]'),offersLabel=document.querySelector('#bottomNav [data-nav="offers"]'),accountLabel=document.querySelector('#bottomNav [data-nav="account"]'),requestButton=requestLabel?.closest('button'),accountButton=accountLabel?.closest('button'),utilityNav=$('navUnread')?.closest('button'),chatNav=$('adminChatNav'),headerChat=$('headerAdminChatsBtn');
-  bottom.classList.toggle('admin-nav',role==='admin');chatNav?.classList.toggle('hidden',role!=='admin');headerChat?.classList.toggle('hidden',role!=='admin');
+  const canReadChats=role==='admin'&&(currentUser.isOwner||currentUser.permissions?.some(p=>['conversations.read','conversations.manage'].includes(p)));
+  bottom.classList.toggle('admin-nav',role==='admin');chatNav?.classList.toggle('hidden',!canReadChats);headerChat?.classList.toggle('hidden',!canReadChats);
   $('headerRole').textContent=t(role);
   $('appLangBtn').textContent=lang==='ar'?'EN':'AR';
   const homeLabel=document.querySelector('[data-nav="home"]');if(homeLabel)homeLabel.textContent=role==='client'?tr('المتجر','Store'):t('home');

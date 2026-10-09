@@ -87,12 +87,12 @@ export default async function handler(req,res){
         result=await snapshot(user,{productId:url.searchParams.get('product')||'',pageId:url.searchParams.get('page')||'',category:url.searchParams.get('category')||'',q:url.searchParams.get('q')||''});
       }
       else if(path==='/api/ai-chat'){assert(req.method==='POST',405);result=await aiChat(user,body,req);}
-      else if(path==='/api/ai-conversion'){assert(req.method==='POST',405);result=await recordChatConversion(user,body);}
+      else if(path==='/api/ai-conversion'){assert(req.method==='POST',405);result=await recordChatConversion(user,body,req);}
       else if(path==='/api/admin-ai'){result=req.method==='GET'?await adminAiOverview(user):await adminAi(user,body);}
       else if(path==='/api/ai-conversation'){
         result=req.method==='GET'
-          ?await customerConversation(user,{conversationId:url.searchParams.get('conversationId')||'',guestKey:url.searchParams.get('guestKey')||'',language:url.searchParams.get('language')||'ar'})
-          :await captureGuestLead(user,body);
+          ?await customerConversation(user,{conversationId:url.searchParams.get('conversationId')||'',guestKey:url.searchParams.get('guestKey')||'',language:url.searchParams.get('language')||'ar'},req)
+          :await captureGuestLead(user,body,req);
       }
       else if(path==='/api/ai-conversations'&&req.method==='GET'){
         result=url.searchParams.get('conversationId')?await adminConversationRead(user,url.searchParams.get('conversationId')):await adminConversationList(user);
@@ -133,6 +133,7 @@ export default async function handler(req,res){
     }
     res.setHeader('Content-Type','application/json; charset=utf-8');res.end(JSON.stringify(result));
   }catch(error){
+    if(error.status===429&&error.retryAfter)res.setHeader('Retry-After',String(Math.ceil(error.retryAfter)));
     res.statusCode=error.status||500;res.setHeader('Content-Type','application/json; charset=utf-8');
     res.end(JSON.stringify({error:error.status?error.message:'حدث خطأ في الخادم / Server error'}));
   }

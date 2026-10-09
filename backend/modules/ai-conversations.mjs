@@ -1,3 +1,5 @@
+import {can} from './auth.mjs';
+import {enforceChatLimit} from './chat-rate-limit.mjs';
 import {db,assert} from '../lib/supabase.mjs';
 
 const clean=(value,max=4000)=>String(value??'').trim().slice(0,max);
@@ -120,7 +122,8 @@ export async function requestHumanHandoff(row){
     last_message_at:now()
   });
 }
-export async function captureGuestLead(user,body={}){
+export async function captureGuestLead(user,body={},req=null){
+  await enforceChatLimit(user,req,'lead');
   const row=await ensureConversation(user,body,false);
   assert(row,404,'المحادثة غير موجودة / Conversation not found');
   const guestKey=clean(body.guestKey,120);
@@ -147,7 +150,8 @@ export async function captureGuestLead(user,body={}){
 export async function listConversationMessages(conversationId,limit=200){
   return db('ai_messages',`conversation_id=eq.${encodeURIComponent(conversationId)}&order=id.asc&limit=${Math.max(1,Math.min(300,Number(limit)||200))}`);
 }
-export async function customerConversation(user,params={}){
+export async function customerConversation(user,params={},req=null){
+  await enforceChatLimit(user,req,'read');
   const row=await ensureConversation(user,params,false);
   if(!row)return {conversation:null,messages:[]};
   const guestKey=clean(params.guestKey,120);
@@ -182,19 +186,19 @@ function adminConversation(row){
   };
 }
 export async function adminConversationList(user){
-  assert(user?.role==='admin',403,'غير مصرح / Unauthorized');
+  assert(can(user,'conversations.read')||can(user,'conversations.manage'),403,'غير مصرح / Unauthorized');
   const rows=await db('ai_conversations','order=last_message_at.desc&limit=150');
   return {conversations:rows.map(adminConversation)};
 }
 export async function adminConversationRead(user,id){
-  assert(user?.role==='admin',403,'غير مصرح / Unauthorized');
+  assert(can(user,'conversations.read')||can(user,'conversations.manage'),403,'غير مصرح / Unauthorized');
   const row=await getConversation(clean(id,80));assert(row,404,'المحادثة غير موجودة / Conversation not found');
   const messages=await listConversationMessages(row.id);
-  const updated=Number(row.unread_admin||0)>0?await updateConversation(row,{unread_admin:0}):row;
+  const updated=can(user,'conversations.manage')&&Number(row.unread_admin||0)>0?await updateConversation(row,{unread_admin:0}):row;
   return {conversation:adminConversation(updated),messages:messages.map(publicMessage)};
 }
 export async function adminConversationAction(user,body={}){
-  assert(user?.role==='admin',403,'غير مصرح / Unauthorized');
+  assert(can(user,'conversations.manage'),403,'غير مصرح / Unauthorized');
   const row=await getConversation(clean(body.conversationId,80));assert(row,404,'المحادثة غير موجودة / Conversation not found');
   const action=clean(body.action,30);
   if(action==='takeover'){
