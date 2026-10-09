@@ -49,3 +49,26 @@ test('inactive knowledge entries are ignored',()=>{
   const result=searchKnowledgeBase(state,'فرع جدة','ar');
   assert.equal(result.matches.some(row=>row.id==='inactive-entry'),false);
 });
+
+
+test('exact knowledge aliases tolerate Arabic diacritics and punctuation',()=>{
+  assert.match(directKnowledgeAnswer(state,'  وَيْن مَقَرّكم؟!  ','ar'),/قوانزو/);
+});
+
+test('exact English aliases can answer without overlapping the stored question',()=>{
+  const aliases={settings:{knowledgeBase:[{
+    id:'visit',questionEn:'Can we arrange a visit?',answerEn:'Please book an appointment.',
+    keywords:['office appointment'],active:true
+  }]}};
+  assert.equal(directKnowledgeAnswer(aliases,'Office appointment?','en'),'Please book an appointment.');
+});
+
+test('partial and single-word keyword matches do not force a direct answer',()=>{
+  assert.equal(directKnowledgeAnswer(state,'اريد عنوان الشركة على الفاتورة','ar'),null);
+  assert.equal(directKnowledgeAnswer(state,'موقعكم','ar'),null);
+  assert.equal(directKnowledgeAnswer(state,'كم سعر السماعات؟','ar'),null);
+});
+
+test('an exact alias cannot activate a disabled knowledge entry',()=>{
+  assert.equal(directKnowledgeAnswer(state,'فرع جدة','ar'),null);
+});

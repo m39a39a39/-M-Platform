@@ -884,7 +884,10 @@ function knowledgeQuestionScore(message,row){
   for(const rawKeyword of row.keywords){
     const keyword=normalizeCatalogText(rawKeyword);
     if(!keyword)continue;
-    if(q.includes(keyword))score+=keyword.includes(' ')?20:14;
+    // Explicit multi-word aliases are as strong as a matching question.
+    // Retain the existing scoring for partial and single-word matches.
+    if(q===keyword&&catalogTokens(keyword).length>=2)score+=48;
+    else if(q.includes(keyword))score+=keyword.includes(' ')?20:14;
     else{
       const coverage=phraseMatchScore(q,keyword);
       if(coverage===1)score+=12;
