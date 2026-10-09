@@ -1,3 +1,4 @@
+import {enforceChatLimit} from './chat-rate-limit.mjs';
 import {db,assert} from '../lib/supabase.mjs';
 
 const ALLOWED_EVENTS=new Set(['product_click','add_to_cart','checkout_started']);
@@ -48,7 +49,8 @@ export async function resolveChatAttribution(user,body={}){
   if(!canAttribute(user,conversation,clean(body?.guestKey,120)))return null;
   return {conversationId:conversation.id,customerId:user?.role==='client'?user.id:null};
 }
-export async function recordChatConversion(user,body={}){
+export async function recordChatConversion(user,body={},req=null){
+  await enforceChatLimit(user,req,'conversion');
   const eventName=clean(body.eventName,40);
   assert(ALLOWED_EVENTS.has(eventName),400,'حدث تتبع غير صالح / Invalid tracking event');
   const attribution=await resolveChatAttribution(user,body);

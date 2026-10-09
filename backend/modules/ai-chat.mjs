@@ -1,3 +1,4 @@
+import {enforceChatLimit} from './chat-rate-limit.mjs';
 import {snapshot} from './records.mjs';
 import {assert,HttpError,db} from '../lib/supabase.mjs';
 import {createHash} from 'node:crypto';
@@ -8,8 +9,6 @@ import {isUnlimitedStock} from '../../shared/inventory.mjs';
 
 const OPENAI_URL='https://api.openai.com/v1/chat/completions';
 const DEFAULT_MODEL='gpt-6-luna';
-const usageWindows=new Map();
-const RATE_WINDOW_MS=10*60*1000;
 const responseCache=new Map();
 const RESPONSE_CACHE_TTL_MS=6*60*60*1000;
 
@@ -25,24 +24,6 @@ async function openAiRequest({apiKey,payload,timeoutMs=26000}){
   });
   return {response};
 }
-function viewerKey(user,req){
-  if(user?.id)return 'user:'+user.id;
-  const forwarded=String(req?.headers?.['x-forwarded-for']||'').split(',')[0].trim();
-  const ip=forwarded||String(req?.socket?.remoteAddress||'unknown');
-  return 'guest:'+createHash('sha256').update(ip).digest('hex').slice(0,24);
-}
-function enforceRateLimit(user,req){
-  const key=viewerKey(user,req),now=Date.now(),limit=user?40:12;
-  let row=usageWindows.get(key);
-  if(!row||now-row.startedAt>=RATE_WINDOW_MS)row={startedAt:now,count:0};
-  row.count+=1;usageWindows.set(key,row);
-  if(usageWindows.size>5000){
-    for(const [k,v] of usageWindows)if(now-v.startedAt>=RATE_WINDOW_MS)usageWindows.delete(k);
-  }
-  if(row.count>limit)throw new HttpError(429,'تم الوصول إلى حد الاستخدام مؤقتًا. حاول بعد قليل. / Too many AI requests. Try again shortly.');
-  return key;
-}
-
 const clean=value=>String(value??'').replace(/[\u0000-\u001f\u007f]/g,' ').replace(/\s+/g,' ').trim();
 const parseJsonObject=value=>{
   const raw=String(value||'').trim().replace(/^\`\`\`(?:json)?\s*/i,'').replace(/\s*\`\`\`$/,'');
@@ -1096,7 +1077,7 @@ function safeMarketingSignal(value){
   }
   return result;
 }
-async function analyzeProductImage({image,message,language,apiKey,model,gatewayUser}){
+async function analyzeProductImage({image,message,language,apiKey,model}){
   const prompt=language==='ar'
     ?'حلل صورة المنتج بهدف البحث عنه داخل كتالوج متجر إلكتروني. أعد JSON فقط. حدد نوع المنتج العام، وأهم الكلمات المرئية أو المواصفات مثل الماركة والموديل والواط والمنافذ واللون إذا كانت واضحة. لا تخمن معلومات غير ظاهرة. إذا لم يظهر منتج قابل للشراء بوضوح اجعل confidence = "none" و query فارغًا.'
     :'Analyze this product image for catalog search. Return JSON only. Identify the generic product type plus clearly visible brand, model, wattage, ports, color, or other useful visible specifications. Do not guess unseen details. If no purchasable product is clearly visible, set confidence to "none" and query to an empty string.';
@@ -1162,6 +1143,7 @@ export async function aiChat(user,body={},req=null){
   const image='';
   const message=clamp(body.message,2000);
   assert(message,400,'اكتب رسالتك / Enter a message');
+  await enforceChatLimit(user,req,'message');
   const language=body.language==='en'?'en':'ar';
   const marketingSignal=safeMarketingSignal(body.marketingSignal);
   const proactive=!!marketingSignal;
@@ -1183,7 +1165,6 @@ export async function aiChat(user,body={},req=null){
       return {reply,source:'database',conversationId:conversation.id,humanMode:false,waitingHuman:true,leadPrompt:!user};
     }
   }
-  let gatewayUser='';
   const model=String(process.env.OPENAI_CHAT_MODEL||DEFAULT_MODEL).replace(/^openai\//,'');
   const history=normalizeHistory(body.history);
   const policyPageId=resolvedPolicyPageId(message,history);
@@ -1212,7 +1193,7 @@ export async function aiChat(user,body={},req=null){
   }
   const apiKey=openAiApiKey();
   if(!apiKey)throw new HttpError(503,'لم يتم تفعيل مفتاح OpenAI بعد. / OpenAI API key is not configured yet.');
-  const imageSearch=image?await analyzeProductImage({image,message,language,apiKey,model,gatewayUser:gatewayUser||(gatewayUser=enforceRateLimit(user,req))}):null;
+  const imageSearch=image?await analyzeProductImage({image,message,language,apiKey,model}):null;
   if(imageSearch?.confidence==='none'||imageSearch&&!imageSearch.query){
     const reply=language==='ar'
       ?'لم أستطع تحديد المنتج بوضوح من هذه الصورة. جرّب صورة أوضح للمنتج من الأمام أو أضف اسمه أو مواصفته.'
@@ -1299,7 +1280,6 @@ If PLATFORM_CONTEXT_JSON contains shoppingSignal, write a very short proactive m
     temperature:0.2,
     reasoning_effort:'none'
   };
-  if(!gatewayUser)gatewayUser=enforceRateLimit(user,req);
   let response;
   try{
     ({response}=await openAiRequest({apiKey,payload,timeoutMs:26000}));

@@ -35,7 +35,7 @@ function updateChatBadge(){
   }
 }
 async function refreshConversationsSummary(renderView=false){
-  if(!isAdmin())return;
+  if(!isAdmin()||!canReadChats()){clearTimeout(chatTimer);chatRows=[];updateChatBadge();return;}
   try{
     const result=await api('/api/v1/ai-conversations');
     chatRows=Array.isArray(result?.conversations)?result.conversations:[];revision++;updateChatBadge();
@@ -51,6 +51,7 @@ const date=v=>{if(!v)return'—';const d=new Date(v);return Number.isNaN(d.getTi
 const me=()=>state?.user;
 const isAdmin=()=>me()?.role==='admin';
 const can=p=>!!(me()&&(me().isOwner||me().permissions?.includes(p)));
+const canReadChats=()=>can('conversations.read')||can('conversations.manage');
 const account=id=>(state?.accounts||[]).find(a=>a.id===id);
 const ownerOf=x=>account(x?.customerId||x?.supplierId);
 const title=x=>{const t=x?.translation||{};return(lang()==='ar'?(t.titleAr||t.titleEn):(t.titleEn||t.titleAr))||x?.product||x?.title||`#${ref(x)}`;};
@@ -446,6 +447,8 @@ const TEAM_PERMISSION_LABELS=[
   ['moderate','تعليق الطلبات','Suspend requests'],
   ['trash','الحذف والاستعادة','Trash & restore'],
   ['settings','النصوص والشعار','Text & logo'],
+  ['conversations.read','قراءة محادثات العملاء','Read customer conversations'],
+  ['conversations.manage','الرد وإدارة محادثات العملاء','Reply to and manage conversations'],
   ['team','إدارة الفريق','Manage team']
 ];
 function teamPanel(){
@@ -515,6 +518,7 @@ function chatPriority(row){
   return 0;
 }
 function chats(){
+  if(!canReadChats()){setRoot('conversations',page(tr('غير مصرح','Access denied')));return;}
   const rows=[...chatRows].filter(chatFilterMatch).sort((a,b)=>chatPriority(b)-chatPriority(a)||String(b.lastMessageAt||'').localeCompare(String(a.lastMessageAt||'')));
   const filters=[['all',tr('الكل','All')],['waiting',tr('بانتظار موظف','Waiting')],['human',tr('قيد الرد','Agent')],['ai','AI'],['unanswered',tr('لم يتم الرد','Unread')],['closed',tr('مغلقة','Closed')]];
   setRoot('conversations',page(tr('المحادثات','Conversations'),tr('تابع العملاء المحتملين واستلم المحادثات عند الحاجة.','Follow customer leads and take over conversations when needed.'))+
@@ -528,11 +532,12 @@ function chats(){
     }).join('')||empty()}</div>`);
 }
 async function openChatConversation(id){
+  if(!canReadChats())return;
   try{
     const result=await api('/api/v1/ai-conversations?conversationId='+encodeURIComponent(id));
     const row=result?.conversation;if(!row)return;
     const who=chatCustomer(row),messages=Array.isArray(result.messages)?result.messages:[];
-    chatRows=chatRows.map(x=>x.id===id?{...x,...row,unreadAdmin:0}:x);updateChatBadge();
+    chatRows=chatRows.map(x=>x.id===id?{...x,...row}:x);updateChatBadge();
     const messagesHtml=messages.map(m=>{
       const sender=m.sender==='customer'?tr('العميل','Customer'):m.sender==='admin'?tr('فريق M','M Team'):tr('المساعد الذكي','AI assistant');
       return `<div class="admin-chat-message ${esc(m.sender)}"><small>${esc(sender)}</small><p>${esc(m.content)}</p><time>${esc(date(m.createdAt))}</time></div>`;
@@ -540,8 +545,8 @@ async function openChatConversation(id){
     const controls=row.status==='human'
       ?`<button type="button" class="secondary-btn" data-admin-chat-action="ai" data-chat-id="${esc(row.id)}">${esc(tr('إرجاع الرد للذكاء الاصطناعي','Return to AI'))}</button>`
       :`<button type="button" class="primary-btn" data-admin-chat-action="takeover" data-chat-id="${esc(row.id)}">${esc(row.status==='closed'?tr('إعادة فتح واستلام المحادثة','Reopen & take over'):tr('استلام المحادثة','Take over chat'))}</button>`;
-    const reply=row.status==='closed'?'':`<form id="adminChatReplyForm" class="admin-chat-reply" data-chat-id="${esc(row.id)}"><textarea name="message" maxlength="4000" required placeholder="${esc(tr('اكتب ردك للعميل...','Write your reply...'))}"></textarea><button type="submit" class="primary-btn">${esc(tr('إرسال الرد','Send reply'))}</button></form>`;
-    modal(row.leadName||who.name,chatStatusLabel(row),`<section class="admin-chat-thread"><div class="admin-chat-customer"><strong>${esc(row.leadName||who.name)}</strong><small>${esc(row.leadContact||who.detail)}</small>${row.leadFollowupNeeded?`<div class="admin-chat-lead-details"><b>🔥 ${esc(tr('عميل محتمل – يحتاج متابعة','Lead – follow-up needed'))}</b>${row.leadCountry?`<span>${esc(tr('الدولة','Country'))}: ${esc(row.leadCountry)}</span>`:''}${row.leadProductSku?`<span>SKU: ${esc(row.leadProductSku)}</span>`:''}${row.leadQuantity?`<span>${esc(tr('الكمية','Quantity'))}: ${esc(row.leadQuantity)}</span>`:''}</div>`:''}</div><div class="admin-chat-messages">${messagesHtml||empty()}</div><div class="admin-chat-controls">${controls}${row.status!=='closed'?'<button type="button" class="danger-text" data-admin-chat-action="close" data-chat-id="'+esc(row.id)+'">'+esc(tr('إغلاق المحادثة','Close chat'))+'</button>':'<button type="button" class="secondary-btn" data-admin-chat-action="ai" data-chat-id="'+esc(row.id)+'">'+esc(tr('إعادة فتح بالذكاء الاصطناعي','Reopen with AI'))+'</button>'}</div>${reply}</section>`);
+    const reply=!can('conversations.manage')||row.status==='closed'?'':`<form id="adminChatReplyForm" class="admin-chat-reply" data-chat-id="${esc(row.id)}"><textarea name="message" maxlength="4000" required placeholder="${esc(tr('اكتب ردك للعميل...','Write your reply...'))}"></textarea><button type="submit" class="primary-btn">${esc(tr('إرسال الرد','Send reply'))}</button></form>`;
+    modal(row.leadName||who.name,chatStatusLabel(row),`<section class="admin-chat-thread"><div class="admin-chat-customer"><strong>${esc(row.leadName||who.name)}</strong><small>${esc(row.leadContact||who.detail)}</small>${row.leadFollowupNeeded?`<div class="admin-chat-lead-details"><b>🔥 ${esc(tr('عميل محتمل – يحتاج متابعة','Lead – follow-up needed'))}</b>${row.leadCountry?`<span>${esc(tr('الدولة','Country'))}: ${esc(row.leadCountry)}</span>`:''}${row.leadProductSku?`<span>SKU: ${esc(row.leadProductSku)}</span>`:''}${row.leadQuantity?`<span>${esc(tr('الكمية','Quantity'))}: ${esc(row.leadQuantity)}</span>`:''}</div>`:''}</div><div class="admin-chat-messages">${messagesHtml||empty()}</div>${can('conversations.manage')?`<div class="admin-chat-controls">${controls}${row.status!=='closed'?'<button type="button" class="danger-text" data-admin-chat-action="close" data-chat-id="'+esc(row.id)+'">'+esc(tr('إغلاق المحادثة','Close chat'))+'</button>':'<button type="button" class="secondary-btn" data-admin-chat-action="ai" data-chat-id="'+esc(row.id)+'">'+esc(tr('إعادة فتح بالذكاء الاصطناعي','Reopen with AI'))+'</button>'}</div>`:''}${reply}</section>`);
     requestAnimationFrame(()=>{
       const messageList=document.querySelector('.chat-conversation-dialog .admin-chat-messages');
       if(messageList)messageList.scrollTop=messageList.scrollHeight;
@@ -550,6 +555,7 @@ async function openChatConversation(id){
   }catch(e){toast(e.message);}
 }
 async function runChatAction(id,action,message=''){
+  if(!can('conversations.manage'))return false;
   try{
     await api('/api/v1/ai-conversations',{method:'POST',body:{conversationId:id,action,message}});
     await refreshConversationsSummary(false);await openChatConversation(id);return true;
