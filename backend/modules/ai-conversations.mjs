@@ -147,8 +147,15 @@ export async function captureGuestLead(user,body={},req=null){
   await insertMessage(updated.id,'ai',reply);
   return {conversation:publicConversation(updated),leadCaptured:true,reply};
 }
-export async function listConversationMessages(conversationId,limit=200){
-  return db('ai_messages',`conversation_id=eq.${encodeURIComponent(conversationId)}&order=id.asc&limit=${Math.max(1,Math.min(300,Number(limit)||200))}`);
+export async function listConversationMessages(conversationId,limit=200,{afterId=0,beforeId=0,latest=false}={}){
+  const count=Math.max(1,Math.min(300,Number(limit)||200));
+  const since=Number(afterId),before=Number(beforeId);
+  const hasAfter=Number.isSafeInteger(since)&&since>0;
+  const hasBefore=!hasAfter&&Number.isSafeInteger(before)&&before>0;
+  const descending=!hasAfter&&(latest||hasBefore);
+  const query=`conversation_id=eq.${encodeURIComponent(conversationId)}${hasAfter?`&id=gt.${since}`:hasBefore?`&id=lt.${before}`:''}&order=id.${descending?'desc':'asc'}&limit=${count}`;
+  const messages=await db('ai_messages',query);
+  return descending?messages.reverse():messages;
 }
 export async function customerConversation(user,params={},req=null){
   await enforceChatLimit(user,req,'read');
@@ -156,9 +163,16 @@ export async function customerConversation(user,params={},req=null){
   if(!row)return {conversation:null,messages:[]};
   const guestKey=clean(params.guestKey,120);
   assert(ownsConversation(user,row,guestKey),403,'غير مصرح / Unauthorized');
-  const messages=await listConversationMessages(row.id);
+  // The first load fetches only the most recent messages; polling reads only new IDs.
+  const afterId=Number(params.afterId),beforeId=Number(params.beforeId);
+  const incremental=Number.isSafeInteger(afterId)&&afterId>0;
+  const older=!incremental&&Number.isSafeInteger(beforeId)&&beforeId>0;
+  const messages=await listConversationMessages(row.id,incremental?100:40,{
+    afterId:incremental?afterId:0,beforeId:older?beforeId:0,latest:!incremental
+  });
   const updated=Number(row.unread_customer||0)>0?await updateConversation(row,{unread_customer:0}):row;
-  return {conversation:publicConversation(updated),messages:messages.map(publicMessage)};
+  return {conversation:publicConversation(updated),messages:messages.map(publicMessage),
+    ...(!incremental?{hasOlderMessages:messages.length===40}:{})};
 }
 function publicConversation(row){
   return {

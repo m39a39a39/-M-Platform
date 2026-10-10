@@ -5,6 +5,7 @@
 .m-ai-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 20px 16px;background:linear-gradient(135deg,var(--navy,#0b2236),#123b59);color:#fff}
 .m-ai-head div{display:grid;gap:3px;min-width:0}.m-ai-head strong{font-size:18px}.m-ai-head small{font-size:13px;opacity:.82;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.m-ai-close{width:44px;height:44px;border:0;border-radius:15px;background:rgba(255,255,255,.12);color:#fff;font-size:27px;line-height:1;flex:0 0 auto}
 .m-ai-messages{overflow:auto;-webkit-overflow-scrolling:touch;padding:18px 18px 12px;display:flex;flex-direction:column;gap:13px;background:#f7fafb;overscroll-behavior:contain}
+.m-ai-older{display:flex;justify-content:center}.m-ai-older button{border:1px solid #dbe5ea;border-radius:999px;background:#fff;color:var(--navy,#0b2236);padding:7px 13px;font:inherit;font-size:12px;cursor:pointer}
 .m-ai-row{display:flex}.m-ai-row>div{max-width:92%;padding:11px 13px;border-radius:18px;white-space:pre-wrap;line-height:1.55;font-size:15px;overflow-wrap:anywhere}
 .m-ai-row.assistant{justify-content:flex-start}.m-ai-row.assistant>div{background:#fff;border:1px solid var(--line,#dce6eb);border-start-start-radius:7px;color:var(--navy,#0b2236)}
 .m-ai-row.user{justify-content:flex-end}.m-ai-row.user>div{background:var(--blue,#1699db);color:#fff;border-start-end-radius:7px}

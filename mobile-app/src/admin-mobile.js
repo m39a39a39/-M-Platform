@@ -4,7 +4,7 @@ import { downloadInvoicePdf } from './invoice-pdf.js';
 import { categoryRows, subcategoryRows, supplyCountryRows, taxonomyLabel } from './catalog-taxonomy.js';
 let state=null,revision=0;
 let requestFilter='all',offerTab='pending',timer=null;
-let chatRows=[],chatTimer=null,chatFilter='all';
+let chatRows=[],chatTimer=null,chatFilter='all',chatSummaryBusy=false;
 let selectedProducts=new Set();
 const searches=new Map(),mediaCache=new Map(),mediaTasks=new Map();
 const MEDIA_CONCURRENCY=6;
@@ -36,12 +36,22 @@ function updateChatBadge(){
 }
 async function refreshConversationsSummary(renderView=false){
   if(!isAdmin()||!canReadChats()){clearTimeout(chatTimer);chatRows=[];updateChatBadge();return;}
+  if(chatSummaryBusy)return;
+  chatSummaryBusy=true;
   try{
     const result=await api('/api/v1/ai-conversations');
-    chatRows=Array.isArray(result?.conversations)?result.conversations:[];revision++;updateChatBadge();
-    if(renderView&&activeView()==='conversations')chats();
-  }catch{}
-  clearTimeout(chatTimer);chatTimer=setTimeout(()=>void refreshConversationsSummary(activeView()==='conversations'),10000);
+    const next=Array.isArray(result?.conversations)?result.conversations:[];
+    if(JSON.stringify(next)!==JSON.stringify(chatRows)){
+      chatRows=next;revision++;updateChatBadge();
+      if(renderView&&activeView()==='conversations')chats();
+    }
+  }catch{
+    // Retain the current conversation list on transient network errors.
+  }finally{
+    chatSummaryBusy=false;
+    clearTimeout(chatTimer);
+    if(isAdmin()&&canReadChats())chatTimer=setTimeout(()=>void refreshConversationsSummary(activeView()==='conversations'),document.hidden?60000:activeView()==='conversations'?10000:30000);
+  }
 }
 const lang=()=>document.documentElement.lang==='en'?'en':'ar';
 const tr=(ar,en)=>lang()==='ar'?ar:en;
