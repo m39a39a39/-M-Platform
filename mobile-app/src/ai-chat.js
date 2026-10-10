@@ -5,6 +5,7 @@ import {latestAssistantQuickReplies} from './ai-chat-state.js';
 let controller=null;
 let pollTimer=null;
 let waitingTimer=null;
+let renderedMessageParts=[];
 const signalTimers=new Map();
 const MARKETING_KEY='m-platform.ai-marketing.v2';
 const GUEST_KEY='m-platform.ai-guest-key.v1';
@@ -150,7 +151,10 @@ function setOpen(open){
 }
 function safeProductImage(src){
   const value=String(src||'');
-  return /^\/api\/media\/[a-f0-9-]{36}$/i.test(value)||/^https:\/\/ueeshop\.ly200-cdn\.com\//i.test(value)?value:'';
+  const stored=value.match(/^\/api\/media\/([a-f0-9-]{36})$/i);
+  // Show a small optimized thumbnail, not the original full-size storage object.
+  if(stored)return `/api/v1/media/${stored[1]}?width=256&quality=72`;
+  return /^https:\/\/ueeshop\.ly200-cdn\.com\//i.test(value)?value:'';
 }
 function productCardsHtml(products=[]){
   const rows=Array.isArray(products)?products.slice(0,6):[];
@@ -158,7 +162,7 @@ function productCardsHtml(products=[]){
   return `<div class="m-ai-products" aria-label="${esc(language()==='ar'?'منتجات مقترحة':'Suggested products')}">${rows.map(product=>{
     const image=safeProductImage(product.image),price=Number.isFinite(Number(product.price))?Number(product.price):null;
     return `<a class="m-ai-product-card" data-chat-product="${esc(product.id||'')}" href="${esc(product.href||('/?product='+encodeURIComponent(product.id||'')))}">
-      <span class="m-ai-product-image">${image?`<img src="${esc(image)}" alt="" loading="lazy" decoding="async">`:'<span class="m-ai-product-placeholder">M</span>'}</span>
+      <span class="m-ai-product-image">${image?`<img src="${esc(image)}" alt="" loading="lazy" decoding="async" fetchpriority="low" width="128" height="128">`:'<span class="m-ai-product-placeholder">M</span>'}</span>
       <strong>${esc(product.title||product.sku||'')}</strong>
       ${price!==null?`<span class="m-ai-product-price">${esc(new Intl.NumberFormat(language()==='ar'?'ar-SA':'en',{maximumFractionDigits:2}).format(price))} ${esc(product.currency||'SAR')}</span>`:''}
       ${Number(product.priceQuantity)>0?`<small>${esc(language()==='ar'?('سعر '+product.priceQuantity+' حبة'):('Price at '+product.priceQuantity+' pcs'))}</small>`:product.moq!==null&&product.moq!==undefined&&product.moq!==''?`<small>MOQ ${esc(product.moq)}</small>`:''}
@@ -202,8 +206,23 @@ function render(){
   const messages=host.querySelector('.m-ai-messages');
   const greeting=controller.mode==='client'?t('clientHello'):t('guestHello');
   const rows=[{role:'assistant',content:greeting,metadata:{}},...controller.messages];
-  messages.innerHTML=rows.map(messageHtml).join('');
-  if(controller.loading&&!controller.humanMode)messages.insertAdjacentHTML('beforeend',`<div class="m-ai-row assistant"><div class="m-ai-thinking"><span></span><span></span><span></span> ${esc(t('thinking'))}</div></div>`);
+  // Preserve existing message/image nodes; append new messages rather than reloading every card.
+  const parts=rows.map(messageHtml);
+  let shared=0;
+  while(shared<renderedMessageParts.length&&shared<parts.length&&renderedMessageParts[shared]===parts[shared])shared++;
+  const nearBottom=messages.scrollHeight-messages.clientHeight-messages.scrollTop<100;
+  const thinking=messages.querySelector('[data-ai-thinking]');
+  if(shared<renderedMessageParts.length)messages.innerHTML=parts.join('');
+  else if(shared<parts.length){
+    const markup=parts.slice(shared).join('');
+    if(thinking)thinking.insertAdjacentHTML('beforebegin',markup);
+    else messages.insertAdjacentHTML('beforeend',markup);
+  }
+  renderedMessageParts=parts;
+  const pending=messages.querySelector('[data-ai-thinking]');
+  if(controller.loading&&!controller.humanMode){
+    if(!pending)messages.insertAdjacentHTML('beforeend',`<div class="m-ai-row assistant" data-ai-thinking><div class="m-ai-thinking"><span></span><span></span><span></span> ${esc(t('thinking'))}</div></div>`);
+  }else pending?.remove();
 
   const dynamic=latestQuickReplies(),initial=controller.mode==='client'?t('chipsClient'):t('chipsGuest'),chips=dynamic.length?dynamic:controller.messages.length?[]:initial;
   host.querySelector('.m-ai-chips').innerHTML=chips.map(label=>`<button type="button" data-prompt="${esc(label)}">${esc(label)}</button>`).join('');
@@ -222,7 +241,7 @@ function render(){
 
   const input=host.querySelector('textarea'),send=host.querySelector('.m-ai-form button'),photoInput=host.querySelector('.m-ai-photo input');
   input.disabled=controller.loading;send.disabled=controller.loading;photoInput.disabled=controller.loading;
-  requestAnimationFrame(()=>{messages.scrollTop=messages.scrollHeight;});
+  if(nearBottom)requestAnimationFrame(()=>{messages.scrollTop=messages.scrollHeight;});
 }
 function setConversationId(id){
   if(!controller||!id)return;
@@ -230,31 +249,54 @@ function setConversationId(id){
 }
 function startPolling(){
   if(pollTimer||!controller?.conversationId||typeof controller.fetchConversation!=='function')return;
-  pollTimer=setInterval(()=>void syncRemote(false),7000);
+  const tick=async()=>{
+    pollTimer=null;
+    const active=controller;
+    if(!active?.conversationId||typeof active.fetchConversation!=='function')return;
+    await syncRemote(false);
+    if(active!==controller)return;
+    const closed=ensureHost().querySelector('.m-ai-panel').classList.contains('hidden');
+    pollTimer=setTimeout(tick,document.hidden?45000:closed?20000:10000);
+  };
+  pollTimer=setTimeout(tick,10000);
 }
-function stopPolling(){clearInterval(pollTimer);pollTimer=null;}
+function stopPolling(){clearTimeout(pollTimer);pollTimer=null;}
 async function syncRemote(silent=false){
-  if(!controller?.conversationId||typeof controller.fetchConversation!=='function')return;
+  const active=controller;
+  if(!active?.conversationId||typeof active.fetchConversation!=='function'||active.syncing)return;
+  active.syncing=true;
   try{
-    const result=await controller.fetchConversation({conversationId:controller.conversationId,guestKey:visitorKey(),language:language()});
-    if(!result?.conversation)return;
-    controller.humanMode=result.conversation.status==='human';
-    controller.waitingHuman=!!result.conversation.waitingHuman;
-    controller.waitingSince=String(result.conversation.waitingSince||'');
-    controller.leadCaptured=!!result.conversation.leadCaptured;
+    const afterId=Number(active.lastRemoteId)||0;
+    const result=await active.fetchConversation({conversationId:active.conversationId,guestKey:visitorKey(),language:language(),afterId});
+    if(active!==controller||!result?.conversation)return;
+    const formerStatus=active.humanMode+'|'+active.waitingHuman+'|'+active.waitingSince+'|'+active.leadCaptured;
+    active.humanMode=result.conversation.status==='human';
+    active.waitingHuman=!!result.conversation.waitingHuman;
+    active.waitingSince=String(result.conversation.waitingSince||'');
+    active.leadCaptured=!!result.conversation.leadCaptured;
     const incoming=(result.messages||[]).map(row=>({
       id:Number(row.id)||0,
       role:row.sender==='customer'?'user':row.sender==='admin'?'admin':'assistant',
       content:String(row.content||''),
       metadata:row.metadata&&typeof row.metadata==='object'?row.metadata:{}
-    })).filter(x=>x.content);
-    const latestId=incoming.reduce((m,x)=>Math.max(m,x.id||0),0);
-    const lastAdmin=[...incoming].reverse().find(x=>x.role==='admin'&&(x.id||0)>Number(controller.lastRemoteId||0));
-    if(lastAdmin&&!silent&&ensureHost().querySelector('.m-ai-panel').classList.contains('hidden'))showNudge(lastAdmin.content);
-    if(incoming.length)controller.messages=incoming.slice(-40);
-    controller.lastRemoteId=Math.max(Number(controller.lastRemoteId||0),latestId);
-    render();
-  }catch{}
+    })).filter(x=>x.id>0&&x.content);
+    const newAdmin=[...incoming].reverse().find(x=>x.role==='admin'&&x.id>afterId);
+    if(newAdmin&&!silent&&ensureHost().querySelector('.m-ai-panel').classList.contains('hidden'))showNudge(newAdmin.content);
+    if(incoming.length){
+      const saved=afterId?active.messages.filter(m=>Number(m.id)>0):[];
+      const seen=new Set(saved.map(m=>m.id));
+      for(const row of incoming)if(!seen.has(row.id)){saved.push(row);seen.add(row.id);}
+      saved.sort((a,b)=>a.id-b.id);
+      const confirmed=saved.slice(-40);
+      const optimistic=active.messages.filter(m=>!m.id&&!confirmed.some(row=>row.role===m.role&&row.content===m.content));
+      active.messages=[...confirmed,...optimistic].slice(-40);
+      active.lastRemoteId=Math.max(afterId,...incoming.map(m=>m.id));
+    }
+    const changedStatus=formerStatus!==active.humanMode+'|'+active.waitingHuman+'|'+active.waitingSince+'|'+active.leadCaptured;
+    if(incoming.length||changedStatus)render();
+  }catch{
+    // Keep the visible conversation available when the connection briefly fails.
+  }finally{active.syncing=false;}
 }
 async function selectImage(event){
   if(!controller||controller.loading)return;
@@ -365,7 +407,7 @@ export function aiChatSignal(type,detail={}){
 export function mountAiChat({mode='guest',language:languageGetter=()=> 'ar',send,fetchConversation,captureLead,trackConversion:trackConversionHandler}={}){
   if(typeof send!=='function')return;
   const sameMode=controller?.mode===mode,stored=storedConversationId(mode);
-  stopPolling();clearTimeout(waitingTimer);waitingTimer=null;
+  stopPolling();clearTimeout(waitingTimer);waitingTimer=null;renderedMessageParts=[];
   controller={
     mode,language:languageGetter,send,fetchConversation,captureLead,trackConversion:trackConversionHandler,
     messages:sameMode?controller.messages:[],loading:false,
@@ -378,5 +420,5 @@ export function mountAiChat({mode='guest',language:languageGetter=()=> 'ar',send
   if(controller.conversationId){startPolling();setTimeout(()=>void syncRemote(true),120);}
 }
 export function unmountAiChat(){
-  controller=null;stopPolling();clearTimeout(waitingTimer);waitingTimer=null;for(const timer of signalTimers.values())clearTimeout(timer);signalTimers.clear();document.getElementById('mAiChat')?.remove();
+  controller=null;renderedMessageParts=[];stopPolling();clearTimeout(waitingTimer);waitingTimer=null;for(const timer of signalTimers.values())clearTimeout(timer);signalTimers.clear();document.getElementById('mAiChat')?.remove();
 }
