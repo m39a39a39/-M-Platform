@@ -61,3 +61,7 @@
 .copy-selection .copy-check{flex-direction:row;align-items:center}.copy-jobs,.copy-actions,.copy-counts{display:flex;flex-wrap:wrap;gap:8px;margin-block:14px;align-items:center}.copy-counts span{background:#eef2ff;color:#334155;padding:6px 10px;border-radius:8px}.copy-jobs button,.copy-actions button{min-height:40px}
 .copy-item{border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-block:10px}.copy-item summary{display:flex;justify-content:space-between;gap:12px;cursor:pointer}.copy-item small{white-space:pre-wrap;line-height:1.6;color:#64748b}.copy-comparison label:last-child{grid-column:1/-1}
 @media(max-width:600px){.copy-selection,.copy-comparison{grid-template-columns:1fr}.copy-item summary{flex-direction:column}.copy-actions button{flex:1}.copy-panel{padding:12px}}
+/* Explicit tracks keep Safari's RTL intrinsic widths inside the phone viewport. */
+.copy-panel{width:100%;max-width:100%;min-width:0;box-sizing:border-box;grid-template-columns:minmax(0,1fr);word-break:break-word}
+.copy-panel>*{min-width:0;max-width:100%;box-sizing:border-box}.copy-panel .mg-ai-panel-head{flex-wrap:wrap}.copy-panel .mg-ai-panel-head>div{min-width:0;flex:1 1 220px}.copy-panel select{min-width:0;width:100%}
+.copy-item:not([open])>:not(summary){display:none}.copy-item form{min-width:0}.copy-item summary>*{min-width:0;overflow-wrap:anywhere}

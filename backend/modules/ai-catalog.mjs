@@ -1,4 +1,3 @@
-import {randomUUID} from 'node:crypto';
 import {db,one,sb,rpc,config,assert,HttpError} from '../lib/supabase.mjs';
 import {can} from './auth.mjs';
 

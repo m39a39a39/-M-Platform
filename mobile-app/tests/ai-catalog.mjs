@@ -36,7 +36,8 @@ for(const [engine,type] of Object.entries({chromium,webkit}))for(const language 
  assert.equal(await page.locator('[name=skus]').inputValue(),'AC25, AC26');
  await page.locator('[data-copy-action=apply]').click();await page.locator('[data-copy-action=revert]').waitFor();
  page.on('dialog',dialog=>dialog.accept());await page.locator('[data-copy-action=revert]').click();await page.waitForFunction(()=>!document.querySelector('[data-copy-action=revert]'));
- const width=await page.evaluate(()=>({page:document.documentElement.scrollWidth,width:innerWidth}));assert.ok(width.page<=width.width+1,JSON.stringify(width));
+ await page.screenshot({path:`layout-results/ai-catalog/${engine}-${language}.png`,fullPage:true});
+ const width=await page.evaluate(()=>({page:document.documentElement.scrollWidth,width:innerWidth}));if(width.page>width.width+1)console.log(await page.evaluate(()=>[...document.querySelectorAll('body *')].map(el=>({tag:el.tagName,cls:el.className,width:el.getBoundingClientRect().width,scroll:el.scrollWidth})).filter(x=>x.width>innerWidth||x.scroll>innerWidth).slice(0,20)));assert.ok(width.page<=width.width+1,JSON.stringify(width));
  assert.deepEqual(errors,[]);await page.screenshot({path:`layout-results/ai-catalog/${engine}-${language}.png`,fullPage:true});
  await browser.close();console.log(`PASS AI catalog ${engine} ${language}`);
 }
