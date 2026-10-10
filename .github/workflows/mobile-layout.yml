@@ -50,6 +50,7 @@ jobs:
             sleep 1
           done
           node tests/customer-portal.mjs
+          node tests/ai-catalog.mjs
       - name: Legacy portal regression (retired guest and admin markup)
         continue-on-error: true
         run: |

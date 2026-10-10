@@ -210,6 +210,7 @@
       ${usagePanel()}
       ${conversionPanel()}
       ${creatorIntro()}
+      ${overview?.productDraftEnabled?'<div data-ai-catalog-root></div>':''}
       <section class="mg-ai-panel">
         <div class="mg-ai-panel-head">
           <div><strong>${esc(tr('اقتراحات سريعة','Quick prompts'))}</strong><small>${esc(tr('ابدأ بتحليل جاهز أو اكتب سؤالك','Start with a suggested analysis or type your own request'))}</small></div>
@@ -224,6 +225,7 @@
         <footer>${esc(tr('تحويلات شات العملاء تُحسب من أحداث فعلية ومجمعة بدون حفظ نص المحادثة داخل سجل التحويل.','Customer chat conversions are calculated from real aggregated events; chat text is not stored in the conversion log.'))}</footer>
       </section>
     </section>`;
+    window.MCatalogAI?.render(root.querySelector('[data-ai-catalog-root]'),{categories:taxonomy().categories});
     requestAnimationFrame(()=>{const chat=root?.querySelector('[data-mg-ai-chat]');if(chat)chat.scrollTop=chat.scrollHeight;});
   }
 
@@ -376,6 +378,7 @@
       return true;
     },
     reset(){
+      window.MCatalogAI?.reset();
       overview=null;messages=[];error='';loading=false;loadingOverview=false;
       creatorOpen=false;productFiles=[];productDraft=null;generating=false;savingProduct=false;productError='';
       productInput={sku:'',price:'',currency:'SAR',moq:'1',stock:'',leadDays:'7',country:'',notes:''};

@@ -1,3 +1,4 @@
+import {aiCatalog} from './modules/ai-catalog.mjs';
 import {deleteOrder} from './modules/delete-order.mjs';
 import {supplierCatalog} from './modules/supplier-catalog.mjs';
 import {bulkSupplySources} from './modules/bulk-supply-sources.mjs';
@@ -88,6 +89,7 @@ export default async function handler(req,res){
       }
       else if(path==='/api/ai-chat'){assert(req.method==='POST',405);result=await aiChat(user,body,req);}
       else if(path==='/api/ai-conversion'){assert(req.method==='POST',405);result=await recordChatConversion(user,body,req);}
+      else if(path==='/api/ai-catalog'){result=await aiCatalog(user,req.method==='GET'?{action:'list'}:body);}
       else if(path==='/api/admin-ai'){result=req.method==='GET'?await adminAiOverview(user):await adminAi(user,body);}
       else if(path==='/api/ai-conversation'){
         result=req.method==='GET'

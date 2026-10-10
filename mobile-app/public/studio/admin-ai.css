@@ -53,3 +53,15 @@
 .mg-ai-conversion-flow>b{color:#98a2b3;text-align:center;font-size:16px}
 @media(max-width:900px){.mg-ai-conversion-flow{grid-template-columns:1fr auto 1fr auto 1fr}.mg-ai-conversion-flow article:nth-of-type(4),.mg-ai-conversion-flow article:nth-of-type(5){margin-top:2px}}
 @media(max-width:620px){.mg-ai-conversion-head{flex-direction:column}.mg-ai-conversion-head>span{white-space:normal}.mg-ai-conversion-flow{display:grid;grid-template-columns:1fr}.mg-ai-conversion-flow>b{transform:rotate(90deg);height:14px}.mg-ai-conversion-flow article{padding:10px 12px}.mg-ai-conversion-flow article strong{font-size:20px}}
+
+/* Bulk copy proposals use the same admin panel on desktop and phone. */
+.copy-panel{margin-block:20px;overflow-wrap:anywhere}.copy-panel>p{line-height:1.7;color:var(--muted,#64748b)}
+.copy-selection,.copy-comparison{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.copy-selection label,.copy-comparison label{display:flex;flex-direction:column;gap:6px;min-width:0}
+.copy-selection input,.copy-selection select,.copy-selection textarea,.copy-comparison textarea,.copy-panel select{max-width:100%;box-sizing:border-box}.copy-selection textarea,.copy-comparison textarea{width:100%;resize:vertical;line-height:1.6;padding:10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#0f172a}
+.copy-selection .copy-check{flex-direction:row;align-items:center}.copy-jobs,.copy-actions,.copy-counts{display:flex;flex-wrap:wrap;gap:8px;margin-block:14px;align-items:center}.copy-counts span{background:#eef2ff;color:#334155;padding:6px 10px;border-radius:8px}.copy-jobs button,.copy-actions button{min-height:40px}
+.copy-item{border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-block:10px}.copy-item summary{display:flex;justify-content:space-between;gap:12px;cursor:pointer}.copy-item small{white-space:pre-wrap;line-height:1.6;color:#64748b}.copy-comparison label:last-child{grid-column:1/-1}
+@media(max-width:600px){.copy-selection,.copy-comparison{grid-template-columns:1fr}.copy-item summary{flex-direction:column}.copy-actions button{flex:1}.copy-panel{padding:12px}}
+/* Explicit tracks keep Safari's RTL intrinsic widths inside the phone viewport. */
+.copy-panel{width:100%;max-width:100%;min-width:0;box-sizing:border-box;grid-template-columns:minmax(0,1fr);word-break:break-word}
+.copy-panel>*{min-width:0;max-width:100%;box-sizing:border-box}.copy-panel .mg-ai-panel-head{flex-wrap:wrap}.copy-panel .mg-ai-panel-head>div{min-width:0;flex:1 1 220px}.copy-panel select{min-width:0;width:100%}
+.copy-item:not([open])>:not(summary){display:none}.copy-item form{min-width:0}.copy-item summary>*{min-width:0;overflow-wrap:anywhere}
