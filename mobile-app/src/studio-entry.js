@@ -15,7 +15,7 @@ import {session} from './session.js';
 import {knowledgeBase} from './knowledge-base.js';
 window.MStudioSession=session;
 window.MKnowledgeBase=knowledgeBase;
-const STUDIO_ASSET_VERSION='20261010-ai-catalog-v1';
-for(const file of ['domain.js','app.js','studio.js','live.js','ai-catalog.js','admin-ai.js','unified.js','supply-bulk.js','catalog-bulk.js','storefront-controls.js','advanced.js','theme-editor.js']){
+const STUDIO_ASSET_VERSION='20261010-product-copy-v2';
+for(const file of ['domain.js','app.js','studio.js','product-copy.js','live.js','ai-catalog.js','admin-ai.js','unified.js','supply-bulk.js','catalog-bulk.js','storefront-controls.js','advanced.js','theme-editor.js']){
   await new Promise((resolve,reject)=>{const script=document.createElement('script');script.src='/studio/'+file+'?v='+STUDIO_ASSET_VERSION;script.onload=resolve;script.onerror=reject;document.body.append(script);});
 }

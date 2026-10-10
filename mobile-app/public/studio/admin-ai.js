@@ -210,7 +210,7 @@
       ${usagePanel()}
       ${conversionPanel()}
       ${creatorIntro()}
-      ${overview?.productDraftEnabled?'<div data-ai-catalog-root></div>':''}
+      ${overview?.productDraftEnabled?'<p class="tip">✨ حسّن العناوين والأوصاف من صفحة تعديل المنتج، أو حدّد منتجات من الكتالوج واختر «تحسين المحدد».</p><details><summary>دفعات الصور السابقة</summary><div data-ai-catalog-root></div></details>':''}
       <section class="mg-ai-panel">
         <div class="mg-ai-panel-head">
           <div><strong>${esc(tr('اقتراحات سريعة','Quick prompts'))}</strong><small>${esc(tr('ابدأ بتحليل جاهز أو اكتب سؤالك','Start with a suggested analysis or type your own request'))}</small></div>

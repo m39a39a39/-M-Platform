@@ -65,3 +65,12 @@
 .copy-panel{width:100%;max-width:100%;min-width:0;box-sizing:border-box;grid-template-columns:minmax(0,1fr);word-break:break-word}
 .copy-panel>*{min-width:0;max-width:100%;box-sizing:border-box}.copy-panel .mg-ai-panel-head{flex-wrap:wrap}.copy-panel .mg-ai-panel-head>div{min-width:0;flex:1 1 220px}.copy-panel select{min-width:0;width:100%}
 .copy-item:not([open])>:not(summary){display:none}.copy-item form{min-width:0}.copy-item summary>*{min-width:0;overflow-wrap:anywhere}
+
+/* Product copy is reviewed beside the product's own editable fields. */
+.product-copy{box-sizing:border-box;min-width:0;max-width:100%;padding:14px;border:1px solid #cbd5e1;border-radius:12px;background:#f8fafc;color:#182234;overflow-wrap:anywhere;grid-column:1/-1}
+.product-copy summary{cursor:pointer;font-weight:650;padding:8px 0}.product-copy details:not([open])>:not(summary){display:none}
+.product-copy-controls{display:flex;flex-wrap:wrap;align-items:end;gap:10px;margin:12px 0}.product-copy-controls label{display:grid;gap:5px;flex:1 1 180px;min-width:0}
+.product-copy input:not([type=checkbox]),.product-copy select,.product-copy textarea{box-sizing:border-box;width:100%;max-width:100%;min-width:0;padding:9px;border:1px solid #bdc7d4;border-radius:7px;background:white;color:#182234;font:inherit}
+.product-copy button{padding:9px 12px;white-space:normal}.product-copy-actions{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.product-copy [hidden]{display:none!important}
+.product-copy-compare{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.product-copy-compare>div{min-width:0;background:white;padding:10px;border-radius:8px}.product-copy-compare p{white-space:pre-wrap;margin:5px 0}.product-copy small{color:#526175}.product-copy textarea{min-height:110px;resize:vertical}.product-copy-field{margin:12px 0;min-width:0}.product-copy-row{padding:12px 0;border-top:1px solid #dce2ea;min-width:0}.product-copy-row header{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px}.product-copy-row header label{min-width:0;overflow-wrap:anywhere}.product-copy [role=status]{white-space:pre-wrap}
+@media(max-width:600px){.product-copy-compare{grid-template-columns:minmax(0,1fr)}.product-copy{padding:10px}.product-copy-controls{align-items:stretch}.product-copy-controls button{width:100%}}
