@@ -91,7 +91,7 @@ export default async function handler(req,res){
       else if(path==='/api/admin-ai'){result=req.method==='GET'?await adminAiOverview(user):await adminAi(user,body);}
       else if(path==='/api/ai-conversation'){
         result=req.method==='GET'
-          ?await customerConversation(user,{conversationId:url.searchParams.get('conversationId')||'',guestKey:url.searchParams.get('guestKey')||'',language:url.searchParams.get('language')||'ar'},req)
+          ?await customerConversation(user,{conversationId:url.searchParams.get('conversationId')||'',guestKey:url.searchParams.get('guestKey')||'',language:url.searchParams.get('language')||'ar',afterId:url.searchParams.get('afterId')||''},req)
           :await captureGuestLead(user,body,req);
       }
       else if(path==='/api/ai-conversations'&&req.method==='GET'){
