@@ -20,6 +20,7 @@ const copy={
   ar:{
     title:'مساعد M الذكي',subtitle:'مستشار مشتريات وتوريد',waitingSubtitle:'بانتظار موظف · المساعد مستمر معك',humanSubtitle:'فريق M يتولى المحادثة الآن',team:'فريق M',
     placeholder:'اكتب ماذا تبحث عنه...',send:'إرسال',close:'إغلاق',photo:'إضافة صورة من الكاميرا أو الاستديو',imageReady:'الصورة جاهزة للبحث',imageError:'تعذر قراءة الصورة. اختر صورة أخرى.',imageSearch:'📷 بحث بصورة',
+    older:'عرض الرسائل السابقة',
     guestHello:'مرحبًا 👋 أخبرني ماذا تريد شراءه، وسأساعدك في اختيار الأنسب من المنتجات المتاحة.',
     clientHello:'مرحبًا 👋 أخبرني ماذا تحتاج، وسأساعدك في مشترياتك وطلبات التوريد.',
     error:'تعذر الحصول على رد الآن. حاول مرة أخرى.',thinking:'جاري البحث...',leadTitle:'هل تريد أن نتواصل معك؟',leadText:'حتى لا نفقد التواصل إذا أغلقت الصفحة، اترك رقم واتساب أو وسيلة تواصل وسيتابع معك الموظف.',leadContact:'رقم واتساب أو وسيلة التواصل',leadName:'الاسم (اختياري)',leadSave:'حفظ وسيلة التواصل',leadSaved:'تم حفظ وسيلة التواصل',waitingLong:'فريق خدمة العملاء مشغول حاليًا، لكن طلبك محفوظ ويمكنني الاستمرار في مساعدتك حتى يستلم الموظف.',
@@ -29,6 +30,7 @@ const copy={
   en:{
     title:'M AI Assistant',subtitle:'Smart buying & sourcing advisor',waitingSubtitle:'Waiting for an agent · AI can still help',humanSubtitle:'M Team is handling this conversation',team:'M Team',
     placeholder:'Tell me what you are looking for...',send:'Send',close:'Close',photo:'Add image from camera or photo library',imageReady:'Image ready to search',imageError:'Could not read this image. Choose another image.',imageSearch:'📷 Image search',
+    older:'Show earlier messages',
     guestHello:'Hi 👋 Tell me what you want to buy and I will help you choose the best fit from available products.',
     clientHello:'Hi 👋 Tell me what you need and I can help with your purchases and sourcing requests.',
     error:'I could not get a response right now. Please try again.',thinking:'Searching...',leadTitle:'Want us to contact you?',leadText:'If you leave the page, add a WhatsApp number or contact method so our team can follow up.',leadContact:'WhatsApp or contact method',leadName:'Name (optional)',leadSave:'Save contact',leadSaved:'Contact saved',waitingLong:'Our customer service team is busy right now. Your request is saved and I can keep helping until an agent takes over.',
@@ -125,6 +127,7 @@ function ensureHost(){
     host.querySelector('textarea').value=button.dataset.prompt;host.querySelector('.m-ai-form').requestSubmit();
   });
   host.querySelector('.m-ai-messages').addEventListener('click',event=>{
+    if(event.target.closest('[data-ai-load-older]')){void loadOlderMessages();return;}
     const card=event.target.closest('[data-chat-product]');if(!card)return;
     const productId=String(card.dataset.chatProduct||'');if(!productId)return;
     const href=card.getAttribute('href')||'';
@@ -207,7 +210,7 @@ function render(){
   const greeting=controller.mode==='client'?t('clientHello'):t('guestHello');
   const rows=[{role:'assistant',content:greeting,metadata:{}},...controller.messages];
   // Preserve existing message/image nodes; append new messages rather than reloading every card.
-  const parts=rows.map(messageHtml);
+  const parts=[messageHtml(rows[0]),...(controller.hasOlderMessages?[`<div class="m-ai-older"><button type="button" data-ai-load-older>${esc(t('older'))}</button></div>`]:[]),...rows.slice(1).map(messageHtml)];
   let shared=0;
   while(shared<renderedMessageParts.length&&shared<parts.length&&renderedMessageParts[shared]===parts[shared])shared++;
   const nearBottom=messages.scrollHeight-messages.clientHeight-messages.scrollTop<100;
@@ -261,6 +264,32 @@ function startPolling(){
   pollTimer=setTimeout(tick,10000);
 }
 function stopPolling(){clearTimeout(pollTimer);pollTimer=null;}
+async function loadOlderMessages(){
+  const active=controller;
+  if(!active?.conversationId||!active.hasOlderMessages||active.loadingOlder||typeof active.fetchConversation!=='function')return;
+  const earliest=active.messages.find(x=>Number(x.id)>0)?.id;
+  if(!earliest)return;
+  active.loadingOlder=true;
+  const viewport=ensureHost().querySelector('.m-ai-messages');
+  const previousHeight=viewport.scrollHeight,previousTop=viewport.scrollTop;
+  try{
+    const result=await active.fetchConversation({conversationId:active.conversationId,guestKey:visitorKey(),language:language(),beforeId:earliest,afterId:0});
+    if(active!==controller)return;
+    const existing=new Set(active.messages.map(m=>Number(m.id)).filter(Boolean));
+    const previous=(result.messages||[]).map(row=>({
+      id:Number(row.id)||0,
+      role:row.sender==='customer'?'user':row.sender==='admin'?'admin':'assistant',
+      content:String(row.content||''),
+      metadata:row.metadata&&typeof row.metadata==='object'?row.metadata:{}
+    })).filter(m=>m.id>0&&m.content&&!existing.has(m.id));
+    active.messages=[...previous,...active.messages].slice(-200);
+    active.hasOlderMessages=!!result.hasOlderMessages&&previous.length>0;
+    render();
+    requestAnimationFrame(()=>{if(active===controller)viewport.scrollTop=previousTop+viewport.scrollHeight-previousHeight;});
+  }catch{
+    // Keep the current messages if loading old history fails.
+  }finally{active.loadingOlder=false;}
+}
 async function syncRemote(silent=false){
   const active=controller;
   if(!active?.conversationId||typeof active.fetchConversation!=='function'||active.syncing)return;
@@ -287,13 +316,14 @@ async function syncRemote(silent=false){
       const seen=new Set(saved.map(m=>m.id));
       for(const row of incoming)if(!seen.has(row.id)){saved.push(row);seen.add(row.id);}
       saved.sort((a,b)=>a.id-b.id);
-      const confirmed=saved.slice(-40);
+      const confirmed=saved.slice(-200);
       const optimistic=active.messages.filter(m=>!m.id&&!confirmed.some(row=>row.role===m.role&&row.content===m.content));
-      active.messages=[...confirmed,...optimistic].slice(-40);
+      active.messages=[...confirmed,...optimistic].slice(-200);
       active.lastRemoteId=Math.max(afterId,...incoming.map(m=>m.id));
     }
     const changedStatus=formerStatus!==active.humanMode+'|'+active.waitingHuman+'|'+active.waitingSince+'|'+active.leadCaptured;
-    if(incoming.length||changedStatus)render();
+    if(!afterId)active.hasOlderMessages=!!result.hasOlderMessages;
+    if(incoming.length||changedStatus||!afterId)render();
   }catch{
     // Keep the visible conversation available when the connection briefly fails.
   }finally{active.syncing=false;}
@@ -337,7 +367,7 @@ async function submit(event){
   const host=ensureHost(),input=host.querySelector('textarea'),message=input.value.trim(),image=controller.pendingImage||'';if(!message&&!image)return;
   markEngaged();hideNudge();input.value='';controller.pendingImage='';
   const visibleMessage=message||t('imageSearch');
-  controller.messages.push({role:'user',content:visibleMessage,metadata:{}});controller.messages=controller.messages.slice(-40);
+  controller.messages.push({role:'user',content:visibleMessage,metadata:{}});controller.messages=controller.messages.slice(-200);
   controller.loading=true;render();
   try{
     const history=controller.messages.slice(0,-1).slice(-6).map(x=>({role:x.role==='user'?'user':'assistant',content:x.content}));
@@ -352,7 +382,7 @@ async function submit(event){
   }catch(error){
     controller.messages.push({role:'assistant',content:String(error?.message||t('error')),metadata:{}});
   }finally{
-    controller.loading=false;controller.messages=controller.messages.slice(-40);render();
+    controller.loading=false;controller.messages=controller.messages.slice(-200);render();
   }
 }
 function scheduleSignal(key,delay,fn){clearTimeout(signalTimers.get(key));signalTimers.set(key,setTimeout(()=>{signalTimers.delete(key);fn();},delay));}
@@ -373,7 +403,7 @@ async function requestProactive(signal){
       language:language(),marketingSignal:signal
     });
     const reply=String(result?.reply||'').trim();if(!reply)return;
-    controller.messages.push({role:'assistant',content:reply});controller.messages=controller.messages.slice(-40);
+    controller.messages.push({role:'assistant',content:reply});controller.messages=controller.messages.slice(-200);
     showNudge(reply);render();
   }catch{}
 }
@@ -414,7 +444,8 @@ export function mountAiChat({mode='guest',language:languageGetter=()=> 'ar',send
     humanMode:sameMode?controller.humanMode:false,waitingHuman:sameMode?controller.waitingHuman:false,
     waitingSince:sameMode?controller.waitingSince||'':'',leadCaptured:sameMode?controller.leadCaptured:false,
     conversationId:sameMode?controller.conversationId||stored:stored,lastRemoteId:sameMode?controller.lastRemoteId||0:0,
-    pendingImage:sameMode?controller.pendingImage||'':''
+    pendingImage:sameMode?controller.pendingImage||'':'',
+    hasOlderMessages:sameMode?!!controller.hasOlderMessages:false
   };
   const host=ensureHost();host.classList.remove('hidden');render();
   if(controller.conversationId){startPolling();setTimeout(()=>void syncRemote(true),120);}
