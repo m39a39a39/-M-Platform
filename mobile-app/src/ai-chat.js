@@ -283,7 +283,7 @@ async function loadOlderMessages(){
       metadata:row.metadata&&typeof row.metadata==='object'?row.metadata:{}
     })).filter(m=>m.id>0&&m.content&&!existing.has(m.id));
     active.messages=[...previous,...active.messages].slice(-200);
-    active.hasOlderMessages=!!result.hasOlderMessages&&previous.length>0;
+    active.hasOlderMessages=!!result.hasOlderMessages&&previous.length>0&&active.messages.length<200;
     render();
     requestAnimationFrame(()=>{if(active===controller)viewport.scrollTop=previousTop+viewport.scrollHeight-previousHeight;});
   }catch{
