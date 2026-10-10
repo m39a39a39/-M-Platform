@@ -72,6 +72,7 @@ function editProduct(id){
     }
     render();toast(saved.status==='active'?'تم حفظ المنتج ونشره':'تم حفظ المنتج كمسودة');
   });
+  window.MProductCopy?.mountEditor($('#edit-form'));
 };
 function orderName(o){return o.delivery?.name||(liveState.accounts||[]).find(a=>a.id===o.customerId)?.name||'عميل';}
 function ordersView(){
