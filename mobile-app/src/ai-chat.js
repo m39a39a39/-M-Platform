@@ -248,7 +248,14 @@ function render(){
 }
 function setConversationId(id){
   if(!controller||!id)return;
-  controller.conversationId=String(id);storeConversationId(controller.mode,controller.conversationId);startPolling();
+  const next=String(id);
+  if(controller.conversationId&&controller.conversationId!==next){
+    // A closed thread was replaced: never merge its remote history into the new thread.
+    controller.lastRemoteId=0;
+    controller.hasOlderMessages=false;
+    controller.messages=controller.messages.filter(message=>!Number(message.id));
+  }
+  controller.conversationId=next;storeConversationId(controller.mode,next);startPolling();
 }
 function startPolling(){
   if(pollTimer||!controller?.conversationId||typeof controller.fetchConversation!=='function')return;
@@ -272,9 +279,10 @@ async function loadOlderMessages(){
   active.loadingOlder=true;
   const viewport=ensureHost().querySelector('.m-ai-messages');
   const previousHeight=viewport.scrollHeight,previousTop=viewport.scrollTop;
+  const conversationId=active.conversationId;
   try{
-    const result=await active.fetchConversation({conversationId:active.conversationId,guestKey:visitorKey(),language:language(),beforeId:earliest,afterId:0});
-    if(active!==controller)return;
+    const result=await active.fetchConversation({conversationId,guestKey:visitorKey(),language:language(),beforeId:earliest,afterId:0});
+    if(active!==controller||active.conversationId!==conversationId)return;
     const existing=new Set(active.messages.map(m=>Number(m.id)).filter(Boolean));
     const previous=(result.messages||[]).map(row=>({
       id:Number(row.id)||0,
@@ -295,9 +303,9 @@ async function syncRemote(silent=false){
   if(!active?.conversationId||typeof active.fetchConversation!=='function'||active.syncing)return;
   active.syncing=true;
   try{
-    const afterId=Number(active.lastRemoteId)||0;
-    const result=await active.fetchConversation({conversationId:active.conversationId,guestKey:visitorKey(),language:language(),afterId});
-    if(active!==controller||!result?.conversation)return;
+    const afterId=Number(active.lastRemoteId)||0,conversationId=active.conversationId;
+    const result=await active.fetchConversation({conversationId,guestKey:visitorKey(),language:language(),afterId});
+    if(active!==controller||active.conversationId!==conversationId||!result?.conversation)return;
     const formerStatus=active.humanMode+'|'+active.waitingHuman+'|'+active.waitingSince+'|'+active.leadCaptured;
     active.humanMode=result.conversation.status==='human';
     active.waitingHuman=!!result.conversation.waitingHuman;
