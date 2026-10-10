@@ -381,7 +381,7 @@ function syncClientAiChat(){
     mode:'client',
     language:()=>lang,
     send:body=>request('/api/v1/ai-chat',{method:'POST',auth:true,body}),
-    fetchConversation:params=>request('/api/v1/ai-conversation?'+new URLSearchParams({conversationId:String(params.conversationId||''),guestKey:String(params.guestKey||''),language:String(params.language||lang),afterId:String(params.afterId||0)}),{auth:true}),
+    fetchConversation:params=>request('/api/v1/ai-conversation?'+new URLSearchParams({conversationId:String(params.conversationId||''),guestKey:String(params.guestKey||''),language:String(params.language||lang),afterId:String(params.afterId||0),beforeId:String(params.beforeId||0)}),{auth:true}),
     trackConversion:body=>request('/api/v1/ai-conversion',{method:'POST',auth:true,body})
   });
 }
