@@ -53,13 +53,20 @@ for(const [engine,type] of Object.entries({chromium,webkit}))for(const language 
  const product={id:'c3b2d826-a640-4945-b3b4-b1cb204bef56',version:2,product:'AMAYA 20W',specs:'Original description',sku:'A20',status:'published',translation:{titleAr:'شاحن AMAYA',titleEn:'AMAYA charger',descriptionAr:'الوصف الأصلي',descriptionEn:'Original description'},categoryId:'cat',country:'China',unitPrice:35,currency:'SAR',moq:1,leadTime:3,images:[]};
  const admin={id:'admin',role:'admin',isOwner:true,name:'Admin'};
  const state={user:admin,settings:{_version:1,storefront:defaultStore(),categories:[{id:'cat',nameAr:'شواحن',nameEn:'Chargers',active:true}],subcategories:[],currencies:[{code:'SAR',rate:1,active:true}],supplyCountries:[{id:'China',nameAr:'الصين',nameEn:'China',active:true}]},publicOffers:[product],accounts:[admin],requests:[],quotes:[],interests:[],supplySources:[]};
- const writes=[];
+ const writes=[],completionCalls=[];
  await actual.route('**/api/**',route=>{
   const path=new URL(route.request().url()).pathname;let result={};
   if(path.endsWith('/state'))result=state;
   else if(path.endsWith('/notifications'))result=[];
-  else if(path.endsWith('/product-copy'))result={proposal:{titleAr:'شاحن AMAYA محسّن',titleEn:'Improved AMAYA charger'}};
-  else if(path.endsWith('/studio-product')){const body=route.request().postDataJSON();writes.push(body);product.translation.titleAr=body.product.name;product.translation.titleEn=body.product.nameEn;product.version++;result={ok:true};}
+  else if(path.endsWith('/uploads'))result={src:'/api/media/eeeeeeee-eeee-4eee-eeee-eeeeeeeeeeee'};
+  else if(path.endsWith('/product-copy')){
+   const body=route.request().postDataJSON();
+   if(body.mode==='complete'){completionCalls.push(body);result={proposal:{titleAr:'سماعة AMAYA',titleEn:'AMAYA headphones',descriptionAr:'سماعة من AMAYA.',descriptionEn:'Headphones from AMAYA.',shortDescription:'سماعة AMAYA',technicalSpecs:'',options:''},evidence:[],taxonomy:{categoryId:'',subcategoryId:'',newCategory:{nameAr:'سماعات',nameEn:'Headphones'},newSubcategory:{nameAr:'سماعات سلكية',nameEn:'Wired headphones'}},taxonomyReference:{categories:state.settings.categories,subcategories:[]}};}
+   else result={proposal:{titleAr:'شاحن AMAYA محسّن',titleEn:'Improved AMAYA charger'}};
+  }
+  else if(path.endsWith('/studio-product')){const body=route.request().postDataJSON();writes.push(body);product.translation.titleAr=body.product.name;product.translation.titleEn=body.product.nameEn;product.version++;
+   if(body.product.id!==product.id){const next={...product,id:body.product.id,product:body.product.name,sku:body.product.sku,images:body.product.images,categoryId:'headphones',subcategoryId:'wired'};state.publicOffers.push(next);state.settings.categories.push({id:'headphones',nameAr:'سماعات',nameEn:'Headphones',active:true});state.settings.subcategories.push({id:'wired',parentId:'headphones',nameAr:'سماعات سلكية',nameEn:'Wired headphones',active:true});}
+   result={ok:true};}
   return route.fulfill({json:result});
  });
  await actual.goto('http://127.0.0.1:4173/admin.html?screen=products');
@@ -68,6 +75,17 @@ for(const [engine,type] of Object.entries({chromium,webkit}))for(const language 
  await actual.screenshot({path:`layout-results/product-copy/studio-${engine}-${language}.png`,fullPage:true});
  await actual.locator('#edit-form button[type=submit]').click();await actual.waitForFunction(()=>!document.querySelector('#dialog').open);assert.equal(writes.length,1);assert.equal(writes[0].product.nameEn,'Improved AMAYA charger');
  await actual.locator('[data-catalog-select]').first().check();await actual.locator('[data-action=catalog-ai]').click();await actual.locator('[data-product-copy-bulk] [data-pc-generate]').waitFor();
+ await actual.locator('#dialog [data-action=close]').click();
+ await actual.locator('[data-action=new-product]').click();await actual.locator('[name=name]').fill('سماعة AMAYA');
+ // A corrupt image is ignored for analysis, so the name still produces a usable proposal.
+ await actual.locator('[name=photos]').setInputFiles({name:'blurry.png',mimeType:'image/png',buffer:Buffer.from('unreadable')});
+ await actual.locator('[data-complete-generate]').click();await actual.locator('[data-complete-use]').waitFor();assert.equal(completionCalls[0].images.length,0);assert.equal(writes.length,1);
+ await actual.locator('[name=name]').fill('سماعة AMAYA معدلة');await actual.locator('[data-complete-use]').click();assert.equal(await actual.locator('[name=name]').inputValue(),'سماعة AMAYA معدلة');
+ await actual.locator('[name=photos]').setInputFiles({name:'product.png',mimeType:'image/png',buffer:Buffer.from(await actual.evaluate(()=>{const c=document.createElement('canvas');c.width=100;c.height=100;c.getContext('2d').fillRect(0,0,100,100);return c.toDataURL('image/png').split(',')[1];}),'base64')});
+ await actual.locator('[data-complete-generate]').click();await actual.locator('[data-complete-use]').waitFor();assert.equal(completionCalls[1].images.length,1);
+ await actual.locator('[data-complete-use]').click();assert.equal(writes.length,1);assert.equal(await actual.locator('[name=technicalSpecs]').inputValue(),'');assert.equal(await actual.locator('[name=categoryId]').inputValue(),'ai-new-category');assert.equal(await actual.locator('[name=subcategoryId]').inputValue(),'ai-new-subcategory');assert.match(await actual.locator('[name=sku]').inputValue(),/^MG-/);
+ await actual.screenshot({path:`layout-results/product-copy/completion-${engine}-${language}.png`,fullPage:true});
+ await actual.locator('#edit-form button[type=submit]').click();await actual.waitForFunction(()=>!document.querySelector('#dialog').open);assert.equal(writes.length,2);assert.equal(writes[1].taxonomyProposal.newCategory.nameEn,'Headphones');assert.equal(writes[1].product.technicalSpecs,'');assert.equal(writes[1].product.price,1);
  assert.deepEqual(studioErrors,[]);assert.ok(await actual.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
  await browser.close();console.log(`PASS product copy ${engine} ${language}`);
 }
