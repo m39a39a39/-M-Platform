@@ -175,3 +175,6 @@ body.app-modal-open .sf-product-page .sf-buy-bar{display:none!important}
 
 .supplier-catalog-results[aria-busy="true"]{opacity:.82;transition:opacity .15s ease}
 .catalog-refresh-note{display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 0;color:#667085;font-size:13px}
+
+
+.sf-catalog-sort{display:flex;align-items:center;justify-content:flex-end;gap:12px;flex-wrap:wrap;margin:0 0 20px;font-weight:600}.sf-catalog-sort select{font:inherit;color:inherit;background:#fff;border:1px solid #cdd8d6;border-radius:10px;padding:10px 14px;max-width:100%;min-height:44px}.sf-category-back{display:inline-block;margin:8px 0 16px;color:var(--store-accent);text-decoration:underline;text-underline-offset:4px}
