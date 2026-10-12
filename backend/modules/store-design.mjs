@@ -32,7 +32,7 @@ export function validateDesign(value,store,context){
   assert(out.productSource!=='category'||out.categoryId,502,'التصنيف مطلوب');
   assert(out.productSource!=='manual'||out.productIds.length,502,'اختر منتجات القسم');
   assert(['products','request','cart','register-client'].includes(out.buttonTarget),502,'إجراء غير صالح');
-  out.showImage=['hero','image'].includes(out.type)?!!out.image:true;out.showButton=!!out.button;return out;
+  out.showImage=['hero','image'].includes(out.type)?!!out.image:true;out.showButton=!!out.button;out.showAllProducts=!['hero','image'].includes(out.type);return out;
  });
  let normalized;
  try{normalized=normalizeStore({...store,sections:[...store.sections.filter(s=>!isHome(s)),...sections]});}

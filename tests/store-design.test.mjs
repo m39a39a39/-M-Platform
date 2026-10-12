@@ -53,3 +53,21 @@ test('provider refusal, failure, truncation and malformed proposals leave settin
 });
 
 test('product sections keep product photos visible without a section banner image',()=>{const out=validateDesign({...proposal,sections:[{...proposal.sections[0],type:'products',image:''}]},store,context);assert.equal(out.sections[0].showImage,true);});
+
+test('generated hero and image banners default to one action',()=>{
+ for(const type of ['hero','image']){
+  const out=validateDesign({...proposal,sections:[{...proposal.sections[0],type}]},store,context);
+  assert.equal(out.sections[0].showButton,true);assert.equal(out.sections[0].showAllProducts,false);
+ }
+});
+test('existing banners deduplicate equivalent catalog actions but retain distinct destinations and fallback',()=>{
+ const render=(patch,language='ar')=>renderStorefront({settings:{storefront:{...store,sections:[{...proposal.sections[0],id:'existing',page:'home',visible:true,channel:'both',showButton:true,showAllProducts:true,...patch}]}},publicOffers:[]},'web',{language,chrome:false});
+ for(const type of ['hero','image'])for(const language of ['ar','en']){
+  const html=render({type},language);assert.match(html,/sf-primary/);assert.doesNotMatch(html,/sf-all-products/);
+  assert.match(render({type,showButton:false},language),/sf-all-products/);
+  assert.match(render({type,button:'',buttonEn:''},language),/sf-all-products/);
+  assert.match(render({type,productSource:'category',categoryId:'cat'},language),/sf-all-products/);
+  assert.match(render({type,buttonTarget:'request'},language),/sf-all-products/);
+ }
+ assert.match(render({type:'products'}),/sf-all-products/);
+});
