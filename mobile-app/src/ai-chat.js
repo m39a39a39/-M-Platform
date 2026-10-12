@@ -255,7 +255,7 @@ function setConversationId(id){
     controller.hasOlderMessages=false;
     controller.messages=controller.messages.filter(message=>!Number(message.id));
   }
-  controller.conversationId=next;storeConversationId(controller.mode,next);startPolling();
+  controller.conversationId=next;storeConversationId(controller.scope,next);startPolling();
 }
 function startPolling(){
   if(pollTimer||!controller?.conversationId||typeof controller.fetchConversation!=='function')return;
@@ -354,6 +354,7 @@ function clearPendingImage(){
 async function submitLead(event){
   event.preventDefault();
   if(!controller||controller.loading||typeof controller.captureLead!=='function'||!controller.conversationId)return;
+  const active=controller;
   const form=event.currentTarget,contact=form.elements.contact.value.trim(),name=form.elements.name.value.trim();
   if(!contact)return;
   const button=form.querySelector('button');button.disabled=true;
@@ -362,24 +363,28 @@ async function submitLead(event){
       conversationId:controller.conversationId,guestKey:visitorKey(),language:language(),
       contact,name,productSku:latestProductSku()
     });
+    if(active!==controller)return;
     controller.leadCaptured=!!result?.leadCaptured;
     if(result?.reply)controller.messages.push({role:'assistant',content:String(result.reply),metadata:{}});
     await syncRemote(true);
   }catch(error){
+    if(active!==controller)return;
     controller.messages.push({role:'assistant',content:String(error?.message||t('error')),metadata:{}});
-  }finally{button.disabled=false;render();}
+  }finally{button.disabled=false;if(active===controller)render();}
 }
 async function submit(event){
   event.preventDefault();
   if(!controller||controller.loading)return;
   const host=ensureHost(),input=host.querySelector('textarea'),message=input.value.trim(),image=controller.pendingImage||'';if(!message&&!image)return;
+  const active=controller;
   markEngaged();hideNudge();input.value='';controller.pendingImage='';
   const visibleMessage=message||t('imageSearch');
   controller.messages.push({role:'user',content:visibleMessage,metadata:{}});controller.messages=controller.messages.slice(-200);
   controller.loading=true;render();
   try{
-    const history=controller.messages.slice(0,-1).slice(-6).map(x=>({role:x.role==='user'?'user':'assistant',content:x.content}));
-    const result=await controller.send({message:message||t('imageSearch'),history,language:language(),guestKey:visitorKey(),conversationId:controller.conversationId||'',...(image?{image}: {})});
+    const page=new URLSearchParams(location.search);
+    const result=await controller.send({message:message||t('imageSearch'),pageContext:{productId:page.get('product')||controller.viewedProductId||'',pageId:page.get('page')||'',categoryId:page.get('category')||''},language:language(),guestKey:visitorKey(),conversationId:controller.conversationId||'',...(image?{image}: {})});
+    if(active!==controller)return;
     if(result?.conversationId)setConversationId(result.conversationId);
     controller.humanMode=!!result?.humanMode;
     controller.waitingHuman=!!result?.waitingHuman||controller.waitingHuman&&!controller.humanMode;
@@ -388,9 +393,10 @@ async function submit(event){
     if(result?.reply)controller.messages.push({role:'assistant',content:String(result.reply),metadata:{products:result.recommendations||[],quickReplies:result.quickReplies||[],...(result.waitingHuman?{handoff:'waiting'}:{}),...(result.leadPrompt?{leadPrompt:true}:{})}});
     await syncRemote(true);
   }catch(error){
+    if(active!==controller)return;
     controller.messages.push({role:'assistant',content:String(error?.message||t('error')),metadata:{}});
   }finally{
-    controller.loading=false;controller.messages=controller.messages.slice(-200);render();
+    if(active===controller){controller.loading=false;controller.messages=controller.messages.slice(-200);render();}
   }
 }
 function scheduleSignal(key,delay,fn){clearTimeout(signalTimers.get(key));signalTimers.set(key,setTimeout(()=>{signalTimers.delete(key);fn();},delay));}
@@ -403,13 +409,14 @@ function eligibleForProactive(){
 }
 async function requestProactive(signal){
   if(!eligibleForProactive())return;
+  const active=controller;
   const state=marketingState();state.count=Number(state.count||0)+1;state.lastAt=Date.now();saveMarketingState(state);
   try{
     const result=await controller.send({
       message:language()==='ar'?'أنشئ رسالة مساعدة استباقية مناسبة لهذا العميل.':'Create a suitable proactive sales-assistance message for this customer.',
-      history:controller.messages.slice(-6).map(x=>({role:x.role==='user'?'user':'assistant',content:x.content})),
       language:language(),marketingSignal:signal
     });
+    if(active!==controller)return;
     const reply=String(result?.reply||'').trim();if(!reply)return;
     controller.messages.push({role:'assistant',content:reply});controller.messages=controller.messages.slice(-200);
     showNudge(reply);render();
@@ -419,6 +426,7 @@ export function aiChatSignal(type,detail={}){
   if(!controller)return;
   const state={count:0,lastAt:0,views:{},distinct:[],chatEngaged:false,...marketingState()};
   if(type==='product_view'){
+    controller.viewedProductId=String(detail.productId||'');
     const key=String(detail.sku||detail.title||'product').slice(0,120);
     state.views={...(state.views||{}),[key]:Number(state.views?.[key]||0)+1};
     state.distinct=[...new Set([...(Array.isArray(state.distinct)?state.distinct:[]),key])].slice(-8);saveMarketingState(state);
@@ -442,16 +450,20 @@ export function aiChatSignal(type,detail={}){
   }
   if(type==='cart_open'&&Number(detail.cartCount)>0)scheduleSignal('cart-open',15000,()=>requestProactive({type:'cart_hesitation',...detail}));
 }
-export function mountAiChat({mode='guest',language:languageGetter=()=> 'ar',send,fetchConversation,captureLead,trackConversion:trackConversionHandler}={}){
+export function mountAiChat({mode='guest',accountId='',language:languageGetter=()=> 'ar',send,fetchConversation,captureLead,trackConversion:trackConversionHandler}={}){
   if(typeof send!=='function')return;
-  const sameMode=controller?.mode===mode,stored=storedConversationId(mode);
+  if(mode==='client'&&!accountId){unmountAiChat();return;}
+  const scope=mode==='client'?'client:'+accountId:'guest:'+visitorKey();
+  const sameMode=controller?.scope===scope,stored=storedConversationId(scope);
+  if(!sameMode){clearChatAttribution();for(const timer of signalTimers.values())clearTimeout(timer);signalTimers.clear();}
   stopPolling();clearTimeout(waitingTimer);waitingTimer=null;renderedMessageParts=[];
   controller={
-    mode,language:languageGetter,send,fetchConversation,captureLead,trackConversion:trackConversionHandler,
+    mode,scope,language:languageGetter,send,fetchConversation,captureLead,trackConversion:trackConversionHandler,
     messages:sameMode?controller.messages:[],loading:false,
     humanMode:sameMode?controller.humanMode:false,waitingHuman:sameMode?controller.waitingHuman:false,
     waitingSince:sameMode?controller.waitingSince||'':'',leadCaptured:sameMode?controller.leadCaptured:false,
     conversationId:sameMode?controller.conversationId||stored:stored,lastRemoteId:sameMode?controller.lastRemoteId||0:0,
+    viewedProductId:sameMode?controller.viewedProductId||'':'',
     pendingImage:sameMode?controller.pendingImage||'':'',
     hasOlderMessages:sameMode?!!controller.hasOlderMessages:false
   };
@@ -461,3 +473,4 @@ export function mountAiChat({mode='guest',language:languageGetter=()=> 'ar',send
 export function unmountAiChat(){
   controller=null;renderedMessageParts=[];stopPolling();clearTimeout(waitingTimer);waitingTimer=null;for(const timer of signalTimers.values())clearTimeout(timer);signalTimers.clear();document.getElementById('mAiChat')?.remove();
 }
+

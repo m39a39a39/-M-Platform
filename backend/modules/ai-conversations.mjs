@@ -66,7 +66,7 @@ export async function ensureConversation(user,body={},create=true){
   const guestKey=clean(body.guestKey,120),language=body.language==='en'?'en':'ar';
   if(!user&&!validGuestKey(guestKey)){if(create)assert(false,400,'جلسة المحادثة غير صالحة / Invalid chat session');return null;}
   let row=body.conversationId?await getConversation(clean(body.conversationId,80)):null;
-  if(row&&!ownsConversation(user,row,guestKey))row=null;
+  if(body.conversationId)assert(row&&ownsConversation(user,row,guestKey),404,'المحادثة غير موجودة / Conversation not found');
   if(row?.status==='closed'&&create)row=null;
   if(!row)row=await latestConversation(user,guestKey);
   if(!row&&create)row=await createConversation(user,guestKey,language);
@@ -236,3 +236,4 @@ export async function adminConversationAction(user,body={}){
   }
   throw Object.assign(new Error('إجراء غير صالح / Invalid action'),{status:400});
 }
+

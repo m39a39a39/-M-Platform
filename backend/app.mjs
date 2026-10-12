@@ -81,6 +81,7 @@ export default async function handler(req,res){
       assert(req.method==='POST',405);result=await authRoute(path.split('/').at(-1),req,res,body);
     }else{
       const user=await identify(req,res,path==='/api/state'||path==='/api/ai-chat'||path==='/api/ai-conversation'||path==='/api/ai-conversion'||path.startsWith('/api/media/')&&req.method==='GET');
+      if(['/api/ai-chat','/api/ai-conversation','/api/ai-conversion'].includes(path)&&req.headers.authorization)assert(user,401,'انتهت الجلسة / Session expired');
       if(path==='/api/state'){
         assert(req.method==='GET',405);
         if(!user){
@@ -144,4 +145,3 @@ export default async function handler(req,res){
     res.end(JSON.stringify({error:error.status?error.message:'حدث خطأ في الخادم / Server error'}));
   }
 }
-

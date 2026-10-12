@@ -46,7 +46,7 @@ function publicSettingsForView(data={},route={}){
     const routePage=aiPolicies?'':productId?'product':category?'category':(q||['products','search'].includes(pageId))?'search':pageId?'':'home';
     const sections=(safe.storefront.sections||[]).filter(section=>{
       const page=section.page||(['header','footer'].includes(section.type)?'global':'home');
-      return page==='global'||(routePage&&page===routePage);
+      return page==='global'||(aiKnowledge&&section.visible!==false)||(routePage&&page===routePage);
     }).map(publicSectionForView);
     safe.storefront={...safe.storefront,
       pages:(safe.storefront.pages||[]).map(page=>{

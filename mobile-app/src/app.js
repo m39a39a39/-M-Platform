@@ -378,7 +378,7 @@ const request=(path,options={})=>session.request(path,options);
 function syncClientAiChat(){
   if(currentUser?.role!=='client'){unmountAiChat();return;}
   mountAiChat({
-    mode:'client',
+    mode:'client',accountId:currentUser.id,
     language:()=>lang,
     send:body=>request('/api/v1/ai-chat',{method:'POST',auth:true,body}),
     fetchConversation:params=>request('/api/v1/ai-conversation?'+new URLSearchParams({conversationId:String(params.conversationId||''),guestKey:String(params.guestKey||''),language:String(params.language||lang),afterId:String(params.afterId||0),beforeId:String(params.beforeId||0)}),{auth:true}),
@@ -840,7 +840,7 @@ async function offerSupply(productId){
 async function openPublicOffer(offerId){
   if(currentUser?.role==='client'){location.assign('/?product='+encodeURIComponent(offerId));return;}
   let o=(platformState.publicOffers||[]).find(x=>x.id===offerId);if(currentUser?.role==='supplier')try{o=await supplierProduct(offerId,request);}catch(error){showToast(error.message);return;}if(!o)return;
-  if(currentUser?.role==='client')aiChatSignal('product_view',{productSku:o.sku||'',productTitle:titleOf(o),price:Number(o.unitPrice)||0,currency:o.currency||'',moq:Number(o.moq)||0});
+  if(currentUser?.role==='client')aiChatSignal('product_view',{productId:o.id,productSku:o.sku||'',productTitle:titleOf(o),price:Number(o.unitPrice)||0,currency:o.currency||'',moq:Number(o.moq)||0});
   const cartItem=cartItems.find(x=>x.offerId===o.id);
   const moq=Math.max(1,Math.ceil(Number(o.moq)||1)),stock=trackedStock(o),available=isUnlimitedStock(o)||stock>=moq,maxAttr=!isUnlimitedStock(o)?` max="${esc(stock)}"`:'';
   const initialQty=cartItem?.quantity||moq;
@@ -1511,4 +1511,5 @@ if(Capacitor.isNativePlatform()){
   window.addEventListener('pageshow',refreshAfterResume);
 }
 (async function boot(){await languageReady;lang=getLanguage();applyLanguage();setRegisterRole('client');applyResetLanguage();if(recoveryAccessToken()){showView('resetView');return;}if(new URLSearchParams(location.search).get('store')==='1'){showView('guestView');return;}await resumeSession();})();
+
 

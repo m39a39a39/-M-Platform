@@ -38,7 +38,7 @@ export function createSession({ storage, fetchImpl = (...args) => fetch(...args)
     const requestController = new AbortController(), signal = controller.signal;
     const cancel = () => requestController.abort();
     if (!detached) signal.addEventListener('abort', cancel, { once: true });
-    const timeout = setTimeout(cancel, 30000);
+    const timeout = setTimeout(cancel, path==='/api/v1/ai-chat'?55000:30000);
     try {
       const headers = { 'X-M-Client': 'native' };
       if (body !== undefined) headers['Content-Type'] = 'application/json';

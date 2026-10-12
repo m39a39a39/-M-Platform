@@ -207,6 +207,7 @@
         <div class="mg-ai-safety">${esc(tr('آمن: الاعتماد مطلوب قبل الحفظ','Safe: approval required before saving'))}</div>
       </header>
       ${overview?cards():`<div class="mg-ai-loading">${esc(loadingOverview?tr('جاري تحميل ملخص المتجر…','Loading store overview…'):tr('تعذر تحميل ملخص المتجر','Could not load store overview'))}</div>`}
+      ${overview?.knowledgeStatus?`<section class="mg-ai-panel"><strong>${esc(tr('معرفة شات العملاء: قراءة مباشرة','Customer chat knowledge: live reads'))}</strong><p>${esc(tr('يقرأ المنتجات والسياسات والمعلومات المنشورة عند كل سؤال. المسودات غير متاحة للعملاء، والطلبات مقتصرة على صاحب الحساب.','Reads published products, policies and store information on every question. Drafts are excluded and orders are limited to the signed-in owner.'))}</p><small>${esc(tr('آخر فحص','Last checked'))}: ${esc(new Date(overview.knowledgeStatus.checkedAt).toLocaleString())}</small></section>`:''}
       ${usagePanel()}
       ${conversionPanel()}
       ${creatorIntro()}
@@ -386,3 +387,4 @@
     }
   };
 })();
+
