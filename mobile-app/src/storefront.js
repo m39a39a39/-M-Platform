@@ -48,7 +48,7 @@ export function renderStorefront(state,channel='web',options={}){
   const s={...raw,...normalizeSectionLayout(raw)},heading=`${s.showTitle?`<${index===0&&s.type==='hero'?'h1':'h2'}>${esc(localized(s,'title'))}</${index===0&&s.type==='hero'?'h1':'h2'}>`:''}${s.showSubtitle?`<p>${esc(localized(s,'subtitle'))}</p>`:''}`;
   let content='';
   if(s.type==='imageBanner')content=`<section class="sf-image-only-banner sf-clickable-surface">${img(s.image,'',index===0)}${hit({...s,clickable:true})}</section>`;
-  if(s.type==='hero'||s.type==='image')content=`<section class="sf-image-section sf-clickable-surface ${s.type==='hero'?'sf-custom-hero':''}">${hit(s)}${s.showImage?img(s.image,'',index===0):''}<div>${heading}<div class="sf-section-actions">${button(s)}${s.showAllProducts?allButton:''}</div></div></section>`;
+  if(s.type==='hero'||s.type==='image')content=`<section class="sf-image-section sf-clickable-surface ${s.type==='hero'?'sf-custom-hero':''}">${hit(s)}${s.showImage?img(s.image,'',index===0):''}<div>${heading}<div class="sf-section-actions">${button(s)}${s.showAllProducts&&!(button(s)&&s.buttonTarget==='products'&&(s.productSource||'latest')==='latest')?allButton:''}</div></div></section>`;
   if(s.type==='text'||s.type==='cta')content=`<section class="sf-text-section">${heading}${button(s)}</section>`;
   if(['benefits','steps','faq'].includes(s.type)){const entries=localized(s,'items').split('\n').filter(Boolean);content=`<section class="sf-section">${heading}<div class="sf-custom-items">${entries.map((line,i)=>{const [title,...desc]=line.split('|');return s.type==='faq'?`<details><summary>${esc(title)}</summary><p>${esc(desc.join('|'))}</p></details>`:`<article>${s.type==='steps'?`<b>${i+1}</b>`:''}<h3>${esc(title)}</h3><p>${esc(desc.join('|'))}</p></article>`;}).join('')}</div></section>`;}
   if(s.type==='products')content=`<section class="sf-section">${heading}<div class="sf-products">${selectSectionProducts(state.publicOffers||[],s,config.collections).map(p=>storeProductCard(p,{...h,showProductImage:s.showImage},options.money,lang)).join('')||`<p class="sf-empty">${en?'No products available.':'لا توجد منتجات متاحة.'}</p>`}</div><div class="sf-section-actions">${button(s)}${s.showAllProducts?allButton:''}</div></section>`;
@@ -149,3 +149,4 @@ export function formatStoreMoney(value,currency,language='ar'){
  const digits=Math.abs(n)>=100?2:4;
  return `${esc(String(currency||'').toUpperCase())} ${Number(n.toFixed(digits)).toLocaleString(language==='ar'?'ar':'en',{maximumFractionDigits:digits})}`.trim();
 }
+
