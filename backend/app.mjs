@@ -1,3 +1,4 @@
+import {generateStoreDesign} from './modules/store-design.mjs';
 import {productCopy} from './modules/product-copy.mjs';
 import {aiCatalog} from './modules/ai-catalog.mjs';
 import {deleteOrder} from './modules/delete-order.mjs';
@@ -120,6 +121,7 @@ export default async function handler(req,res){
         else if(path==='/api/profile/currency')result=await updateOwnCurrency(user,body);
         else if(path==='/api/orders/assign')result=await assignSupplier(user,body);
         else if(path==='/api/order-management')result=await manageOrder(user,body);
+        else if(path==='/api/store-design')result=await generateStoreDesign(user,body);
         else if(path==='/api/studio')result=await saveStudio(user,body);
         else if(path==='/api/studio-product')result=await saveStudioProduct(user,body);
         else if(path==='/api/settings')result=await saveSettings(user,body);
@@ -142,3 +144,4 @@ export default async function handler(req,res){
     res.end(JSON.stringify({error:error.status?error.message:'حدث خطأ في الخادم / Server error'}));
   }
 }
+
