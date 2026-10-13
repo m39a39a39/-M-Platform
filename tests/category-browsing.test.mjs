@@ -16,7 +16,7 @@ test('parent opens its children and subcategory retains parent navigation and fi
  const product=(id,subcategoryId)=>({id,categoryId:'electronics',subcategoryId,status:'published',product:id,unitPrice:10,currency:'SAR'});
  const data={...state,publicOffers:[product('headphones','audio'),product('charger','cables')]};
  const parent=renderStoreRoute(data,{category:'electronics'},{language:'ar'});assert.match(parent,/category=audio/);assert.match(parent,/category=cables/);assert.match(parent,/data-store-product="headphones"/);assert.match(parent,/data-store-product="charger"/);
- const sub=renderStoreRoute(data,{category:'audio'},{language:'ar'});assert.match(sub,/كل إلكترونيات/);assert.match(sub,/data-store-product="headphones"/);assert.doesNotMatch(sub,/data-store-product="charger"/);
+ const sub=renderStoreRoute(data,{category:'audio'},{language:'ar'});assert.doesNotMatch(sub,/كل إلكترونيات|sf-category-back/);assert.match(sub,/class="sf-breadcrumb"/);assert.match(sub,/data-store-product="headphones"/);assert.doesNotMatch(sub,/data-store-product="charger"/);
  assert.equal(renderCategoryStrip(state,{parentId:'hidden'}),'');
 });
 const offers=[{id:'usd',unitPrice:10,currency:'USD'},{id:'sar',unitPrice:20,currency:'SAR'},{id:'cheap',unitPrice:5,currency:'SAR'}].map(p=>({...p,status:'published',product:p.id,categoryId:'electronics'}));
@@ -31,4 +31,29 @@ test('category/search routes honor requested sort and render all four sorting ch
  assert.ok(html.indexOf('data-store-product="usd"')<html.indexOf('data-store-product="cheap"'));
  for(const key of ['newest','price-asc','price-desc','name'])assert.match(html,new RegExp('value="'+key+'"'));
  const hidden=renderCatalog(state,{language:'ar',catalogConfig:{showSort:false}});assert.doesNotMatch(hidden,/data-catalog-filter="sort"/);
+});
+
+test('category pages reuse the product breadcrumb below the tiles, without an extra back link',()=>{
+ const product={id:'headphones',categoryId:'electronics',subcategoryId:'audio',status:'published',product:'Headphones',unitPrice:10,currency:'SAR'};
+ const data={...state,publicOffers:[product]};
+ for(const language of ['ar','en']){
+  const main=renderStoreRoute(data,{category:'electronics'},{language});
+  const sub=renderStoreRoute(data,{category:'audio'},{language});
+  const detail=renderStoreRoute(data,{product:'headphones'},{language});
+  for(const html of [main,sub,detail]){
+   assert.equal((html.match(/class="sf-breadcrumb"/g)||[]).length,1);
+   assert.doesNotMatch(html,/sf-category-back|>كل إلكترونيات<|>All Electronics</);
+   assert.ok(html.indexOf('class="sf-category-strip"')<html.indexOf('class="sf-breadcrumb"'));
+  }
+  assert.ok(main.indexOf('class="sf-breadcrumb"')<main.indexOf('<h1>'));
+  assert.ok(sub.indexOf('class="sf-breadcrumb"')<sub.indexOf('<h1>'));
+  assert.match(main,new RegExp('<span aria-current="page">'+(language==='ar'?'إلكترونيات':'Electronics')+'</span>'));
+  assert.match(sub,new RegExp('href="/\\?category=electronics">'+(language==='ar'?'إلكترونيات':'Electronics')+'</a>'));
+  assert.match(detail,new RegExp('href="/\\?category=audio">'+(language==='ar'?'صوتيات':'Audio')+'</a>'));
+ }
+ const noNav=structuredClone(data);
+ noNav.settings.storefront.sections.find(s=>s.page==='category'&&s.type==='categoryNav').visible=false;
+ const fallback=renderStoreRoute(noNav,{category:'audio'},{language:'ar'});
+ assert.equal((fallback.match(/class="sf-breadcrumb"/g)||[]).length,1);
+ assert.ok(fallback.indexOf('class="sf-breadcrumb"')<fallback.indexOf('<h1>'));
 });
