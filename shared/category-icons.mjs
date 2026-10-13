@@ -101,6 +101,7 @@ const CATEGORY_ICON={
  'sub-smart-rings':'ring'
 };
 const LABEL_ICON=[
+ [/العناية الشخصية|personal care appliances?/i,'dryer'],
  [/مجففات|hair dryers?/i,'dryer'],
  [/ماكينات حلاقة|trimmers?|clippers?/i,'trimmer'],
  [/فرد الشعر|straighteners?/i,'straightener'],
