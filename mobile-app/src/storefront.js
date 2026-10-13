@@ -6,6 +6,7 @@ import {SECTION_DEFAULTS,normalizeSectionLayout,sectionDefaults} from '../../sha
 export {SECTION_DEFAULTS,sectionDefaults};
 import {homeConfig,defaultStore,selectSectionProducts,STORE_OPTIONS,safeStoreLink} from '../../shared/storefront-model.mjs';
 import {isUnlimitedStock,trackedStock} from '../../shared/inventory.mjs';
+import {categoryIcon} from '../../shared/category-icons.mjs';
 export {homeConfig,defaultStore,STORE_OPTIONS};
 export {selectSectionProducts};
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -133,8 +134,7 @@ export function renderCategoryStrip(state,{ids,parentId,activeId,images={},limit
  const parents=(settings.categories||[]).filter(c=>!c.parentId&&c.active!==false),parent=parents.find(c=>c.id===parentId);
  const mainIds=[...new Set((ids||[]).map(id=>{const c=all.find(c=>c.id===id);return c?.parentId||c?.id;}).filter(Boolean))];
  const rows=parentId?(parent?all.filter(c=>c.parentId===parentId&&c.active!==false):[]):Array.isArray(ids)?selectedTaxonomy(parents,mainIds):parents;
- const imageMap=Object.assign({},...(settings.storefront?.sections||[]).filter(s=>s.type==='categories').map(s=>s.categoryImages||{}),images);
- return rows.length||parent?`<nav class="sf-category-strip" aria-label="${language==='en'?'Categories':'التصنيفات'}">${rows.slice(0,limit).map(c=>`<a href="/?category=${encodeURIComponent(c.id)}" data-store-category="${esc(c.id)}" ${c.id===activeId?'aria-current="page"':''}>${media(imageMap[c.id])?`<img src="${esc(imageVariant(imageMap[c.id],180,76))}" ${responsiveAttrs(imageMap[c.id],[96,144,180,240],'72px',76)} data-media="${esc(imageMap[c.id])}" alt="" loading="lazy" decoding="async">`:`<span class="sf-category-icon">${symbol('box')}</span>`}<span>${esc(c[language==='en'?'nameEn':'nameAr']||c.nameAr)}</span></a>`).join('')}</nav>`:'';
+ return rows.length||parent?`<nav class="sf-category-strip" aria-label="${language==='en'?'Categories':'التصنيفات'}">${rows.slice(0,limit).map(c=>`<a href="/?category=${encodeURIComponent(c.id)}" data-store-category="${esc(c.id)}" ${c.id===activeId?'aria-current="page"':''}><span class="sf-category-icon">${categoryIcon(c)}</span><span>${esc(c[language==='en'?'nameEn':'nameAr']||c.nameAr)}</span></a>`).join('')}</nav>`:'';
 }
 function renderProductBlock(state,p,s,options){
  const lang=options.language||document.documentElement.lang,en=lang==='en',h=homeConfig(state.settings),text=(a,b)=>en?b:a,price=(n)=>options.money?options.money(n,p.currency):`${new Intl.NumberFormat(lang,{maximumFractionDigits:2}).format(Number(n)||0)} ${esc(p.currency)}`;
