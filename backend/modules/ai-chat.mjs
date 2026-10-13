@@ -1,8 +1,9 @@
+import {publicSalesKnowledge,ownSalesOrders,runSalesAdvisor} from './sales-advisor.mjs';
 import {enforceChatLimit} from './chat-rate-limit.mjs';
 import {snapshot} from './records.mjs';
 import {assert,HttpError,db} from '../lib/supabase.mjs';
 import {createHash} from 'node:crypto';
-import {ensureConversation,saveCustomerMessage,saveAiMessage,requestHumanHandoff} from './ai-conversations.mjs';
+import {ensureConversation,saveCustomerMessage,saveAiMessage,requestHumanHandoff,listConversationMessages} from './ai-conversations.mjs';
 import {recordAiUsage} from './ai-usage.mjs';
 import {chatProductSignals,recordRecommendationImpressions} from './chat-conversions.mjs';
 import {isUnlimitedStock} from '../../shared/inventory.mjs';
@@ -1140,163 +1141,53 @@ function aiProviderError(status){
 
 export async function aiChat(user,body={},req=null){
   assert(!user||user.role==='client',403,'المساعد الذكي متاح للعملاء والمتصفحين فقط / AI assistant is for customers and visitors only');
-  const image='';
-  const message=clamp(body.message,2000);
-  assert(message,400,'اكتب رسالتك / Enter a message');
+  const message=clamp(body.message,2000);assert(message,400,'اكتب رسالتك / Enter a message');
   await enforceChatLimit(user,req,'message');
-  const language=body.language==='en'?'en':'ar';
-  const marketingSignal=safeMarketingSignal(body.marketingSignal);
-  const proactive=!!marketingSignal;
-  let conversation=null;
-  if(!proactive){
+  const language=body.language==='en'?'en':'ar',marketingSignal=safeMarketingSignal(body.marketingSignal);
+  let conversation=null,history=[];
+  if(!marketingSignal){
     conversation=await ensureConversation(user,body,true);
-    const savedText=image?(message|| (language==='ar'?'📷 بحث بصورة':'📷 Image search')):message;
-    const saved=await saveCustomerMessage(conversation,savedText);
-    conversation=saved.conversation;
+    // The browser cannot provide trusted history, ownership, roles or prices.
+    const recent=await listConversationMessages(conversation.id,24,{latest:true});
+    history=recent.map(row=>({role:row.sender==='customer'?'user':'assistant',content:clamp(row.content,2000)+(row.sender!=='customer'&&row.metadata?.products?.length?'\nPreviously shown product references: '+JSON.stringify(row.metadata.products.slice(0,3).map(p=>({id:clamp(p.id,90),title:clamp(p.title,180)}))):'')}));
+    conversation=(await saveCustomerMessage(conversation,message)).conversation;
     if(conversation.status==='human')return {conversationId:conversation.id,humanMode:true};
     if(wantsHumanSupport(message)){
-      const reply=language==='en'
-        ?'Your request is now waiting for a customer service agent. I can still help you here until a team member takes over.'
-        :'طلبك الآن بانتظار موظف خدمة العملاء. أقدر أواصل مساعدتك هنا إلى أن يستلم الموظف المحادثة.';
+      const reply=language==='en'?'Your request is waiting for a customer service agent. I can still help until a team member takes over.':'طلبك الآن بانتظار موظف خدمة العملاء. أقدر أواصل مساعدتك إلى أن يستلم الموظف المحادثة.';
       conversation=await requestHumanHandoff(conversation);
-      const metadata={handoff:'waiting',leadPrompt:!user};
-      await saveAiMessage(conversation,reply,metadata);
+      await saveAiMessage(conversation,reply,{handoff:'waiting',leadPrompt:!user});
       await recordAiUsage({surface:'customer',source:'database',user,conversationId:conversation.id,model:''});
       return {reply,source:'database',conversationId:conversation.id,humanMode:false,waitingHuman:true,leadPrompt:!user};
     }
   }
+  const apiKey=openAiApiKey();assert(apiKey,503,'المساعد غير متاح مؤقتًا / Assistant temporarily unavailable');
   const model=String(process.env.OPENAI_CHAT_MODEL||DEFAULT_MODEL).replace(/^openai\//,'');
-  const history=normalizeHistory(body.history);
-  const policyPageId=resolvedPolicyPageId(message,history);
-  const policySignal=policyQuestionSignal(message,history);
-  const guestSnapshotOptions=policySignal
-    ?{...(policyPageId?{pageId:policyPageId}:{}),aiPolicies:true,aiKnowledge:true}
-    :{q:message,aiCatalog:true,aiKnowledge:true};
-  const state=await snapshot(user||null,!user?guestSnapshotOptions:{aiKnowledge:true});
-  const conversionSignals=await chatProductSignals();
-  const knowledgeSearch=searchKnowledgeBase(state,message,language,history);
-  const knowledgeRelevant=Number(knowledgeSearch.matches?.[0]?.score||0)>=16;
-  const resolvedTextQuery=resolveCustomerProductQuery(state,message,history);
-  const productActive=!policySignal&&!knowledgeRelevant&&(!!marketingSignal||isCustomerProductQuery(state,message,history,resolvedTextQuery));
-  const resolvedProductSearch=productActive?customerProductSearch(state,resolvedTextQuery,language,conversionSignals):emptyProductSearch(resolvedTextQuery);
-  if(!proactive&&!image){
-    const direct=directCustomerAnswer(state,user,message,language,conversionSignals,resolvedTextQuery,resolvedProductSearch,productActive,history,knowledgeSearch);
-    if(direct){
-      const ui=chatUiMetadata(state,resolvedTextQuery,language,conversionSignals,resolvedProductSearch);
-      if(conversation){
-        await saveAiMessage(conversation,direct,ui);
-        await recordRecommendationImpressions({conversation,user,products:ui.products});
-      }
-      await recordAiUsage({surface:'customer',source:'database',user,conversationId:conversation?.id,model});
-      return {reply:direct,source:'database',recommendations:ui.products,quickReplies:ui.quickReplies,...(conversation?{conversationId:conversation.id,humanMode:false,waitingHuman:!!conversation.handoff_requested_at}:{})};
-    }
-  }
-  const apiKey=openAiApiKey();
-  if(!apiKey)throw new HttpError(503,'لم يتم تفعيل مفتاح OpenAI بعد. / OpenAI API key is not configured yet.');
-  const imageSearch=image?await analyzeProductImage({image,message,language,apiKey,model}):null;
-  if(imageSearch?.confidence==='none'||imageSearch&&!imageSearch.query){
-    const reply=language==='ar'
-      ?'لم أستطع تحديد المنتج بوضوح من هذه الصورة. جرّب صورة أوضح للمنتج من الأمام أو أضف اسمه أو مواصفته.'
-      :'I could not identify the product clearly from this image. Try a clearer front view or add the product name or specification.';
-    if(conversation)await saveAiMessage(conversation,reply);
-    await recordAiUsage({surface:'customer',source:'openai',user,conversationId:conversation?.id,model});
-    return {reply,source:'openai',usage:null,...(conversation?{conversationId:conversation.id,humanMode:false}:{})};
-  }
-  const productQuery=[imageSearch?.query,imageSearch?.productType,imageSearch?.visibleText,marketingSignal?.query,marketingSignal?.productSku,marketingSignal?.productTitle,resolvedTextQuery].filter(Boolean).join(' ');
-  const shouldSearchProducts=productActive||!!imageSearch||!!marketingSignal;
-  const productSearch=!shouldSearchProducts
-    ?emptyProductSearch(productQuery)
-    :productQuery===resolvedTextQuery&&!imageSearch&&!marketingSignal
-      ?resolvedProductSearch
-      :customerProductSearch(state,productQuery,language,conversionSignals);
-  const personalContextNeeded=!!user&&qHas(message.toLowerCase(),['طلبي','الطلب','الدفع','فاتورة','عرض','تتبع','order','payment','invoice','quote','tracking']);
-  const policyPage=policyPageId?selectedPolicyPage(state,policyPageId):null;
-  const fallbackPolicies=policySignal&&!policyPage?policyPagesForLanguage(state,language).slice(0,8).map(page=>({id:page.id,title:page.title,content:clamp(page.content,1800)})):[];
-  const knowledgeContext=(knowledgeSearch.matches||[]).slice(0,5).map(row=>({
-    id:row.id,category:row.category,question:row.question,answer:row.answer,keywords:row.keywords,score:row.score
-  }));
-  const context={
-    viewer:user?{signedIn:true}:{signedIn:false},
-    products:productSearch.context,
-    ...(knowledgeContext.length?{knowledge:knowledgeContext}:{}),
-    ...(policyPage?{policy:{id:policyPage.id,title:language==='en'?(policyPage.titleEn||policyPage.title):(policyPage.title||policyPage.titleEn),content:clamp(language==='en'?(policyPage.contentEn||policyPage.content):(policyPage.content||policyPage.contentEn),1800)}}:{}),
-    ...(fallbackPolicies.length?{policies:fallbackPolicies}:{}),
-    ...(imageSearch?{imageSearch}:{}),
-    ...(marketingSignal?{shoppingSignal:marketingSignal}:{}),
-    ...(personalContextNeeded?clientContext(state):{})
+  // Fresh public projection on every turn; no shared reply cache or private catalog snapshot.
+  const state=await snapshot(null,{q:'*',aiCatalog:true,aiPolicies:true,aiKnowledge:true});
+  const knowledge=publicSalesKnowledge(state);
+  const complete=async(name,schema,messages,maxTokens)=>{
+    let response;
+    try{({response}=await openAiRequest({apiKey,timeoutMs:18000,payload:{model,messages,max_completion_tokens:maxTokens,reasoning_effort:'none',response_format:{type:'json_schema',json_schema:{name,strict:true,schema}}}}));}
+    catch{throw new HttpError(502,'تعذر الاتصال بالمساعد، حاول مجددًا / Could not reach the assistant; please try again');}
+    if(!response.ok)throw aiProviderError(response.status);
+    const data=await response.json();
+    await recordAiUsage({surface:'customer',source:'openai',user,conversationId:conversation?.id,model,usage:data.usage});
+    const parsed=parseJsonObject(data?.choices?.[0]?.message?.content);
+    assert(parsed&&typeof parsed==='object'&&!Array.isArray(parsed),502,'تعذر فهم استجابة المساعد / Invalid assistant response');
+    return parsed;
   };
-  const ui=chatUiMetadata(state,productQuery,language,conversionSignals,productSearch);
-  const cacheable=!user&&!proactive&&!imageSearch&&history.length===0;
-  const cacheKey=cacheable?cacheKeyFor(language,message,context):'';
-  if(cacheKey){
-    const cached=await getCachedReply(cacheKey);
-    if(cached){
-      if(conversation){
-        await saveAiMessage(conversation,cached,ui);
-        await recordRecommendationImpressions({conversation,user,products:ui.products});
-      }
-      await recordAiUsage({surface:'customer',source:'cache',user,conversationId:conversation?.id,model});
-      return {reply:cached,source:'cache',recommendations:ui.products,quickReplies:ui.quickReplies,...(conversation?{conversationId:conversation.id,humanMode:false,waitingHuman:!!conversation.handoff_requested_at}:{})};
-    }
-  }
-  const system=language==='ar'
-    ?`أنت مستشار مبيعات وتوريد محترف داخل IMSG. هدفك فهم ما يحتاجه العميل ومساعدته على اتخاذ قرار شراء مناسب، بدون ضغط أو مبالغة.
-اعتمد على PLATFORM_CONTEXT_JSON في معلومات المنتجات والأسعار والمخزون والطلبات والعروض والسياسات. إذا احتوى السياق على knowledge فهو بنك المعلومات الرسمي للمتجر ويأخذ الأولوية في الأسئلة العامة عن الشركة والخدمة وطريقة العمل. إذا احتوى السياق على policy أو policies فاعتبرها المصدر الرسمي للسؤال المتعلق بالسياسة. استخدم فقط المعلومات ذات الصلة بالسؤال وأجب مباشرة وباختصار. لا تخترع أي سعر أو خصم أو مخزون أو حالة أو ميزة غير موجودة.
-افهم احتياج العميل من كلامه وسلوكه الشرائي غير الحساس فقط، مثل البحث، المنتجات التي يقارنها، أو السلة. لا تستنتج أو تستخدم صفات حساسة شخصية.
-أجب عن السؤال الحالي فقط. الرد العادي جملة أو جملتان قصيرتان، ولا تشرح سياسة كاملة ما لم يطلب العميل التفاصيل.
-إذا احتجت توضيحًا، اسأل سؤالًا واحدًا فقط في الرد، ولا تجمع عدة أسئلة معًا. لا تسأل عن الكمية في البداية إلا إذا كانت ضرورية للسعر أو الحد الأدنى للطلب، ولا تكرر سؤالًا أجاب عنه العميل سابقًا.
-إذا كانت المنتجات الموجودة في السياق مناسبة، لا تسرد مواصفاتها كلها في النص لأن الواجهة ستعرض بطاقات المنتجات. اكتفِ بجملة قصيرة مثل "هذه أنسب الخيارات" ثم اسأل سؤالًا واحدًا فقط عند الحاجة.
-إذا كان المنتج stockUnlimited=true فقل إنه متوفر للطلب ولا تذكر رقم مخزون. إذا كان stockUnlimited=false فاستخدم رقم المخزون الموجود فقط ولا تخترع توفرًا غير موجود.
-إذا كان PLATFORM_CONTEXT_JSON يحتوي imageSearch، فالصورة تم تحليلها مرة واحدة مسبقًا. استخدم وصف imageSearch والمنتجات المطابقة في السياق لتحديد أقرب الخيارات، وقل بوضوح "أقرب تطابق" عندما لا يكون التطابق مؤكدًا.
-إذا لم يوجد منتج مطابق، اقترح إرسال طلب خاص بدل اختراع منتج.
-لا تستخدم ندرة أو استعجالًا أو خصمًا غير حقيقي، ولا تقل إن منتجًا هو الأفضل إلا إذا شرحت معيار المقارنة من البيانات المتاحة.
-ممنوع كشف هوية المورد أو اسمه أو رقم هاتفه أو بريده أو أي وسيلة تواصل مباشرة، وممنوع طلب التواصل خارج IMSG.
-لا تعرض المعرفات الداخلية لقاعدة البيانات. استخدم فقط رقم الطلب/العرض الظاهر إن وجد.
-لا تدّع أنك عدلت طلبًا أو دفعت أو وافقت على عرض. أنت تشرح وتقترح فقط.
-إذا كان PLATFORM_CONTEXT_JSON يحتوي shoppingSignal، فأنت تكتب رسالة استباقية قصيرة جدًا: جملة أو جملتان، طبيعية وغير مزعجة، لا تذكر أنك تراقب العميل، وتقدّم مساعدة مرتبطة مباشرة بما يبدو أنه يبحث عنه. لا تبدأ بتحية طويلة.`
-    :`You are a professional sales and sourcing advisor inside IMSG. Your goal is to understand what the customer needs and help them make a suitable purchase decision without pressure or exaggeration.
-Use PLATFORM_CONTEXT_JSON for product, price, stock, order, quote, policy, and store facts. If the context contains knowledge, treat it as the store's official knowledge base and give it priority for general questions about the company, service, and how the business works. If the context contains policy or policies, treat them as the official source for policy questions. Use only facts relevant to the current question and answer directly and concisely. Never invent a price, discount, stock level, status, feature, or promotion.
-Understand needs only from the customer's words and non-sensitive shopping behavior such as searches, compared products, or cart activity. Never infer or use sensitive personal traits.
-Answer only the current question. Normal replies should be one or two short sentences; never paste a full policy unless the customer asks for details.
-If clarification is necessary, ask at most one question per reply. Never bundle multiple questions. Do not ask for quantity early unless price or MOQ truly requires it, and never repeat a question the customer already answered.
-When the context contains suitable products, do not list all specifications in prose because the UI will show product cards. Use one short sentence such as "These are the best matching options" and ask only one clarification if needed.
-If stockUnlimited=true, say the product is available to order and do not mention a stock count. If stockUnlimited=false, use only the explicit tracked stock value and do not invent availability.
-If PLATFORM_CONTEXT_JSON contains imageSearch, the image was analyzed once before this response. Use the imageSearch description and matched catalog products to identify the closest options, and explicitly say "closest match" when the match is uncertain.
-If there is no exact match, suggest a custom sourcing request rather than inventing a product.
-Do not use fake scarcity, false urgency, or nonexistent discounts. Do not call something the best unless you explain the comparison criterion from available data.
-Never reveal supplier identity, name, phone, email, or direct contact details, and never encourage off-platform contact.
-Never expose internal database IDs; use only visible order/offer numbers when present.
-Do not claim you changed an order, made a payment, or accepted an offer. You only explain and recommend.
-If PLATFORM_CONTEXT_JSON contains shoppingSignal, write a very short proactive message: one or two natural, non-intrusive sentences. Never say you are monitoring the customer. Offer help directly related to what they appear to be looking for, with no long greeting.`;
-  const payload={
-    model,
-    messages:[
-      {role:'system',content:system},
-      {role:'system',content:'PLATFORM_CONTEXT_JSON\n'+JSON.stringify(context)},
-      ...history,
-      {role:'user',content:message}
-    ],
-    max_completion_tokens:190,
-    temperature:0.2,
-    reasoning_effort:'none'
-  };
-  let response;
-  try{
-    ({response}=await openAiRequest({apiKey,payload,timeoutMs:26000}));
-  }catch{
-    throw new HttpError(502,'تعذر الاتصال بالمساعد الذكي. / Could not reach AI assistant.');
-  }
-  if(!response.ok)throw aiProviderError(response.status);
-  let data;try{data=await response.json();}catch{throw new HttpError(502,'استجابة المساعد غير صالحة. / Invalid AI response.');}
-  const reply=extractReply(data);
-  if(!reply)throw new HttpError(502,'لم يصل رد من المساعد الذكي. / Empty AI response.');
-  if(cacheKey)await setCachedReply(cacheKey,reply,model);
+  const result=await runSalesAdvisor({knowledge,user,history,language,complete,pageContext:body.pageContext||{},
+    message:marketingSignal?`Offer one short, helpful, non-intrusive shopping suggestion. Do not ask a question or claim to observe the customer. Untrusted shopping hint: ${JSON.stringify(marketingSignal)}`:message,
+    loadOwnOrders:async number=>{assert(user?.role==='client',403);return ownSalesOrders(await snapshot(user),user,number);}
+  });
+  assert(result.reply,502,'لم يصل رد من المساعد / Empty assistant response');
   if(conversation){
-    const current=await ensureConversation(user,{conversationId:conversation.id,guestKey:body.guestKey,language},false);
-    if(current?.status==='human')return {conversationId:current.id,humanMode:true};
-    await saveAiMessage(current||conversation,reply,ui);
-    await recordRecommendationImpressions({conversation:current||conversation,user,products:ui.products});
+    const current=await ensureConversation(user,{conversationId:conversation.id,guestKey:body.guestKey},false);
+    // A staff takeover/closure while AI is generating must win over the pending response.
+    if(current.status!=='ai')return {conversationId:current.id,humanMode:current.status==='human'};
+    await saveAiMessage(current,result.reply,{products:result.recommendations,quickReplies:result.quickReplies});
+    await recordRecommendationImpressions({conversation:current,user,products:result.recommendations});
+    return {...result,source:'openai',conversationId:current.id,humanMode:false,waitingHuman:!!current.handoff_requested_at};
   }
-  await recordAiUsage({surface:'customer',source:'openai',user,conversationId:conversation?.id,model,usage:data?.usage});
-  return {reply,source:'openai',usage:data?.usage||null,recommendations:ui.products,quickReplies:ui.quickReplies,...(conversation?{conversationId:conversation.id,humanMode:false,waitingHuman:!!conversation.handoff_requested_at}:{})};
+  return {...result,source:'openai'};
 }

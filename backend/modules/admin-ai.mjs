@@ -1,3 +1,4 @@
+import {publicSalesKnowledge} from './sales-advisor.mjs';
 import {snapshot} from './records.mjs';
 import {can} from './auth.mjs';
 import {assert,HttpError} from '../lib/supabase.mjs';
@@ -317,6 +318,7 @@ export async function adminAiOverview(user){
   catch(error){console.warn('IMSG AI metrics summary failed',error?.message||'unknown');}
   return {
     mode:'proposal',
+    knowledgeStatus:{mode:'live',checkedAt:new Date().toISOString(),publishedProducts:publicSalesKnowledge(state).products.length,publicDocuments:publicSalesKnowledge(state).documents.length},
     overview:context.overview,
     usage,
     conversion,
@@ -391,3 +393,4 @@ export async function adminAi(user,body={}){
   await recordAiUsage({surface:'admin',source:'openai',user,model,usage:data?.usage});
   return {reply,mode:'readonly',usage:data?.usage||null,overview:context.overview,behaviorTrackingAvailable:true};
 }
+
