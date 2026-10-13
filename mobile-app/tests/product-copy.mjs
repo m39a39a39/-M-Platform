@@ -70,18 +70,29 @@ for(const [engine,type] of Object.entries({chromium,webkit}))for(const language 
   return route.fulfill({json:result});
  });
  await actual.goto('http://127.0.0.1:4173/admin.html?screen=products');
- await actual.locator('[data-action=edit-product]').first().click();await actual.locator('.product-copy-shortcut').first().click();await actual.locator('[data-pc-generate]').click();await actual.locator('[data-pc-use]').waitFor();assert.equal(writes.length,0);
- await actual.locator('[data-pc-use]').click();assert.equal(writes.length,0);assert.equal(await actual.locator('[name=price]').inputValue(),'35');
+ await actual.locator('[data-action=edit-product]').first().click();
+ assert.equal(await actual.locator('.product-copy-shortcut').count(),0);
+ assert.equal(await actual.locator('[data-complete-generate]').count(),1);
+ await actual.locator('[data-complete-generate]').click();await actual.locator('[data-complete-use]').waitFor();assert.equal(writes.length,0);
+ assert.equal(await actual.locator('[name=nameEn]').inputValue(),'AMAYA charger');
+ await actual.locator('[name=nameEn]').locator('..').locator('.product-ai-suggestion button').click();
+ assert.equal(await actual.locator('[name=nameEn]').inputValue(),'AMAYA headphones');
+ await actual.locator('[data-complete-undo]').click();assert.equal(await actual.locator('[name=nameEn]').inputValue(),'AMAYA charger');
+ await actual.locator('[data-complete-generate]').click();await actual.locator('[data-complete-use]').waitFor();
+ await actual.locator('[name=nameEn]').locator('..').locator('.product-ai-suggestion button').click();
+ assert.equal(writes.length,0);assert.equal(await actual.locator('[name=price]').inputValue(),'35');
  await actual.screenshot({path:`layout-results/product-copy/studio-${engine}-${language}.png`,fullPage:true});
- await actual.locator('#edit-form button[type=submit]').click();await actual.waitForFunction(()=>!document.querySelector('#dialog').open);assert.equal(writes.length,1);assert.equal(writes[0].product.nameEn,'Improved AMAYA charger');
+ await actual.locator('#edit-form button[type=submit]').click();await actual.waitForFunction(()=>!document.querySelector('#dialog').open);assert.equal(writes.length,1);assert.equal(writes[0].product.nameEn,'AMAYA headphones');
+ completionCalls.length=0;
  await actual.locator('[data-catalog-select]').first().check();await actual.locator('[data-action=catalog-ai]').click();await actual.locator('[data-product-copy-bulk] [data-pc-generate]').waitFor();
  await actual.locator('#dialog [data-action=close]').click();
  await actual.locator('[data-action=new-product]').click();await actual.locator('[name=name]').fill('سماعة AMAYA');
  // A corrupt image is ignored for analysis, so the name still produces a usable proposal.
- await actual.locator('[name=photos]').setInputFiles({name:'blurry.png',mimeType:'image/png',buffer:Buffer.from('unreadable')});
- await actual.locator('[data-complete-generate]').click();await actual.locator('[data-complete-use]').waitFor();assert.equal(completionCalls[0].images.length,0);assert.equal(writes.length,1);
+ await actual.locator('[data-image-input]').setInputFiles({name:'blurry.png',mimeType:'image/png',buffer:Buffer.from('unreadable')});
+ await actual.locator('[data-complete-generate]').click();await actual.locator('[data-complete-use]').waitFor();assert.equal(completionCalls[0].images.length,0);assert.equal(writes.length,1);assert.equal(await actual.locator('[name=nameEn]').inputValue(),'AMAYA headphones');
  await actual.locator('[name=name]').fill('سماعة AMAYA معدلة');await actual.locator('[data-complete-use]').click();assert.equal(await actual.locator('[name=name]').inputValue(),'سماعة AMAYA معدلة');
- await actual.locator('[name=photos]').setInputFiles({name:'product.png',mimeType:'image/png',buffer:Buffer.from(await actual.evaluate(()=>{const c=document.createElement('canvas');c.width=100;c.height=100;c.getContext('2d').fillRect(0,0,100,100);return c.toDataURL('image/png').split(',')[1];}),'base64')});
+ await actual.locator('[data-image-action=remove]').click();
+ await actual.locator('[data-image-input]').setInputFiles({name:'product.png',mimeType:'image/png',buffer:Buffer.from(await actual.evaluate(()=>{const c=document.createElement('canvas');c.width=100;c.height=100;c.getContext('2d').fillRect(0,0,100,100);return c.toDataURL('image/png').split(',')[1];}),'base64')});
  await actual.locator('[data-complete-generate]').click();await actual.locator('[data-complete-use]').waitFor();assert.equal(completionCalls[1].images.length,1);
  await actual.locator('[data-complete-use]').click();assert.equal(writes.length,1);assert.equal(await actual.locator('[name=technicalSpecs]').inputValue(),'');assert.equal(await actual.locator('[name=categoryId]').inputValue(),'ai-new-category');assert.equal(await actual.locator('[name=subcategoryId]').inputValue(),'ai-new-subcategory');assert.match(await actual.locator('[name=sku]').inputValue(),/^MG-/);
  await actual.screenshot({path:`layout-results/product-copy/completion-${engine}-${language}.png`,fullPage:true});
@@ -89,3 +100,4 @@ for(const [engine,type] of Object.entries({chromium,webkit}))for(const language 
  assert.deepEqual(studioErrors,[]);assert.ok(await actual.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
  await browser.close();console.log(`PASS product copy ${engine} ${language}`);
 }
+
