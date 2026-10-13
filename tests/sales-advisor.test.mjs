@@ -109,3 +109,9 @@ test('order tool is unavailable to guests and binds signed-in reads to server id
  assert.ok(fx.calls.some(c=>c.path.endsWith('/requests')&&c.query.get('owner_id')==='eq.client-a'));
  assert.match(fx.payloads.at(-1).messages[0].content,/notFound/);
 }));
+
+ test('price sorting keeps weak accessory matches from displacing relevant chargers',()=>{
+ const k=publicSalesKnowledge({settings,publicOffers:[product('charger','شاحن سريع USB C',{unitPrice:8}),...Array.from({length:25},(_,i)=>product('accessory'+i,'حامل',{unitPrice:1,shortDescription:'USB'}))]});
+ const rows=retrieveSalesEvidence(k,{...plan,queries:['شاحن سريع','USB C charger'],maxPrice:20,sort:'price-asc'}).products;
+ assert.deepEqual(rows.map(p=>p.id),['charger']);
+ });
