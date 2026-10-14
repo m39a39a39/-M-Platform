@@ -14,7 +14,7 @@ export function selectSectionProducts(offers,s,collections=[]){
  let rows=offers.filter(p=>p.status==='published'&&!p.deletedAt&&!p.studioArchived);
  const mode=s.productSource||'latest';
  if(mode==='manual')rows=(s.productIds||[]).map(id=>rows.find(p=>p.id===id)).filter(Boolean);
- else if(mode==='category')rows=rows.filter(p=>p.categoryId===s.categoryId);
+ else if(mode==='category')rows=rows.filter(p=>p.categoryId===s.categoryId&&(!s.subcategoryId||p.subcategoryId===s.subcategoryId));
  else if(mode==='featured')rows=(s.productIds||[]).map(id=>rows.find(p=>p.id===id)).filter(Boolean);
  else if(mode==='collection'){const c=collections.find(c=>c.id===s.collectionId&&c.active);rows=(c?.productIds||[]).map(id=>rows.find(p=>p.id===id)).filter(Boolean);}
  else rows=[...rows].sort((a,b)=>String(b.createdAt||b.updatedAt||'').localeCompare(String(a.createdAt||a.updatedAt||''))||a.id.localeCompare(b.id));
