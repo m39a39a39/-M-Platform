@@ -118,7 +118,7 @@ export async function rows(table,query=''){
   assert(false,413,'هذه القائمة كبيرة؛ يلزم تفعيل التقسيم إلى صفحات / Pagination required');
 }
 const inIds=ids=>ids.map(x=>`"${x}"`).join(',');
-function homepageOfferPlan(settingsData={}){
+export function homepageOfferPlan(settingsData={}){
   const storefront=upgradeSettings(settingsData).storefront||{},sections=(storefront.sections||[]).filter(section=>section?.visible!==false);
   const collections=storefront.collections||[],manualIds=new Set(),categoryNeeds=[];
   let latestLimit=20;
@@ -126,12 +126,14 @@ function homepageOfferPlan(settingsData={}){
     if(section.type==='catalog'){latestLimit=Math.max(latestLimit,Number(section.catalog?.pageSize)||20);continue;}
     if(section.type!=='products')continue;
     const limit=Math.max(1,Number(section.limit)||6),mode=section.productSource||'latest';
-    if(mode==='manual'||mode==='featured')for(const id of section.productIds||[])if(id)manualIds.add(id);
-    else if(mode==='collection'){
+    if(mode==='manual'||mode==='featured'){
+      for(const id of section.productIds||[])if(id)manualIds.add(id);
+    }else if(mode==='collection'){
       const collection=collections.find(item=>item.id===section.collectionId&&item.active!==false);
       for(const id of collection?.productIds||[])if(id)manualIds.add(id);
-    }else if(mode==='category'&&section.categoryId)categoryNeeds.push({id:section.categoryId,limit});
-    else latestLimit=Math.max(latestLimit,limit);
+    }else if(mode==='category'&&section.categoryId){
+      categoryNeeds.push({id:section.categoryId,subcategoryId:section.subcategoryId||'',limit});
+    }else latestLimit=Math.max(latestLimit,limit);
   }
   return {manualIds:[...manualIds],categoryNeeds,latestLimit};
 }
@@ -139,7 +141,10 @@ async function homepageOfferRows(settingsData={}){
   const {manualIds,categoryNeeds,latestLimit}=homepageOfferPlan(settingsData),base='data->>status=eq.published&data->>deletedAt=is.null';
   const tasks=[db('public_offers',`${base}&order=created_at.desc&limit=${Math.min(120,latestLimit+24)}`)];
   if(manualIds.length)tasks.push(db('public_offers',`id=in.(${inIds(manualIds)})&${base}&limit=${manualIds.length}`));
-  for(const need of categoryNeeds)tasks.push(db('public_offers',`${base}&data->>categoryId=eq.${encodeURIComponent(need.id)}&order=created_at.desc&limit=${Math.min(60,need.limit+12)}`));
+  for(const need of categoryNeeds){
+    const categoryFilter=`${base}&data->>categoryId=eq.${encodeURIComponent(need.id)}`+(need.subcategoryId?`&data->>subcategoryId=eq.${encodeURIComponent(need.subcategoryId)}`:'');
+    tasks.push(db('public_offers',`${categoryFilter}&order=created_at.desc&limit=${Math.min(60,need.limit+12)}`));
+  }
   const rows=(await Promise.all(tasks)).flat();
   return [...new Map(rows.map(row=>[row.id,row])).values()];
 }
