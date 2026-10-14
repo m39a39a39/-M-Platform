@@ -104,9 +104,10 @@ export function createSession({ storage, fetchImpl = (...args) => fetch(...args)
   }
   async function state() {
     const version = epoch;
-    let data = await request('/api/v1/state');
+    // Avoid the anonymous storefront CDN cache for authenticated sessions.
+    let data = await request('/api/v1/state?authenticated=1');
     // Older API deployments return public data with HTTP 200 for an expired bearer.
-    if (!data.user) { await refresh(); data = await request('/api/v1/state'); }
+    if (!data.user) { await refresh(); data = await request('/api/v1/state?authenticated=1'); }
     guard(version);
     if (!data.user?.id || !['client','supplier','admin'].includes(data.user.role) ||
         (tokens.userId && tokens.userId!==data.user.id)) {

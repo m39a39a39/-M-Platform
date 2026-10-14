@@ -84,6 +84,9 @@ export default async function handler(req,res){
       if(['/api/ai-chat','/api/ai-conversation','/api/ai-conversion'].includes(path)&&req.headers.authorization)assert(user,401,'انتهت الجلسة / Session expired');
       if(path==='/api/state'){
         assert(req.method==='GET',405);
+        // Keep authenticated state separate from publicly cached storefront data.
+        // An anonymous cache hit here must never sign out a newly logged-in user.
+        if(url.searchParams.get('authenticated')==='1')assert(user,401,'انتهت الجلسة / Session expired');
         if(!user){
           res.setHeader('Cache-Control','public, max-age=0, s-maxage=30, stale-while-revalidate=300');
           res.setHeader('CDN-Cache-Control','public, max-age=30, stale-while-revalidate=300');

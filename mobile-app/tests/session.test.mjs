@@ -8,7 +8,7 @@ const user = id => ({id,role:id==='admin'?'admin':'client'});
 function fixture(handler) {
   let saved=null;
   const storage={get:async()=>saved,set:async value=>{saved=structuredClone(value);},remove:async()=>{saved=null;}};
-  const fetchImpl=async(url,options)=>handler(new URL(url).pathname,options);
+  const fetchImpl=async(url,options)=>{const parsed=new URL(url);return handler(parsed.pathname,options,parsed.searchParams);};
   const session=createSession({storage,fetchImpl,now:()=>100000});
   return {session,storage,fetchImpl,get saved(){return saved;}};
 }
@@ -96,4 +96,20 @@ test('local logout is immediate while detached revocation survives navigation an
   await f.session.login({});
   assert.equal(logoutOptions.signal.aborted,false);
   release();
+});
+
+test('authenticated state is isolated from the public storefront cache after login',async()=>{
+  const paths=[];
+  const f=fixture((path,o,query)=>{
+    if(path.endsWith('/login'))return loginReply('client');
+    if(path.endsWith('/refresh'))return reply({tokens:tokens('rotated')});
+    if(path.endsWith('/state')){
+      paths.push({path,authenticated:query.get('authenticated'),bearer:o.headers.Authorization});
+      return reply({user:user('client')});
+    }
+    throw new Error('unexpected request '+path);
+  });
+  await f.session.login({});
+  assert.equal((await f.session.state()).user.id,'client');
+  assert.deepEqual(paths,[{path:'/api/v1/state',authenticated:'1',bearer:'Bearer client'}]);
 });
