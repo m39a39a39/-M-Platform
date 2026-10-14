@@ -46,7 +46,29 @@ for(const [engine,type] of Object.entries({chromium,webkit})){
   try{
    const storefront=()=>page.locator('#guestView:not(.hidden) #guest-storefront, #appView:not(.hidden) #customer-storefront');
    const signature=async()=>({text:(await storefront().innerText()).replace(/\s+/g,' ').trim(),sections:await storefront().locator('[data-layout-section]').evaluateAll(nodes=>nodes.map(n=>n.dataset.layoutSection))});
-   await page.goto(baseURL+'/');await page.locator('#guest-storefront .published-storefront').waitFor();const guestHome=await signature();
+   await page.goto(baseURL+'/');await page.locator('#guest-storefront .published-storefront').waitFor();
+   // Browser-level check: chosen colors override special home layouts and View all anchors.
+   const sectionColors=await page.evaluate(()=>{
+     const host=document.querySelector('#guest-storefront .published-storefront'),el=document.createElement('div');
+     el.className='sf-layout-block';el.dataset.layoutSection='home-power-banks';
+     el.innerHTML='<section class="sf-section"><h2>Section heading</h2><p>Section caption</p><a class="sf-all-products" href="/?category=power">View all products</a></section>';
+     host.appendChild(el);
+     const check=(id,background,foreground)=>{
+       el.dataset.layoutSection=id;
+       el.style.setProperty('--section-bg',background);
+       el.style.setProperty('--section-color',foreground);
+       const css=element=>getComputedStyle(element);
+       return {background:css(el).backgroundColor,gradient:css(el).backgroundImage,text:css(el).color,
+         title:css(el.querySelector('h2')).color,subtitle:css(el.querySelector('p')).color,link:css(el.querySelector('a')).color};
+     };
+     const light=check('home-power-banks','#f6f8fa','#193d43');
+     const dark=check('home-audio','#102c42','#ffffff');
+     el.remove();
+     return {light,dark};
+   });
+   assert.deepEqual(sectionColors.light,{background:'rgb(246, 248, 250)',gradient:'none',text:'rgb(25, 61, 67)',title:'rgb(25, 61, 67)',subtitle:'rgb(25, 61, 67)',link:'rgb(25, 61, 67)'});
+   assert.deepEqual(sectionColors.dark,{background:'rgb(16, 44, 66)',gradient:'none',text:'rgb(255, 255, 255)',title:'rgb(255, 255, 255)',subtitle:'rgb(255, 255, 255)',link:'rgb(255, 255, 255)'});
+   const guestHome=await signature();
    await page.goto(baseURL+'/?category=cat1');await page.locator('.sf-product').first().waitFor();const guestCategory=await signature();
    await page.goto(baseURL+'/?page=products');
    await page.locator('.sf-product').first().waitFor();
