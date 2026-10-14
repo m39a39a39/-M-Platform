@@ -1,6 +1,7 @@
 import './ai-chat.css';
 import {filesToCompressedSources} from './image-upload.js';
 import {latestAssistantQuickReplies} from './ai-chat-state.js';
+import {extractWhatsappLinks} from './ai-chat-whatsapp.js';
 
 let controller=null;
 let pollTimer=null;
@@ -176,7 +177,9 @@ function productCardsHtml(products=[]){
 function messageHtml(row){
   const meta=row?.metadata||{},sender=row.role==='admin'?'<small class="m-ai-sender">'+esc(t('team'))+'</small>':'';
   const hasProducts=row.role!=='user'&&Array.isArray(meta.products)&&meta.products.length;
-  return `<div class="m-ai-row ${row.role==='user'?'user':'assistant'}${hasProducts?' has-products':''}"><div>${sender}<span class="m-ai-message-text">${esc(row.content)}</span>${row.role!=='user'?productCardsHtml(meta.products):''}</div></div>`;
+  const whatsapp=row.role==='assistant'?extractWhatsappLinks(row.content):{text:row.content,links:[]};
+  const buttons=whatsapp.links.length?`<div class="m-ai-whatsapp-links">${whatsapp.links.map(href=>`<a class="m-ai-whatsapp-link" href="${esc(href)}" target="_blank" rel="noopener noreferrer">🟢 تواصل معنا عبر واتساب</a>`).join('')}</div>`:'';
+  return `<div class="m-ai-row ${row.role==='user'?'user':'assistant'}${hasProducts?' has-products':''}"><div>${sender}<span class="m-ai-message-text">${esc(whatsapp.text)}</span>${buttons}${row.role!=='user'?productCardsHtml(meta.products):''}</div></div>`;
 }
 function latestQuickReplies(){
   return latestAssistantQuickReplies(controller?.messages||[],!!controller?.humanMode);

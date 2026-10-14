@@ -47,3 +47,7 @@
   .m-ai-head{padding-inline:10px}.m-ai-row>div{font-size:13.5px}
   .m-ai-product-card strong,.m-ai-product-price{font-size:10px}
 }
+
+.m-ai-whatsapp-links{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.m-ai-whatsapp-link{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;min-height:44px;width:100%;max-width:100%;padding:9px 14px;border:1px solid #a6e0bd;border-radius:12px;background:#e8f9ef;color:#176c45;text-decoration:none;font:inherit;font-size:13px;font-weight:750;line-height:1.45;text-align:center;white-space:normal;cursor:pointer}
+.m-ai-whatsapp-link:hover,.m-ai-whatsapp-link:focus-visible{background:#dbf5e5;color:#125836}
