@@ -19,6 +19,26 @@ test('product sources filter unpublished products and preserve manual order',()=
  const ids=s=>selectSectionProducts(products,s).map(p=>p.id);
  assert.deepEqual(ids({productSource:'latest'}),['b','a']);assert.deepEqual(ids({productSource:'category',categoryId:'c'}),['a']);assert.deepEqual(ids({productSource:'manual',productIds:['b','secret','a']}),['b','a']);assert.deepEqual(ids({productSource:'featured',productIds:['a']}),['a']);
 });
+test('main category includes its children, while a selected subcategory isolates its products and opens its route',()=>{
+ const scoped=[{id:'a1',categoryId:'c',subcategoryId:'headphones',status:'published',product:'Wireless'},
+               {id:'a2',categoryId:'c',subcategoryId:'microphones',status:'published',product:'Mic'},
+               {id:'a3',categoryId:'c',status:'published',product:'General'},
+               {id:'b1',categoryId:'d',subcategoryId:'headphones',status:'published',product:'Elsewhere'}];
+ const ids=s=>selectSectionProducts(scoped,s).map(p=>p.id);
+ assert.deepEqual(ids({productSource:'category',categoryId:'c',limit:20}),['a1','a2','a3']);
+ assert.deepEqual(ids({productSource:'category',categoryId:'c',subcategoryId:'headphones',limit:20}),['a1']);
+ assert.deepEqual(ids({productSource:'category',categoryId:'c',subcategoryId:'microphones',limit:20}),['a2']);
+ const store=normalizeStore({...defaultStore(),sections:[{id:'selected',type:'products',title:'السماعات',visible:true,channel:'both',button:'استكشف المنتجات',buttonTarget:'products',productSource:'category',categoryId:'c',subcategoryId:'headphones',limit:10}]});
+ assert.equal(store.sections[0].subcategoryId,'headphones');
+ const state={settings:{storefront:store,categories:[{id:'c',nameAr:'الصوت والسماعات'}],subcategories:[{id:'headphones',parentId:'c',nameAr:'السماعات اللاسلكية'}]},publicOffers:scoped};
+ const html=renderStorefront(state,'web',{language:'ar'});
+ assert.match(html,/data-store-product="a1"/);
+ assert.doesNotMatch(html,/data-store-product="a2"|data-store-product="a3"|data-store-product="b1"/);
+ assert.match(html,/href="\/\?category=headphones"/);
+ assert.doesNotMatch(html,/data-store-browse="selected"/);
+ store.sections[0].subcategoryId='';
+ assert.match(renderStorefront(state,'web',{language:'ar'}),/href="\/\?category=c"/);
+});
 test('new schema saves bilingual content and rejects executable links and unknown product sources',()=>{
  const base=defaultStore(),s={id:'x',type:'products',title:'مختارات',titleEn:'Picks',subtitleEn:'Description',buttonEn:'Shop',href:'https://example.test/catalog',visible:true,channel:'both',productSource:'manual',productIds:['a'],limit:4};
  const saved=normalizeStore({...base,sections:[s]});assert.equal(saved.sections[0].titleEn,'Picks');assert.equal(saved.sections[0].href,s.href);assert.deepEqual(saved.sections[0].productIds,['a']);assert.equal(saved.home,undefined);
