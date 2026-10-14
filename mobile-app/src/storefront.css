@@ -186,3 +186,18 @@ body.app-modal-open .sf-product-page .sf-buy-bar{display:none!important}
 .sf-breadcrumb-divider{color:#8494a1}
 .sf-block-categoryNav .sf-breadcrumb,.sf-block-productCategories .sf-breadcrumb,.sf-block-categories .sf-breadcrumb{margin-top:12px}
 @container(max-width:650px){.sf-breadcrumb{font-size:14px;gap:5px 8px}}
+
+/* Respect the section background/text colors chosen in Design Store, including in previews.
+   Merchandising presets may style cards/layout, but must not override user-selected colors. */
+.published-storefront .sf-layout-block {
+  background:var(--section-bg);
+  color:var(--section-color);
+}
+.published-storefront .sf-layout-block .sf-section>h2,
+.published-storefront .sf-layout-block .sf-section>p {
+  color:inherit;
+}
+.published-storefront .sf-layout-block .sf-all-products,
+.published-storefront .sf-layout-block .sf-all-products:visited {
+  color:inherit;
+}
