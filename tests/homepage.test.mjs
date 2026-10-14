@@ -4,6 +4,7 @@ import {readFile} from 'node:fs/promises';
 import {defaultStore,selectSectionProducts} from '../shared/storefront-model.mjs';
 import {normalizeStore} from '../backend/modules/studio.mjs';
 import {upgradeStore} from '../backend/modules/storefront-upgrade.mjs';
+import {homepageOfferPlan} from '../backend/modules/records.mjs';
 import {renderStorefront} from '../mobile-app/src/storefront.js';
 const products=[{id:'a',status:'published',categoryId:'c',createdAt:'2026-01-01',translation:{titleAr:'منتج',titleEn:'Product'},unitPrice:4},{id:'b',status:'published',categoryId:'d',createdAt:'2026-02-01',translation:{titleAr:'آخر',titleEn:'Other'},unitPrice:5},{id:'secret',status:'review'}];
 test('section removal persists without reintroducing builtins, including an empty homepage',()=>{
@@ -67,4 +68,42 @@ test('image-only banner saves and renders only an image with an accessible click
   assert.match(banner,/<img /);assert.match(banner,/<a class="sf-banner-hit" href="\/products"/);
   assert.doesNotMatch(banner,/<h[1-6]|<p|sf-primary|sf-all-products|<div/);
  }
+});
+
+test('homepage fetch plan reserves enough stock for a selected subcategory and other product sources',()=>{
+ const store=defaultStore();
+ store.collections=[{id:'picks',active:true,productIds:['collection-one']}];
+ store.sections=[
+  {id:'power',type:'products',visible:true,productSource:'category',categoryId:'cat-charging-power',subcategoryId:'sub-power-banks',limit:10},
+  {id:'audio',type:'products',visible:true,productSource:'category',categoryId:'cat-audio',limit:5},
+  {id:'manual',type:'products',visible:true,productSource:'manual',productIds:['manual-one','manual-two'],limit:2},
+  {id:'collection',type:'products',visible:true,productSource:'collection',collectionId:'picks',limit:4},
+  {id:'hidden',type:'products',visible:false,productSource:'category',categoryId:'hidden',limit:24}
+ ];
+ const plan=homepageOfferPlan({storefront:store});
+ assert.deepEqual(plan.categoryNeeds,[
+  {id:'cat-charging-power',subcategoryId:'sub-power-banks',limit:10},
+  {id:'cat-audio',subcategoryId:'',limit:5}
+ ]);
+ assert.deepEqual(plan.manualIds,['manual-one','manual-two','collection-one']);
+ assert.equal(plan.latestLimit,20);
+});
+
+test('homepage product section shows ten matching products and View all targets its subcategory',()=>{
+ const store=defaultStore();
+ store.sections=[{id:'power',type:'products',title:'الشواحن المتنقلة',visible:true,channel:'both',productSource:'category',categoryId:'cat-charging-power',subcategoryId:'sub-power-banks',limit:10,showAllProducts:true}];
+ const offers=[
+  ...Array.from({length:12},(_,i)=>({id:'power-'+i,categoryId:'cat-charging-power',subcategoryId:'sub-power-banks',status:'published',unitPrice:10,moq:1})),
+  {id:'wall-charger',categoryId:'cat-charging-power',subcategoryId:'sub-wall-chargers',status:'published'}
+ ];
+ const state={settings:{storefront:normalizeStore(store)},publicOffers:offers};
+ const html=renderStorefront(state,'web',{language:'ar'});
+ assert.equal((html.match(/class="sf-product"/g)||[]).length,10);
+ assert.match(html,/class="sf-all-products" href="\/\?category=sub-power-banks"/);
+ assert.doesNotMatch(html,/data-store-product="wall-charger"/);
+ state.settings.storefront.sections[0].productSource='manual';
+ state.settings.storefront.sections[0].productIds=['power-1','power-3'];
+ const manual=renderStorefront(state,'web',{language:'ar'});
+ assert.match(manual,/class="sf-all-products" data-store-browse="power"/);
+ assert.equal((manual.match(/class="sf-product"/g)||[]).length,2);
 });
