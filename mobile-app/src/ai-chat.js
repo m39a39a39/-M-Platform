@@ -19,21 +19,21 @@ const PROACTIVE_COOLDOWN=90000;
 const esc=value=>String(value??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 const copy={
   ar:{
-    title:'مساعد M الذكي',subtitle:'مستشار مشتريات وتوريد',waitingSubtitle:'بانتظار موظف · المساعد مستمر معك',humanSubtitle:'فريق M يتولى المحادثة الآن',team:'فريق M',
-    placeholder:'اكتب ماذا تبحث عنه...',send:'إرسال',close:'إغلاق',photo:'إضافة صورة من الكاميرا أو الاستديو',imageReady:'الصورة جاهزة للبحث',imageError:'تعذر قراءة الصورة. اختر صورة أخرى.',imageSearch:'📷 بحث بصورة',
-    older:'عرض الرسائل السابقة',
-    guestHello:'مرحبًا 👋 أخبرني ماذا تريد شراءه، وسأساعدك في اختيار الأنسب من المنتجات المتاحة.',
-    clientHello:'مرحبًا 👋 أخبرني ماذا تحتاج، وسأساعدك في مشترياتك وطلبات التوريد.',
+    title:'مساعد IMSG',subtitle:'استفسارات المنتجات والطلبات',launcher:'اسأل IMSG',waitingSubtitle:'بانتظار موظف · المساعد مستمر معك',humanSubtitle:'فريق M يتولى المحادثة الآن',team:'فريق M',
+    placeholder:'اكتب استفسارك هنا…',send:'إرسال',close:'إغلاق',photo:'إضافة صورة من الكاميرا أو الاستديو',imageReady:'الصورة جاهزة للبحث',imageError:'تعذر قراءة الصورة. اختر صورة أخرى.',imageSearch:'📷 بحث بصورة',
+    older:'محادثاتي',
+    guestHello:'أهلًا بك في IMSG 👋 كيف يمكننا مساعدتك؟',
+    clientHello:'أهلًا بك في IMSG 👋 كيف يمكننا مساعدتك؟',
     error:'تعذر الحصول على رد الآن. حاول مرة أخرى.',thinking:'جاري البحث...',leadTitle:'هل تريد أن نتواصل معك؟',leadText:'حتى لا نفقد التواصل إذا أغلقت الصفحة، اترك رقم واتساب أو وسيلة تواصل وسيتابع معك الموظف.',leadContact:'رقم واتساب أو وسيلة التواصل',leadName:'الاسم (اختياري)',leadSave:'حفظ وسيلة التواصل',leadSaved:'تم حفظ وسيلة التواصل',waitingLong:'فريق خدمة العملاء مشغول حاليًا، لكن طلبك محفوظ ويمكنني الاستمرار في مساعدتك حتى يستلم الموظف.',
     chipsGuest:['أبحث عن أفضل منتج لسوقي','قارن لي بين المنتجات المناسبة','لم أجد المنتج الذي أريده'],
     chipsClient:['اقترح لي منتجًا مناسبًا','ما حالة طلب التوريد؟','أين وصل طلبي؟']
   },
   en:{
-    title:'M AI Assistant',subtitle:'Smart buying & sourcing advisor',waitingSubtitle:'Waiting for an agent · AI can still help',humanSubtitle:'M Team is handling this conversation',team:'M Team',
-    placeholder:'Tell me what you are looking for...',send:'Send',close:'Close',photo:'Add image from camera or photo library',imageReady:'Image ready to search',imageError:'Could not read this image. Choose another image.',imageSearch:'📷 Image search',
-    older:'Show earlier messages',
-    guestHello:'Hi 👋 Tell me what you want to buy and I will help you choose the best fit from available products.',
-    clientHello:'Hi 👋 Tell me what you need and I can help with your purchases and sourcing requests.',
+    title:'IMSG Assistant',subtitle:'Product & Order Inquiries',launcher:'Ask IMSG',waitingSubtitle:'Waiting for an agent · AI can still help',humanSubtitle:'M Team is handling this conversation',team:'M Team',
+    placeholder:'Type your inquiry here…',send:'Send',close:'Close',photo:'Add image from camera or photo library',imageReady:'Image ready to search',imageError:'Could not read this image. Choose another image.',imageSearch:'📷 Image search',
+    older:'My Conversations',
+    guestHello:'Welcome to IMSG 👋 How can we help you?',
+    clientHello:'Welcome to IMSG 👋 How can we help you?',
     error:'I could not get a response right now. Please try again.',thinking:'Searching...',leadTitle:'Want us to contact you?',leadText:'If you leave the page, add a WhatsApp number or contact method so our team can follow up.',leadContact:'WhatsApp or contact method',leadName:'Name (optional)',leadSave:'Save contact',leadSaved:'Contact saved',waitingLong:'Our customer service team is busy right now. Your request is saved and I can keep helping until an agent takes over.',
     chipsGuest:['Find the best product for my market','Compare suitable products','I cannot find the product I need'],
     chipsClient:['Recommend a suitable product','What is my sourcing request status?','Where is my order?']
@@ -200,6 +200,7 @@ function render(){
   const host=ensureHost(),lang=language(),rtl=lang==='ar';
   host.dir=rtl?'rtl':'ltr';
   host.querySelector('.m-ai-head strong').textContent=t('title');
+  const launcher=host.querySelector('.m-ai-launcher');launcher.title=t('launcher');launcher.setAttribute('aria-label',t('launcher'));
   host.querySelector('.m-ai-head small').textContent=controller.humanMode?t('humanSubtitle'):controller.waitingHuman?t('waitingSubtitle'):t('subtitle');
   host.querySelector('.m-ai-close').setAttribute('aria-label',t('close'));
   host.querySelector('textarea').placeholder=t('placeholder');
