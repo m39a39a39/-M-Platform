@@ -61,8 +61,7 @@ function publicSettingsForView(data={},route={}){
 function publicProductSummary(row){
   const d=row.data||{},translation=d.translation||{},item={id:row.id,displayNo:row.display_no,createdAt:row.created_at,status:'published',
     sku:d.sku||'',translation:{titleAr:translation.titleAr||'',titleEn:translation.titleEn||''},images:Array.isArray(d.images)?d.images.filter(Boolean).slice(0,1):[],
-    country:d.country||'',categoryId:d.categoryId||'',subcategoryId:d.subcategoryId||'',unitPrice:d.unitPrice??'',currency:d.currency||'',moq:d.moq??'',stock:d.stock??'',stockUnlimited:d.stockUnlimited!==false};
-  if(Array.isArray(d.tiers)&&d.tiers.length)item.tiers=d.tiers;
+    country:d.country||'',categoryId:d.categoryId||'',subcategoryId:d.subcategoryId||'',moq:d.moq??'',stock:d.stock??'',stockUnlimited:d.stockUnlimited!==false};
   return compactPublicValue(item)||item;
 }
 export function publicAiProductSummary(row){
@@ -261,7 +260,13 @@ export async function snapshot(user,{productId='',pageId='',category='',q='',aiC
     return item;
   });
   const responseSettings=user?publicSettings(upgradeSettings(settings.data),{includeKnowledge:aiKnowledge}):publicSettingsForView(settings.data,{pageId,productId,category,q,aiPolicies,aiKnowledge});
-  let responseOffers=publicOffers.map(r=>!user&&r.id!==productId?(aiCatalog?publicAiProductSummary(r):publicProductSummary(r)):anonymous(r,'publicOffers',user));
+  let responseOffers=publicOffers.map(r=>{
+    const item=!user&&r.id!==productId?(aiCatalog?publicAiProductSummary(r):publicProductSummary(r)):anonymous(r,'publicOffers',user);
+    if(!user||user.role==='client'){
+      for(const key of ['unitPrice','price','salePrice','discount','discountPercent','currency','tiers','priceTiers','sampleCost','total','cost'])delete item[key];
+    }
+    return item;
+  });
   if(!user&&!productId&&!pageId&&!category&&!q){
     const storefront=responseSettings.storefront||{},sections=(storefront.sections||[]).filter(section=>section?.visible!==false);
     const collections=storefront.collections||[],selected=new Map();
