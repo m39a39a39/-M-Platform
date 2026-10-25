@@ -6,10 +6,10 @@ for(const name of ['localStorage','sessionStorage']){
   try{hasWebSession=!!globalThis[name]?.getItem('m-platform.session.v1');}catch{}
 }
 
-const accountRoute=['/customer','/customer.html','/supplier','/supplier.html','/login.html','/reset-password.html','/register-customer.html','/register-supplier.html'].includes(location.pathname);
+const accountRoute=['/admin','/admin.html','/studio.html','/customer','/customer.html','/supplier','/supplier.html','/login.html','/reset-password.html','/register-customer.html','/register-supplier.html'].includes(location.pathname);
 const nativeRuntime=location.protocol==='capacitor:'||location.protocol==='ionic:'||location.protocol==='file:';
 
-if(!accountRoute&&!nativeRuntime&&!hasWebSession){
+if(!accountRoute&&!nativeRuntime){
   window.addEventListener('mplatform:register',event=>{
     const role=event.detail?.role==='supplier'?'supplier':'client';
     location.assign((role==='supplier'?'/supplier.html':'/customer.html')+'?auth=register');
