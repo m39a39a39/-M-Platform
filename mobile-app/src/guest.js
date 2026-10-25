@@ -284,7 +284,7 @@ function mountGuestStore(){
  catalogNode('guestProductSearch').placeholder=t('search');catalogNode('guestProductSearch').setAttribute('aria-label',t('search'));catalogNode('guestPrevPage').textContent=t('previous');catalogNode('guestNextPage').textContent=t('next');
  catalog.querySelector('.guest-product-search').hidden=!h.showSearch;
  catalogNode('guestCategoryFilters').hidden=!h.showCategories;catalogNode('guestSubcategoryFilters').hidden=!h.showCategories;catalogNode('guestSupplyCountryFilters').hidden=!h.showCountries;
- bindStorefront(host,state,{chrome:false,observe:aiChatSignal,money,hydrate:hydrateImages,product:openOffer,add:(id,quantity)=>{try{const p=publishedOffers().find(p=>p.id===id);addToCart(p,quantity);showGuestToast(t('added'));}catch(e){showGuestToast(e.message);}},page:(title,html)=>{$('modalTitle').textContent=title;$('modalKicker').textContent='';$('modalBody').innerHTML=html;$('modal').classList.remove('hidden');},category:id=>{category=id;renderOffers();},catalog:()=>catalog.isConnected&&catalog.scrollIntoView({behavior:'smooth'}),action:action=>{if(action==='cart')openGuestCart();if(action==='login')showLogin();if(action==='request')openGuestCart();if(action==='register-client')register('client');if(action==='register-supplier')register('supplier');if(action==='language')toggleLanguage();if(action==='home')host.scrollIntoView({behavior:'smooth'});}});
+ bindStorefront(host,state,{chrome:false,observe:aiChatSignal,money,hydrate:hydrateImages,product:openOffer,add:(id,quantity)=>{try{const p=publishedOffers().find(p=>p.id===id);addToCart(p,quantity);showGuestToast(t('added'));}catch(e){showGuestToast(e.message);}},page:(title,html)=>{$('modalTitle').textContent=title;$('modalKicker').textContent='';$('modalBody').innerHTML=html;$('modal').classList.remove('hidden');},category:id=>{category=id;renderOffers();},catalog:()=>catalog.isConnected&&catalog.scrollIntoView({behavior:'smooth'}),action:action=>{if(action==='cart')openGuestCart();if(action==='login')showLogin();if(action==='request')openGuestCustomRequest();if(action==='register-client')register('client');if(action==='register-supplier')register('supplier');if(action==='language')toggleLanguage();if(action==='home')host.scrollIntoView({behavior:'smooth'});}});
  hydrateImages(host);
 }
 async function load(){
@@ -445,6 +445,78 @@ async function openGuestRfqForm(){
    $('modalBody').querySelector('[data-rfq-finish]').addEventListener('click',closeModal);
   }
   cartItems=[];saveCart();pendingRfqKey='';
+ });
+}
+
+let pendingCustomRfqKey='';
+async function openGuestCustomRequest(){
+ await ensureGuestUiStyles();
+ const label=(ar,en)=>lang==='ar'?ar:en;
+ $('modalKicker').textContent='IMSG';
+ $('modalTitle').textContent=label('طلب عرض خاص','Custom sourcing request');
+ $('modalBody').innerHTML='<form id="imsg-custom-rfq-form" class="form-stack imsg-rfq-form imsg-custom-rfq-form">'+
+  '<p class="imsg-custom-intro">'+label('لم تجد المنتج المطلوب؟ أخبرنا بالمواصفات والكمية، وسنتواصل معك عبر واتساب.','Can’t find the product? Describe it and the required quantity. We will contact you on WhatsApp.')+'</p>'+
+  '<label>'+label('اسم المنتج *','Product name *')+'<input name="productName" maxlength="200" minlength="2" required autocomplete="off"></label>'+
+  '<label>'+label('مواصفات المنتج *','Product specifications *')+'<textarea name="specifications" rows="4" minlength="5" maxlength="2000" required placeholder="'+label('الموديل، المقاس، اللون، أو أي متطلبات أخرى','Model, size, color or other requirements')+'"></textarea></label>'+
+  '<label>'+label('الكمية المطلوبة *','Requested quantity *')+'<input name="quantity" type="number" inputmode="numeric" min="1" max="1000000000" step="1" required></label>'+
+  '<label>'+label('صورة المنتج (اختياري)','Product image (optional)')+'<input name="image" type="file" accept="image/jpeg,image/png,image/webp"><small>'+label('يمكنك إرفاق صورة واحدة بصيغة JPG أو PNG أو WebP.','Attach one JPG, PNG or WebP image.')+'</small></label>'+
+  '<label>'+label('الاسم *','Name *')+'<input name="name" autocomplete="name" maxlength="140" minlength="2" required></label>'+
+  '<label>'+label('رقم واتساب *','WhatsApp number *')+'<div class="imsg-rfq-phone"><select name="dial" aria-label="'+label('مفتاح الدولة','Country code')+'"><option value="+966">+966</option><option value="+971">+971</option><option value="+967">+967</option><option value="+965">+965</option><option value="+974">+974</option><option value="+968">+968</option><option value="+973">+973</option><option value="+20">+20</option><option value="+86">+86</option><option value="+60">+60</option><option value="+1">+1</option><option value="+44">+44</option></select><input name="phone" type="tel" inputmode="tel" autocomplete="tel-national" placeholder="5XXXXXXXX" required></div></label>'+
+  '<label>'+label('الدولة *','Country *')+'<input name="country" maxlength="120" value="'+label('السعودية','Saudi Arabia')+'" required></label>'+
+  '<label>'+label('اسم الشركة أو المتجر (اختياري)','Company or store (optional)')+'<input name="company" maxlength="200"></label>'+
+  '<label>'+label('ملاحظات إضافية (اختياري)','Additional notes (optional)')+'<textarea name="notes" rows="3" maxlength="2000"></textarea></label>'+
+  '<p data-custom-rfq-message class="imsg-rfq-error" role="status" aria-live="polite"></p>'+
+  '<button type="submit" class="primary-btn">'+label('إرسال الطلب الخاص','Submit custom request')+'</button></form>';
+ $('modal').classList.remove('hidden');
+ $('imsg-custom-rfq-form').addEventListener('submit',async event=>{
+  event.preventDefault();
+  const form=event.currentTarget,submit=form.querySelector('[type="submit"]'),message=form.querySelector('[data-custom-rfq-message]');
+  if(submit.disabled)return;
+  const f=new FormData(form),national=String(f.get('phone')||'').replace(/[\\s()\\-.]/g,'').replace(/^0+/,'');
+  const whatsapp=String(f.get('dial'))+national,quantity=Number(f.get('quantity'));
+  if(!/^\\+[1-9]\\d{7,14}$/.test(whatsapp)){
+   message.textContent=label('أدخل رقم واتساب صحيحًا','Enter a valid WhatsApp number');return;
+  }
+  if(!Number.isSafeInteger(quantity)||quantity<1||quantity>1000000000){
+   message.textContent=label('أدخل كمية صحيحة','Enter a valid quantity');return;
+  }
+  submit.disabled=true;
+  message.textContent=label('جارٍ إرسال الطلب...','Sending request...');
+  try{
+   let image='';
+   const photo=form.elements.image?.files?.[0];
+   if(photo){
+    if(!['image/jpeg','image/png','image/webp'].includes(photo.type))throw Error(label('صيغة الصورة غير مدعومة','Unsupported image format'));
+    const {filesToCompressedSources}=await import('./image-upload.js');
+    image=(await filesToCompressedSources(form.elements.image,{maxFiles:1,targetBytes:240*1024,maxDimension:1200}))[0]||'';
+    if(image.length>480000)throw Error(label('الصورة كبيرة جدًا. اختر صورة أصغر.','Image is too large. Choose a smaller image.'));
+   }
+   if(!pendingCustomRfqKey)pendingCustomRfqKey=crypto.randomUUID();
+   const response=await fetch(API+'/api/v1/rfq',{method:'POST',credentials:'omit',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+    source:'website',requestType:'custom',items:[],idempotencyKey:pendingCustomRfqKey,
+    customer:{name:f.get('name'),whatsapp,country:f.get('country'),company:f.get('company')},
+    customDetails:{productName:f.get('productName'),specifications:f.get('specifications'),quantity,image},
+    notes:f.get('notes')
+   })});
+   const result=await response.json().catch(()=>({}));
+   if(!response.ok||!result?.number)throw Error(result?.error||label('تعذر حفظ الطلب. حاول مرة أخرى.','Could not save the request. Try again.'));
+   pendingCustomRfqKey='';
+   $('modalKicker').textContent='IMSG';
+   $('modalTitle').textContent=label('تأكيد الطلب الخاص','Custom request confirmation');
+   $('modalBody').innerHTML='<section class="imsg-rfq-success" role="status">'+
+    '<div class="imsg-rfq-success-icon" aria-hidden="true">✓</div>'+
+    '<h3>'+label('تم استلام طلبك بنجاح!','Your request was received!')+'</h3>'+
+    '<div class="imsg-rfq-receipt"><span>'+label('رقم الطلب','Request number')+'</span><strong dir="ltr">'+esc(result.number)+'</strong></div>'+
+    '<p><strong>'+esc(String(f.get('productName')||''))+'</strong> · '+quantity.toLocaleString('en-US')+' '+label('قطعة','units')+'</p>'+
+    '<p>'+label('سيراجع فريق IMSG المواصفات ويتواصل معك عبر واتساب لتقديم عرض السعر.','IMSG will review your specifications and contact you on WhatsApp with a quote.')+'</p>'+
+    '<button type="button" class="primary-btn" data-custom-rfq-done>'+label('العودة إلى المتجر','Back to store')+'</button></section>';
+   $('modalBody').scrollTop=0;
+   $('modalBody').querySelector('[data-custom-rfq-done]').addEventListener('click',closeModal);
+  }catch(error){
+   message.textContent=error?.message||label('تعذر إرسال الطلب. حاول مرة أخرى.','Unable to submit. Please try again.');
+   submit.disabled=false;
+   message.scrollIntoView({block:'nearest'});
+  }
  });
 }
 
