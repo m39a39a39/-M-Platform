@@ -19,7 +19,7 @@ import {registerPushDevice,unregisterPushDevice} from './modules/push.mjs';
 import {publicAppConfig} from './modules/app-config.mjs';
 import {submitPaymentReceipt,reviewPaymentReceipt} from './modules/payments.mjs';
 import {manageOrder} from './modules/order-management.mjs';
-import {saveStudio,saveStudioProduct} from './modules/studio.mjs';
+import {saveStudio,saveStudioProduct,publishCreatedProduct} from './modules/studio.mjs';
 import {createCartOrder} from './modules/cart-orders.mjs';
 import {rfqRoute} from './modules/rfq.mjs';
 import {aiChat} from './modules/ai-chat.mjs';
@@ -134,6 +134,7 @@ export default async function handler(req,res){
         else if(path==='/api/store-design')result=await generateStoreDesign(user,body);
         else if(path==='/api/studio')result=await saveStudio(user,body);
         else if(path==='/api/studio-product')result=await saveStudioProduct(user,body);
+        else if(path==='/api/studio-product/publish')result=await publishCreatedProduct(user,body);
         else if(path==='/api/settings')result=await saveSettings(user,body);
         else if(path==='/api/team')result=await team(user,body);
         else if(path==='/api/uploads')result=await upload(user,body);
