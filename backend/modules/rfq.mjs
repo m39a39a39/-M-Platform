@@ -3,7 +3,7 @@ import {assert,config,db,rpc} from '../lib/supabase.mjs';
 import {can} from './auth.mjs';
 
 const ADMIN_READ=user=>can(user,'requests.read')||can(user,'requests.edit');
-const ADMIN_EDIT=user=>can(user,'requests.edit')&&can(user,'accounts.read');
+const ADMIN_EDIT=user=>can(user,'requests.edit');
 const MAX_ITEMS=100;
 function str(value,max=200){return String(value??'').trim().slice(0,max+1);}
 function normalizePhone(value){
@@ -69,6 +69,16 @@ async function list(){
 export async function rfqRoute(user,req,body,url){
   if(req.method==='GET'){assert(ADMIN_READ(user),403,'غير مصرح / Unauthorized');return list();}
   assert(req.method==='POST',405);
+  if(body?.action==='customer-note'){
+    assert(ADMIN_EDIT(user),403,'غير مصرح / Unauthorized');
+    const id=str(body.customerId,40),notes=str(body.notes,2000);
+    assert(/^[0-9a-f-]{36}$/i.test(id)&&notes.length<=2000,400,'بيانات ملاحظات العميل غير صحيحة');
+    const result=await db('imsg_rfq_customers','id=eq.'+encodeURIComponent(id),{
+      method:'PATCH',body:{notes,updated_at:new Date().toISOString()},headers:{Prefer:'return=representation'}
+    });
+    assert(Array.isArray(result)&&result.length===1,404,'العميل غير موجود');
+    return {ok:true};
+  }
   const admin=body?.source==='admin'||body?.requestId;
   if(admin)assert(ADMIN_EDIT(user),403,'غير مصرح / Unauthorized');
   const payload=parsePayload(body,admin);
