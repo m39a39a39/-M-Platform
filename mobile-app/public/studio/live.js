@@ -61,7 +61,21 @@ function renderOriginalProductEditorPage(){
   const id=window.MAdmin.getProductEditorId()||new URLSearchParams(location.search).get('product')||'';
   const canCreate=permitted('offers.create')||permitted('offers.edit');
   const canEdit=permitted('offers.edit');
-  const actual=id?state.draft.products.find(row=>row.id===id):null;
+  const permittedProduct=id?(liveState.publicOffers||[]).find(row=>row.id===id&&!row.deletedAt):null;
+  const actual=permittedProduct?state.draft.products.find(row=>row.id===id):null;
+  // Read-only access uses ONLY a product present in the current user's
+  // server-filtered snapshot. No edit form, dialog or extra privileges.
+  if(id&&permittedProduct&&!canEdit){
+    const p=productOf(permittedProduct);
+    const category=(liveState.settings.categories||[]).find(c=>c.id===p.categoryId);
+    const subcategory=(liveState.settings.subcategories||[]).find(c=>c.id===p.subcategoryId);
+    const escVal=value=>esc(value==null||value===''?'—':value);
+    const line=(label,value)=>`<div class="staff-product-detail-field"><dt>${esc(label)}</dt><dd dir="auto">${escVal(value)}</dd></div>`;
+    const images=(p.images||[]).map((src,index)=>`<img src="${esc(src)}" alt="صورة المنتج ${index+1}" loading="lazy">`).join('');
+    host.innerHTML=`<div class="admin-product-page"><div class="page-head admin-page-head"><div><h1>تفاصيل المنتج</h1><p>عرض المنتج المحفوظ — دون صلاحية تعديل</p></div></div><div class="admin-product-page-top"><button type="button" class="secondary-btn" data-admin-product-cancel>← العودة إلى المنتجات</button></div><section class="admin-product-page-card panel"><div class="staff-product-detail-heading"><h2>${escVal(p.name)}</h2><span class="status-pill status-${esc(permittedProduct.status||'pending')}">${p.status==='active'?'منشور':'غير منشور'}</span></div>${images?`<div class="staff-product-detail-images">${images}</div>`:''}<dl class="staff-product-detail-grid">${line('اسم المنتج بالإنجليزية',p.nameEn)}${line('رمز المنتج (SKU)',p.sku)}${line('التصنيف الرئيسي',category?.nameAr)}${line('التصنيف الفرعي',subcategory?.nameAr)}${line('دولة التوريد',p.country)}${line('الحد الأدنى للطلب',p.moq)}${line('العملة',p.currency)}${line('مدة التجهيز بالأيام',p.leadDays)}${line('المخزون',p.stock)}${line('السعر (اختياري)',p.price)}</dl><div class="staff-product-detail-notes"><h3>الوصف العربي</h3><p>${escVal(p.description)}</p><h3>English description</h3><p dir="auto">${escVal(p.descriptionEn)}</p>${p.shortDescription?`<h3>الوصف المختصر</h3><p>${escVal(p.shortDescription)}</p>`:''}${p.technicalSpecs?`<h3>المواصفات الفنية</h3><p>${escVal(p.technicalSpecs)}</p>`:''}${p.options?`<h3>الألوان والموديلات</h3><p>${escVal(p.options)}</p>`:''}${p.notes?`<h3>ملاحظات المنتج</h3><p>${escVal(p.notes)}</p>`:''}</div><p class="staff-product-view-permission">يمكنك مشاهدة المنتج الذي أضفته. لتعديله، يلزم منحك صلاحية «تعديل المنتجات» من الإدارة.</p></section></div>`;
+    hydrateStudioImages();
+    return;
+  }
   if(!canCreate||(id&&(!canEdit||!actual))){
     host.innerHTML='<section class="admin-product-page panel"><h2>غير مسموح</h2><p>ليس لديك صلاحية تعديل هذا المنتج.</p><button class="secondary-btn" type="button" data-admin-product-cancel>العودة إلى المنتجات</button></section>';
     return;

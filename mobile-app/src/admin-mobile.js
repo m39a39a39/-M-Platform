@@ -14,7 +14,12 @@ export const getProductEditorId=()=>productEditorId;
 export function finishProductEditor(){productEditorId='';offerTab='all';go('offers','all');}
 export function openProductEditor(id=''){
   const existing=id?(state?.publicOffers||[]).find(row=>row.id===id&&!row.deletedAt):null;
-  if(id&&(!existing||!can('offers.edit'))){toast(tr('ليس لديك صلاحية تعديل هذا المنتج.','You cannot edit this product.'));return false;}
+  // A user with product-view access may inspect a product, while only
+  // offers.edit can modify existing records. The server already scopes rows.
+  if(id&&(!existing||!(can('offers.read')||can('offers.create')||can('offers.edit')||can('publish')||can('translate')||can('moderate')))){
+    toast(tr('هذا المنتج غير متاح لحسابك.','This product is not available to your account.'));
+    return false;
+  }
   if(!id&&!(can('offers.create')||can('offers.edit'))){toast(tr('ليس لديك صلاحية إضافة المنتجات.','You cannot add products.'));return false;}
   productEditorId=id||'';
   go('product-editor');
@@ -817,7 +822,9 @@ function requestQuotesPanel(request){
 }
 export function openRecord(kind,id){
   const arr=kind==='request'?state?.requests:kind==='quote'?state?.quotes:state?.publicOffers,x=(arr||[]).find(v=>v.id===id);if(!x)return;
-  if(kind==='public'&&can('offers.edit')){openProductEditor(id);return;}
+  // All product cards use the full admin product page. For creation-only
+  // employees this is a read-only detail view, never a compressed dialog.
+  if(kind==='public'){openProductEditor(id);return;}
   if(kind==='request'&&x.orderFlowVersion===2&&adapter)return adapter.openOrder(id);
   if(kind==='request'&&x.orderType==='cart'){
     const html=ownerBox(x)+assignmentButton(x,'requests')+cartOrderAdminPanel(x)+selectedQuoteCard(x)+supplierConfirmationCard(x,'request')+replacementSupplierPanel(x,'request')+((can('requests.edit')||can('publish'))?trackingEditor(x):'')+adminInvoicePanel(x,'request');

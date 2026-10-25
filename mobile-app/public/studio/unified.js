@@ -10,7 +10,7 @@ const expandedNavigation=new Set();
 // One authority for pages, sidebar links, deep links, and browser history.
 // Server-side permissions independently protect every data/action endpoint.
 const adminPageAccess={
- 'product-editor':['offers.create','offers.edit'],
+ 'product-editor':['offers.create','offers.read','offers.edit','publish','translate','moderate'],
  overview:['settings'],notifications:['requests.read','requests.edit'],
  conversations:['conversations.read','conversations.manage'],ai:['settings'],knowledge:['settings'],
  rfq:['requests.read','requests.edit'],orders:['requests.read','requests.edit'],

@@ -314,3 +314,82 @@
  .admin-product-page .studio-product-actions{position:sticky;bottom:0;z-index:6;background:#fff;padding:12px 0 calc(12px + env(safe-area-inset-bottom,0px));box-shadow:0 -6px 18px rgba(10,30,45,.045);}
  .admin-product-page .studio-product-actions button{width:100%;}
 }
+
+/* Accessible, properly scrollable admin dialogs on iOS-sized viewports.
+   Previously the dialog could collapse to a single header strip (status + X). */
+@media (max-width:760px) {
+  dialog#operations-dialog.operations-dialog[open]:not(.chat-conversation-dialog):not(:has(#adminTeamForm)) {
+    box-sizing:border-box;
+    position:fixed;
+    inset:auto 0 0;
+    display:flex;
+    flex-direction:column;
+    width:100%;
+    max-width:100vw;
+    height:min(88dvh,800px);
+    max-height:calc(100dvh - env(safe-area-inset-top,0px) - 12px);
+    margin:0 auto;
+    padding:0;
+    overflow:hidden;
+    border:0;
+    border-radius:20px 20px 0 0;
+    background:#fff;
+  }
+  #operations-dialog.operations-dialog[open]:not(.chat-conversation-dialog):not(:has(#adminTeamForm)) > .studio-operations {
+    display:flex;
+    flex:1 1 auto;
+    flex-direction:column;
+    min-width:0;
+    min-height:0;
+    width:100%;
+    overflow:hidden;
+  }
+  #operations-dialog.operations-dialog[open]:not(.chat-conversation-dialog):not(:has(#adminTeamForm)) .operations-modal-head {
+    box-sizing:border-box;
+    display:flex;
+    flex:0 0 auto;
+    justify-content:space-between;
+    align-items:center;
+    padding:14px 16px;
+    margin:0;
+    gap:14px;
+    min-height:70px;
+    border-bottom:1px solid #e6ebef;
+  }
+  #operations-dialog.operations-dialog[open]:not(.chat-conversation-dialog):not(:has(#adminTeamForm)) .operations-modal-head > div {
+    min-width:0;
+    overflow-wrap:anywhere;
+  }
+  #operations-dialog.operations-dialog[open]:not(.chat-conversation-dialog):not(:has(#adminTeamForm)) .operations-modal-head button {
+    flex:0 0 44px;
+    width:44px;
+    height:44px;
+    padding:0;
+  }
+  #operations-dialog.operations-dialog[open]:not(.chat-conversation-dialog):not(:has(#adminTeamForm)) #modalBody {
+    box-sizing:border-box;
+    display:block;
+    flex:1 1 auto;
+    min-height:0;
+    overflow-y:auto;
+    -webkit-overflow-scrolling:touch;
+    overscroll-behavior:contain;
+    padding:16px 16px calc(22px + env(safe-area-inset-bottom,0px));
+  }
+}
+/* Read-only product detail is a regular dashboard page, not a popup. */
+.admin-product-page .staff-product-detail-heading{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:20px;}
+.admin-product-page .staff-product-detail-heading h2{font-size:23px;line-height:1.5;margin:0;}
+.admin-product-page .staff-product-detail-images{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:12px;margin-bottom:24px;}
+.admin-product-page .staff-product-detail-images img{display:block;width:100%;height:170px;object-fit:contain;background:#f5f7fa;border-radius:12px;border:1px solid #e1e8ee;}
+.admin-product-page .staff-product-detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:0 0 24px;}
+.admin-product-page .staff-product-detail-field{padding:12px;background:#f6f8fa;border:1px solid #e7ecf2;border-radius:10px;min-width:0;}
+.admin-product-page .staff-product-detail-field dt{font-size:13px;color:#64788a;margin-bottom:5px;}
+.admin-product-page .staff-product-detail-field dd{font-size:15px;color:#172d34;font-weight:600;margin:0;overflow-wrap:anywhere;}
+.admin-product-page .staff-product-detail-notes h3{margin:16px 0 6px;font-size:16px;}
+.admin-product-page .staff-product-detail-notes p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;color:#344658;line-height:1.75;}
+.admin-product-page .staff-product-view-permission{font-size:13px;color:#64788a;margin:24px 0 0;padding-top:16px;border-top:1px solid #e7ecf2;}
+@media(max-width:600px){
+ .admin-product-page .staff-product-detail-grid{grid-template-columns:minmax(0,1fr);}
+ .admin-product-page .staff-product-detail-images{grid-template-columns:repeat(2,minmax(0,1fr));}
+}
