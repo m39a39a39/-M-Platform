@@ -48,3 +48,25 @@ button{cursor:pointer}
   .boot-brand{width:116px;height:24px}
 }
 @media(prefers-reduced-motion:reduce){.boot-skeleton,.catalog-skeleton-piece{animation:none}}
+
+/* IMSG RFQ – customer list and contact form; no price or currency UI. */
+.imsg-rfq-list{display:grid;gap:12px;padding-block:6px 14px}
+.imsg-rfq-row{display:flex;gap:12px;align-items:center;padding:12px;border:1px solid #e2e8e6;border-radius:12px;background:#fff}
+.imsg-rfq-row>a{flex:none;width:78px;height:78px;display:flex;align-items:center;justify-content:center}
+.imsg-rfq-row img{max-width:78px;max-height:78px;object-fit:contain;border-radius:8px}
+.imsg-rfq-product{flex:1;min-width:0;display:flex;flex-direction:column;gap:7px}
+.imsg-rfq-product strong{line-height:1.4;overflow-wrap:anywhere}
+.imsg-rfq-product small{opacity:.65;direction:ltr;text-align:start}
+.imsg-rfq-product label{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.imsg-rfq-product input{width:106px;max-width:100%;border:1px solid #cbd5d1;border-radius:8px;padding:6px 10px;font:inherit}
+.imsg-rfq-form{display:grid;gap:15px}
+.imsg-rfq-form label{display:grid;gap:6px;font-weight:600}
+.imsg-rfq-form input,.imsg-rfq-form select,.imsg-rfq-form textarea{box-sizing:border-box;min-height:43px;padding:10px;border:1px solid #ccd8d4;border-radius:9px;font:inherit;max-width:100%;width:100%;background:white}
+.imsg-rfq-phone{display:flex;gap:8px;direction:ltr}
+.imsg-rfq-phone select{width:112px;flex:none}
+.imsg-rfq-summary{padding:14px;border-radius:12px;background:#f4f7f5;font-size:.94em;max-height:180px;overflow:auto}
+.imsg-rfq-summary p{margin:8px 0}
+.imsg-rfq-error{margin:0;color:#b42318;min-height:1.4em}
+.imsg-rfq-success{text-align:center;padding:20px 8px;line-height:1.8}
+.imsg-rfq-success h3{font-size:1.6em;direction:ltr}
+@media(max-width:480px){.imsg-rfq-row{gap:8px;padding:8px}.imsg-rfq-row>a{width:64px;height:64px}.imsg-rfq-row img{max-width:64px;max-height:64px}}
