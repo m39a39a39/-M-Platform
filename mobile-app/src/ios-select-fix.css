@@ -1,0 +1,70 @@
+/* iOS-only alternative to the native Safari select sheet/blur. */
+html[data-imsg-ios-selects] select.imsg-ios-select-source { display:none !important; }
+html[data-imsg-ios-selects] .imsg-ios-select-trigger {
+  box-sizing:border-box;
+  display:inline-flex;
+  gap:10px;
+  justify-content:space-between;
+  align-items:center;
+  appearance:none;
+  -webkit-appearance:none;
+  cursor:pointer;
+  text-align:start;
+  max-width:100%;
+  overflow:hidden;
+  white-space:nowrap;
+  -webkit-tap-highlight-color:transparent;
+}
+html[data-imsg-ios-selects] .imsg-ios-select-trigger:focus-visible {
+  outline:2px solid #1699db;
+  outline-offset:2px;
+}
+html[data-imsg-ios-selects] .imsg-ios-select-trigger:disabled { opacity:.55;cursor:not-allowed; }
+html[data-imsg-ios-selects] .imsg-ios-select-trigger .imsg-ios-select-value {
+  min-width:0;
+  flex:1;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+html[data-imsg-ios-selects] .imsg-ios-select-chevron { flex:none;font-size:1.1em;line-height:1; }
+html[data-imsg-ios-selects] .imsg-ios-select-menu {
+  position:fixed;
+  box-sizing:border-box;
+  z-index:2147483647;
+  display:block;
+  padding:5px;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+  background:#fff;
+  color:#112a3d;
+  border:1px solid #c9d6df;
+  border-radius:14px;
+  box-shadow:0 12px 34px rgba(12,37,54,.22);
+  font:500 16px/1.45 system-ui,-apple-system,Arial,sans-serif;
+}
+html[data-imsg-ios-selects] .imsg-ios-select-option {
+  display:block;
+  box-sizing:border-box;
+  width:100%;
+  min-height:44px;
+  padding:10px 12px;
+  margin:0;
+  border:0;
+  border-radius:9px;
+  background:transparent;
+  color:inherit;
+  font:inherit;
+  text-align:start;
+  white-space:normal;
+  overflow-wrap:anywhere;
+  cursor:pointer;
+}
+html[data-imsg-ios-selects] .imsg-ios-select-option[aria-selected="true"] {
+  color:#075e89;
+  background:#e8f4fb;
+  font-weight:750;
+}
+html[data-imsg-ios-selects] .imsg-ios-select-option:focus-visible { outline:2px solid #1699db;outline-offset:-2px; }
+html[data-imsg-ios-selects] .imsg-ios-select-option:disabled { color:#9ca7b2;cursor:not-allowed; }

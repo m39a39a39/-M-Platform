@@ -1,3 +1,5 @@
+import './ios-select-fix.css';
+import './ios-select-fix.js';
 import * as portalRoutes from './portal-routes.js';
 window.MPortal=portalRoutes;
 import {mountSiteChrome} from './site-chrome.js';
