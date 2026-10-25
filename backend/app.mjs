@@ -137,7 +137,7 @@ export default async function handler(req,res){
         else if(path==='/api/uploads')result=await upload(user,body);
         else if(path==='/api/payment-receipts')result=await submitPaymentReceipt(user,body);
         else if(path==='/api/payment-review')result=await reviewPaymentReceipt(user,body);
-        else if(path==='/api/cart-orders')result=await createCartOrder(user,body);
+        else if(path==='/api/cart-orders')throw new HttpError(410,'توقفت طلبات الشراء المباشر. استخدم قائمتي لإرسال طلب عرض سعر. / Direct checkout is disabled. Use My List to request a quote.');
         else if(path==='/api/ai-conversations')result=await adminConversationAction(user,body);
         else if(path==='/api/notifications/read')result=await markNotificationsRead(user,body);
         else if(path==='/api/push/register')result=await registerPushDevice(user,body);
