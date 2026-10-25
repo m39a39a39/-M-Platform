@@ -353,8 +353,14 @@ async function openGuestRfqForm(){
  const rows=cartRows();if(!rows.length){void openGuestCart();return;}
  const ar=lang==='ar',label=(a,e)=>ar?a:e;
  $('modalKicker').textContent=t('cart');$('modalTitle').textContent=quoteButtonLabel();
+ const totalUnits=rows.reduce((sum,row)=>sum+Number(row.quantity||0),0);
+ const summaryRows=rows.map(row=>{
+  const image=row.offer.images?.[0]||'';
+  return '<div class="imsg-rfq-summary-line">'+(image?'<img alt="" width="72" height="72" src="'+esc(image)+'" loading="lazy" decoding="async">':'<span class="imsg-rfq-summary-placeholder" aria-hidden="true">▣</span>')+
+   '<div class="imsg-rfq-summary-product"><strong>'+esc(title(row.offer))+'</strong><span>'+label('الكمية','Quantity')+': <b dir="ltr">'+Number(row.quantity).toLocaleString('en-US')+'</b></span></div></div>';
+ }).join('');
  $('modalBody').innerHTML='<form id="imsg-rfq-form" class="form-stack imsg-rfq-form">'+
- '<div class="imsg-rfq-summary"><strong>'+label('المنتجات المختارة','Selected products')+' ('+rows.length+')</strong><div>'+rows.map(x=>'<div class="imsg-rfq-summary-line">'+(x.offer.images?.[0]?'<img alt="" src="'+esc(x.offer.images[0])+'" loading="lazy">':'')+'<span>'+esc(title(x.offer))+' · '+esc(x.offer.sku||'')+' — '+x.quantity+'</span></div>').join('')+'</div></div>'+
+ '<section class="imsg-rfq-summary" aria-label="'+label('ملخص الطلب','Order summary')+'"><div class="imsg-rfq-summary-head"><strong>'+label('ملخص المنتجات','Products summary')+'</strong><button type="button" class="imsg-rfq-edit" data-rfq-edit>'+label('تعديل قائمتي','Edit my list')+'</button></div><div class="imsg-rfq-summary-items">'+summaryRows+'</div><div class="imsg-rfq-summary-footer"><span>'+label('عدد المنتجات','Products')+': <b>'+rows.length+'</b></span><span>'+label('إجمالي القطع','Total units')+': <b dir="ltr">'+totalUnits.toLocaleString('en-US')+'</b></span></div></section>'+
  '<label>'+label('الاسم *','Name *')+'<input name="name" autocomplete="name" maxlength="140" minlength="2" required></label>'+
  '<label>'+label('رقم واتساب *','WhatsApp number *')+'<div class="imsg-rfq-phone"><select name="dial" aria-label="'+label('مفتاح الدولة','Country code')+'"><option value="+966">+966</option><option value="+971">+971</option><option value="+967">+967</option><option value="+965">+965</option><option value="+974">+974</option><option value="+968">+968</option><option value="+973">+973</option><option value="+20">+20</option><option value="+86">+86</option><option value="+60">+60</option><option value="+1">+1</option><option value="+44">+44</option></select><input name="phone" type="tel" inputmode="tel" autocomplete="tel-national" placeholder="5XXXXXXXX" required></div></label>'+
  '<label>'+label('الدولة *','Country *')+'<input name="country" maxlength="120" required value="'+label('السعودية','Saudi Arabia')+'"></label>'+
@@ -362,6 +368,7 @@ async function openGuestRfqForm(){
  '<label>'+label('ملاحظات إضافية (اختياري)','Additional notes (optional)')+'<textarea name="notes" rows="3" maxlength="2000"></textarea></label>'+
  '<p class="imsg-rfq-error" data-rfq-message role="status" aria-live="polite"></p><button class="primary-btn" type="submit">'+label('إرسال طلب عرض السعر','Submit quote request')+'</button></form>';
  $('modal').classList.remove('hidden');
+ $('imsg-rfq-form').querySelector('[data-rfq-edit]').addEventListener('click',openGuestCart);
  $('imsg-rfq-form').addEventListener('submit',async event=>{
   event.preventDefault();
   const form=event.currentTarget,button=form.querySelector('[type="submit"]'),message=form.querySelector('[data-rfq-message]');
