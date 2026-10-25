@@ -26,13 +26,17 @@ test('new product types and newly published policies are available without retra
  assert.equal(result.documents[0].content,'التوصيل خلال يومين');
  assert.doesNotMatch(JSON.stringify(result),/خمسة أيام/);
 });
-test('budget normalization, quantity tiers and generated product cards use the same live price',async()=>{
+test('customer model and product cards never expose price, currency, discounts or quantity tiers',async()=>{
  const k=publicSalesKnowledge({settings,publicOffers:[product('usd','شاحن',{unitPrice:10,currency:'USD',tiers:[{min:100,price:5}]}),product('sar','شاحن',{unitPrice:25})]});
  const selected={...plan,queries:['شاحن'],categoryIds:[],quantity:100,maxPrice:22,sort:'price-asc'};
- const rows=retrieveSalesEvidence(k,selected).products;assert.deepEqual(rows.map(p=>p.id),['usd']);assert.equal(rows[0].price,5);
- const reply=await runSalesAdvisor({knowledge:k,message:'100 حبة',complete:async name=>name==='shopping_plan'?selected:{reply:'هذا الخيار مناسب',productIds:['usd','invented','usd'],quickReplies:['قارن']}});
- assert.equal(reply.recommendations.length,1);assert.equal(reply.recommendations[0].price,5);assert.equal(reply.recommendations[0].priceQuantity,100);
+ const rows=retrieveSalesEvidence(k,selected).products;
+ assert.deepEqual(rows.map(p=>p.id).sort(),['sar','usd']);
+ assert.doesNotMatch(JSON.stringify(k),/"(?:price|currency|tiers|unitPrice)"\\s*:/);
+ const reply=await runSalesAdvisor({knowledge:k,message:'100 حبة',complete:async name=>name==='shopping_plan'?selected:{reply:'استخدم قائمتي لطلب عرض سعر',productIds:['usd'],quickReplies:['قارن']}});
+ assert.equal(reply.recommendations.length,1);
+ assert.doesNotMatch(JSON.stringify(reply.recommendations),/"(?:price|currency|tiers|unitPrice|basePrice)"\\s*:/);
 });
+
 test('personal context explicitly checks owner and published quote parent; unknown number never returns a different order',()=>{
  const privateState={requests:[{id:'a',customerId:client.id,displayNo:123,status:'sent'},{id:'b',customerId:'client-b',displayNo:456,status:'sent',internalNotes:'PRIVATE'}],interests:[{id:'c',customerId:'client-b',displayNo:789}],quotes:[{id:'q1',requestId:'a',displayNo:11,status:'published',unitPrice:12,supplierId:'PRIVATE'},{id:'q2',requestId:'b',displayNo:22,status:'published',unitPrice:99}]};
  const own=ownSalesOrders(privateState,client);assert.equal(own.orders.length,1);assert.equal(own.quotes.length,1);assert.doesNotMatch(JSON.stringify(own),/PRIVATE|456|789/);
@@ -110,7 +114,7 @@ test('order tool is unavailable to guests and binds signed-in reads to server id
  assert.match(fx.payloads.at(-1).messages[0].content,/notFound/);
 }));
 
- test('price sorting keeps weak accessory matches from displacing relevant chargers',()=>{
+ test('relevance keeps weak accessory matches from displacing relevant chargers',()=>{
  const k=publicSalesKnowledge({settings,publicOffers:[product('charger','شاحن سريع USB C',{unitPrice:8}),...Array.from({length:25},(_,i)=>product('accessory'+i,'حامل',{unitPrice:1,shortDescription:'USB'}))]});
  const rows=retrieveSalesEvidence(k,{...plan,queries:['شاحن سريع','USB C charger'],maxPrice:20,sort:'price-asc'}).products;
  assert.deepEqual(rows.map(p=>p.id),['charger']);
