@@ -5,6 +5,8 @@ const ar=()=>document.documentElement.lang!=='en';
 const T=(a,b)=>ar()?a:b;
 const statuses=[['new','جديد','New'],['contacted','تم التواصل','Contacted'],['agreed','تم الاتفاق','Agreed'],['closed','مغلق','Closed']];
 const statusLabel=v=>{const row=statuses.find(y=>y[0]===v);return row?T(row[1],row[2]):v;};
+const isCustom=row=>row?.requestType==='custom';
+const requestKind=row=>isCustom(row)?T('طلب خاص','Custom'):T('منتجات الكتالوج','Catalog');
 const fmtDate=value=>value?new Intl.DateTimeFormat(ar()?'ar':'en',{dateStyle:'medium',timeStyle:'short'}).format(new Date(value)):'—';
 function nameOf(p){
  const lang=ar()?'titleAr':'titleEn';
@@ -16,7 +18,7 @@ function listProducts(){return (current?.offers||[]).filter(p=>p.status==='publi
 function filteredRows(){
  const q=normalized(filter.q);
  return records.filter(row=>{
-  const c=row.customer||{},search=[row.number,c.name,c.whatsapp,c.country,c.company,...row.items.flatMap(item=>[item.snapshot?.sku,item.snapshot?.model,item.snapshot?.product,item.snapshot?.translation?.titleAr,item.snapshot?.translation?.titleEn])].join(' ').toLowerCase();
+  const c=row.customer||{},search=[row.number,c.name,c.whatsapp,c.country,c.company,row.customDetails?.productName,row.customDetails?.specifications,...row.items.flatMap(item=>[item.snapshot?.sku,item.snapshot?.model,item.snapshot?.product,item.snapshot?.translation?.titleAr,item.snapshot?.translation?.titleEn])].join(' ').toLowerCase();
   if(q&&!search.includes(q))return false;
   if(filter.status!=='all'&&row.status!==filter.status)return false;
   if(filter.source!=='all'&&row.source!==filter.source)return false;
@@ -28,12 +30,12 @@ function filteredRows(){
   return true;
  }).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
 }
-const actionLink=r=>'https://wa.me/'+encodeURIComponent(String(r.customer?.whatsapp||'').replace(/\D/g,''))+'?text='+encodeURIComponent(T('مرحبًا، معك فريق IMSG بخصوص طلب عرض السعر رقم ','Hello, this is IMSG regarding quote request ')+r.number+T('. نود التواصل معك لمراجعة المنتجات والكميات المطلوبة.','. We would like to review the requested products and quantities with you.'));
+const actionLink=r=>'https://wa.me/'+encodeURIComponent(String(r.customer?.whatsapp||'').replace(/\\D/g,''))+'?text='+encodeURIComponent(T('مرحبًا، معك فريق IMSG بخصوص طلب عرض السعر رقم ','Hello, this is IMSG regarding quote request ')+r.number+(isCustom(r)?T('. نود التواصل معك لمراجعة المواصفات المطلوبة.','. We would like to review the custom specifications.'):T('. نود التواصل معك لمراجعة المنتجات والكميات المطلوبة.','. We would like to review the requested products and quantities.')));
 function tableHTML(){
  const rows=filteredRows();
  return '<div class="imsg-rfq-scroll"><table class="imsg-rfq-table"><thead><tr>'+
- [T('رقم الطلب','Reference'),T('العميل','Customer'),T('واتساب','WhatsApp'),T('الدولة','Country'),T('المنتجات','Products'),T('التاريخ','Date'),T('المصدر','Source'),T('الحالة','Status'),T('الإجراءات','Actions')].map(h=>'<th>'+h+'</th>').join('')+
- '</tr></thead><tbody>'+rows.map(row=>'<tr><td><b dir="ltr">'+x(row.number)+'</b></td><td>'+x(row.customer?.name||'—')+'</td><td dir="ltr">'+x(row.customer?.whatsapp||'')+'</td><td>'+x(row.customer?.country||'')+'</td><td>'+row.items.length+'</td><td>'+x(fmtDate(row.createdAt))+'</td><td>'+T(row.source==='website'?'الموقع':'الإدارة',row.source==='website'?'Website':'Admin')+'</td><td><span class="imsg-rfq-status status-'+x(row.status)+'">'+x(statusLabel(row.status))+'</span></td><td><button type="button" data-rfq-view="'+x(row.id)+'">'+T('عرض','View')+'</button> <button type="button" data-rfq-edit="'+x(row.id)+'">'+T('تعديل','Edit')+'</button> <a href="'+x(actionLink(row))+'" target="_blank" rel="noopener noreferrer">'+T('واتساب','WhatsApp')+'</a></td></tr>').join('')+
+ [T('رقم الطلب','Reference'),T('العميل','Customer'),T('واتساب','WhatsApp'),T('الدولة','Country'),T('النوع','Type'),T('المنتجات / الكمية','Products / Qty'),T('التاريخ','Date'),T('المصدر','Source'),T('الحالة','Status'),T('الإجراءات','Actions')].map(h=>'<th>'+h+'</th>').join('')+
+ '</tr></thead><tbody>'+rows.map(row=>'<tr><td><b dir="ltr">'+x(row.number)+'</b></td><td>'+x(row.customer?.name||'—')+'</td><td dir="ltr">'+x(row.customer?.whatsapp||'')+'</td><td>'+x(row.customer?.country||'')+'</td><td>'+requestKind(row)+'</td><td>'+(isCustom(row)?x(row.customDetails?.quantity||'—'):row.items.length)+'</td><td>'+x(fmtDate(row.createdAt))+'</td><td>'+T(row.source==='website'?'الموقع':'الإدارة',row.source==='website'?'Website':'Admin')+'</td><td><span class="imsg-rfq-status status-'+x(row.status)+'">'+x(statusLabel(row.status))+'</span></td><td><button type="button" data-rfq-view="'+x(row.id)+'">'+T('عرض','View')+'</button> <button type="button" data-rfq-edit="'+x(row.id)+'">'+T('تعديل','Edit')+'</button> <a href="'+x(actionLink(row))+'" target="_blank" rel="noopener noreferrer">'+T('واتساب','WhatsApp')+'</a></td></tr>').join('')+
  '</tbody></table></div>'+(!rows.length?'<p class="imsg-rfq-empty">'+T('لا توجد طلبات مطابقة.','No matching requests.')+'</p>':'');
 }
 function customersHTML(){
@@ -91,8 +93,10 @@ function modal(title,html){
 }
 function showDetails(row){
  if(!row)return;
- const c=row.customer||{}, audit=row.audit||[];
- modal(row.number,'<div class="imsg-rfq-details"><p><b>'+x(c.name)+'</b> · <span dir="ltr">'+x(c.whatsapp)+'</span> · '+x(c.country)+'</p><p>'+T('الشركة','Company')+': '+x(c.company||'—')+' · '+T('الحالة','Status')+': '+x(statusLabel(row.status))+'</p><p>'+T('الملاحظات','Notes')+': '+x(row.notes||'—')+'</p><div class="imsg-rfq-items">'+row.items.map(item=>'<div><span>'+x(nameOf(item.snapshot))+' ('+x(item.snapshot?.sku||'')+')</span><b>× '+Number(item.quantity)+'</b></div>').join('')+'</div><div class="imsg-rfq-dialog-actions"><button type="button" data-rfq-details-edit>'+T('تعديل الطلب','Edit request')+'</button><button type="button" data-rfq-details-copy>'+T('نسخ الطلب','Duplicate')+'</button><a href="'+x(actionLink(row))+'" target="_blank" rel="noopener noreferrer">'+T('تواصل عبر واتساب','Contact on WhatsApp')+'</a></div><h3>'+T('سجل التعديلات','Change history')+'</h3><div class="imsg-rfq-audit">'+audit.map(e=>'<p><small>'+x(fmtDate(e.at))+' · '+x(e.actorId||T('الموقع','Website'))+'</small><br>'+x(e.action==='created'?T('تم إنشاء الطلب','Created'):T('تم تعديل الطلب','Updated'))+' · '+x(JSON.stringify(e.before?.items||[]))+' → '+x(JSON.stringify(e.after?.items||[]))+'</p>').join('')+'</div></div>');
+ const c=row.customer||{}, audit=row.audit||[],d=row.customDetails||{};
+ modal(row.number,'<div class="imsg-rfq-details"><p><b>'+x(c.name)+'</b> · <span dir="ltr">'+x(c.whatsapp)+'</span> · '+x(c.country)+'</p><p>'+T('الشركة','Company')+': '+x(c.company||'—')+' · '+T('الحالة','Status')+': '+x(statusLabel(row.status))+'</p><p>'+T('نوع الطلب','Request type')+': '+requestKind(row)+'</p><p>'+T('الملاحظات','Notes')+': '+x(row.notes||'—')+'</p>'+
+ (isCustom(row)?'<div class="imsg-rfq-custom-details"><h3>'+x(d.productName||'—')+'</h3><p>'+x(d.specifications||'—')+'</p><p>'+T('الكمية المطلوبة','Quantity')+': <strong>'+x(d.quantity||'—')+'</strong></p>'+(d.image?'<img class="imsg-rfq-custom-image" alt="'+T('صورة المنتج','Product image')+'" src="'+x(d.image)+'">':'')+'</div>':
+ '<div class="imsg-rfq-items">'+row.items.map(item=>'<div><span>'+x(nameOf(item.snapshot))+' ('+x(item.snapshot?.sku||'')+')</span><b>× '+Number(item.quantity)+'</b></div>').join('')+'</div>')<div class="imsg-rfq-dialog-actions"><button type="button" data-rfq-details-edit>'+T('تعديل الطلب','Edit request')+'</button><button type="button" data-rfq-details-copy>'+T('نسخ الطلب','Duplicate')+'</button><a href="'+x(actionLink(row))+'" target="_blank" rel="noopener noreferrer">'+T('تواصل عبر واتساب','Contact on WhatsApp')+'</a></div><h3>'+T('سجل التعديلات','Change history')+'</h3><div class="imsg-rfq-audit">'+audit.map(e=>'<p><small>'+x(fmtDate(e.at))+' · '+x(e.actorId||T('الموقع','Website'))+'</small><br>'+x(e.action==='created'?T('تم إنشاء الطلب','Created'):T('تم تعديل الطلب','Updated'))+' · '+x(JSON.stringify(e.before?.items||[]))+' → '+x(JSON.stringify(e.after?.items||[]))+'</p>').join('')+'</div></div>');
  dialog.querySelector('[data-rfq-details-edit]').onclick=()=>showEditor(row);
  dialog.querySelector('[data-rfq-details-copy]').onclick=()=>showEditor(null,row);
 }
