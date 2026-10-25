@@ -1,9 +1,12 @@
 import {defineConfig} from 'vite';
 import {resolve} from 'node:path';
-const portalPages={name:'portal-pages',enforce:'post',generateBundle(_,bundle){
- const main=bundle['index.html'],studio=bundle['studio.html'];
- for(const [file,title,source] of [['customer.html','IMSG | بوابة العميل',main],['supplier.html','IMSG | بوابة المورد',main],['admin.html','IMSG | الإدارة',studio]]){
-  this.emitFile({type:'asset',fileName:file,source:String(source.source).replace(/<title>[^<]*<\/title>/,'<title>'+title+'</title>')});
- }
+const adminAlias={name:'admin-alias',enforce:'post',generateBundle(_,bundle){
+ const studio=bundle['studio.html'];
+ if(!studio)throw new Error('Admin studio HTML not generated');
+ this.emitFile({type:'asset',fileName:'admin.html',source:String(studio.source).replace(/<title>[^<]*<\/title>/,'<title>IMSG | الإدارة</title>')});
 }};
-export default defineConfig({plugins:[portalPages],build:{rollupOptions:{input:{main:resolve(import.meta.dirname,'index.html'),studio:resolve(import.meta.dirname,'studio.html')}}}});
+export default defineConfig({plugins:[adminAlias],build:{rollupOptions:{input:{
+ main:resolve(import.meta.dirname,'index.html'),
+ studio:resolve(import.meta.dirname,'studio.html'),
+ reset:resolve(import.meta.dirname,'reset-password.html')
+}}}});

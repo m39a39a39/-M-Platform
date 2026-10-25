@@ -1,19 +1,9 @@
-import './guest.js';
-
-let hasWebSession=false;
-for(const name of ['localStorage','sessionStorage']){
-  if(hasWebSession)break;
-  try{hasWebSession=!!globalThis[name]?.getItem('m-platform.session.v1');}catch{}
-}
-
-const accountRoute=['/admin','/admin.html','/studio.html','/customer','/customer.html','/supplier','/supplier.html','/login.html','/reset-password.html','/register-customer.html','/register-supplier.html'].includes(location.pathname);
-const nativeRuntime=location.protocol==='capacitor:'||location.protocol==='ionic:'||location.protocol==='file:';
-
-if(!accountRoute&&!nativeRuntime){
-  window.addEventListener('mplatform:register',event=>{
-    const role=event.detail?.role==='supplier'?'supplier':'client';
-    location.assign((role==='supplier'?'/supplier.html':'/customer.html')+'?auth=register');
-  });
+// The storefront is guest-only. The studio HTML is the sole administrator portal.
+const legacyPortals=new Set(['/customer','/customer.html','/supplier','/supplier.html','/register-customer.html','/register-supplier.html']);
+if(legacyPortals.has(location.pathname)){
+ location.replace('/');
+}else if(location.pathname==='/login.html'){
+ location.replace('/admin.html');
 }else{
-  await import('./app.js');
+ await import('./guest.js');
 }

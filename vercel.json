@@ -19,12 +19,16 @@
       "destination": "/api?route=:path*"
     },
     {
-      "source": "/reset-password.html",
+      "source": "/login.html",
       "destination": "/index.html"
     },
     {
-      "source": "/login.html",
+      "source": "/offers.html",
       "destination": "/index.html"
+    },
+    {
+      "source": "/admin",
+      "destination": "/admin.html"
     },
     {
       "source": "/register-customer.html",
@@ -35,20 +39,20 @@
       "destination": "/index.html"
     },
     {
-      "source": "/offers.html",
+      "source": "/customer.html",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/supplier.html",
       "destination": "/index.html"
     },
     {
       "source": "/customer",
-      "destination": "/customer.html"
+      "destination": "/index.html"
     },
     {
       "source": "/supplier",
-      "destination": "/supplier.html"
-    },
-    {
-      "source": "/admin",
-      "destination": "/admin.html"
+      "destination": "/index.html"
     }
   ],
   "headers": [
@@ -110,25 +114,16 @@
       ]
     },
     {
-      "source": "/customer.html",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-cache, must-revalidate"
-        }
-      ]
-    },
-    {
-      "source": "/supplier.html",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-cache, must-revalidate"
-        }
-      ]
-    },
-    {
       "source": "/admin.html",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/reset-password.html",
       "headers": [
         {
           "key": "Cache-Control",

@@ -103,18 +103,11 @@ export async function authRoute(action,req,res,body){
   }
   const email=String(body.email||'').trim().toLowerCase(),password=String(body.password||'');
   assert(email.length<255&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)&&password.length>=8&&password.length<=128,400,'تحقق من البريد وكلمة المرور (8 أحرف على الأقل) / Check email and password');
-  if(action==='register'){
-    assert(['client','supplier'].includes(body.role),400);
-    const data={role:body.role};
-    for(const k of ['name','company','phone','country','category'])data[k]=String(body[k]||'').trim().slice(0,200);
-    assert(data.name&&data.phone&&data.country,400,'أكمل بيانات التسجيل / Complete registration');
-    const result=await sb('/auth/v1/signup',{method:'POST',publicKey:true,body:{email,password,data}});
-    if(result.access_token&&!native)setCookies(res,result);
-    return {confirmationRequired:!result.access_token,...(native&&result.access_token?{tokens:nativeTokens(result)}:{})};
-  }
+  // Previous customer/supplier registration was retired; visitor RFQs need no accounts.
+  if(action==='register')throw new HttpError(410,'تم إيقاف التسجيل القديم. أرسل طلب عرض سعر دون حساب. / Account registration is retired.');
   assert(action==='login',404);
   const result=await sb('/auth/v1/token?grant_type=password',{method:'POST',publicKey:true,body:{email,password}});
-  const p=await one('profiles',result.user.id);assert(p&&!p.blocked_at&&!p.deleted_at,403);
+  const p=await one('profiles',result.user.id);assert(p?.role==='admin'&&!p.blocked_at&&!p.deleted_at,403,'تسجيل الدخول للإدارة فقط / Admin sign-in only');
   if(!native)setCookies(res,result);
   return {user:profile(p),...(native?{tokens:nativeTokens(result)}:{})};
 }

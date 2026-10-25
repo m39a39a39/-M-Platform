@@ -1,35 +1,22 @@
-export const portalPaths = Object.freeze({client:'/customer.html',supplier:'/supplier.html',admin:'/admin.html'});
-const screens={client:['home','notifications','account'],supplier:['home','orders','requests','offers','notifications','account'],admin:['overview','requests','settings','notifications','conversations']};
+// Only the administration portal remains; historical customer and supplier
+// records are preserved for existing admin business records.
+export const portalPaths=Object.freeze({admin:'/admin.html'});
+const screens=['overview','requests','settings','notifications','conversations'];
 export function portalRole(pathname){
-  const path=String(pathname).replace(/\/$/,'');
-  if(['/customer','/customer.html'].includes(path))return 'client';
-  if(['/supplier','/supplier.html'].includes(path))return 'supplier';
-  if(['/admin','/admin.html','/studio.html'].includes(path))return 'admin';
-  return null;
+ return ['/admin','/admin.html','/studio.html'].includes(String(pathname).replace(/\/$/,''))?'admin':null;
 }
 export function portalScreen(role,search=''){
-  let screen=new URLSearchParams(search).get('screen');
-  if(role==='admin'&&screen==='account')screen='settings';
-  return screens[role]?.includes(screen)?screen:role==='admin'?'overview':'home';
+ if(role!=='admin')return 'overview';
+ let screen=new URLSearchParams(search).get('screen');
+ if(screen==='account')screen='settings';
+ return screens.includes(screen)?screen:'overview';
 }
-export function portalUrl(role,screen='home'){
-  const base=portalPaths[role]||'/';
-  return screens[role]?.includes(screen)&&!['home','overview'].includes(screen)?base+'?screen='+encodeURIComponent(screen):base;
+export function portalUrl(role,screen='overview'){
+ if(role!=='admin')return '/';
+ return screens.includes(screen)&&screen!=='overview'?'/admin.html?screen='+encodeURIComponent(screen):'/admin.html';
 }
-// The authenticated server profile determines the portal, never the requested URL.
 export function portalRedirect(role,pathname,search='',native=false){
-  if(native||!portalPaths[role])return null;
-  const requested=portalRole(pathname),query=new URLSearchParams(search);
-  if(requested&&requested!==role)return portalPaths[role];
-  if(role==='client'&&requested==='client'&&portalScreen(role,search)==='home'&&!query.has('returnTo'))return '/'+(search||'');
-  if(requested===role)return pathname===portalPaths[role]?null:portalPaths[role]+search;
-  const shopping=['product','category','page','q'].some(key=>query.has(key));
-  if(role==='client'&&(shopping||!query.has('screen')))return null;
-  return portalUrl(role,portalScreen(role,search));
-}
-
-// Only store routes may be used as a post-login destination.
-export function storeReturnUrl(value){
-  if(!value||!value.startsWith('/')||value.startsWith('//'))return null;
-  try{const url=new URL(value,'https://store.invalid');return url.origin==='https://store.invalid'&&url.pathname==='/'&&!url.searchParams.has('screen')?url.pathname+url.search:null;}catch{return null;}
+ if(native||role!=='admin')return null;
+ const path=String(pathname).replace(/\/$/,'');
+ return portalRole(path)&&path==='/admin.html'?null:portalUrl('admin',portalScreen('admin',search));
 }
