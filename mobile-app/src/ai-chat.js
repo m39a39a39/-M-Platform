@@ -164,12 +164,11 @@ function productCardsHtml(products=[]){
   const rows=Array.isArray(products)?products.slice(0,6):[];
   if(!rows.length)return '';
   return `<div class="m-ai-products" aria-label="${esc(language()==='ar'?'منتجات مقترحة':'Suggested products')}">${rows.map(product=>{
-    const image=safeProductImage(product.image),price=Number.isFinite(Number(product.price))?Number(product.price):null;
+    const image=safeProductImage(product.image);
     return `<a class="m-ai-product-card" data-chat-product="${esc(product.id||'')}" href="${esc(product.href||('/?product='+encodeURIComponent(product.id||'')))}">
       <span class="m-ai-product-image">${image?`<img src="${esc(image)}" alt="" loading="lazy" decoding="async" fetchpriority="low" width="128" height="128">`:'<span class="m-ai-product-placeholder">M</span>'}</span>
       <strong>${esc(product.title||product.sku||'')}</strong>
-      ${price!==null?`<span class="m-ai-product-price">${esc(new Intl.NumberFormat(language()==='ar'?'ar-SA':'en',{maximumFractionDigits:2}).format(price))} ${esc(product.currency||'SAR')}</span>`:''}
-      ${Number(product.priceQuantity)>0?`<small>${esc(language()==='ar'?('سعر '+product.priceQuantity+' حبة'):('Price at '+product.priceQuantity+' pcs'))}</small>`:product.moq!==null&&product.moq!==undefined&&product.moq!==''?`<small>MOQ ${esc(product.moq)}</small>`:''}
+      ${product.moq!==null&&product.moq!==undefined&&product.moq!==''?`<small>MOQ ${esc(product.moq)}</small>`:''}
       <i aria-hidden="true">↗</i>
     </a>`;
   }).join('')}</div>`;
@@ -445,11 +444,11 @@ export function aiChatSignal(type,detail={}){
   }
   if(type==='cart_add'){
     const attr=readAttribution();
-    if(attr)void trackConversion('add_to_cart',{productId:String(detail.productId||''),metadata:{quantity:detail.quantity,cartCount:detail.cartCount,price:detail.price,currency:detail.currency}});
+    if(attr)void trackConversion('add_to_cart',{productId:String(detail.productId||''),metadata:{quantity:detail.quantity,cartCount:detail.cartCount}});
     scheduleSignal('cart-add',Number(detail.cartCount)>=2?5000:11000,()=>requestProactive({type:'cart_interest',...detail}));return;
   }
   if(type==='checkout_started'){
-    if(readAttribution())void trackConversion('checkout_started',{metadata:{cartCount:detail.cartCount,cartTotal:detail.cartTotal,currency:detail.currency}});
+    if(readAttribution())void trackConversion('checkout_started',{metadata:{cartCount:detail.cartCount}});
     return;
   }
   if(type==='cart_open'&&Number(detail.cartCount)>0)scheduleSignal('cart-open',15000,()=>requestProactive({type:'cart_hesitation',...detail}));
