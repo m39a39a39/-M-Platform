@@ -290,96 +290,27 @@
   }
 }
 
-/* Product creation is a full usable sheet on small phones, not a tiny desktop modal. */
-@media (max-width:760px) {
-  dialog#operations-dialog.operations-dialog:has(#adminPublicOfferForm)[open] {
-    box-sizing:border-box;
-    position:fixed;
-    inset:auto 0 0;
-    display:flex;
-    flex-direction:column;
-    width:100%;
-    max-width:100vw;
-    height:min(92dvh,920px);
-    max-height:calc(100dvh - env(safe-area-inset-top,0px) - 8px);
-    margin:0 auto;
-    padding:0;
-    overflow:hidden;
-    background:#fff;
-    border:0;
-    border-radius:20px 20px 0 0;
-  }
-  #operations-dialog:has(#adminPublicOfferForm) > .studio-operations {
-    display:flex;
-    flex-direction:column;
-    flex:1 1 auto;
-    min-width:0;
-    min-height:0;
-    overflow:hidden;
-  }
-  #operations-dialog:has(#adminPublicOfferForm) .operations-modal-head {
-    flex:0 0 auto;
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-    padding:12px 16px;
-    min-height:68px;
-    border-bottom:1px solid #e8edf1;
-  }
-  #operations-dialog:has(#adminPublicOfferForm) .operations-modal-head button {
-    flex:0 0 44px;
-    width:44px;
-    height:44px;
-    padding:0;
-  }
-  #operations-dialog:has(#adminPublicOfferForm) #modalBody {
-    flex:1 1 auto;
-    min-height:0;
-    box-sizing:border-box;
-    padding:16px 16px calc(20px + env(safe-area-inset-bottom,0px));
-    overflow-x:hidden;
-    overflow-y:auto;
-    -webkit-overflow-scrolling:touch;
-  }
-  #operations-dialog:has(#adminPublicOfferForm) .admin-public-offer-editor {
-    width:100%;
-    min-width:0;
-  }
-  #operations-dialog:has(#adminPublicOfferForm) .form-two {
-    grid-template-columns:minmax(0,1fr);
-  }
-  #operations-dialog:has(#adminPublicOfferForm) .admin-public-offer-editor input,
-  #operations-dialog:has(#adminPublicOfferForm) .admin-public-offer-editor textarea,
-  #operations-dialog:has(#adminPublicOfferForm) .admin-public-offer-editor select {
-    box-sizing:border-box;
-    min-width:0;
-    max-width:100%;
-    font-size:16px;
-  }
-}
 
-/* The product form is part of the admin page, not a modal dialog. */
-.admin-product-page { width:100%;max-width:1180px;margin:0 auto;min-width:0; }
-.admin-product-page .admin-page-head { margin-bottom:12px; }
-.admin-product-page-top { display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 16px; }
-.admin-product-page-hint { color:#6c7b8d;font-size:13px; }
-.admin-product-page-card { box-sizing:border-box;padding:clamp(16px,3vw,36px);border-radius:18px;overflow:visible; }
-.admin-product-page-card .admin-public-offer-editor { width:100%;max-width:100%;display:grid;gap:18px;min-width:0; }
-.admin-product-page-card .admin-public-offer-editor>h3 { margin:0;font-size:22px;color:#142d42; }
-.admin-product-page-card .admin-public-offer-editor>section { min-width:0;border-top:1px solid #e8edf2;padding-top:20px; }
-.admin-product-page-card .admin-public-offer-editor .form-two { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px; }
-.admin-product-page-card .admin-public-offer-editor label { min-width:0; }
-.admin-product-page-card .admin-public-offer-editor input:not([type=checkbox]):not([type=file]),
-.admin-product-page-card .admin-public-offer-editor textarea,
-.admin-product-page-card .admin-public-offer-editor select { box-sizing:border-box;width:100%;max-width:100%;min-width:0;font-size:16px; }
-.admin-product-page-card .admin-public-offer-editor>button[type=submit] { position:sticky;bottom:calc(8px + env(safe-area-inset-bottom,0px));z-index:5;width:100%;min-height:52px;box-shadow:0 7px 25px rgba(11,34,54,.17); }
-.admin-product-page-card .admin-public-offer-editor .form-message {overflow-wrap:anywhere;}
+/* Original Studio product form, embedded in the normal owner/staff admin page. */
+.admin-product-page { width:100%;max-width:1160px;margin:0 auto;min-width:0; }
+.admin-product-page .admin-page-head{margin-bottom:16px;}
+.admin-product-page-top{display:flex;justify-content:flex-start;align-items:center;gap:12px;margin-bottom:16px;}
+.admin-product-page-card{box-sizing:border-box;background:#fff;padding:clamp(16px,3vw,34px);border:1px solid #e0e7ee;border-radius:18px;overflow:visible;}
+.admin-product-page .studio-product-form{width:100%;max-width:100%;min-width:0;}
+.admin-product-page .studio-product-form-body>.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 18px;}
+.admin-product-page .studio-product-form .full{grid-column:1/-1;min-width:0;}
+.admin-product-page .studio-product-form input:not([type=checkbox]):not([type=file]),
+.admin-product-page .studio-product-form textarea,
+.admin-product-page .studio-product-form select{box-sizing:border-box;min-width:0;max-width:100%;font-size:16px;}
+.admin-product-page .studio-product-form .product-images,
+.admin-product-page .studio-product-form .product-copy{width:100%;max-width:100%;min-width:0;}
+.admin-product-page .studio-product-actions{margin-top:22px;padding-top:18px;border-top:1px solid #e5ecf2;display:flex;align-items:center;justify-content:space-between;gap:15px;flex-wrap:wrap;}
+.admin-product-page .studio-product-actions [role=alert]{flex:1;min-width:0;color:#a82e36;overflow-wrap:anywhere;}
+.admin-product-page .studio-product-actions button{min-width:180px;min-height:50px;}
 @media(max-width:760px){
  .admin-product-page{max-width:100%;}
- .admin-product-page-top{align-items:flex-start;}
- .admin-product-page-hint{font-size:12px;}
  .admin-product-page-card{padding:16px 14px;border-radius:16px;}
- .admin-product-page-card .admin-public-offer-editor{gap:16px;}
- .admin-product-page-card .admin-public-offer-editor .form-two{grid-template-columns:minmax(0,1fr);gap:14px;}
- .admin-product-page-card .admin-public-offer-editor>h3{font-size:20px;}
+ .admin-product-page .studio-product-form-body>.form-grid{grid-template-columns:minmax(0,1fr);gap:0;}
+ .admin-product-page .studio-product-actions{position:sticky;bottom:0;z-index:6;background:#fff;padding:12px 0 calc(12px + env(safe-area-inset-bottom,0px));box-shadow:0 -6px 18px rgba(10,30,45,.045);}
+ .admin-product-page .studio-product-actions button{width:100%;}
 }

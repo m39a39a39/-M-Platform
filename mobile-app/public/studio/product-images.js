@@ -32,7 +32,7 @@
    if(action==='replace'){replacement=items[i].id;input.multiple=false;input.click();return;}
    if(action==='preview'){
     const viewer=document.createElement('dialog');viewer.className='product-image-viewer';viewer.innerHTML=`<button type="button" autofocus aria-label="إغلاق الصورة">إغلاق ×</button><img src="${esc(card.querySelector('img').src)}" alt="معاينة صورة المنتج">`;
-    form.closest('dialog').append(viewer);viewer.querySelector('button').onclick=()=>viewer.close();viewer.addEventListener('close',()=>{viewer.remove();button.focus();},{once:true});viewer.showModal();return;
+    (form.closest('dialog')||document.body).append(viewer);viewer.querySelector('button').onclick=()=>viewer.close();viewer.addEventListener('close',()=>{viewer.remove();button.focus();},{once:true});viewer.showModal();return;
    }
    if(action==='remove'){release(items[i]);items.splice(i,1);}else{const to=action==='primary'?0:action==='previous'?i-1:i+1;if(to<0||to>=items.length)return;items.splice(to,0,items.splice(i,1)[0]);}
    status.textContent=action==='remove'?'تم حذف الصورة من النموذج.':'تم تحديث ترتيب الصور.';render(items[Math.min(i,items.length-1)]?.id);
@@ -52,7 +52,12 @@
    for(const item of snapshot){if(item.file&&!item.uploaded)item.uploaded=await upload(item.file);const src=item.file?item.uploaded:item.src;if(!src)throw Error('تعذر رفع الصورة. حاول مجددًا.');output.push(src);}
    if(signature!==items.map(x=>x.id).join(','))throw Error('تغيرت الصور أثناء الرفع؛ راجع ترتيبها ثم احفظ مجددًا.');return output;
   }};
-  form.closest('dialog')?.addEventListener('close',e=>{if(e.target!==form.closest('dialog'))return;urls.forEach(url=>URL.revokeObjectURL(url));urls.clear();});
+  const cleanup=()=>{urls.forEach(url=>URL.revokeObjectURL(url));urls.clear();};
+  const containerDialog=form.closest('dialog');
+  containerDialog?.addEventListener('close',e=>{if(e.target===containerDialog)cleanup();});
+  // Full-page navigation removes the form without a dialog close event.
+  const disconnectObserver=new MutationObserver(()=>{if(!form.isConnected){cleanup();disconnectObserver.disconnect();}});
+  disconnectObserver.observe(document.body,{subtree:true,childList:true});
   render();
  }
  window.MProductImages={mount};

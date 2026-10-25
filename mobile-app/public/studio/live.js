@@ -53,10 +53,31 @@ const originalReview=reviewChanges;reviewChanges=function(){originalReview();$('
 const readDataImage=readImage;readImage=async function(file){const source=await readDataImage(file);if(!source)return null;return (await api('uploads',{source})).src;};
 const imageCache=new Map();async function hydrateStudioImages(){for(const el of $$('img[src^="/api/media/"]')){const src=el.getAttribute('src');try{let url=imageCache.get(src);if(!url){const r=await window.MStudioSession.raw(src,{auth:true});if(!r.ok)continue;url=URL.createObjectURL(await r.blob());imageCache.set(src,url);}if(el.isConnected)el.src=url;}catch{}}}
 const actualModal=modal;modal=function(...args){actualModal(...args);hydrateStudioImages();};
-function editProduct(id){
-  if(!permitted('offers.edit'))return toast('لا تملك صلاحية تعديل المنتجات');
+// Restore the ORIGINAL Studio product form for both owner and employees.
+// Only its container is now a full page; no alternate product form is used.
+function editProduct(id){return window.MAdmin.openProductEditor(id||'');}
+function renderOriginalProductEditorPage(){
+  const host=$('#screen');if(!host)return;
+  const id=window.MAdmin.getProductEditorId()||new URLSearchParams(location.search).get('product')||'';
+  const canCreate=permitted('offers.create')||permitted('offers.edit');
+  const canEdit=permitted('offers.edit');
+  const actual=id?state.draft.products.find(row=>row.id===id):null;
+  if(!canCreate||(id&&(!canEdit||!actual))){
+    host.innerHTML='<section class="admin-product-page panel"><h2>غير مسموح</h2><p>ليس لديك صلاحية تعديل هذا المنتج.</p><button class="secondary-btn" type="button" data-admin-product-cancel>العودة إلى المنتجات</button></section>';
+    return;
+  }
   const p=clone(state.draft.products.find(p=>p.id===id)||{id:uid(),version:0,name:'',nameEn:'',sku:'',description:'',descriptionEn:'',moq:50,price:null,currency:'SAR',leadDays:7,images:[],status:'active',country:'',categoryId:'',supplierId:''});
-  formModal(id?'تعديل المنتج':'إضافة منتج',`<div class="form-grid">${field('الاسم بالعربية','name',p.name,'text','required')}${field('الاسم بالإنجليزية','nameEn',p.nameEn,'text')}<section class="full" data-product-images></section><div class="full" data-product-ai-slot></div><h3 class="full product-section-title">بيانات المنتج</h3>${field('رمز المنتج','sku',p.sku,'text','required pattern="[A-Za-z0-9._-]+"')}${selectField('التصنيف','categoryId',state.draft.categories.filter(c=>!c.parent).map(c=>[c.id,c.name]),p.categoryId)}${selectField('التصنيف الفرعي','subcategoryId',[['','بدون'],...(liveState.settings.subcategories||[]).filter(c=>c.parentId===p.categoryId&&c.active!==false).map(c=>[c.id,c.nameAr])],p.subcategoryId||'')}${selectField('الحالة','status',[['draft','مسودة'],['active','منشور']],p.status)}${field('السعر (اختياري)','price',p.price??'','number','min="0.01" step="0.01"')}${selectField('العملة','currency',['SAR','USD','CNY','AED','EUR'].map(c=>[c,c]),p.currency)}${field('الحد الأدنى','moq',p.moq,'number','required min="1" step="1"')}${field('المخزون (اختياري)','stock',p.stock??'','number','min="0" step="1"')}${field('مدة التجهيز بالأيام','leadDays',p.leadDays,'number','required min="1"')}${selectField('بلد التوريد','country',(liveState.settings.supplyCountries?.length?liveState.settings.supplyCountries:[{id:'China',nameAr:'الصين'},{id:'United Arab Emirates',nameAr:'الإمارات'}]).filter(c=>c.active!==false).map(c=>[c.id,c.nameAr]),p.country)}${area('وصف مختصر','shortDescription',p.shortDescription||'')}${area('الوصف العربي','description',p.description)}${area('الوصف الإنجليزي','descriptionEn',p.descriptionEn)}<details class="full product-extra"><summary>تفاصيل إضافية ومواصفات</summary><div class="form-grid">${area('المواصفات الفنية','technicalSpecs',p.technicalSpecs||'')}${area('الألوان / الموديلات المتاحة','options',p.options||'')}${area('ملاحظات ظاهرة للعميل','notes',p.notes||'')}<div class="full">${area('شرائح الجملة: كمية:سعر، كل شريحة بسطر','tiers',(p.tiers||[]).map(t=>t.min+':'+t.price).join('\n'))}</div></div></details></div>`,async fd=>{
+  const fields=`<div class="form-grid">${field('الاسم بالعربية','name',p.name,'text','required')}${field('الاسم بالإنجليزية','nameEn',p.nameEn,'text')}<section class="full" data-product-images></section><div class="full" data-product-ai-slot></div><h3 class="full product-section-title">بيانات المنتج</h3>${field('رمز المنتج','sku',p.sku,'text','required pattern="[A-Za-z0-9._-]+"')}${selectField('التصنيف','categoryId',state.draft.categories.filter(c=>!c.parent).map(c=>[c.id,c.name]),p.categoryId)}${selectField('التصنيف الفرعي','subcategoryId',[['','بدون'],...(liveState.settings.subcategories||[]).filter(c=>c.parentId===p.categoryId&&c.active!==false).map(c=>[c.id,c.nameAr])],p.subcategoryId||'')}${selectField('الحالة','status',[['draft','مسودة'],['active','منشور']],p.status)}${field('السعر (اختياري)','price',p.price??'','number','min="0.01" step="0.01"')}${selectField('العملة','currency',['SAR','USD','CNY','AED','EUR'].map(c=>[c,c]),p.currency)}${field('الحد الأدنى','moq',p.moq,'number','required min="1" step="1"')}${field('المخزون (اختياري)','stock',p.stock??'','number','min="0" step="1"')}${field('مدة التجهيز بالأيام','leadDays',p.leadDays,'number','required min="1"')}${selectField('بلد التوريد','country',(liveState.settings.supplyCountries?.length?liveState.settings.supplyCountries:[{id:'China',nameAr:'الصين'},{id:'United Arab Emirates',nameAr:'الإمارات'}]).filter(c=>c.active!==false).map(c=>[c.id,c.nameAr]),p.country)}${area('وصف مختصر','shortDescription',p.shortDescription||'')}${area('الوصف العربي','description',p.description)}${area('الوصف الإنجليزي','descriptionEn',p.descriptionEn)}<details class="full product-extra"><summary>تفاصيل إضافية ومواصفات</summary><div class="form-grid">${area('المواصفات الفنية','technicalSpecs',p.technicalSpecs||'')}${area('الألوان / الموديلات المتاحة','options',p.options||'')}${area('ملاحظات ظاهرة للعميل','notes',p.notes||'')}<div class="full">${area('شرائح الجملة: كمية:سعر، كل شريحة بسطر','tiers',(p.tiers||[]).map(t=>t.min+':'+t.price).join('\n'))}</div></div></details></div>`;
+  host.innerHTML=`<div class="admin-product-page"><div class="page-head admin-page-head"><div><h1>${id?'تعديل المنتج':'إضافة منتج'}</h1><p>نموذج IMSG الأصلي لإضافة المنتجات وإدارتها</p></div></div><div class="admin-product-page-top"><button type="button" class="secondary-btn" data-admin-product-cancel>← العودة إلى المنتجات</button></div><section class="admin-product-page-card panel"><form id="edit-form" class="studio-product-form"><div class="studio-product-form-body">${fields}</div><div class="studio-product-actions"><p id="studio-product-save-error" role="alert" aria-live="polite"></p><button class="primary-btn" type="submit">حفظ المنتج</button></div></form></section></div>`;
+  const form=host.querySelector('#edit-form');
+  form.onsubmit=async event=>{
+    event.preventDefault();
+    if(!form.reportValidity())return;
+    const button=form.querySelector('[type=submit]'),message=form.querySelector('#studio-product-save-error');
+    if(button.disabled)return;
+    button.disabled=true;message.textContent='';
+    try{
+      const fd=new FormData(form);
     const images=await $('#edit-form').productImages.save(readImage);
     const item={...p,...Object.fromEntries(['name','nameEn','sku','supplierId','categoryId','subcategoryId','status','currency','country','shortDescription','description','descriptionEn','technicalSpecs','options','notes'].map(k=>[k,String(fd.get(k)||'').trim()])),price:String(fd.get('price')??'').trim()===''?null:Number(fd.get('price')),moq:Number(fd.get('moq')),stock:fd.get('stock')===''?null:Number(fd.get('stock')),leadDays:Number(fd.get('leadDays')),images,image:images[0]||'',tiers:String(fd.get('tiers')).trim().split('\n').filter(Boolean).map(l=>{const [min,price]=l.split(':').map(Number);return {min,price}})};
 
@@ -64,7 +85,7 @@ function editProduct(id){
     const issue=StoreRules.validatePricing(item);if(issue)throw Error(typeof issue==='string'?issue:'تحقق من شرائح الأسعار');
     const taxonomyProposal=$('#edit-form').dataset.taxonomyProposal?JSON.parse($('#edit-form').dataset.taxonomyProposal):undefined;
     await api('studio-product',{product:item,taxonomyProposal,redactionConfirmed:item.status==='active'});
-    closeModal();
+
     liveState=await window.MStudioSession.state();settingsVersion=liveState.settings._version;
     const raw=liveState.publicOffers.find(x=>x.id===item.id&&!x.deletedAt);if(!raw)throw Error('تعذر إعادة تحميل المنتج بعد الحفظ');
     const saved=productOf(raw);
@@ -72,12 +93,16 @@ function editProduct(id){
     for(const list of [state.published.products,state.draft.products,committedState.published.products,committedState.draft.products]){
       const index=list.findIndex(x=>x.id===saved.id);if(index>=0)list[index]=clone(saved);else list.push(clone(saved));
     }
-    render();toast(saved.status==='active'?'تم حفظ المنتج ونشره':'تم حفظ المنتج كمسودة');
-  });
-  window.MProductImages.mount($('#edit-form'),p.images,hydrateStudioImages);
-  $('#edit-form').querySelector('[type=submit]').lastChild.textContent='حفظ المنتج';
-  window.MProductComplete?.mount($('#edit-form'),{product:p,categories:liveState.settings.categories||[],subcategories:liveState.settings.subcategories||[],canCreate:permitted('settings')});
-};
+    window.MAdmin.finishProductEditor();
+    toast(saved.status==='active'?'تم حفظ المنتج ونشره':'تم حفظ المنتج كمسودة');
+    }catch(error){message.textContent=error.message||'تعذر حفظ المنتج';button.disabled=false;}
+  };
+  window.MProductImages.mount(form,p.images,hydrateStudioImages);
+  window.MProductComplete?.mount(form,{product:p,categories:liveState.settings.categories||[],subcategories:liveState.settings.subcategories||[],canCreate:permitted('settings')});
+  hydrateStudioImages();
+}
+window.MStudioProductEditor={render:renderOriginalProductEditorPage};
+
 function orderName(o){return o.delivery?.name||(liveState.accounts||[]).find(a=>a.id===o.customerId)?.name||'عميل';}
 function ordersView(){
   const all=(liveState.requests||[]).filter(o=>!o.deletedAt),rows=all.filter(o=>(orderFilter==='all'||orderFilter==='cancelled'&&o.cancelledAt||!o.cancelledAt&&String(o.orderStage)===orderFilter)&&`${o.displayNo||o.id} ${orderName(o)}`.toLowerCase().includes(orderQuery.toLowerCase()));
