@@ -338,9 +338,34 @@ function categoryPanel(){
 function offerTabs(){
   return `<div class="segmented admin-segmented"><button class="${offerTab==='pending'?'active':''}" data-admin-offer-tab="pending">${esc(tr('بانتظار المراجعة','Pending review'))}</button><button class="${offerTab==='all'?'active':''}" data-admin-offer-tab="all">${esc(tr('جميع المنتجات','All products'))}</button></div>`;
 }
+function canPublishMyProduct(x){
+  return can('offers.create')&&x?.supplierId===me()?.id&&x?.storeOwned===true
+    &&(!x.createdByAdmin||x.createdByAdmin===me()?.id)&&['pending','review'].includes(x.status);
+}
+function publishMyProductDialog(id){
+  const x=(state?.publicOffers||[]).find(v=>v.id===id);
+  if(!canPublishMyProduct(x))return;
+  modal(tr('نشر منتجي','Publish my product'),title(x),
+    `<form id="adminPublishMyProductForm" class="form-stack" data-id="${esc(x.id)}">
+      <p>${esc(tr('سيظهر المنتج للعملاء فور النشر. لن تتمكن من تعديله أو حذفه بهذه الصلاحية.','This product becomes visible to customers. You cannot edit or delete it with this permission.'))}</p>
+      <label class="admin-category-toggle-label"><input name="confirm" type="checkbox" required><span>${esc(tr('راجعت النصوص والصور ولا تحتوي على بيانات تواصل مباشرة.','I reviewed the text and images for direct contact information.'))}</span></label>
+      <p class="form-message" data-publish-own-error></p>
+      <button class="primary-btn" type="submit">${esc(tr('نشر المنتج','Publish product'))}</button>
+    </form>`);
+}
+async function submitPublishMyProduct(form){
+  const x=(state?.publicOffers||[]).find(v=>v.id===form.dataset.id);
+  if(!canPublishMyProduct(x))return;
+  const button=form.querySelector('button[type="submit"]'),message=form.querySelector('[data-publish-own-error]');
+  if(button)button.disabled=true;
+  try{
+    await api('/api/v1/studio-product/publish',{method:'POST',body:{id:x.id,redactionConfirmed:!!form.querySelector('[name="confirm"]')?.checked}});
+    await reload();closeModal();offerTab='all';schedule();toast(tr('تم نشر منتجك.','Your product was published.'));
+  }catch(error){if(message)message.textContent=error.message||tr('تعذر نشر المنتج.','Could not publish the product.');if(button)button.disabled=false;}
+}
 function productSelectionRow(x){
   const owner=ownerOf(x),checked=selectedProducts.has(x.id),selectable=can('offers.edit')||can('publish')||can('translate')||can('trash');
-  return `<article class="list-card admin-record-card admin-selectable-product">${selectable?`<label class="admin-product-check"><input type="checkbox" data-admin-product-select="${esc(x.id)}" ${checked?'checked':''}><span></span></label>`:''}<button type="button" class="admin-product-open" data-admin-open="public" data-admin-id="${esc(x.id)}"><div class="list-card-main"><div class="list-card-title"><small>#${esc(ref(x))} · ${esc(x.sku||'')}</small><h3>${esc(title(x))}</h3></div>${badge(x.status)}</div><div class="meta-line">${esc(formatMoney(x.unitPrice,x.currency))} · MOQ ${esc(x.moq||'—')} · ${esc(owner?.company||owner?.name||'')}</div>${gallery(x.images||[])}</button></article>`;
+  return `<article class="list-card admin-record-card admin-selectable-product">${selectable?`<label class="admin-product-check"><input type="checkbox" data-admin-product-select="${esc(x.id)}" ${checked?'checked':''}><span></span></label>`:''}<button type="button" class="admin-product-open" data-admin-open="public" data-admin-id="${esc(x.id)}"><div class="list-card-main"><div class="list-card-title"><small>#${esc(ref(x))} · ${esc(x.sku||'')}</small><h3>${esc(title(x))}</h3></div>${badge(x.status)}</div><div class="meta-line">${esc(formatMoney(x.unitPrice,x.currency))} · MOQ ${esc(x.moq||'—')} · ${esc(owner?.company||owner?.name||'')}</div>${gallery(x.images||[])}</button>${canPublishMyProduct(x)?`<button type="button" class="primary-small" data-admin-publish-own="${esc(x.id)}">${esc(tr('نشر منتجي','Publish my product'))}</button>`:''}</article>`;
 }
 function bulkToolbar(rows){
   const count=selectedProducts.size,all=rows.length&&rows.every(x=>selectedProducts.has(x.id));
@@ -451,7 +476,7 @@ const TEAM_PERMISSION_LABELS=[
   ['requests.read','مشاهدة الطلبات','View requests'],
   ['requests.edit','تعديل الطلبات والصور','Edit requests & images'],
   ['offers.read','مشاهدة المنتجات وعروض الأسعار','View products & quotes'],
-  ['offers.create','إضافة منتجات جديدة فقط (بدون تعديل أو حذف)','Add new products only (no editing or deletion)'],
+  ['offers.create','إضافة ونشر منتجاته فقط (بدون تعديل أو حذف)','Add and publish own products only (no editing or deletion)'],
   ['offers.edit','تعديل المنتجات وعروض الأسعار','Edit products & quotes'],
   ['translate','الترجمة اليدوية','Manual translation'],
   ['publish','الاعتماد والإرسال','Approve & publish'],
@@ -609,7 +634,7 @@ function publicOfferEditor(x){
   const currentImages=(x.images||[]).map((src,i)=>`<label class="admin-image-tile"><input checked type="checkbox" data-admin-public-image-index="${i}"><span><img alt="" data-admin-media="${esc(src)}" data-image-viewer></span><small>${esc(tr('إبقاء الصورة','Keep image'))}</small></label>`).join('');
   return `<form id="adminPublicOfferForm" class="form-stack admin-public-offer-editor" data-id="${esc(x.id||'')}" data-create="${creating?'true':'false'}">
     <h3>${esc(creating?tr('إضافة منتج جديد','Add new product'):tr('تعديل المنتج','Edit product'))}</h3>
-    ${creating?`<p class="muted">${esc(tr('سيُحفظ المنتج بانتظار مراجعة الإدارة، ولن تتمكن من تعديله أو حذفه بهذه الصلاحية.','The new product will await admin review. This permission does not allow editing or deletion.'))}</p><label><span>SKU</span><input name="sku" required maxlength="80" pattern="[A-Za-z0-9._-]+"></label>`:''}
+    ${creating?`<p class="muted">${esc(tr('يمكنك نشر المنتج الآن أو حفظه دون نشر. لا يمكنك تعديله أو حذفه لاحقًا بهذه الصلاحية.','Publish now or save without publishing. This permission does not allow later editing or deletion.'))}</p><label><span>SKU</span><input name="sku" required maxlength="80" pattern="[A-Za-z0-9._-]+"></label>`:''}
     <label><span>${esc(tr('اسم المنتج الأصلي','Original product name'))}</span><input name="product" required maxlength="300" value="${esc(x.product||'')}"></label>
     <label><span>${esc(tr('الوصف الأصلي','Original description'))}</span><textarea name="specs" required maxlength="10000">${esc(x.specs||'')}</textarea></label>
     <div class="form-two"><label><span>${esc(tr('السعر (اختياري)','Price (optional)'))}</span><input name="unitPrice" type="number" step="0.01" min="0.01" value="${esc(x.unitPrice||'')}"></label><label><span>${esc(tr('العملة','Currency'))}</span><select name="currency">${['USD','SAR','AED','CNY','EUR'].map(v=>`<option ${x.currency===v?'selected':''}>${v}</option>`).join('')}</select></label></div>
@@ -622,9 +647,10 @@ function publicOfferEditor(x){
     <section><h3>${esc(tr('النص الظاهر للعملاء','Customer-facing text'))}</h3>${publicTranslationFields(x,creating)}</section>
     <section><h3>${esc(tr('الصور الحالية','Current images'))}</h3><div class="admin-image-grid" data-viewer-gallery>${currentImages}</div></section>
     <label><span>${esc(tr('إضافة صور جديدة','Add new images'))}</span><input id="adminPublicFiles" type="file" accept="image/*" multiple><small>${esc(tr('يمكن اختيار صور كبيرة وسيتم ضغطها تلقائيًا. الحد الأقصى 5 صور إجمالًا.','Large images are compressed automatically. Maximum 5 images total.'))}</small></label>
+    ${creating?`<label class="admin-category-toggle-label"><input name="publishNow" type="checkbox" checked><span>${esc(tr('نشر المنتج مباشرة في المتجر','Publish product immediately in the store'))}</span></label>`:''}
     <label class="admin-category-toggle-label"><input type="checkbox" data-admin-public-redaction><span>${esc(tr('راجعت النصوص والصور ولا تحتوي على بيانات تواصل مباشرة.','I reviewed the text and images and they contain no direct contact details.'))}</span></label>
     <p class="form-message" data-admin-public-message></p>
-    <button class="primary-btn" type="submit">${esc(creating?tr('إضافة المنتج للمراجعة','Submit product for review'):tr('حفظ التعديلات','Save changes'))}</button>
+    <button class="primary-btn" type="submit">${esc(creating?tr('حفظ المنتج','Save product'):tr('حفظ التعديلات','Save changes'))}</button>
   </form>`;
 }
 async function adminFilesToSources(input,maxFiles){
@@ -661,9 +687,11 @@ async function savePublicOffer(form){
     };
     if(creating){
       const translation={};form.querySelectorAll('[data-admin-public-tr]').forEach(el=>translation[el.dataset.adminPublicTr]=el.value.trim());
-      const product={id:crypto.randomUUID(),version:0,status:'draft',sku:form.sku.value.trim(),name:translation.titleAr||patch.product,nameEn:translation.titleEn||patch.product,description:translation.descriptionAr||patch.specs,descriptionEn:translation.descriptionEn||patch.specs,price:patch.unitPrice,currency:patch.currency,moq:patch.moq,stock:patch.stock,stockUnlimited:patch.stockUnlimited,leadDays:patch.leadTime,country:patch.country,categoryId:patch.categoryId,subcategoryId:patch.subcategoryId,images:patch.images};
-      await api('/api/v1/studio-product',{method:'POST',body:{product}});
-      await reload();closeModal();offerTab='pending';schedule();toast(tr('تمت إضافة المنتج للمراجعة.','Product submitted for review.'));return;
+      const publishNow=!!form.publishNow?.checked,redaction=!!form.querySelector('[data-admin-public-redaction]')?.checked;
+      if(publishNow&&!redaction)throw new Error(tr('أكد مراجعة النصوص والصور قبل النشر.','Confirm review of text and images before publishing.'));
+      const product={id:crypto.randomUUID(),version:0,status:publishNow?'active':'draft',sku:form.sku.value.trim(),name:translation.titleAr||patch.product,nameEn:translation.titleEn||patch.product,description:translation.descriptionAr||patch.specs,descriptionEn:translation.descriptionEn||patch.specs,price:patch.unitPrice,currency:patch.currency,moq:patch.moq,stock:patch.stock,stockUnlimited:patch.stockUnlimited,leadDays:patch.leadTime,country:patch.country,categoryId:patch.categoryId,subcategoryId:patch.subcategoryId,images:patch.images};
+      await api('/api/v1/studio-product',{method:'POST',body:{product,redactionConfirmed:publishNow&&redaction}});
+      await reload();closeModal();offerTab=publishNow?'all':'pending';schedule();toast(publishNow?tr('تمت إضافة المنتج ونشره.','Product added and published.'):tr('تم حفظ المنتج دون نشر.','Product saved without publishing.'));return;
     }
     if(can('translate')){
       const translation={};form.querySelectorAll('[data-admin-public-tr]').forEach(el=>translation[el.dataset.adminPublicTr]=el.value.trim());
@@ -918,6 +946,7 @@ document.addEventListener('click',e=>{
   const ot=e.target.closest('[data-admin-offer-tab]');if(ot){offerTab=ot.dataset.adminOfferTab;schedule();return;}
   const bulkEdit=e.target.closest('[data-admin-bulk-edit]');if(bulkEdit){openBulkProductEditor();return;}
   const ba=e.target.closest('[data-admin-bulk-action]');if(ba){const action=ba.dataset.adminBulkAction;if(action==='translation')openBulkProductEditor('translation');else if(['category','country'].includes(action))bulkAssignDialog(action);else runBulkProductAction(action);return;}
+  const publishOwn=e.target.closest('[data-admin-publish-own]');if(publishOwn){publishMyProductDialog(publishOwn.dataset.adminPublishOwn);return;}
   const addProduct=e.target.closest('[data-admin-product-new]');if(addProduct){if(can('offers.create')||can('offers.edit'))modal(tr('إضافة منتج','Add product'),tr('المنتجات','Products'),publicOfferEditor({images:[],stockUnlimited:true,currency:'SAR'}));return;}
   const tn=e.target.closest('[data-admin-team-new]');if(tn){teamDialog();return;}
   const te=e.target.closest('[data-admin-team-edit]');if(te){teamDialog(te.dataset.adminTeamEdit);return;}
@@ -1011,6 +1040,7 @@ document.addEventListener('submit',e=>{
   else if(e.target.matches('#adminSubcategoryForm')){e.preventDefault();submitSubcategory(e.target);}
   else if(e.target.matches('#adminSupplyCountryForm')){e.preventDefault();submitSupplyCountry(e.target);}
   else if(e.target.matches('#adminPublicOfferForm')){e.preventDefault();savePublicOffer(e.target);}
+  else if(e.target.matches('#adminPublishMyProductForm')){e.preventDefault();submitPublishMyProduct(e.target);}
   else if(e.target.matches('#adminBulkProductsForm')){e.preventDefault();submitBulkProducts(e.target);}
   else if(e.target.matches('#adminBulkAssignForm')){e.preventDefault();const form=e.target;runBulkProductAction(form.dataset.kind,form.value.value).then(ok=>{if(ok)closeModal();});}
 });
