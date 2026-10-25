@@ -32,7 +32,9 @@ const normalizeOrigin=value=>String(value||'').trim().replace(/\/$/,'');
 const extraWebOrigins=()=>new Set(String(process.env.APP_ORIGINS||'').split(',').map(normalizeOrigin).filter(Boolean));
 export const allowedWebOrigin=(origin,primaryOrigin)=>{
   const normalized=normalizeOrigin(origin),primary=normalizeOrigin(primaryOrigin);
-  return !!normalized&&(normalized===primary||extraWebOrigins().has(normalized));
+  const previewHost=process.env.VERCEL_ENV==='preview'&&(process.env.VERCEL_BRANCH_URL||process.env.VERCEL_URL);
+  const previewOrigin=previewHost?'https://'+previewHost:'';
+  return !!normalized&&(normalized===primary||normalized===previewOrigin||extraWebOrigins().has(normalized));
 };
 const nativeOrigin=req=>NATIVE_ORIGINS.has(String(req.headers.origin||''));
 const setNativeCors=(req,res,isV1)=>{
