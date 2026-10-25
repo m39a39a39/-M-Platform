@@ -49,12 +49,12 @@ let cartItems=[];
 
 const text={
   ar:{
-    tagline:'تسوق المنتجات أو أرسل طلب توريد.',eyebrow:'منصة شراء وتوريد موثوقة',title:'تسوق المنتجات أو أرسل طلب توريد.',
+    tagline:'تصفح المنتجات واطلب عرض سعر.',eyebrow:'منصة شراء وتوريد موثوقة',title:'تصفح المنتجات واطلب عرض سعر.',
     subtitle:'منصة آمنة تربطك بموردين مؤهلين، بينما نتولى مراجعة العروض، التحقق من البضاعة، الترجمة، الشحن الموثوق، ومتابعة الضمان.',
     browse:'تصفح المنتجات',login:'تسجيل الدخول',customer:'إنشاء حساب عميل',supplier:'إنشاء حساب مورد',kicker:'تصفح دون حساب',offers:'المنتجات',
     reload:'تحديث',loading:'جارٍ تحميل المنتجات...',empty:'لا توجد منتجات منشورة حاليًا.',price:'السعر',unitPrice:'سعر الحبة',moq:'الحد الأدنى',
     production:'الإنتاج',days:'يوم',stock:'المخزون',details:'تفاصيل المنتج',back:'العودة للرئيسية',error:'تعذر تحميل المنتجات. تحقق من اتصال الإنترنت.',
-    previous:'السابق',next:'التالي',page:'صفحة',companyDescription:'تسوق المنتجات وتابع مشترياتك وطلبات التوريد.',
+    previous:'السابق',next:'التالي',page:'صفحة',companyDescription:'تصفح كتالوج IMSG وأرسل طلب عرض سعر بسهولة دون تسجيل.',
     contact:'تواصل معنا',copyright:'© 2026 IMSG — جميع الحقوق محفوظة',allCategories:'الكل',supplyCountry:'بلد التوريد',allCountries:'الكل',
     search:'ابحث عن منتج أو SKU',quantity:'الكمية',productTotal:'إجمالي هذا المنتج',addCart:'أضف إلى قائمتي',updateCart:'تحديث الكمية في قائمتي',
     added:'تمت إضافة المنتج إلى قائمتي.',cart:'قائمتي',products:'منتجات',total:'الإجمالي',grandTotal:'الإجمالي الكلي',remove:'حذف',
@@ -66,12 +66,12 @@ const text={
     maxProducts:'الحد الأقصى 10 منتجات في الطلب الواحد.',invalidQty:'تحقق من الكمية والحد الأدنى والمخزون.'
   },
   en:{
-    tagline:'Shop products or send a sourcing request.',eyebrow:'Trusted sourcing platform',title:'Shop products or send a sourcing request.',
+    tagline:'Browse products and request a quote.',eyebrow:'Trusted sourcing platform',title:'Browse products and request a quote.',
     subtitle:'A secure platform that connects you with qualified suppliers while we handle offer review, product verification, translation, reliable shipping, and warranty follow-up.',
     browse:'Browse products',login:'Sign in',customer:'Create customer account',supplier:'Create supplier account',kicker:'Browse without an account',offers:'Products',
     reload:'Refresh',loading:'Loading products...',empty:'No products are currently published.',price:'Price',unitPrice:'Unit price',moq:'MOQ',
     production:'Production',days:'days',stock:'Stock',details:'Product details',back:'Back to home',error:'Could not load products. Check your internet connection.',
-    previous:'Previous',next:'Next',page:'Page',companyDescription:'Shop products and track your purchases and sourcing requests.',
+    previous:'Previous',next:'Next',page:'Page',companyDescription:'Browse the IMSG B2B catalog and request quotations without an account.',
     contact:'Contact us',copyright:'© 2026 IMSG — All rights reserved.',allCategories:'All',supplyCountry:'Supply country',allCountries:'All',
     search:'Search products or SKU',quantity:'Quantity',productTotal:'This product total',addCart:'Add to my list',updateCart:'Update quantity in my list',
     added:'Added to my list.',cart:'My list',products:'products',total:'Total',grandTotal:'Grand total',remove:'Remove',
@@ -284,7 +284,7 @@ function mountGuestStore(){
  catalogNode('guestProductSearch').placeholder=t('search');catalogNode('guestProductSearch').setAttribute('aria-label',t('search'));catalogNode('guestPrevPage').textContent=t('previous');catalogNode('guestNextPage').textContent=t('next');
  catalog.querySelector('.guest-product-search').hidden=!h.showSearch;
  catalogNode('guestCategoryFilters').hidden=!h.showCategories;catalogNode('guestSubcategoryFilters').hidden=!h.showCategories;catalogNode('guestSupplyCountryFilters').hidden=!h.showCountries;
- bindStorefront(host,state,{chrome:false,observe:aiChatSignal,money,hydrate:hydrateImages,product:openOffer,add:(id,quantity)=>{try{const p=publishedOffers().find(p=>p.id===id);addToCart(p,quantity);showGuestToast(t('added'));}catch(e){showGuestToast(e.message);}},page:(title,html)=>{$('modalTitle').textContent=title;$('modalKicker').textContent='';$('modalBody').innerHTML=html;$('modal').classList.remove('hidden');},category:id=>{category=id;renderOffers();},catalog:()=>catalog.isConnected&&catalog.scrollIntoView({behavior:'smooth'}),action:action=>{if(action==='cart')openGuestCart();if(action==='login')showLogin();if(action==='request')requireCustomerAuth('new-request');if(action==='register-client')register('client');if(action==='register-supplier')register('supplier');if(action==='language')toggleLanguage();if(action==='home')host.scrollIntoView({behavior:'smooth'});}});
+ bindStorefront(host,state,{chrome:false,observe:aiChatSignal,money,hydrate:hydrateImages,product:openOffer,add:(id,quantity)=>{try{const p=publishedOffers().find(p=>p.id===id);addToCart(p,quantity);showGuestToast(t('added'));}catch(e){showGuestToast(e.message);}},page:(title,html)=>{$('modalTitle').textContent=title;$('modalKicker').textContent='';$('modalBody').innerHTML=html;$('modal').classList.remove('hidden');},category:id=>{category=id;renderOffers();},catalog:()=>catalog.isConnected&&catalog.scrollIntoView({behavior:'smooth'}),action:action=>{if(action==='cart')openGuestCart();if(action==='login')showLogin();if(action==='request')openGuestCart();if(action==='register-client')register('client');if(action==='register-supplier')register('supplier');if(action==='language')toggleLanguage();if(action==='home')host.scrollIntoView({behavior:'smooth'});}});
  hydrateImages(host);
 }
 async function load(){
