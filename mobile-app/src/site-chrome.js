@@ -25,5 +25,5 @@ function portalHeader(role,signedRole,cartCount){
 
 function customerNavigation(){
  const ar=document.documentElement.lang!=='en',active=new URLSearchParams(location.search).get('screen')||'home';
- return `<nav class="customer-account-nav" aria-label="${ar?'حساب العميل':'Customer account'}">${[['requests','مشترياتي','Purchases'],['offers','طلبات التوريد','Sourcing requests'],['account','حسابي','Account']].map(([screen,a,e])=>`<a href="${portalUrl('client',screen)}" ${active===screen?'aria-current="page"':''}>${ar?a:e}</a>`).join('')}</nav>`;
+ return `<nav class="customer-account-nav" aria-label="${ar?'حساب العميل':'Customer account'}">${[['account','حسابي','Account']].map(([screen,a,e])=>`<a href="${portalUrl('client',screen)}" ${active===screen?'aria-current="page"':''}>${ar?a:e}</a>`).join('')}</nav>`;
 }
