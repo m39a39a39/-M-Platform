@@ -348,6 +348,44 @@ async function openGuestCart(){
  $('modalBody').querySelector('[data-guest-cart-clear]').addEventListener('click',()=>{cartItems=[];saveCart();void openGuestCart();});
  $('modalBody').querySelector('[data-rfq-continue]').addEventListener('click',openGuestRfqForm);
 }
+// A dedicated confirmation remains visible even when the form was scrolled to its bottom.
+function showGuestRfqReceipt(receipt,submittedRows){
+ const label=(a,e)=>lang==='ar'?a:e;
+ const number=String(receipt.number);
+ const units=submittedRows.reduce((sum,row)=>sum+Number(row.quantity||0),0);
+ const body=$('modalBody');
+ $('modalKicker').textContent='IMSG';
+ $('modalTitle').textContent=label('تأكيد طلب عرض السعر','Quote request confirmation');
+ body.innerHTML='<section class="imsg-rfq-success" role="status" aria-label="'+label('تأكيد استلام الطلب','Request confirmation')+'">'+
+  '<div class="imsg-rfq-success-icon" aria-hidden="true">✓</div>'+
+  '<h3>'+label('تم استلام طلبك بنجاح!','Your request was received!')+'</h3>'+
+  '<p class="imsg-rfq-success-intro">'+label('شكرًا لاختيارك IMSG.','Thank you for choosing IMSG.')+'</p>'+
+  '<div class="imsg-rfq-receipt"><span>'+label('رقم طلب عرض السعر','Quote request number')+'</span><strong dir="ltr">'+esc(number)+'</strong></div>'+
+  '<div class="imsg-rfq-success-stats"><div><span>'+label('عدد المنتجات','Products')+'</span><strong>'+submittedRows.length.toLocaleString('en-US')+'</strong></div><div><span>'+label('إجمالي القطع','Total pieces')+'</span><strong>'+units.toLocaleString('en-US')+'</strong></div></div>'+
+  '<p class="imsg-rfq-received"><span aria-hidden="true">●</span> '+label('الحالة: بانتظار مراجعة الطلب','Status: Awaiting review')+'</p>'+
+  '<div class="imsg-rfq-next"><strong>'+label('ماذا يحدث الآن؟','What happens next?')+'</strong><p>'+label('سيراجع فريق IMSG المنتجات والكميات المطلوبة، ثم يتواصل معك عبر واتساب لتقديم عرض السعر.','The IMSG team will review your products and quantities, then contact you on WhatsApp with a quotation.')+'</p></div>'+
+  '<div class="imsg-rfq-success-actions"><button type="button" class="primary-btn" data-rfq-home>'+label('العودة إلى المتجر','Back to store')+'</button><button type="button" class="secondary-btn" data-rfq-copy>'+label('نسخ رقم الطلب','Copy request number')+'</button></div>'+
+  '<p class="imsg-rfq-copy-feedback" data-rfq-copy-feedback aria-live="polite"></p></section>';
+ $('modal').classList.remove('hidden');
+ body.scrollTop=0;
+ requestAnimationFrame(()=>{if(body.isConnected){body.scrollTop=0;$('modalTitle').setAttribute('tabindex','-1');$('modalTitle').focus({preventScroll:true});}});
+ body.querySelector('[data-rfq-home]').addEventListener('click',()=>{
+  closeModal();if(location.pathname!=='/')showGuest();else window.scrollTo({top:0,behavior:'smooth'});
+ });
+ body.querySelector('[data-rfq-copy]').addEventListener('click',async()=>{
+  let copied=false;
+  try{if(navigator.clipboard?.writeText){await navigator.clipboard.writeText(number);copied=true;}}catch{}
+  if(!copied){
+   const input=document.createElement('textarea');input.value=number;input.readOnly=true;input.style.cssText='position:fixed;opacity:0;pointer-events:none';
+   document.body.append(input);input.select();
+   try{copied=!!document.execCommand('copy');}catch{}
+   input.remove();
+  }
+  const feedback=body.querySelector('[data-rfq-copy-feedback]');
+  if(feedback)feedback.textContent=copied?label('تم نسخ رقم الطلب.','Request number copied.'):label('تعذر النسخ تلقائيًا؛ يمكنك تحديد الرقم ونسخه.','Select the number above to copy it.');
+ });
+}
+
 async function openGuestRfqForm(){
  await ensureGuestUiStyles();
  const rows=cartRows();if(!rows.length){void openGuestCart();return;}
@@ -374,23 +412,39 @@ async function openGuestRfqForm(){
   const form=event.currentTarget,button=form.querySelector('[type="submit"]'),message=form.querySelector('[data-rfq-message]');
   if(button.disabled)return;
   const fd=new FormData(form);
+  const submittedRows=cartRows();
   const national=String(fd.get('phone')||'').replace(/[\s()\-.]/g,'').replace(/^0+/,'');
   const whatsapp=String(fd.get('dial'))+national;
   if(!/^\+[1-9]\d{7,14}$/.test(whatsapp)){message.textContent=label('أدخل رقم واتساب صحيحًا','Enter a valid WhatsApp number');return;}
   if(!pendingRfqKey)pendingRfqKey=crypto.randomUUID();
   button.disabled=true;message.textContent=label('جارٍ إرسال الطلب...','Sending request...');
+  let result;
   try{
    const response=await fetch(API+'/api/v1/rfq',{method:'POST',credentials:'omit',headers:{'Content-Type':'application/json'},body:JSON.stringify({
     customer:{name:fd.get('name'),whatsapp,country:fd.get('country'),company:fd.get('company')},
-    notes:fd.get('notes'),idempotencyKey:pendingRfqKey,source:'website',items:cartRows().map(x=>({offerId:x.item.offerId,quantity:x.quantity}))
+    notes:fd.get('notes'),idempotencyKey:pendingRfqKey,source:'website',
+    items:submittedRows.map(x=>({offerId:x.item.offerId,quantity:x.quantity}))
    })});
-   let result={};try{result=await response.json();}catch{}
-   if(!response.ok||!result.number)throw new Error(result.error||label('تعذر حفظ الطلب، حاول مرة أخرى','Unable to save the request'));
-   cartItems=[];saveCart();pendingRfqKey='';
-   $('modalKicker').textContent='IMSG';$('modalTitle').textContent=label('تم الإرسال بنجاح','Request received');
-   $('modalBody').innerHTML='<section class="imsg-rfq-success"><h3>'+esc(result.number)+'</h3><p>'+label('تم استلام طلب عرض السعر بنجاح. سيتواصل معك فريق IMSG عبر واتساب قريبًا.','Your quote request was received. The IMSG team will contact you via WhatsApp soon.')+'</p><button type="button" class="primary-btn" data-rfq-finish>'+label('إغلاق','Close')+'</button></section>';
+   result=await response.json().catch(()=>({}));
+   if(!response.ok||!result?.number)throw new Error(result?.error||label('تعذر تأكيد حفظ الطلب، حاول مرة أخرى','Could not confirm that the request was saved. Try again.'));
+  }catch(error){
+   // Do not discard the form, list, or submission key on an unsuccessful response.
+   button.disabled=false;
+   message.textContent=error?.message||label('تعذر إرسال الطلب. حاول مرة أخرى','Unable to send the request. Please try again.');
+   message.scrollIntoView({block:'center',behavior:'smooth'});
+   return;
+  }
+  // Only a confirmed server response can clear the saved list.
+  if(document.activeElement instanceof HTMLElement)document.activeElement.blur();
+  try{showGuestRfqReceipt(result,submittedRows);}
+  catch(error){
+   console.error('IMSG RFQ confirmation rendering failed',error);
+   $('modalKicker').textContent='IMSG';$('modalTitle').textContent=label('تم استلام طلبك بنجاح','Request received');
+   $('modalBody').innerHTML='<section class="imsg-rfq-success" role="status"><h3>'+esc(result.number)+'</h3><p>'+label('تم استلام طلبك. سيتواصل معك فريق IMSG عبر واتساب.','Your request was received. The IMSG team will contact you via WhatsApp.')+'</p><button type="button" class="primary-btn" data-rfq-finish>'+label('العودة إلى المتجر','Back to store')+'</button></section>';
+   $('modal').classList.remove('hidden');$('modalBody').scrollTop=0;
    $('modalBody').querySelector('[data-rfq-finish]').addEventListener('click',closeModal);
-  }catch(error){message.textContent=error.message||label('تعذر الإرسال','Submission failed');button.disabled=false;}
+  }
+  cartItems=[];saveCart();pendingRfqKey='';
  });
 }
 
