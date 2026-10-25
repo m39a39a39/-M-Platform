@@ -17,8 +17,20 @@ function parsePayload(body,admin=false){
   const name=str(customer.name,140),country=str(customer.country,120),company=str(customer.company,200);
   const whatsapp=normalizePhone(customer.whatsapp);
   assert(name.length>=2&&name.length<=140&&country.length>=2&&country.length<=120&&company.length<=200,400,'أكمل بيانات العميل المطلوبة');
+  const requestType=body.requestType||'catalog';
+  assert(['catalog','custom'].includes(requestType),400,'نوع الطلب غير صحيح');
   const items=body.items;
-  assert(Array.isArray(items)&&items.length>=1&&items.length<=MAX_ITEMS,400,'اختر من 1 إلى 100 منتج');
+  assert(Array.isArray(items)&&items.length<=MAX_ITEMS&&(requestType==='catalog'?items.length>=1:items.length===0),400,
+    requestType==='custom'?'طلب التوريد الخاص لا يتطلب منتجات من الكتالوج':'اختر من 1 إلى 100 منتج');
+  let customDetails={};
+  if(requestType==='custom'){
+    const details=body.customDetails||{},productName=str(details.productName,200),specifications=str(details.specifications,2000),
+      quantity=Number(details.quantity),image=String(details.image||'');
+    assert(productName.length>=2&&productName.length<=200&&specifications.length>=5&&specifications.length<=2000,400,'أكمل اسم المنتج ومواصفاته');
+    assert(Number.isSafeInteger(quantity)&&quantity>0&&quantity<=1000000000,400,'الكمية غير صحيحة');
+    assert(image.length<=480000&&(!image||/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(image)),400,'صيغة صورة المنتج غير مدعومة');
+    customDetails={productName,specifications,quantity,image};
+  }
   const seen=new Set();
   const checked=items.map(row=>{
     const offerId=str(row?.offerId,100),quantity=Number(row?.quantity);
@@ -39,7 +51,8 @@ function parsePayload(body,admin=false){
     idempotencyKey=str(body.idempotencyKey,40);
     assert(/^[a-f\d]{8}-[a-f\d]{4}-[1-8][a-f\d]{3}-[89ab][a-f\d]{3}-[a-f\d]{12}$/i.test(idempotencyKey),400,'Invalid submission key');
   }
-  return {customer:{name,country,company,whatsapp,notes:admin?str(customer.notes,2000):''},items:checked,notes,internalNotes,source,status,requestId,expectedVersion,idempotencyKey};
+  return {customer:{name,country,company,whatsapp,notes:admin?str(customer.notes,2000):''},items:checked,
+    requestType,customDetails,notes,internalNotes,source,status,requestId,expectedVersion,idempotencyKey};
 }
 function hashOrigin(req){
   // Never store raw IP addresses. The key rotates when the server secret changes.
@@ -60,7 +73,8 @@ async function list(){
   for(const e of audit){const rows=events.get(e.request_id)||[];rows.push({id:e.id,actorId:e.actor_id,action:e.action,before:e.before_data,after:e.after_data,at:e.created_at});events.set(e.request_id,rows);}
   return {requests:requests.map(r=>({
     id:r.id,number:'RFQ-'+r.number,customerId:r.customer_id,customer:contacts.get(r.customer_id)||null,
-    source:r.source,status:r.status,notes:r.notes,internalNotes:r.internal_notes,
+    source:r.source,status:r.status,requestType:r.request_type||'catalog',customDetails:r.custom_details||{},
+    notes:r.notes,internalNotes:r.internal_notes,
     createdBy:r.created_by,updatedBy:r.updated_by,createdAt:r.created_at,updatedAt:r.updated_at,
     statusChangedAt:r.status_changed_at,version:r.version,items:byRequest.get(r.id)||[],
     audit:events.get(r.id)||[]
