@@ -23,6 +23,8 @@
 /* One shared shell for store routes, sign-in, customer and supplier screens. */
 .has-site-chrome .app-header,.has-site-chrome .brand-block{display:none!important}
 .shared-site-chrome{max-width:1440px;margin:auto}
+/* Keep the public store header visible while browsing products; portal headers are unchanged. */
+#site-header.shared-site-chrome:has(> .sf-header){position:sticky;top:0;z-index:100}
 .shared-site-chrome .sf-header{position:relative;flex-wrap:wrap;gap:12px;padding:16px 24px}
 .sf-header-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .sf-header-actions button{display:flex;align-items:center;gap:6px}
