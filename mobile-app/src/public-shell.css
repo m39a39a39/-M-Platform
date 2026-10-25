@@ -64,8 +64,22 @@ button{cursor:pointer}
 .imsg-rfq-form input,.imsg-rfq-form select,.imsg-rfq-form textarea{box-sizing:border-box;min-height:43px;padding:10px;border:1px solid #ccd8d4;border-radius:9px;font:inherit;max-width:100%;width:100%;background:white}
 .imsg-rfq-phone{display:flex;gap:8px;direction:ltr}
 .imsg-rfq-phone select{width:112px;flex:none}
-.imsg-rfq-summary{padding:14px;border-radius:12px;background:#f4f7f5;font-size:.94em;max-height:180px;overflow:auto}
-.imsg-rfq-summary p{margin:8px 0}
+.imsg-rfq-summary{min-width:0;padding:12px 14px;border:1px solid #dce6eb;border-radius:14px;background:#fff;font-size:.9rem}
+.imsg-rfq-summary-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:4px}
+.imsg-rfq-summary-head>strong{font-size:14px;color:#0b2236}
+.imsg-rfq-edit{border:0;background:transparent;color:#0a79ae;font-weight:700;font-size:13px;padding:8px 0;min-height:36px;white-space:nowrap}
+.imsg-rfq-edit:focus-visible{outline:2px solid #1699db;outline-offset:3px;border-radius:4px}
+.imsg-rfq-summary-items{display:grid;max-height:290px;overflow-y:auto;overscroll-behavior:contain}
+.imsg-rfq-summary-line{display:flex;align-items:center;gap:12px;min-width:0;padding:10px 0;border-bottom:1px solid #eef2f4}
+.imsg-rfq-summary-line>img,.imsg-rfq-summary-placeholder{display:block;flex:0 0 72px;width:72px;height:72px;border-radius:10px;border:1px solid #edf1f3;background:#f7f9fa;object-fit:contain}
+.imsg-rfq-summary-placeholder{display:grid;place-items:center;color:#8a9aa5;font-size:24px}
+.imsg-rfq-summary-product{min-width:0;flex:1;display:grid;gap:6px}
+.imsg-rfq-summary-product strong{font-size:13px;line-height:1.45;font-weight:750;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.imsg-rfq-summary-product span{font-size:12px;color:#6d7f8c}
+.imsg-rfq-summary-product b{color:#0b2236;font-size:13px}
+.imsg-rfq-summary-footer{display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px 12px;padding-top:12px;font-size:12px;color:#607784}
+.imsg-rfq-summary-footer b{color:#0b2236}
+@media(max-width:480px){.imsg-rfq-summary{padding:10px 12px}.imsg-rfq-summary-line{gap:10px}.imsg-rfq-summary-line>img,.imsg-rfq-summary-placeholder{flex-basis:64px;width:64px;height:64px}}
 .imsg-rfq-error{margin:0;color:#b42318;min-height:1.4em}
 .imsg-rfq-success{text-align:center;padding:20px 8px;line-height:1.8}
 .imsg-rfq-success h3{font-size:1.6em;direction:ltr}
