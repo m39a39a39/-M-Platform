@@ -4,7 +4,7 @@ const MAX_ITEMS=400,MAX_FILE=10*1024*1024,MAX_ZIP=250*1024*1024,PER_PAGE=25;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','"':'&#39;'}[c]));
 const tr=(ar,en)=>document.documentElement.lang==='en'?en:ar;
 const api=body=>window.MStudioSession.request('/api/v1/bulk-product-ai',{auth:true,method:'POST',body});
-const token=()=>String(window.liveState?.user?.id||globalThis.liveState?.user?.id||'');
+const token=()=>String(typeof liveState!=='undefined'?liveState?.user?.id||'':'');
 const state={owner:'',rows:[],busy:false,stop:false,page:0,filter:'all',query:'',notice:'',error:'',selectedCategory:'',loading:false,open:false};
 let root=null,database=null,urls=[],redrawTimer=null;
 const key=id=>'imsg-bulk-ai-'+id;
@@ -12,9 +12,9 @@ const statusName={pending:['بانتظار التحليل','Pending'],analyzing:
 const label=s=>tr(...(statusName[s]||[s,s]));
 const fileType=name=>/\.jpe?g$/i.test(name)?'image/jpeg':/\.png$/i.test(name)?'image/png':/\.webp$/i.test(name)?'image/webp':'';
 const cleanName=s=>String(s||'').toLowerCase().replace(/[\s\p{P}\p{S}]+/gu,' ').trim();
-const inStore=()=>Array.isArray(globalThis.liveState?.publicOffers)?globalThis.liveState.publicOffers:[];
-const categories=()=>Array.isArray(globalThis.liveState?.settings?.categories)?globalThis.liveState.settings.categories.filter(x=>x.active!==false):[];
-const subcategories=id=>(globalThis.liveState?.settings?.subcategories||[]).filter(x=>x.parentId===id&&x.active!==false);
+const inStore=()=>typeof liveState!=='undefined'&&Array.isArray(liveState?.publicOffers)?liveState.publicOffers:[];
+const categories=()=>typeof liveState!=='undefined'&&Array.isArray(liveState?.settings?.categories)?liveState.settings.categories.filter(x=>x.active!==false):[];
+const subcategories=id=>(typeof liveState!=='undefined'?liveState?.settings?.subcategories||[]:[]).filter(x=>x.parentId===id&&x.active!==false);
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 function dbOpen(){
  return new Promise((resolve,reject)=>{
