@@ -41,3 +41,11 @@
 .imsg-rfq-audit{max-height:240px;overflow:auto;font-size:.82rem}
 .imsg-rfq-audit p{border-bottom:1px solid #edf1ee;padding-bottom:12px;overflow-wrap:anywhere}
 @media(max-width:650px){.imsg-rfq-admin{padding:10px}.imsg-rfq-heading{align-items:stretch}.imsg-rfq-contact-grid{grid-template-columns:1fr}.imsg-rfq-editor-item{flex-wrap:wrap}.imsg-rfq-editor-item>div{flex-basis:100%}.imsg-rfq-dialog{max-height:98dvh}}
+
+
+/* Custom RFQs use the same administration modal and table. */
+.imsg-rfq-custom-fields{display:grid;gap:12px}
+.imsg-rfq-custom-fields[hidden],.imsg-rfq-editor [data-rfq-catalog-fields][hidden]{display:none!important}
+.imsg-rfq-custom-details{border:1px solid #dce9e3;border-radius:10px;background:#f7fbf9;padding:12px}
+.imsg-rfq-custom-details p{white-space:pre-wrap;overflow-wrap:anywhere}
+.imsg-rfq-custom-image{display:block;max-width:100%;width:min(300px,100%);max-height:320px;object-fit:contain;border-radius:9px;margin-top:10px}
