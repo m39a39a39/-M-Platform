@@ -81,10 +81,12 @@ export async function saveStudio(user,body){
 
 
 export async function saveStudioProduct(user,body={}){
-  assert(user?.role==='admin'&&can(user,'offers.edit'),403,'غير مسموح / Not allowed');
+  assert(user?.role==='admin',403,'غير مسموح / Not allowed');
   const p=body.product;assert(p&&typeof p==='object'&&!Array.isArray(p),400,'بيانات المنتج غير صالحة / Invalid product');
   id(p.id);assert(['draft','active','archived'].includes(p.status),400,'حالة المنتج غير صالحة / Invalid product status');
   const old=await one('public_offers',p.id);
+  assert(old?can(user,'offers.edit'):(can(user,'offers.create')||can(user,'offers.edit')),403,'لا تملك صلاحية إنشاء أو تعديل المنتجات / Product permission denied');
+  if(!old&&!can(user,'offers.edit'))assert(p.status==='draft',403,'إضافة المنتجات لا تمنح صلاحية النشر / Create permission does not allow publishing');
   assert(!old?.data?.deletedAt,409,'المنتج محذوف / Product deleted');
   assert(Number(p.version||0)===(old?.version||0),409,'تغيّر المنتج؛ حدّث الصفحة / Product changed; refresh');
   const settings=await one('settings','site');assert(settings,409,'إعدادات المتجر غير متاحة / Store settings unavailable');
@@ -93,7 +95,7 @@ export async function saveStudioProduct(user,body={}){
   const subcategories=taxonomy?.subcategories||(Array.isArray(settings.data?.subcategories)?settings.data.subcategories:[]);
   const countries=Array.isArray(settings.data?.supplyCountries)&&settings.data.supplyCountries.length?settings.data.supplyCountries:[{id:'China',active:true},{id:'United Arab Emirates',active:true}];
   const now=new Date().toISOString(),published=p.status==='active';
-  const d={...old?.data,storeOwned:true,sku:text(String(p.sku||''),80),product:text(String(p.name||''),100),specs:text(String(p.description||'')),country:text(String(p.country||''),80),unitPrice:p.price==null||String(p.price).trim()===''?null:Number(p.price),currency:String(p.currency||'').toUpperCase(),moq:Number(p.moq),stock:p.stock==null?'':String(p.stock),stockUnlimited:p.stockUnlimited!==false,leadTime:String(p.leadDays),categoryId:String(p.categoryId||''),subcategoryId:String(p.subcategoryId||''),images:list(p.images||[],5),translation:{titleAr:text(String(p.name||''),100),titleEn:text(String(p.nameEn||''),100),descriptionAr:text(String(p.description||'')),descriptionEn:text(String(p.descriptionEn||''))},status:published?'published':'review',studioArchived:p.status==='archived',shortDescription:text(String(p.shortDescription||''),500),productNotes:text(String(p.notes||''),2000),options:text(String(p.options||''),1000),technicalSpecs:text(String(p.technicalSpecs||''),5000),tiers:normalizeTiers(p.tiers||[],Number(p.moq),Number(p.price)),createdAt:old?.data?.createdAt||now,updatedAt:now};
+  const d={...old?.data,storeOwned:true,sku:text(String(p.sku||''),80),product:text(String(p.name||''),100),specs:text(String(p.description||'')),country:text(String(p.country||''),80),unitPrice:p.price==null||String(p.price).trim()===''?null:Number(p.price),currency:String(p.currency||'').toUpperCase(),moq:Number(p.moq),stock:p.stock==null?'':String(p.stock),stockUnlimited:p.stockUnlimited!==false,leadTime:String(p.leadDays),categoryId:String(p.categoryId||''),subcategoryId:String(p.subcategoryId||''),images:list(p.images||[],5),translation:{titleAr:text(String(p.name||''),100),titleEn:text(String(p.nameEn||''),100),descriptionAr:text(String(p.description||'')),descriptionEn:text(String(p.descriptionEn||''))},status:published?'published':(old?'review':'pending'),studioArchived:p.status==='archived',shortDescription:text(String(p.shortDescription||''),500),productNotes:text(String(p.notes||''),2000),options:text(String(p.options||''),1000),technicalSpecs:text(String(p.technicalSpecs||''),5000),tiers:normalizeTiers(p.tiers||[],Number(p.moq),Number(p.price)),createdAt:old?.data?.createdAt||now,updatedAt:now};
   if(taxonomy){d.categoryId=taxonomy.categoryId;d.subcategoryId=taxonomy.subcategoryId;}
   const publicText=[...Object.values(d.translation),d.shortDescription,d.productNotes,d.options,d.technicalSpecs];
   for(const value of publicText)assert(!/(?:https?:\/\/|www\.|wa\.me|@[a-z0-9]|[\w.+-]+@[\w.-]+\.[a-z]{2,}|(?:\+|00)\d[\d\s()-]{7,})/i.test(value),400,'احذف بيانات التواصل من المحتوى العام');
@@ -117,7 +119,7 @@ export async function saveStudioProduct(user,body={}){
     if(d.categoryId)assert(categories.some(c=>c.id===d.categoryId),400,'التصنيف غير متاح / Category unavailable');
     if(d.subcategoryId)assert(subcategories.some(s=>s.id===d.subcategoryId&&s.parentId===d.categoryId),400,'التصنيف الفرعي غير متاح / Subcategory unavailable');
   }
-  const changes=[{table:'public_offers',id:p.id,version:old?.version||0,ownerId:old?.owner_id||null,data:d,action:'studio_product_save'}];
+  const changes=[{table:'public_offers',id:p.id,version:old?.version||0,ownerId:old?.owner_id||user.id,data:d,action:old?'studio_product_save':'studio_product_create'}];
   const settingsData=structuredClone(settings.data||{}),draftProducts=settingsData.studioDraft?.products;
   let settingsChanged=!!taxonomy?.changed;
   if(taxonomy?.changed){

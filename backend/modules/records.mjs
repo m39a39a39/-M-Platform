@@ -173,7 +173,7 @@ export async function snapshot(user,{productId='',pageId='',category='',q='',aiC
   else if(user?.role==='admin'&&(can(user,'offers.read')||can(user,'offers.edit')||can(user,'publish')||can(user,'requests.edit')))supplySources=(await rows('supply_sources')).filter(open).map(r=>({...ownSource(r),supplierId:r.owner_id}));
   if(user?.role==='admin'){
     const readRequests=can(user,'requests.read')||can(user,'requests.edit')||can(user,'translate')||can(user,'publish')||can(user,'trash')||can(user,'moderate');
-    const readOffers=can(user,'offers.read')||can(user,'offers.edit')||can(user,'translate')||can(user,'publish')||can(user,'trash')||can(user,'moderate');
+    const readOffers=can(user,'offers.read')||can(user,'offers.create')||can(user,'offers.edit')||can(user,'translate')||can(user,'publish')||can(user,'trash')||can(user,'moderate');
     const readAccounts=readRequests||readOffers||can(user,'accounts.read')||can(user,'accounts.manage')||can(user,'team')||can(user,'moderate');
     [settings,requests,quotes,publicOffers,interests,accounts]=await Promise.all([
       one('settings','site'),
