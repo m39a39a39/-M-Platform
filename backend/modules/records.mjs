@@ -188,13 +188,12 @@ export async function snapshot(user,{productId='',pageId='',category='',q='',aiC
   }
 
   if(user?.role==='client'){
-    [settings,publicOffers,requests,interests]=await Promise.all([
+    // Historical purchases remain in PostgreSQL but are no longer part of
+    // the client-facing B2B RFQ experience or its network response.
+    [settings,publicOffers]=await Promise.all([
       one('settings','site'),
-      rows('public_offers','data->>status=eq.published&data->>deletedAt=is.null'),
-      rows('requests',`owner_id=eq.${user.id}&data->>deletedAt=is.null`),
-      rows('interests',`owner_id=eq.${user.id}`)
+      rows('public_offers','data->>status=eq.published&data->>deletedAt=is.null')
     ]);
-    if(requests.length)quotes=await rows('quotes',`request_id=in.(${inIds(requests.map(r=>r.id))})&data->>status=eq.published&data->>deletedAt=is.null`);
   }else if(user?.role==='supplier'){
     [settings,requests,quotes,publicOffers]=await Promise.all([
       one('settings','site'),
