@@ -21,6 +21,7 @@ import {submitPaymentReceipt,reviewPaymentReceipt} from './modules/payments.mjs'
 import {manageOrder} from './modules/order-management.mjs';
 import {saveStudio,saveStudioProduct} from './modules/studio.mjs';
 import {createCartOrder} from './modules/cart-orders.mjs';
+import {rfqRoute} from './modules/rfq.mjs';
 import {aiChat} from './modules/ai-chat.mjs';
 import {adminAi,adminAiOverview} from './modules/admin-ai.mjs';
 import {customerConversation,captureGuestLead,adminConversationList,adminConversationRead,adminConversationAction} from './modules/ai-conversations.mjs';
@@ -80,9 +81,12 @@ export default async function handler(req,res){
     if(path.startsWith('/api/auth/')){
       assert(req.method==='POST',405);result=await authRoute(path.split('/').at(-1),req,res,body);
     }else{
-      const user=await identify(req,res,path==='/api/state'||path==='/api/ai-chat'||path==='/api/ai-conversation'||path==='/api/ai-conversion'||path.startsWith('/api/media/')&&req.method==='GET');
+      const user=await identify(req,res,path==='/api/state'||path==='/api/ai-chat'||path==='/api/ai-conversation'||path==='/api/ai-conversion'||path==='/api/rfq'&&req.method==='POST'||path.startsWith('/api/media/')&&req.method==='GET');
       if(['/api/ai-chat','/api/ai-conversation','/api/ai-conversion'].includes(path)&&req.headers.authorization)assert(user,401,'انتهت الجلسة / Session expired');
-      if(path==='/api/state'){
+      if(path==='/api/rfq'){
+        result=await rfqRoute(user,req,body,url);
+      }
+      else if(path==='/api/state'){
         assert(req.method==='GET',405);
         // Keep authenticated state separate from publicly cached storefront data.
         // An anonymous cache hit here must never sign out a newly logged-in user.
