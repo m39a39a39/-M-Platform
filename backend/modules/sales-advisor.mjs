@@ -56,7 +56,6 @@ export function retrieveSalesEvidence(knowledge,plan={},page={}){
  const productIds=new Set(list(plan.productIds).slice(0,8));
  const categoryIds=new Set(list(plan.categoryIds).slice(0,8));
  const quantity=finite(plan.quantity);
- const quantity=finite(plan.quantity);
  const products=plan.needsProducts?knowledge.products.map(p=>{
   const cats=knowledge.categories.filter(c=>[p.categoryId,p.subcategoryId].includes(c.id));
   const titleScore=score([p.title,p.titleEn,p.sku].join(' '),queries);
