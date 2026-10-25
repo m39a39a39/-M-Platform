@@ -21,6 +21,7 @@ import {submitPaymentReceipt,reviewPaymentReceipt} from './modules/payments.mjs'
 import {manageOrder} from './modules/order-management.mjs';
 import {saveStudio,saveStudioProduct} from './modules/studio.mjs';
 import {createCartOrder} from './modules/cart-orders.mjs';
+import {rfqRoute} from './modules/rfq.mjs';
 import {aiChat} from './modules/ai-chat.mjs';
 import {adminAi,adminAiOverview} from './modules/admin-ai.mjs';
 import {customerConversation,captureGuestLead,adminConversationList,adminConversationRead,adminConversationAction} from './modules/ai-conversations.mjs';
@@ -31,7 +32,9 @@ const normalizeOrigin=value=>String(value||'').trim().replace(/\/$/,'');
 const extraWebOrigins=()=>new Set(String(process.env.APP_ORIGINS||'').split(',').map(normalizeOrigin).filter(Boolean));
 export const allowedWebOrigin=(origin,primaryOrigin)=>{
   const normalized=normalizeOrigin(origin),primary=normalizeOrigin(primaryOrigin);
-  return !!normalized&&(normalized===primary||extraWebOrigins().has(normalized));
+  const previewHost=process.env.VERCEL_ENV==='preview'&&(process.env.VERCEL_BRANCH_URL||process.env.VERCEL_URL);
+  const previewOrigin=previewHost?'https://'+previewHost:'';
+  return !!normalized&&(normalized===primary||normalized===previewOrigin||extraWebOrigins().has(normalized));
 };
 const nativeOrigin=req=>NATIVE_ORIGINS.has(String(req.headers.origin||''));
 const setNativeCors=(req,res,isV1)=>{
@@ -80,9 +83,12 @@ export default async function handler(req,res){
     if(path.startsWith('/api/auth/')){
       assert(req.method==='POST',405);result=await authRoute(path.split('/').at(-1),req,res,body);
     }else{
-      const user=await identify(req,res,path==='/api/state'||path==='/api/ai-chat'||path==='/api/ai-conversation'||path==='/api/ai-conversion'||path.startsWith('/api/media/')&&req.method==='GET');
+      const user=await identify(req,res,path==='/api/state'||path==='/api/ai-chat'||path==='/api/ai-conversation'||path==='/api/ai-conversion'||path==='/api/rfq'&&req.method==='POST'||path.startsWith('/api/media/')&&req.method==='GET');
       if(['/api/ai-chat','/api/ai-conversation','/api/ai-conversion'].includes(path)&&req.headers.authorization)assert(user,401,'انتهت الجلسة / Session expired');
-      if(path==='/api/state'){
+      if(path==='/api/rfq'){
+        result=await rfqRoute(user,req,body,url);
+      }
+      else if(path==='/api/state'){
         assert(req.method==='GET',405);
         // Keep authenticated state separate from publicly cached storefront data.
         // An anonymous cache hit here must never sign out a newly logged-in user.
@@ -133,7 +139,7 @@ export default async function handler(req,res){
         else if(path==='/api/uploads')result=await upload(user,body);
         else if(path==='/api/payment-receipts')result=await submitPaymentReceipt(user,body);
         else if(path==='/api/payment-review')result=await reviewPaymentReceipt(user,body);
-        else if(path==='/api/cart-orders')result=await createCartOrder(user,body);
+        else if(path==='/api/cart-orders')throw new HttpError(410,'توقفت طلبات الشراء المباشر. استخدم قائمتي لإرسال طلب عرض سعر. / Direct checkout is disabled. Use My List to request a quote.');
         else if(path==='/api/ai-conversations')result=await adminConversationAction(user,body);
         else if(path==='/api/notifications/read')result=await markNotificationsRead(user,body);
         else if(path==='/api/push/register')result=await registerPushDevice(user,body);

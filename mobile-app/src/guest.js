@@ -11,7 +11,8 @@ const API=String(import.meta.env?.VITE_API_ORIGIN||browserOrigin||'https://www.i
 const storefrontStylesReady=import('./storefront-styles.js');
 const $=id=>document.getElementById(id);
 const mediaCache=new Map();
-const GUEST_CART_KEY='m-platform.guest-cart.v1';
+const GUEST_CART_KEY='imsg.my-list.v1';
+const LEGACY_CART_KEY='m-platform.guest-cart.v1';
 const POST_AUTH_KEY='m-platform.post-auth-action.v1';
 const PAGE_SIZE=20;
 const MEDIA_CONCURRENCY=6;
@@ -48,16 +49,16 @@ let cartItems=[];
 
 const text={
   ar:{
-    tagline:'تسوق المنتجات أو أرسل طلب توريد.',eyebrow:'منصة شراء وتوريد موثوقة',title:'تسوق المنتجات أو أرسل طلب توريد.',
+    tagline:'تصفح المنتجات واطلب عرض سعر.',eyebrow:'منصة شراء وتوريد موثوقة',title:'تصفح المنتجات واطلب عرض سعر.',
     subtitle:'منصة آمنة تربطك بموردين مؤهلين، بينما نتولى مراجعة العروض، التحقق من البضاعة، الترجمة، الشحن الموثوق، ومتابعة الضمان.',
     browse:'تصفح المنتجات',login:'تسجيل الدخول',customer:'إنشاء حساب عميل',supplier:'إنشاء حساب مورد',kicker:'تصفح دون حساب',offers:'المنتجات',
     reload:'تحديث',loading:'جارٍ تحميل المنتجات...',empty:'لا توجد منتجات منشورة حاليًا.',price:'السعر',unitPrice:'سعر الحبة',moq:'الحد الأدنى',
     production:'الإنتاج',days:'يوم',stock:'المخزون',details:'تفاصيل المنتج',back:'العودة للرئيسية',error:'تعذر تحميل المنتجات. تحقق من اتصال الإنترنت.',
-    previous:'السابق',next:'التالي',page:'صفحة',companyDescription:'تسوق المنتجات وتابع مشترياتك وطلبات التوريد.',
+    previous:'السابق',next:'التالي',page:'صفحة',companyDescription:'تصفح كتالوج IMSG وأرسل طلب عرض سعر بسهولة دون تسجيل.',
     contact:'تواصل معنا',copyright:'© 2026 IMSG — جميع الحقوق محفوظة',allCategories:'الكل',supplyCountry:'بلد التوريد',allCountries:'الكل',
-    search:'ابحث عن منتج أو SKU',quantity:'الكمية',productTotal:'إجمالي هذا المنتج',addCart:'إضافة إلى السلة',updateCart:'تحديث الكمية في السلة',
-    added:'تمت إضافة المنتج إلى السلة.',cart:'سلة الطلب',products:'منتجات',total:'الإجمالي',grandTotal:'الإجمالي الكلي',remove:'حذف',
-    clearCart:'إفراغ السلة',submitOrder:'إرسال الطلب',emptyCart:'السلة فارغة. أضف منتجات من الصفحة الرئيسية.',
+    search:'ابحث عن منتج أو SKU',quantity:'الكمية',productTotal:'إجمالي هذا المنتج',addCart:'أضف إلى قائمتي',updateCart:'تحديث الكمية في قائمتي',
+    added:'تمت إضافة المنتج إلى قائمتي.',cart:'قائمتي',products:'منتجات',total:'الإجمالي',grandTotal:'الإجمالي الكلي',remove:'حذف',
+    clearCart:'إفراغ قائمتي',submitOrder:'طلب عرض سعر',emptyCart:'قائمتي فارغة. أضف منتجات من الصفحة الرئيسية.',
     requestTitle:'أرسل طلب جديد',requestDescription:'إذا لم تجد المنتج المناسب، سجّل الدخول وأرسل مواصفاتك.',requestButton:'+ أرسل طلب جديد',
     authCartTitle:'سجّل الدخول لإرسال الطلب',authCartText:'سجّل الدخول أو أنشئ حساب عميل لإرسال الطلب. ستبقى المنتجات والكميات الموجودة في السلة محفوظة.',
     authRequestTitle:'سجّل الدخول لإرسال طلب جديد',authRequestText:'لإرسال مواصفات منتج غير موجود، سجّل الدخول أو أنشئ حساب عميل.',
@@ -65,16 +66,16 @@ const text={
     maxProducts:'الحد الأقصى 10 منتجات في الطلب الواحد.',invalidQty:'تحقق من الكمية والحد الأدنى والمخزون.'
   },
   en:{
-    tagline:'Shop products or send a sourcing request.',eyebrow:'Trusted sourcing platform',title:'Shop products or send a sourcing request.',
+    tagline:'Browse products and request a quote.',eyebrow:'Trusted sourcing platform',title:'Browse products and request a quote.',
     subtitle:'A secure platform that connects you with qualified suppliers while we handle offer review, product verification, translation, reliable shipping, and warranty follow-up.',
     browse:'Browse products',login:'Sign in',customer:'Create customer account',supplier:'Create supplier account',kicker:'Browse without an account',offers:'Products',
     reload:'Refresh',loading:'Loading products...',empty:'No products are currently published.',price:'Price',unitPrice:'Unit price',moq:'MOQ',
     production:'Production',days:'days',stock:'Stock',details:'Product details',back:'Back to home',error:'Could not load products. Check your internet connection.',
-    previous:'Previous',next:'Next',page:'Page',companyDescription:'Shop products and track your purchases and sourcing requests.',
+    previous:'Previous',next:'Next',page:'Page',companyDescription:'Browse the IMSG B2B catalog and request quotations without an account.',
     contact:'Contact us',copyright:'© 2026 IMSG — All rights reserved.',allCategories:'All',supplyCountry:'Supply country',allCountries:'All',
-    search:'Search products or SKU',quantity:'Quantity',productTotal:'This product total',addCart:'Add to cart',updateCart:'Update quantity in cart',
-    added:'Product added to cart.',cart:'Order cart',products:'products',total:'Total',grandTotal:'Grand total',remove:'Remove',
-    clearCart:'Clear cart',submitOrder:'Submit order',emptyCart:'Your cart is empty. Add products from the home page.',
+    search:'Search products or SKU',quantity:'Quantity',productTotal:'This product total',addCart:'Add to my list',updateCart:'Update quantity in my list',
+    added:'Added to my list.',cart:'My list',products:'products',total:'Total',grandTotal:'Grand total',remove:'Remove',
+    clearCart:'Clear my list',submitOrder:'Request a quote',emptyCart:'My list is empty. Add products from the home page.',
     requestTitle:'Send a new request',requestDescription:'If you cannot find the right product, sign in and send your specifications.',requestButton:'+ Send new request',
     authCartTitle:'Sign in to submit the order',authCartText:'Sign in or create a customer account to submit the order. Your cart products and quantities will be preserved.',
     authRequestTitle:'Sign in to send a new request',authRequestText:'To request a product that is not listed, sign in or create a customer account.',
@@ -105,8 +106,8 @@ const filteredOffers=()=>{
 function loadCart(){
   cartItems=[];
   try{
-    const rows=JSON.parse(localStorage.getItem(GUEST_CART_KEY)||'[]');
-    if(Array.isArray(rows))cartItems=rows.filter(x=>x&&typeof x.offerId==='string'&&Number.isInteger(Number(x.quantity))&&Number(x.quantity)>0).slice(0,10).map(x=>({offerId:x.offerId,quantity:Number(x.quantity)}));
+    const rows=JSON.parse(localStorage.getItem(GUEST_CART_KEY)||localStorage.getItem(LEGACY_CART_KEY)||'[]');
+    if(Array.isArray(rows))cartItems=rows.filter(x=>x&&typeof x.offerId==='string'&&Number.isInteger(Number(x.quantity))&&Number(x.quantity)>0).slice(0,100).map(x=>({offerId:x.offerId,quantity:Number(x.quantity),snapshot:x.snapshot||null}));
   }catch{}
   updateCartBadge();
 }
@@ -121,29 +122,31 @@ function updateCartBadge(){
 }
 function cartRows(){
   return cartItems.map(item=>{
-    const offer=publishedOffers().find(o=>o.id===item.offerId);if(!offer)return null;
-    const quantity=Number(item.quantity),unitPrice=tierPrice(offer,quantity);
-    return {item,offer,quantity,unitPrice,total:quantity*unitPrice,currency:String(offer.currency||'').toUpperCase()};
+    const offer=publishedOffers().find(o=>o.id===item.offerId)||item.snapshot;
+    if(!offer)return null;
+    return {item,offer,quantity:Number(item.quantity)};
   }).filter(Boolean);
 }
-function cartCurrency(){return cartRows()[0]?.currency||'';}
 function setCartQuantity(offerId,quantity){
-  const item=cartItems.find(x=>x.offerId===offerId),offer=publishedOffers().find(o=>o.id===offerId);if(!item||!offer)return false;
-  const q=Number(quantity),moq=Math.max(1,Math.ceil(Number(offer.moq)||1)),stock=Number(offer.stock);
-  if(!Number.isInteger(q)||q<moq||(Number.isFinite(stock)&&stock>0&&q>stock))return false;
+  const item=cartItems.find(x=>x.offerId===offerId);
+  const offer=publishedOffers().find(o=>o.id===offerId)||item?.snapshot;
+  if(!item||!offer)return false;
+  const q=Number(quantity),moq=Math.max(1,Math.ceil(Number(offer.moq)||1));
+  if(!Number.isSafeInteger(q)||q<moq||q>1000000000)return false;
   item.quantity=q;saveCart();return true;
 }
 function addToCart(offer,quantity){
-  const q=Number(quantity),moq=Math.max(1,Math.ceil(Number(offer?.moq)||1)),stock=Number(offer?.stock);
   if(!offer||offer.status!=='published')throw new Error(t('empty'));
-  if(!Number.isInteger(q)||q<moq||(Number.isFinite(stock)&&stock>0&&q>stock))throw new Error(t('invalidQty'));
-  const current=cartCurrency(),currency=String(offer.currency||'').toUpperCase();
-  if(current&&current!==currency)throw new Error(t('sameCurrency'));
   const existing=cartItems.find(x=>x.offerId===offer.id);
-  if(!existing&&cartItems.length>=10)throw new Error(t('maxProducts'));
-  if(existing)existing.quantity=q;else cartItems.push({offerId:offer.id,quantity:q});
+  const q=quantity==null&&existing?existing.quantity:Number(quantity??offer.moq??1);
+  const moq=Math.max(1,Math.ceil(Number(offer.moq)||1));
+  if(!Number.isSafeInteger(q)||q<moq||q>1000000000)throw new Error(t('invalidQty'));
+  if(!existing&&cartItems.length>=100)throw new Error(lang==='en'?'The limit is 100 products per quote.':'الحد الأقصى 100 منتج في طلب عرض السعر.');
+  const snapshot={id:offer.id,status:'published',sku:offer.sku||'',product:offer.product||'',moq:offer.moq||1,translation:offer.translation||{},images:(offer.images||[]).slice(0,1)};
+  if(existing){existing.quantity=q;existing.snapshot=snapshot;}
+  else cartItems.push({offerId:offer.id,quantity:q,snapshot});
   saveCart();
-  aiChatSignal('cart_add',{productId:offer.id,productSku:offer.sku||'',productTitle:title(offer),price:Number(offer.unitPrice)||0,currency:offer.currency||'',moq:Number(offer.moq)||0,quantity:q,cartCount:cartItems.length});
+  aiChatSignal('cart_add',{productId:offer.id,productSku:offer.sku||'',productTitle:title(offer),moq:Number(offer.moq)||0,quantity:q,cartCount:cartItems.length});
 }
 
 function renderCategories(){
@@ -281,7 +284,7 @@ function mountGuestStore(){
  catalogNode('guestProductSearch').placeholder=t('search');catalogNode('guestProductSearch').setAttribute('aria-label',t('search'));catalogNode('guestPrevPage').textContent=t('previous');catalogNode('guestNextPage').textContent=t('next');
  catalog.querySelector('.guest-product-search').hidden=!h.showSearch;
  catalogNode('guestCategoryFilters').hidden=!h.showCategories;catalogNode('guestSubcategoryFilters').hidden=!h.showCategories;catalogNode('guestSupplyCountryFilters').hidden=!h.showCountries;
- bindStorefront(host,state,{chrome:false,observe:aiChatSignal,money,hydrate:hydrateImages,product:openOffer,add:(id,quantity)=>{try{const p=publishedOffers().find(p=>p.id===id);addToCart(p,(quantity??(Number(p.moq)||1))+(cartItems.find(x=>x.offerId===id)?.quantity||0));showGuestToast(t('added'));}catch(e){showGuestToast(e.message);}},page:(title,html)=>{$('modalTitle').textContent=title;$('modalKicker').textContent='';$('modalBody').innerHTML=html;$('modal').classList.remove('hidden');},category:id=>{category=id;renderOffers();},catalog:()=>catalog.isConnected&&catalog.scrollIntoView({behavior:'smooth'}),action:action=>{if(action==='cart')openGuestCart();if(action==='login')showLogin();if(action==='request')requireCustomerAuth('new-request');if(action==='register-client')register('client');if(action==='register-supplier')register('supplier');if(action==='language')toggleLanguage();if(action==='home')host.scrollIntoView({behavior:'smooth'});}});
+ bindStorefront(host,state,{chrome:false,observe:aiChatSignal,money,hydrate:hydrateImages,product:openOffer,add:(id,quantity)=>{try{const p=publishedOffers().find(p=>p.id===id);addToCart(p,quantity);showGuestToast(t('added'));}catch(e){showGuestToast(e.message);}},page:(title,html)=>{$('modalTitle').textContent=title;$('modalKicker').textContent='';$('modalBody').innerHTML=html;$('modal').classList.remove('hidden');},category:id=>{category=id;renderOffers();},catalog:()=>catalog.isConnected&&catalog.scrollIntoView({behavior:'smooth'}),action:action=>{if(action==='cart')openGuestCart();if(action==='login')showLogin();if(action==='request')openGuestCart();if(action==='register-client')register('client');if(action==='register-supplier')register('supplier');if(action==='language')toggleLanguage();if(action==='home')host.scrollIntoView({behavior:'smooth'});}});
  hydrateImages(host);
 }
 async function load(){
@@ -294,7 +297,8 @@ async function load(){
       const next=await api('/api/v1/state'+(query.size?'?'+query.toString():''));
       await storefrontStylesReady;
       state=next;lastLoadedAt=Date.now();writeCachedPublicState(next);
-      const valid=new Set(publishedOffers().map(o=>o.id));cartItems=cartItems.filter(x=>valid.has(x.offerId));saveCart();
+      // Keep My List across route-scoped product fetches. Route changes are not deletions.
+       for(const row of cartItems){const found=publishedOffers().find(x=>x.id===row.offerId);if(found)row.snapshot={id:found.id,status:'published',sku:found.sku||'',product:found.product||'',moq:found.moq||1,translation:found.translation||{},images:(found.images||[]).slice(0,1)};}saveCart();
       offersPage=1;renderOffers();
     }catch(error){
       console.error(error);
@@ -323,42 +327,64 @@ async function requireCustomerAuth(action){
   $('modalBody').innerHTML=`<section class="guest-auth-required"><p>${esc(isCart?t('authCartText'):t('authRequestText'))}</p><div class="guest-auth-required-actions"><button class="secondary-btn" type="button" data-guest-auth-login>${esc(t('continueLogin'))}</button><button class="primary-btn" type="button" data-guest-auth-register>${esc(t('createClient'))}</button></div></section>`;
   $('modal').classList.remove('hidden');
 }
+let pendingRfqKey='';
+function quoteButtonLabel(){return lang==='en'?'Request a quote':'طلب عرض سعر';}
 async function openGuestCart(){
-  await ensureGuestUiStyles();
-  const rows=cartRows();
-  aiChatSignal('cart_open',{cartCount:rows.length,cartTotal:rows.reduce((sum,row)=>sum+Number(row.total||0),0),currency:rows[0]?.currency||''});
-  $('modalKicker').textContent=rows.length?`${rows.length} ${t('products')} · ${rows[0].currency}`:'IMSG';$('modalTitle').textContent=t('cart');
-  if(!rows.length){
-    $('modalBody').innerHTML=`<div class="empty-state cart-empty"><span>🛒</span><p>${esc(t('emptyCart'))}</p></div>`;$('modal').classList.remove('hidden');return;
-  }
-  const currency=rows[0].currency,total=rows.reduce((sum,row)=>sum+row.total,0);
-  $('modalBody').innerHTML=`<form id="guestCartForm" class="cart-checkout-form">
-    <div class="cart-table"><div class="cart-table-head" aria-hidden="true"><span>${esc(lang==='ar'?'صورة المنتج':'Image')}</span><span>${esc(lang==='ar'?'اسم المنتج':'Product')}</span><span>${esc(t('unitPrice'))}</span><span>${esc(t('quantity'))}</span><span>${esc(t('total'))}</span><span>${esc(t('remove'))}</span></div>
-    <div class="cart-lines">${rows.map(row=>{
-      const o=row.offer,image=(o.images||[])[0],stock=Number(o.stock),maxAttr=Number.isFinite(stock)&&stock>0?` max="${esc(Math.floor(stock))}"`:'';
-      return `<article class="cart-line" data-guest-cart-line="${esc(o.id)}">
-        <div class="cart-line-image">${image?`<img alt="" data-guest-cart-media="${esc(image)}">`:'<div>M</div>'}</div>
-        <div class="cart-line-product"><strong>${esc(title(o))}</strong><small>MOQ ${esc(o.moq||'—')}</small></div>
-        <div class="cart-line-price"><span>${esc(t('unitPrice'))}</span><strong>${money(row.unitPrice,row.currency)}</strong></div>
-        <label class="cart-line-qty"><span>${esc(t('quantity'))}</span><input type="number" data-guest-cart-qty="${esc(o.id)}" min="${esc(Math.max(1,Math.ceil(Number(o.moq)||1)))}" step="1" value="${esc(row.quantity)}"${maxAttr}></label>
-        <div class="cart-line-total"><span>${esc(t('total'))}</span><strong>${money(row.total,row.currency)}</strong></div>
-        <button type="button" class="danger-text cart-line-remove" data-guest-cart-remove="${esc(o.id)}">${esc(t('remove'))}</button>
-      </article>`;
-    }).join('')}</div></div>
-    <section class="cart-summary"><div><span>${esc(lang==='ar'?'عدد المنتجات':'Products')}</span><strong>${rows.length}</strong></div><div class="cart-grand-total"><span>${esc(t('grandTotal'))}</span><strong>${money(total,currency)}</strong></div></section>
-    <div class="cart-actions"><button type="button" class="secondary-btn" data-guest-cart-clear>${esc(t('clearCart'))}</button><button class="primary-btn" type="submit">${esc(t('submitOrder'))}</button></div>
-  </form>`;
-  $('modal').classList.remove('hidden');hydrateImages($('modalBody'),'data-guest-cart-media');
-  $('modalBody').querySelectorAll('[data-guest-cart-qty]').forEach(input=>input.addEventListener('change',()=>{
-    if(!setCartQuantity(input.dataset.guestCartQty,Number(input.value))){showGuestToast(t('invalidQty'));openGuestCart();return;}openGuestCart();
-  }));
-  $('modalBody').querySelectorAll('[data-guest-cart-remove]').forEach(button=>button.addEventListener('click',()=>{cartItems=cartItems.filter(x=>x.offerId!==button.dataset.guestCartRemove);saveCart();openGuestCart();}));
-  $('modalBody').querySelector('[data-guest-cart-clear]')?.addEventListener('click',()=>{cartItems=[];saveCart();openGuestCart();});
-  $('guestCartForm')?.addEventListener('submit',e=>{
-    e.preventDefault();
-    aiChatSignal('checkout_started',{cartCount:rows.length,cartTotal:total,currency});
-    requireCustomerAuth('open-cart');
-  });
+ await ensureGuestUiStyles();
+ const rows=cartRows();
+ $('modalKicker').textContent='IMSG';
+ $('modalTitle').textContent=t('cart');
+ if(!rows.length){$('modalBody').innerHTML='<div class="empty-state cart-empty"><p>'+esc(t('emptyCart'))+'</p></div>';$('modal').classList.remove('hidden');return;}
+ $('modalBody').innerHTML='<div class="imsg-rfq-list">'+rows.map(row=>{
+  const o=row.offer,image=o.images?.[0]||'',moq=Math.max(1,Math.ceil(Number(o.moq)||1));
+  return '<article class="imsg-rfq-row"><a href="/?product='+encodeURIComponent(row.item.offerId)+'">'+(image?'<img alt="" src="'+esc(image)+'" loading="lazy">':'')+'</a><div class="imsg-rfq-product"><strong>'+esc(title(o))+'</strong><small>'+esc(o.sku||'')+' · MOQ '+moq+'</small><label>'+esc(t('quantity'))+' <button type="button" data-guest-cart-step="-1" data-guest-cart-item="'+esc(row.item.offerId)+'" aria-label="'+(lang==='en'?'Decrease quantity':'تقليل الكمية')+'">−</button><input type="number" data-guest-cart-qty="'+esc(row.item.offerId)+'" min="'+moq+'" value="'+row.quantity+'" step="1"><button type="button" data-guest-cart-step="1" data-guest-cart-item="'+esc(row.item.offerId)+'" aria-label="'+(lang==='en'?'Increase quantity':'زيادة الكمية')+'">+</button></label></div><button type="button" data-guest-cart-remove="'+esc(row.item.offerId)+'" class="danger-text">'+esc(t('remove'))+'</button></article>';
+ }).join('')+'</div><div class="cart-actions"><button type="button" class="secondary-btn" data-guest-cart-clear>'+esc(t('clearCart'))+'</button><button type="button" class="primary-btn" data-rfq-continue>'+esc(quoteButtonLabel())+'</button></div>';
+ $('modal').classList.remove('hidden');
+ $('modalBody').querySelectorAll('[data-guest-cart-qty]').forEach(input=>input.addEventListener('change',()=>{
+  if(!setCartQuantity(input.dataset.guestCartQty,Number(input.value))){showGuestToast(t('invalidQty'));}void openGuestCart();
+ }));
+ $('modalBody').querySelectorAll('[data-guest-cart-step]').forEach(button=>button.addEventListener('click',()=>{const item=cartItems.find(x=>x.offerId===button.dataset.guestCartItem);if(!item)return;const changed=setCartQuantity(item.offerId,item.quantity+Number(button.dataset.guestCartStep));if(!changed)showGuestToast(t('invalidQty'));void openGuestCart();}));
+ $('modalBody').querySelectorAll('[data-guest-cart-remove]').forEach(button=>button.addEventListener('click',()=>{cartItems=cartItems.filter(x=>x.offerId!==button.dataset.guestCartRemove);saveCart();void openGuestCart();}));
+ $('modalBody').querySelector('[data-guest-cart-clear]').addEventListener('click',()=>{cartItems=[];saveCart();void openGuestCart();});
+ $('modalBody').querySelector('[data-rfq-continue]').addEventListener('click',openGuestRfqForm);
+}
+async function openGuestRfqForm(){
+ await ensureGuestUiStyles();
+ const rows=cartRows();if(!rows.length){void openGuestCart();return;}
+ const ar=lang==='ar',label=(a,e)=>ar?a:e;
+ $('modalKicker').textContent=t('cart');$('modalTitle').textContent=quoteButtonLabel();
+ $('modalBody').innerHTML='<form id="imsg-rfq-form" class="form-stack imsg-rfq-form">'+
+ '<div class="imsg-rfq-summary"><strong>'+label('المنتجات المختارة','Selected products')+' ('+rows.length+')</strong><div>'+rows.map(x=>'<div class="imsg-rfq-summary-line">'+(x.offer.images?.[0]?'<img alt="" src="'+esc(x.offer.images[0])+'" loading="lazy">':'')+'<span>'+esc(title(x.offer))+' · '+esc(x.offer.sku||'')+' — '+x.quantity+'</span></div>').join('')+'</div></div>'+
+ '<label>'+label('الاسم *','Name *')+'<input name="name" autocomplete="name" maxlength="140" minlength="2" required></label>'+
+ '<label>'+label('رقم واتساب *','WhatsApp number *')+'<div class="imsg-rfq-phone"><select name="dial" aria-label="'+label('مفتاح الدولة','Country code')+'"><option value="+966">+966</option><option value="+971">+971</option><option value="+967">+967</option><option value="+965">+965</option><option value="+974">+974</option><option value="+968">+968</option><option value="+973">+973</option><option value="+20">+20</option><option value="+86">+86</option><option value="+60">+60</option><option value="+1">+1</option><option value="+44">+44</option></select><input name="phone" type="tel" inputmode="tel" autocomplete="tel-national" placeholder="5XXXXXXXX" required></div></label>'+
+ '<label>'+label('الدولة *','Country *')+'<input name="country" maxlength="120" required value="'+label('السعودية','Saudi Arabia')+'"></label>'+
+ '<label>'+label('اسم الشركة أو المتجر (اختياري)','Company or store (optional)')+'<input name="company" maxlength="200"></label>'+
+ '<label>'+label('ملاحظات إضافية (اختياري)','Additional notes (optional)')+'<textarea name="notes" rows="3" maxlength="2000"></textarea></label>'+
+ '<p class="imsg-rfq-error" data-rfq-message role="status" aria-live="polite"></p><button class="primary-btn" type="submit">'+label('إرسال طلب عرض السعر','Submit quote request')+'</button></form>';
+ $('modal').classList.remove('hidden');
+ $('imsg-rfq-form').addEventListener('submit',async event=>{
+  event.preventDefault();
+  const form=event.currentTarget,button=form.querySelector('[type="submit"]'),message=form.querySelector('[data-rfq-message]');
+  if(button.disabled)return;
+  const fd=new FormData(form);
+  const national=String(fd.get('phone')||'').replace(/[\s()\-.]/g,'').replace(/^0+/,'');
+  const whatsapp=String(fd.get('dial'))+national;
+  if(!/^\+[1-9]\d{7,14}$/.test(whatsapp)){message.textContent=label('أدخل رقم واتساب صحيحًا','Enter a valid WhatsApp number');return;}
+  if(!pendingRfqKey)pendingRfqKey=crypto.randomUUID();
+  button.disabled=true;message.textContent=label('جارٍ إرسال الطلب...','Sending request...');
+  try{
+   const response=await fetch(API+'/api/v1/rfq',{method:'POST',credentials:'omit',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+    customer:{name:fd.get('name'),whatsapp,country:fd.get('country'),company:fd.get('company')},
+    notes:fd.get('notes'),idempotencyKey:pendingRfqKey,source:'website',items:cartRows().map(x=>({offerId:x.item.offerId,quantity:x.quantity}))
+   })});
+   let result={};try{result=await response.json();}catch{}
+   if(!response.ok||!result.number)throw new Error(result.error||label('تعذر حفظ الطلب، حاول مرة أخرى','Unable to save the request'));
+   cartItems=[];saveCart();pendingRfqKey='';
+   $('modalKicker').textContent='IMSG';$('modalTitle').textContent=label('تم الإرسال بنجاح','Request received');
+   $('modalBody').innerHTML='<section class="imsg-rfq-success"><h3>'+esc(result.number)+'</h3><p>'+label('تم استلام طلب عرض السعر بنجاح. سيتواصل معك فريق IMSG عبر واتساب قريبًا.','Your quote request was received. The IMSG team will contact you via WhatsApp soon.')+'</p><button type="button" class="primary-btn" data-rfq-finish>'+label('إغلاق','Close')+'</button></section>';
+   $('modalBody').querySelector('[data-rfq-finish]').addEventListener('click',closeModal);
+  }catch(error){message.textContent=error.message||label('تعذر الإرسال','Submission failed');button.disabled=false;}
+ });
 }
 
 $('backToGuestBtn').addEventListener('click',showGuest);
@@ -391,7 +417,7 @@ window.addEventListener('mplatform:view',e=>{
     if(hasWebSession)break;
     try{hasWebSession=!!globalThis[name]?.getItem('m-platform.session.v1');}catch{}
   }
-  const publicWeb=!Capacitor.isNativePlatform()&&!hasWebSession&&!['/customer','/customer.html','/supplier','/supplier.html','/login.html','/reset-password.html','/register-customer.html','/register-supplier.html'].includes(location.pathname);
+  const publicWeb=!Capacitor.isNativePlatform()&&!['/admin','/admin.html','/studio.html','/customer','/customer.html','/supplier','/supplier.html','/login.html','/reset-password.html','/register-customer.html','/register-supplier.html'].includes(location.pathname);
   if(publicWeb)showView('guestView');
   if(!$('guestView').classList.contains('hidden')){ensureLoaded();scheduleGuestAiChat();}
 })();

@@ -11,8 +11,8 @@ test('customer price and MOQ questions are answered from catalog without an AI c
     {id:'p2',status:'published',sku:'MG-834',unitPrice:30,currency:'SAR',moq:20,stock:10,leadTime:4,translation:{titleAr:'سماعة MG-834',titleEn:'MG-834 Earbuds'}}
   ],settings:{}};
   const reply=directCustomerAnswer(state,null,'كم سعر MG-825 وأقل كمية؟','ar');
-  assert.match(reply,/28 SAR/);
-  assert.match(reply,/20/);
+  assert.match(reply,/قائمتي|طلب عرض سعر/);
+  assert.doesNotMatch(reply,/28 SAR/);
 });
 
 test('company name and address are answered locally from active policy content',()=>{
@@ -108,8 +108,8 @@ test('local-first product discovery answers from catalog without needing prose g
   const search=customerProductSearch(state,query,'ar');
   const reply=directCustomerAnswer(state,null,'أريد كابل رخيص','ar',{},query,search,true);
   assert.equal(search.recommendations[0]?.id,'cheap');
-  assert.match(reply,/أرخص خيار مطابق/);
-  assert.match(reply,/2.5 SAR/);
+  assert.match(reply,/قائمتي|طلب عرض سعر/);
+  assert.doesNotMatch(reply,/2.5 SAR/);
 });
 
 test('typo-tolerant taxonomy understands power bank wording variants and sorts cheapest locally',()=>{
@@ -360,8 +360,8 @@ test('cheapest price at a requested quantity uses wholesale tiers',()=>{
 
   const withQty=customerProductRecommendations(state,'أريد أرخص شاحن حائط 20W عدد 100','ar');
   assert.equal(withQty[0]?.id,'tiered');
-  assert.equal(withQty[0]?.price,5);
-  assert.equal(withQty[0]?.priceQuantity,100);
+  assert.equal('price' in withQty[0],false);
+  assert.equal('priceQuantity' in withQty[0],false);
 });
 
 test('technical specs can make a generically titled product match an exact watt request',()=>{
@@ -384,7 +384,7 @@ test('cheapest Bluetooth headset request excludes cheaper transmitters and recei
   ]};
   const rows=customerProductRecommendations(state,'اريد ارخص سماعة بلوتوث','ar');
   assert.equal(rows[0]?.id,'tws1');
-  assert.equal(rows[0]?.price,9.5);
+  assert.equal('price' in rows[0],false);
   assert.ok(rows.every(x=>['tws1','tws2'].includes(x.id)));
 });
 
@@ -496,8 +496,8 @@ test('quantity followup after a charger request uses the matching wholesale tier
   const query=resolveCustomerProductQuery(state,'100 حبة',[{role:'user',content:'أريد أرخص شاحن حائط 20W'}]);
   const rows=customerProductRecommendations(state,query,'ar');
   assert.equal(rows[0]?.id,'tiered');
-  assert.equal(rows[0]?.price,5);
-  assert.equal(rows[0]?.priceQuantity,100);
+  assert.equal('price' in rows[0],false);
+  assert.equal('priceQuantity' in rows[0],false);
   assert.ok(rows.every(x=>x.id!=='cable'));
 });
 
@@ -527,9 +527,9 @@ test('AI context and product cards share the exact same ranked first product and
   const search=customerProductSearch(state,'أريد أرخص شاحن حائط 20W عدد 100','ar');
   assert.equal(search.context[0]?.id,'tiered');
   assert.equal(search.recommendations[0]?.id,'tiered');
-  assert.equal(search.context[0]?.price,5);
-  assert.equal(search.recommendations[0]?.price,5);
+  assert.equal('price' in search.context[0],false);
+  assert.equal('price' in search.recommendations[0],false);
   assert.equal(search.context[0]?.technicalSpecs,'PD 20W USB-C');
   assert.equal(search.context[0]?.options,'UK plug');
-  assert.deepEqual(search.context[0]?.tiers,[{min:100,price:5}]);
+  assert.equal('tiers' in search.context[0],false);
 });

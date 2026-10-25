@@ -437,12 +437,7 @@ function rankedProductItems(state,query,signals={}){
 }
 function productContextFromRows(rows,intent){
   return rows.map(({item,effectivePrice})=>{
-    const title=titlePair(item),description=descriptionPair(item),basePrice=Number.isFinite(Number(item.unitPrice))?Number(item.unitPrice):null;
-    const tiers=Array.isArray(item?.tiers)?item.tiers
-      .map(t=>({min:Number(t?.min),price:Number(t?.price)}))
-      .filter(t=>Number.isFinite(t.min)&&Number.isFinite(t.price)&&t.min>0)
-      .sort((a,b)=>a.min-b.min)
-      .slice(0,20):[];
+    const title=titlePair(item),description=descriptionPair(item);
     return {
       id:clamp(item.id,90),
       number:item.displayNo||'',
@@ -452,11 +447,7 @@ function productContextFromRows(rows,intent){
       description,
       technicalSpecs:clamp(item.technicalSpecs,1200),
       options:clamp(item.options,800),
-      price:intent.quantity&&Number.isFinite(effectivePrice)?effectivePrice:basePrice,
-      basePrice,
       requestedQuantity:intent.quantity||null,
-      tiers,
-      currency:clamp(item.currency,12),
       moq:item.moq??null,
       stock:isUnlimitedStock(item)?null:(item.stock??null),
       stockUnlimited:isUnlimitedStock(item),
@@ -470,15 +461,11 @@ function productContextFromRows(rows,intent){
 function productRecommendationsFromRows(rows,intent,language){
   return rows.map(({item,effectivePrice})=>{
     const titles=titlePair(item),image=Array.isArray(item.images)?String(item.images[0]||''):'';
-    const basePrice=Number.isFinite(Number(item.unitPrice))?Number(item.unitPrice):null;
     return {
       id:clamp(item.id,90),
       sku:clamp(item.sku,100),
       title:language==='en'?(titles.en||titles.ar):(titles.ar||titles.en),
-      price:intent.quantity&&Number.isFinite(effectivePrice)?effectivePrice:basePrice,
-      basePrice,
-      priceQuantity:intent.quantity||null,
-      currency:clamp(item.currency||'SAR',12),
+
       moq:item.moq??null,
       image:clamp(image,1200),
       href:'/?product='+encodeURIComponent(String(item.id||''))
@@ -607,13 +594,9 @@ function directProductFact(state,message,language,signals={},productQuery=messag
   if(confidence<1||confidence<100&&confidence<=secondConfidence)return null;
   const title=(language==='en'?first.title?.en:first.title?.ar)||first.sku||'Product';
   const facts=[];
-  if(wantsPrice&&Number.isFinite(Number(first.price))){
-    const quantity=Number(first.requestedQuantity)||0;
-    const label=quantity
-      ?(language==='en'?('Price at '+quantity+' pcs: '):('السعر لـ '+quantity+' حبة: '))
-      :(language==='en'?'Price: ':'السعر: ');
-    facts.push(label+Number(first.price)+' '+(first.currency||'SAR'));
-  }
+  if(wantsPrice)return language==='en'
+    ?'Add products to My list and submit a quote request. The IMSG team will contact you on WhatsApp.'
+    :'أضف المنتجات إلى «قائمتي» ثم أرسل «طلب عرض سعر»، وسيتواصل معك فريق IMSG عبر واتساب.';
   if(wantsMoq&&first.moq!==undefined&&first.moq!==null&&first.moq!=='')facts.push((language==='en'?'MOQ: ':'الحد الأدنى: ')+first.moq+(language==='en'?'':' قطعة'));
   if(wantsStock){
     if(first.stockUnlimited)facts.push(language==='en'?'Availability: Available to order':'التوفر: متوفر للطلب');
@@ -625,7 +608,6 @@ function directProductFact(state,message,language,signals={},productQuery=messag
 }
 function productCardSummary(card,language){
   const parts=[card?.title||''];
-  if(Number.isFinite(Number(card?.price)))parts.push(Number(card.price)+' '+(card.currency||'SAR'));
   if(card?.moq!==undefined&&card?.moq!==null&&card?.moq!=='')parts.push((language==='en'?'MOQ ':'الحد الأدنى ')+card.moq);
   return parts.filter(Boolean).join(' — ');
 }
@@ -640,15 +622,13 @@ function directProductDiscoveryAnswer(message,language,productSearch){
     return (language==='en'?'Quick comparison: ':'مقارنة سريعة: ')+rows+'.';
   }
   const first=cards[0];
-  if(intent.cheapest&&Number.isFinite(Number(first?.price))){
-    const quantity=Number(first?.priceQuantity)||0;
-    if(language==='en')return (quantity?'At '+quantity+' pcs, the cheapest matching option is ':'The cheapest matching option is ')+first.title+' — '+Number(first.price)+' '+(first.currency||'SAR')+'.';
-    return (quantity?'عند كمية '+quantity+' حبة، أرخص خيار مطابق هو ':'أرخص خيار مطابق حاليًا هو ')+first.title+' — '+Number(first.price)+' '+(first.currency||'SAR')+'.';
-  }
+  if(intent.cheapest)return language==='en'
+    ?'I can compare product specifications, but pricing is available through My list → Request a quote.'
+    :'يمكنني مقارنة المواصفات، أما الأسعار فتُطلب عبر «قائمتي» ← «طلب عرض سعر».';
   if(intent.quantity){
     return language==='en'
-      ?'These are the matching store options with pricing calculated for '+intent.quantity+' pcs where quantity tiers are available.'
-      :'هذه الخيارات المطابقة من المتجر، وتم احتساب سعر كمية '+intent.quantity+' حبة عند توفر شرائح أسعار للكميات.';
+      ?'These are the matching products. Add your quantities to My list to request a quote.'
+      :'هذه المنتجات المطابقة. حدد الكميات في «قائمتي» ثم أرسل طلب عرض سعر.';
   }
   return language==='en'?'These are the best matching options currently available in the store.':'هذه أنسب الخيارات المتوفرة حاليًا في المتجر.';
 }

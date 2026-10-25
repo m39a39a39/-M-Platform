@@ -435,7 +435,7 @@ function updateShell(){
   $('headerRole').textContent=t(role);
   $('appLangBtn').textContent=lang==='ar'?'EN':'AR';
   const homeLabel=document.querySelector('[data-nav="home"]');if(homeLabel)homeLabel.textContent=role==='client'?tr('المتجر','Store'):t('home');
-  if(requestLabel)requestLabel.textContent=role==='supplier'?tr('طلبات الأسعار','Quote requests'):role==='client'?tr('مشترياتي','Purchases'):t('requests');
+  if(requestLabel)requestLabel.textContent=role==='supplier'?tr('طلبات الأسعار','Quote requests'):role==='client'?tr('قائمتي','My list'):tr('طلبات عروض الأسعار','Quote requests');
   if(offersLabel)offersLabel.textContent=['admin','supplier'].includes(role)?tr('المنتجات','Products'):tr('طلبات التوريد','Sourcing requests');
   if(accountLabel)accountLabel.textContent=t('account');
   const chatLabel=document.querySelector('#bottomNav [data-nav="conversations"]');if(chatLabel)chatLabel.textContent=tr('المحادثات','Chats');

@@ -61,8 +61,7 @@ function publicSettingsForView(data={},route={}){
 function publicProductSummary(row){
   const d=row.data||{},translation=d.translation||{},item={id:row.id,displayNo:row.display_no,createdAt:row.created_at,status:'published',
     sku:d.sku||'',translation:{titleAr:translation.titleAr||'',titleEn:translation.titleEn||''},images:Array.isArray(d.images)?d.images.filter(Boolean).slice(0,1):[],
-    country:d.country||'',categoryId:d.categoryId||'',subcategoryId:d.subcategoryId||'',unitPrice:d.unitPrice??'',currency:d.currency||'',moq:d.moq??'',stock:d.stock??'',stockUnlimited:d.stockUnlimited!==false};
-  if(Array.isArray(d.tiers)&&d.tiers.length)item.tiers=d.tiers;
+    country:d.country||'',categoryId:d.categoryId||'',subcategoryId:d.subcategoryId||'',moq:d.moq??'',stock:d.stock??'',stockUnlimited:d.stockUnlimited!==false};
   return compactPublicValue(item)||item;
 }
 export function publicAiProductSummary(row){
@@ -189,13 +188,12 @@ export async function snapshot(user,{productId='',pageId='',category='',q='',aiC
   }
 
   if(user?.role==='client'){
-    [settings,publicOffers,requests,interests]=await Promise.all([
+    // Historical purchases remain in PostgreSQL but are no longer part of
+    // the client-facing B2B RFQ experience or its network response.
+    [settings,publicOffers]=await Promise.all([
       one('settings','site'),
-      rows('public_offers','data->>status=eq.published&data->>deletedAt=is.null'),
-      rows('requests',`owner_id=eq.${user.id}&data->>deletedAt=is.null`),
-      rows('interests',`owner_id=eq.${user.id}`)
+      rows('public_offers','data->>status=eq.published&data->>deletedAt=is.null')
     ]);
-    if(requests.length)quotes=await rows('quotes',`request_id=in.(${inIds(requests.map(r=>r.id))})&data->>status=eq.published&data->>deletedAt=is.null`);
   }else if(user?.role==='supplier'){
     [settings,requests,quotes,publicOffers]=await Promise.all([
       one('settings','site'),
@@ -261,7 +259,13 @@ export async function snapshot(user,{productId='',pageId='',category='',q='',aiC
     return item;
   });
   const responseSettings=user?publicSettings(upgradeSettings(settings.data),{includeKnowledge:aiKnowledge}):publicSettingsForView(settings.data,{pageId,productId,category,q,aiPolicies,aiKnowledge});
-  let responseOffers=publicOffers.map(r=>!user&&r.id!==productId?(aiCatalog?publicAiProductSummary(r):publicProductSummary(r)):anonymous(r,'publicOffers',user));
+  let responseOffers=publicOffers.map(r=>{
+    const item=!user&&r.id!==productId?(aiCatalog?publicAiProductSummary(r):publicProductSummary(r)):anonymous(r,'publicOffers',user);
+    if(!user||user.role==='client'){
+      for(const key of ['unitPrice','price','salePrice','discount','discountPercent','currency','tiers','priceTiers','sampleCost','total','cost'])delete item[key];
+    }
+    return item;
+  });
   if(!user&&!productId&&!pageId&&!category&&!q){
     const storefront=responseSettings.storefront||{},sections=(storefront.sections||[]).filter(section=>section?.visible!==false);
     const collections=storefront.collections||[],selected=new Map();

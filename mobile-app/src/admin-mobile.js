@@ -1,4 +1,6 @@
 import { session } from './session.js';
+import {mountRfqAdmin} from './rfq-admin.js';
+import './rfq-admin.css';
 import { filesToCompressedSources } from './image-upload.js';
 import { downloadInvoicePdf } from './invoice-pdf.js';
 import { categoryRows, subcategoryRows, supplyCountryRows, taxonomyLabel } from './catalog-taxonomy.js';
@@ -583,7 +585,7 @@ function accounts(section='account'){const u=me(),rows=(state?.accounts||[]).fil
  if(['customers','suppliers'].includes(section)){setRoot(section,`<section class="section-block admin-directory"><div class="section-title"><h2>${esc(section==='customers'?tr('العملاء','Customers'):tr('الموردون','Suppliers'))}</h2></div>${search(tr('ابحث بالاسم أو الشركة','Search name or company'))}<div class="list-stack" data-admin-results>${rows.slice(0,100).map(a=>`<button class="admin-account-row" data-admin-account="${esc(a.id)}"><div><strong>${esc(a.company||a.name||'#'+String(a.id).slice(0,8))}</strong><small>${esc(a.role==='client'?tr('عميل','Customer'):tr('مورد','Supplier'))} · ${esc(a.blockedAt?tr('متوقف','Disabled'):tr('نشط','Active'))}</small></div><span>›</span></button>`).join('')||empty()}</div></section>`);return;}
  setRoot('account',`<section class="profile-card admin-profile"><div class="avatar">${esc((u?.name||'M').charAt(0))}</div><h2>${esc(u?.name||tr('الإدارة','Admin'))}</h2><p>${esc(tr('حساب إدارة','Admin account'))}</p><button class="danger-btn" data-action="logout">${esc(tr('تسجيل الخروج','Sign out'))}</button></section>`);
 }
-export function renderAdminScreen(v=activeView()){if(!isAdmin()||v==='notifications')return false;if(v==='home')home();else if(v==='requests')requests();else if(v==='offers')offers();else if(v==='conversations')chats();else if(['account','customers','suppliers','team','currencies','banks','categories','countries'].includes(v))accounts(v);return true;}
+export function renderAdminScreen(v=activeView()){if(!isAdmin()||v==='notifications')return false;if(v==='home')home();else if(v==='requests')mountRfqAdmin({host:screen(),request:api,offers:state?.publicOffers||[]});else if(v==='offers')offers();else if(v==='conversations')chats();else if(['account','customers','suppliers','team','currencies','banks','categories','countries'].includes(v))accounts(v);return true;}
 function render(){if(!document.getElementById('appView')?.classList.contains('hidden'))renderAdminScreen();}
 
 function modal(titleText,kicker,html){if(adapter){adapter.modal(titleText,kicker,html);hydrate(document.getElementById('modalBody'));return;}const m=document.getElementById('modal');if(!m)return;document.getElementById('modalTitle').textContent=titleText;document.getElementById('modalKicker').textContent=kicker||'';document.getElementById('modalBody').innerHTML=html;m.classList.remove('hidden');hydrate(document.getElementById('modalBody'));}

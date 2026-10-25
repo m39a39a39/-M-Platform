@@ -51,8 +51,8 @@ test('legacy sourcing and ready-product orders can move from ready_to_ship to sh
 test('customer receives one current admin-published quote and historical accepted price stays fixed',()=>fixture(async s=>{
  s.requests.push({id:'rfq',owner_id:'client',version:1,data:{status:'sent'}});
  for(const [id,publishedAt] of [['earlier','2026-10-01'],['current','2026-10-02']])s.quotes.push({id,owner_id:'old',request_id:'rfq',version:1,data:{status:'published',publishedAt,unitPrice:25,currency:'SAR'}});
- let view=await snapshot({id:'client',role:'client',data:{}});assert.deepEqual(view.quotes.map(q=>q.id),['current']);assert.equal(s.quotes.length,2,'Old records must remain intact');
- s.requests[0].data.selectedQuoteId='earlier';view=await snapshot({id:'client',role:'client',data:{}});assert.deepEqual(view.quotes.map(q=>q.id),['earlier']);
+ let view=await snapshot({id:'client',role:'client',data:{}});assert.deepEqual(view.quotes,[]);assert.equal(s.quotes.length,2,'Old records must remain intact');
+ s.requests[0].data.selectedQuoteId='earlier';view=await snapshot({id:'client',role:'client',data:{}});assert.deepEqual(view.quotes,[]);
 }));
 test('customer can decline current sourcing quote, cannot accept stale/rejected quotes or another customer request',()=>fixture(async s=>{
  s.requests.push({id:'rfq',owner_id:'client',version:1,data:{status:'sent',trackingStatus:'quotes_available'}});

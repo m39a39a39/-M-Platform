@@ -30,6 +30,11 @@ export async function sb(path,{method='GET',body,token,publicKey=false,headers={
     const conflict=result?.code==='23505'||result?.message?.includes('Conflict');
     const recovery=cleanPath==='/auth/v1/recover';
     const authMessage=recovery?'تعذر إرسال رابط الاستعادة الآن؛ تحقق من البريد وحاول لاحقًا / Could not send the recovery link; check the email and try again later':'تعذر تسجيل الدخول أو التسجيل؛ تحقق من البريد وكلمة المرور وتأكيد البريد / Authentication failed';
+    if(cleanPath==='/rest/v1/rpc/imsg_rfq_save'){
+      const status=result?.code==='P0001'?429:result?.code==='22023'?400:result?.code==='42501'?403:result?.code==='40001'||result?.code==='23505'?409:result?.code==='P0002'?404:502;
+      const message=status===429?'تم تجاوز حد طلبات عروض الأسعار. حاول لاحقًا. / Too many quote requests.':status===400?'البيانات أو الكميات غير صحيحة. / Invalid quantities or contact information.':status===409?'هناك تعديل متزامن أو طلب مكرر. حدّث الصفحة. / Conflict.':status===404?'لم يتم العثور على الطلب. / Request not found.':status===403?'لا تملك صلاحية هذا الإجراء. / Not authorized.':'تعذر حفظ طلب عرض السعر. حاول مجددًا. / RFQ save failed.';
+      throw new HttpError(status,message);
+    }
     throw new HttpError(conflict?409:response.status===429?429:cleanPath.startsWith('/auth/')?400:502,conflict?'تغيّرت البيانات أو العنصر موجود؛ حدّث الصفحة / Conflict':cleanPath.startsWith('/auth/')?authMessage:'تعذر تنفيذ العملية / Service unavailable');
   }
   return result;
