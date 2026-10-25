@@ -35,7 +35,7 @@ function adminNavigation(){
    return `<details class="nav-group" data-nav-group="${index}" ${active||expandedNavigation.has(String(index))?'open':''}><summary>${esc(label)}<span class="nav-chevron">⌄</span></summary><div class="nav-group-items">${visible.map(item).join('')}</div></details>`;
  }).join('')+item(['settings','settings']);
 }
-function operationsView(){const [route,title,description]=operationRoutes[view]||operationRoutes.overview;operationView=route;return heading(title,description)+`<div class="studio-operations focused-operation" id="screen"></div>`;}
+function operationsView(){const [route,title,description]=operationRoutes[view]||operationRoutes.overview;operationView=route;return (view==='product-editor'?'':heading(title,description))+`<div class="studio-operations focused-operation" id="screen"></div>`;}
 overviewView=operationsView;categoriesView=operationsView;settingsView=operationsView;
 document.addEventListener('toggle',e=>{const id=e.target.dataset?.navGroup;if(id===undefined)return;if(e.target.open)expandedNavigation.add(id);else expandedNavigation.delete(id);},true);
 const connectedRender=render;
