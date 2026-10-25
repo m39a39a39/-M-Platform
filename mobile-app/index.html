@@ -6,7 +6,6 @@
   <meta name="theme-color" content="#0b2236" />
   <style>
     /* Critical startup styles are inline so Safari never flashes the session-check text before CSS loads. */
-    #bootView [data-auth-copy="loading"]{display:none!important}
     #bootView{min-height:100vh;background:#fafbf8}
     .boot-shell{min-height:100vh;background:#fafbf8}
     @media(max-width:600px){
@@ -21,7 +20,7 @@
     <div id="site-header" class="site-header-reserve"></div>
     <section id="bootView">
       <div class="boot-shell" aria-busy="true">
-        <span hidden aria-hidden="true" data-auth-copy="loading">جارٍ التحقق من الجلسة...</span>
+        <span hidden aria-hidden="true">جارٍ التحقق من الجلسة...</span>
         <header class="boot-shell-header">
           <span class="boot-skeleton boot-brand"></span>
           <span class="boot-shell-actions"><i class="boot-skeleton"></i><i class="boot-skeleton"></i></span>
@@ -36,95 +35,6 @@
     </section>
     <section id="guestView" class="hidden"><main id="guest-storefront" aria-live="polite"></main></section>
 
-    <section id="loginView" class="hidden auth-wrap">
-      <header class="brand-block">
-        <div class="brand-mark">I</div>
-        <div class="brand-copy"><strong>IMSG</strong><p data-i18n="tagline">تسوق المنتجات أو أرسل طلب توريد.</p></div>
-        <button id="langBtn" class="icon-btn" type="button">EN</button>
-      </header>
-      <button id="backToGuestBtn" class="back-home-btn" type="button">← <span>العودة للرئيسية</span></button>
-      <section class="card auth-card">
-        <div class="eyebrow" data-i18n="secure">دخول آمن</div>
-        <h1 data-i18n="loginTitle">تسجيل الدخول</h1>
-        <p class="muted" data-i18n="loginSubtitle">استخدم نفس حسابك الموجود على المنصة.</p>
-        <form id="loginForm" class="form-stack">
-          <label><span data-i18n="email">البريد الإلكتروني</span><input id="email" type="email" autocomplete="email" required /></label>
-          <label><span data-i18n="password">كلمة المرور</span><input id="password" type="password" autocomplete="current-password" minlength="8" required /></label>
-          <button id="forgotPasswordBtn" class="text-btn forgot-password-btn" type="button" data-i18n="forgotPassword">نسيت كلمة المرور؟</button>
-          <button id="loginBtn" class="primary-btn" type="submit" data-i18n="login">تسجيل الدخول</button>
-        </form>
-        <p id="message" class="message" aria-live="polite"></p>
-        <div class="guest-register-row login-register-actions">
-          <button id="loginCustomerRegister" class="text-btn" type="button" data-auth-copy="registerClient">إنشاء حساب عميل</button>
-          <button id="loginSupplierRegister" class="text-btn" type="button" data-auth-copy="registerSupplier">إنشاء حساب مورد</button>
-        </div>
-      </section>
-    </section>
-
-    <section id="registerView" class="hidden auth-wrap">
-      <header class="brand-block"><div class="brand-mark">I</div><div class="brand-copy"><strong>IMSG</strong></div><button id="registerLangBtn" class="icon-btn" type="button">EN</button></header>
-      <button id="registerBackBtn" class="back-home-btn" type="button" data-auth-copy="back">العودة للرئيسية</button>
-      <section class="card auth-card">
-        <h1 id="registerTitle">إنشاء حساب عميل</h1>
-        <p class="muted" data-auth-copy="registerIntro">أنشئ حسابك للمتابعة داخل التطبيق.</p>
-        <div class="segmented"><button type="button" data-register-role="client" data-auth-copy="client">عميل</button><button type="button" data-register-role="supplier" data-auth-copy="supplier">مورد</button></div>
-        <form id="registerForm" class="form-stack">
-          <label><span data-auth-copy="name">الاسم</span><input id="registerName" name="name" autocomplete="name" maxlength="200" required /></label>
-          <label><span data-auth-copy="company">اسم الشركة</span><input id="registerCompany" name="company" autocomplete="organization" maxlength="200" /></label>
-          <label><span data-auth-copy="email">البريد الإلكتروني</span><input id="registerEmail" name="email" type="email" autocomplete="email" maxlength="254" required /></label>
-          <label><span data-auth-copy="phone">رقم التواصل مع رمز الدولة (للإدارة فقط)</span><input id="registerPhone" name="phone" type="tel" autocomplete="tel" maxlength="200" required /></label>
-          <label><span data-auth-copy="country">الدولة</span><input id="registerCountry" name="country" autocomplete="country-name" maxlength="200" required /></label>
-          <label id="registerCategoryField" class="hidden"><span data-auth-copy="category">فئة المنتجات</span><input id="registerCategory" name="category" maxlength="200" /></label>
-          <label><span data-auth-copy="password">كلمة المرور (8 أحرف على الأقل)</span><input id="registerPassword" name="password" type="password" autocomplete="new-password" minlength="8" maxlength="128" required /></label>
-          <label><span data-auth-copy="confirmPassword">تأكيد كلمة المرور</span><input id="registerConfirm" name="confirmPassword" type="password" autocomplete="new-password" minlength="8" maxlength="128" required /></label>
-          <p id="registerMessage" class="message" role="status" aria-live="polite"></p>
-          <button id="registerBtn" class="primary-btn" type="submit" data-auth-copy="register">إنشاء الحساب</button>
-        </form>
-        <button id="registerLoginBtn" class="text-btn full" type="button" data-auth-copy="already">لدي حساب بالفعل</button>
-      </section>
-    </section>
-    <section id="resetView" class="hidden auth-wrap">
-      <header class="brand-block">
-        <div class="brand-mark">I</div>
-        <div class="brand-copy"><strong>IMSG</strong><p id="resetSubtitle">استعادة الحساب</p></div>
-        <button id="resetLangBtn" class="icon-btn" type="button">EN</button>
-      </header>
-      <section class="card auth-card">
-        <h1 id="resetTitle">كلمة مرور جديدة</h1>
-        <p id="resetIntro" class="muted">اكتب كلمة مرور جديدة لحسابك. يجب أن تكون 8 أحرف على الأقل.</p>
-        <form id="resetPasswordForm" class="form-stack">
-          <label><span id="resetPasswordLabel">كلمة المرور الجديدة</span><input id="resetPassword" type="password" autocomplete="new-password" minlength="8" maxlength="128" required /></label>
-          <label><span id="resetConfirmLabel">تأكيد كلمة المرور</span><input id="resetConfirmPassword" type="password" autocomplete="new-password" minlength="8" maxlength="128" required /></label>
-          <p id="resetMessage" class="message" role="status" aria-live="polite"></p>
-          <button id="resetPasswordBtn" class="primary-btn" type="submit">حفظ كلمة المرور الجديدة</button>
-        </form>
-        <button id="resetLoginBtn" class="text-btn full hidden" type="button">العودة إلى تسجيل الدخول</button>
-      </section>
-    </section>
-
-    <section id="sessionView" class="hidden auth-wrap">
-      <section class="card form-stack">
-        <p id="sessionMessage" class="message" role="status"></p>
-        <button id="sessionRetryBtn" class="primary-btn" type="button" data-auth-copy="retry">إعادة المحاولة</button>
-        <button id="sessionLogoutBtn" class="secondary-btn" type="button" data-auth-copy="logout">تسجيل الخروج</button>
-      </section>
-    </section>
-
-    <section id="appView" class="hidden mobile-workspace">
-      <header class="app-header">
-        <div class="brand-mini"><span class="brand-mark small">I</span><div><strong>IMSG</strong><small id="headerRole"></small></div></div>
-        <div class="header-actions"><button id="headerCartBtn" class="icon-btn header-cart hidden" type="button" aria-label="Cart">🛒<i id="headerCartCount" class="nav-badge hidden"></i></button><button id="headerNotificationsBtn" class="icon-btn header-notifications hidden" type="button" aria-label="Notifications">🔔<i id="headerUnread" class="nav-badge hidden"></i></button><button id="headerAdminChatsBtn" class="icon-btn header-admin-chats hidden" type="button" aria-label="المحادثات" title="المحادثات">💬<i id="headerChatUnread" class="nav-badge hidden"></i></button><button id="refreshBtn" class="icon-btn" type="button" aria-label="Refresh">↻</button><button id="appLangBtn" class="icon-btn" type="button">EN</button></div>
-      </header>
-      <main id="screen" class="screen" aria-live="polite"></main>
-      <nav id="bottomNav" class="bottom-nav" aria-label="Main navigation">
-        <button data-screen="home" class="active"><span>⌂</span><b data-nav="home">الرئيسية</b></button>
-        <button data-screen="requests"><span>▤</span><b data-nav="requests">الطلبات</b><i id="navOrdersBadge" class="nav-badge hidden"></i></button>
-        <button data-screen="offers"><span>◇</span><b data-nav="offers">العروض</b><i id="navOffersBadge" class="nav-badge hidden"></i></button>
-        <button data-screen="notifications"><span>♢</span><b data-nav="notifications">الإشعارات</b><i id="navUnread" class="nav-badge hidden"></i></button>
-        <button id="adminChatNav" data-screen="conversations" class="hidden"><span>◌</span><b data-nav="conversations">المحادثات</b><i id="navChatUnread" class="nav-badge hidden"></i></button>
-        <button data-screen="account"><span>○</span><b data-nav="account">الحساب</b></button>
-      </nav>
-    </section>
   </div>
 
   <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
