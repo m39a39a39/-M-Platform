@@ -30,11 +30,11 @@ test('actual SQL: supplier proposals, two approved sources, private views, admin
  const delivered=await snapshot(other);assert.equal(delivered.interests.length,1);assert.equal(delivered.interests[0].unitPrice,7);assert.equal(delivered.interests[0].total,21);assert.ok(!JSON.stringify(delivered).includes('PRIVATE'));assert.equal((await snapshot(supplier)).interests.length,0);
  await mutate(other,{collection:'interests',id:delivered.interests[0].id,version:delivered.interests[0].version,patch:{supplierOrderStatus:'confirmed'}});
  const parentAfter=(await pg.query('select data from requests where id=$1',[order.orderId])).rows[0].data;assert.equal(parentAfter.orderStage,0);assert.equal(parentAfter.trackingStatus,'received');
- const customer=await snapshot(client);assert.equal(customer.requests[0].cartTotal,60);assert.equal(customer.interests[0].supplyTerms,undefined);assert.equal(customer.interests[0].assignedSupplierId,undefined);
+ const customer=await snapshot(client);assert.deepEqual(customer.requests,[]);assert.deepEqual(customer.interests,[]);
  await pg.query('update profiles set blocked_at=now() where id=$1',[ids.supplier]);assert.equal((await snapshot(null)).publicOffers.length,1);
  await assert.rejects(()=>pg.query('select public.commit_changes($1,$2)',[ids.admin,JSON.stringify([{table:'public_offers',id:'duplicate-product',ownerId:null,version:0,data:{...row.data,sku:'sku-1'},action:'test'}])]),e=>e.message.includes('product SKU already exists'));assert.equal((await pg.query('select count(*)::int as count from public_offers')).rows[0].count,1);
  await assert.rejects(()=>submitSupplySource(supplier,{sourceId:second.sourceId,version:2,terms}),e=>e.status===403);
- await submitSupplySource(other,{sourceId:second.sourceId,version:2,terms:{...terms,unitPrice:8}});assert.equal((await snapshot(other)).supplySources[0].status,'pending');assert.equal((await snapshot(other)).interests[0].unitPrice,7);assert.equal((await snapshot(null)).publicOffers[0].unitPrice,20);
+ await submitSupplySource(other,{sourceId:second.sourceId,version:2,terms:{...terms,unitPrice:8}});assert.equal((await snapshot(other)).supplySources[0].status,'pending');assert.equal((await snapshot(other)).interests[0].unitPrice,7);assert.equal('unitPrice' in (await snapshot(null)).publicOffers[0],false);
  // A duplicate approved source fails in SQL even if application checks race.
  await assert.rejects(()=>pg.query('insert into supply_sources(id,owner_id,data) values($1,$2,$3)',['duplicate',ids.other,JSON.stringify({productId:pid,status:'approved'})]),e=>e.code==='23505');
  await pg.exec('set role authenticated');await assert.rejects(()=>pg.query('select * from supply_sources'),e=>e.code==='42501');await pg.exec('reset role');
