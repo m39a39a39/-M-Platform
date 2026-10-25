@@ -58,7 +58,7 @@ const text={
     contact:'تواصل معنا',copyright:'© 2026 IMSG — جميع الحقوق محفوظة',allCategories:'الكل',supplyCountry:'بلد التوريد',allCountries:'الكل',
     search:'ابحث عن منتج أو SKU',quantity:'الكمية',productTotal:'إجمالي هذا المنتج',addCart:'أضف إلى قائمتي',updateCart:'تحديث الكمية في قائمتي',
     added:'تمت إضافة المنتج إلى قائمتي.',cart:'قائمتي',products:'منتجات',total:'الإجمالي',grandTotal:'الإجمالي الكلي',remove:'حذف',
-    clearCart:'إفراغ السلة',submitOrder:'طلب عرض سعر',emptyCart:'قائمتي فارغة. أضف منتجات من الصفحة الرئيسية.',
+    clearCart:'إفراغ قائمتي',submitOrder:'طلب عرض سعر',emptyCart:'قائمتي فارغة. أضف منتجات من الصفحة الرئيسية.',
     requestTitle:'أرسل طلب جديد',requestDescription:'إذا لم تجد المنتج المناسب، سجّل الدخول وأرسل مواصفاتك.',requestButton:'+ أرسل طلب جديد',
     authCartTitle:'سجّل الدخول لإرسال الطلب',authCartText:'سجّل الدخول أو أنشئ حساب عميل لإرسال الطلب. ستبقى المنتجات والكميات الموجودة في السلة محفوظة.',
     authRequestTitle:'سجّل الدخول لإرسال طلب جديد',authRequestText:'لإرسال مواصفات منتج غير موجود، سجّل الدخول أو أنشئ حساب عميل.',
@@ -75,7 +75,7 @@ const text={
     contact:'Contact us',copyright:'© 2026 IMSG — All rights reserved.',allCategories:'All',supplyCountry:'Supply country',allCountries:'All',
     search:'Search products or SKU',quantity:'Quantity',productTotal:'This product total',addCart:'Add to my list',updateCart:'Update quantity in my list',
     added:'Added to my list.',cart:'My list',products:'products',total:'Total',grandTotal:'Grand total',remove:'Remove',
-    clearCart:'Clear cart',submitOrder:'Request a quote',emptyCart:'My list is empty. Add products from the home page.',
+    clearCart:'Clear my list',submitOrder:'Request a quote',emptyCart:'My list is empty. Add products from the home page.',
     requestTitle:'Send a new request',requestDescription:'If you cannot find the right product, sign in and send your specifications.',requestButton:'+ Send new request',
     authCartTitle:'Sign in to submit the order',authCartText:'Sign in or create a customer account to submit the order. Your cart products and quantities will be preserved.',
     authRequestTitle:'Sign in to send a new request',authRequestText:'To request a product that is not listed, sign in or create a customer account.',
@@ -337,12 +337,13 @@ async function openGuestCart(){
  if(!rows.length){$('modalBody').innerHTML='<div class="empty-state cart-empty"><p>'+esc(t('emptyCart'))+'</p></div>';$('modal').classList.remove('hidden');return;}
  $('modalBody').innerHTML='<div class="imsg-rfq-list">'+rows.map(row=>{
   const o=row.offer,image=o.images?.[0]||'',moq=Math.max(1,Math.ceil(Number(o.moq)||1));
-  return '<article class="imsg-rfq-row"><a href="/?product='+encodeURIComponent(row.item.offerId)+'">'+(image?'<img alt="" src="'+esc(image)+'" loading="lazy">':'')+'</a><div class="imsg-rfq-product"><strong>'+esc(title(o))+'</strong><small>'+esc(o.sku||'')+' · MOQ '+moq+'</small><label>'+esc(t('quantity'))+' <input type="number" data-guest-cart-qty="'+esc(row.item.offerId)+'" min="'+moq+'" value="'+row.quantity+'" step="1"></label></div><button type="button" data-guest-cart-remove="'+esc(row.item.offerId)+'" class="danger-text">'+esc(t('remove'))+'</button></article>';
+  return '<article class="imsg-rfq-row"><a href="/?product='+encodeURIComponent(row.item.offerId)+'">'+(image?'<img alt="" src="'+esc(image)+'" loading="lazy">':'')+'</a><div class="imsg-rfq-product"><strong>'+esc(title(o))+'</strong><small>'+esc(o.sku||'')+' · MOQ '+moq+'</small><label>'+esc(t('quantity'))+' <button type="button" data-guest-cart-step="-1" data-guest-cart-item="'+esc(row.item.offerId)+'" aria-label="'+(lang==='en'?'Decrease quantity':'تقليل الكمية')+'">−</button><input type="number" data-guest-cart-qty="'+esc(row.item.offerId)+'" min="'+moq+'" value="'+row.quantity+'" step="1"><button type="button" data-guest-cart-step="1" data-guest-cart-item="'+esc(row.item.offerId)+'" aria-label="'+(lang==='en'?'Increase quantity':'زيادة الكمية')+'">+</button></label></div><button type="button" data-guest-cart-remove="'+esc(row.item.offerId)+'" class="danger-text">'+esc(t('remove'))+'</button></article>';
  }).join('')+'</div><div class="cart-actions"><button type="button" class="secondary-btn" data-guest-cart-clear>'+esc(t('clearCart'))+'</button><button type="button" class="primary-btn" data-rfq-continue>'+esc(quoteButtonLabel())+'</button></div>';
  $('modal').classList.remove('hidden');
  $('modalBody').querySelectorAll('[data-guest-cart-qty]').forEach(input=>input.addEventListener('change',()=>{
   if(!setCartQuantity(input.dataset.guestCartQty,Number(input.value))){showGuestToast(t('invalidQty'));}void openGuestCart();
  }));
+ $('modalBody').querySelectorAll('[data-guest-cart-step]').forEach(button=>button.addEventListener('click',()=>{const item=cartItems.find(x=>x.offerId===button.dataset.guestCartItem);if(!item)return;const changed=setCartQuantity(item.offerId,item.quantity+Number(button.dataset.guestCartStep));if(!changed)showGuestToast(t('invalidQty'));void openGuestCart();}));
  $('modalBody').querySelectorAll('[data-guest-cart-remove]').forEach(button=>button.addEventListener('click',()=>{cartItems=cartItems.filter(x=>x.offerId!==button.dataset.guestCartRemove);saveCart();void openGuestCart();}));
  $('modalBody').querySelector('[data-guest-cart-clear]').addEventListener('click',()=>{cartItems=[];saveCart();void openGuestCart();});
  $('modalBody').querySelector('[data-rfq-continue]').addEventListener('click',openGuestRfqForm);
@@ -353,7 +354,7 @@ async function openGuestRfqForm(){
  const ar=lang==='ar',label=(a,e)=>ar?a:e;
  $('modalKicker').textContent=t('cart');$('modalTitle').textContent=quoteButtonLabel();
  $('modalBody').innerHTML='<form id="imsg-rfq-form" class="form-stack imsg-rfq-form">'+
- '<div class="imsg-rfq-summary"><strong>'+label('المنتجات المختارة','Selected products')+' ('+rows.length+')</strong><div>'+rows.map(x=>'<p>'+esc(title(x.offer))+' · '+esc(x.offer.sku||'')+' — '+x.quantity+'</p>').join('')+'</div></div>'+
+ '<div class="imsg-rfq-summary"><strong>'+label('المنتجات المختارة','Selected products')+' ('+rows.length+')</strong><div>'+rows.map(x=>'<div class="imsg-rfq-summary-line">'+(x.offer.images?.[0]?'<img alt="" src="'+esc(x.offer.images[0])+'" loading="lazy">':'')+'<span>'+esc(title(x.offer))+' · '+esc(x.offer.sku||'')+' — '+x.quantity+'</span></div>').join('')+'</div></div>'+
  '<label>'+label('الاسم *','Name *')+'<input name="name" autocomplete="name" maxlength="140" minlength="2" required></label>'+
  '<label>'+label('رقم واتساب *','WhatsApp number *')+'<div class="imsg-rfq-phone"><select name="dial" aria-label="'+label('مفتاح الدولة','Country code')+'"><option value="+966">+966</option><option value="+971">+971</option><option value="+967">+967</option><option value="+965">+965</option><option value="+974">+974</option><option value="+968">+968</option><option value="+973">+973</option><option value="+20">+20</option><option value="+86">+86</option><option value="+60">+60</option><option value="+1">+1</option><option value="+44">+44</option></select><input name="phone" type="tel" inputmode="tel" autocomplete="tel-national" placeholder="5XXXXXXXX" required></div></label>'+
  '<label>'+label('الدولة *','Country *')+'<input name="country" maxlength="120" required value="'+label('السعودية','Saudi Arabia')+'"></label>'+
