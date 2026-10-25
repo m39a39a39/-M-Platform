@@ -15,7 +15,7 @@ test('actual SQL: supplier proposals, two approved sources, private views, admin
  const submission=await submitSupplySource(supplier,{terms,proposal});assert.equal((await snapshot(null)).publicOffers.length,0);
  await assert.rejects(()=>reviewSupplySource(supplier,{id:submission.sourceId,version:1,action:'approve'}),e=>e.status===403);
  const approved=await reviewSupplySource(admin,{id:submission.sourceId,version:1,action:'approve',salePrice:20,currency:'SAR',translation,redactionConfirmed:true});
- const pid=approved.productId;let products=(await snapshot(null)).publicOffers;assert.equal(products.length,1);assert.equal(products[0].unitPrice,20);
+ const pid=approved.productId;let products=(await snapshot(null)).publicOffers;assert.equal(products.length,1);assert.equal('unitPrice' in products[0],false);
  const row=(await pg.query('select * from public_offers where id=$1',[pid])).rows[0];assert.equal(row.owner_id,null);assert.equal(row.data.storeOwned,true);
  const second=await submitSupplySource(other,{productId:pid,terms:{...terms,unitPrice:7}});await reviewSupplySource(admin,{id:second.sourceId,version:1,action:'approve'});
  assert.equal((await snapshot(null)).publicOffers.length,1);
