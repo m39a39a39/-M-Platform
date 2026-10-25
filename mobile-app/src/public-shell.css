@@ -81,6 +81,26 @@ button{cursor:pointer}
 .imsg-rfq-summary-footer b{color:#0b2236}
 @media(max-width:480px){.imsg-rfq-summary{padding:10px 12px}.imsg-rfq-summary-line{gap:10px}.imsg-rfq-summary-line>img,.imsg-rfq-summary-placeholder{flex-basis:64px;width:64px;height:64px}}
 .imsg-rfq-error{margin:0;color:#b42318;min-height:1.4em}
-.imsg-rfq-success{text-align:center;padding:20px 8px;line-height:1.8}
-.imsg-rfq-success h3{font-size:1.6em;direction:ltr}
+/* Customer-facing receipt after the server confirms the RFQ. */
+.imsg-rfq-success{display:grid;gap:13px;padding:14px 4px 8px;text-align:center;color:#0b2236;line-height:1.6;min-height:280px}
+.imsg-rfq-success-icon{display:grid;place-items:center;justify-self:center;width:64px;height:64px;border-radius:50%;background:#e6f6ed;color:#18834b;font-size:34px;font-weight:800}
+.imsg-rfq-success h3{font-size:1.32rem;line-height:1.45;margin:0;font-weight:800}
+.imsg-rfq-success-intro{margin:-5px 0 2px;color:#6a7e88;font-size:14px}
+.imsg-rfq-receipt{border:1px solid #dce6eb;border-radius:14px;background:#f8fbfc;padding:14px;display:grid;gap:6px}
+.imsg-rfq-receipt span{font-size:13px;color:#5d7380}
+.imsg-rfq-receipt strong{font-size:1.5rem;letter-spacing:.02em;overflow-wrap:anywhere;user-select:text;-webkit-user-select:text}
+.imsg-rfq-success-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;text-align:start}
+.imsg-rfq-success-stats div{padding:12px;border:1px solid #e2e9ec;border-radius:12px;display:grid;gap:5px}
+.imsg-rfq-success-stats span{font-size:12px;color:#718490}
+.imsg-rfq-success-stats strong{font-size:18px;color:#0b2236}
+.imsg-rfq-received{justify-self:center;background:#edf8f1;color:#23774b;border-radius:999px;padding:7px 12px;margin:0;font-size:12px;font-weight:700}
+.imsg-rfq-received span{font-size:9px}
+.imsg-rfq-next{text-align:start;border-radius:14px;background:#f3f7f9;padding:14px}
+.imsg-rfq-next strong{font-size:14px}
+.imsg-rfq-next p{font-size:13px;color:#5d7180;line-height:1.8;margin:6px 0 0}
+.imsg-rfq-success-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:5px}
+.imsg-rfq-success-actions button{width:100%;min-width:0;min-height:48px;font-size:13px;border-radius:12px;white-space:normal}
+.imsg-rfq-copy-feedback{min-height:1.35em;color:#246e47;font-size:12px;margin:0}
+@media(max-width:370px){.imsg-rfq-success-actions{grid-template-columns:1fr}}
+
 @media(max-width:480px){.imsg-rfq-row{gap:8px;padding:8px}.imsg-rfq-row>a{width:64px;height:64px}.imsg-rfq-row img{max-width:64px;max-height:64px}}
