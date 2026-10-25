@@ -416,7 +416,7 @@ window.addEventListener('mplatform:view',e=>{
     if(hasWebSession)break;
     try{hasWebSession=!!globalThis[name]?.getItem('m-platform.session.v1');}catch{}
   }
-  const publicWeb=!Capacitor.isNativePlatform()&&!hasWebSession&&!['/customer','/customer.html','/supplier','/supplier.html','/login.html','/reset-password.html','/register-customer.html','/register-supplier.html'].includes(location.pathname);
+  const publicWeb=!Capacitor.isNativePlatform()&&!['/admin','/admin.html','/studio.html','/customer','/customer.html','/supplier','/supplier.html','/login.html','/reset-password.html','/register-customer.html','/register-supplier.html'].includes(location.pathname);
   if(publicWeb)showView('guestView');
   if(!$('guestView').classList.contains('hidden')){ensureLoaded();scheduleGuestAiChat();}
 })();
