@@ -357,3 +357,29 @@
     font-size:16px;
   }
 }
+
+/* The product form is part of the admin page, not a modal dialog. */
+.admin-product-page { width:100%;max-width:1180px;margin:0 auto;min-width:0; }
+.admin-product-page .admin-page-head { margin-bottom:12px; }
+.admin-product-page-top { display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 16px; }
+.admin-product-page-hint { color:#6c7b8d;font-size:13px; }
+.admin-product-page-card { box-sizing:border-box;padding:clamp(16px,3vw,36px);border-radius:18px;overflow:visible; }
+.admin-product-page-card .admin-public-offer-editor { width:100%;max-width:100%;display:grid;gap:18px;min-width:0; }
+.admin-product-page-card .admin-public-offer-editor>h3 { margin:0;font-size:22px;color:#142d42; }
+.admin-product-page-card .admin-public-offer-editor>section { min-width:0;border-top:1px solid #e8edf2;padding-top:20px; }
+.admin-product-page-card .admin-public-offer-editor .form-two { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px; }
+.admin-product-page-card .admin-public-offer-editor label { min-width:0; }
+.admin-product-page-card .admin-public-offer-editor input:not([type=checkbox]):not([type=file]),
+.admin-product-page-card .admin-public-offer-editor textarea,
+.admin-product-page-card .admin-public-offer-editor select { box-sizing:border-box;width:100%;max-width:100%;min-width:0;font-size:16px; }
+.admin-product-page-card .admin-public-offer-editor>button[type=submit] { position:sticky;bottom:calc(8px + env(safe-area-inset-bottom,0px));z-index:5;width:100%;min-height:52px;box-shadow:0 7px 25px rgba(11,34,54,.17); }
+.admin-product-page-card .admin-public-offer-editor .form-message {overflow-wrap:anywhere;}
+@media(max-width:760px){
+ .admin-product-page{max-width:100%;}
+ .admin-product-page-top{align-items:flex-start;}
+ .admin-product-page-hint{font-size:12px;}
+ .admin-product-page-card{padding:16px 14px;border-radius:16px;}
+ .admin-product-page-card .admin-public-offer-editor{gap:16px;}
+ .admin-product-page-card .admin-public-offer-editor .form-two{grid-template-columns:minmax(0,1fr);gap:14px;}
+ .admin-product-page-card .admin-public-offer-editor>h3{font-size:20px;}
+}
