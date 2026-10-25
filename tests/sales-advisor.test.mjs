@@ -110,7 +110,7 @@ test('order tool is unavailable to guests and binds signed-in reads to server id
  assert.match(fx.payloads.at(-1).messages[0].content,/signInRequired/);
  assert.equal(fx.calls.some(c=>c.path.endsWith('/requests')),false);
  await aiChat(client,{conversationId:'a',message:'تابع طلبي',userId:'client-b'});
- assert.ok(fx.calls.some(c=>c.path.endsWith('/requests')&&c.query.get('owner_id')==='eq.client-a'));
+ assert.equal(fx.calls.some(c=>c.path.endsWith('/requests')),false);
  assert.match(fx.payloads.at(-1).messages[0].content,/notFound/);
 }));
 
