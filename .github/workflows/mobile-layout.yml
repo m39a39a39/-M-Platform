@@ -50,6 +50,7 @@ jobs:
             sleep 1
           done
           node tests/public-auth-retirement.mjs
+          node tests/admin-invite-flow.mjs
           node tests/ai-catalog.mjs
           node tests/product-copy.mjs
       - uses: actions/upload-artifact@v4
