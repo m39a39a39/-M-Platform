@@ -119,7 +119,6 @@ async function bootStudio(){
  try{
   await window.MStudioSession.restore();
   await loadLive();
-  if(!permitted('settings')){view='orders';render();}
  }catch(error){
   try{
    const publicState=await window.MStudioSession.request('/api/v1/state',{auth:false});

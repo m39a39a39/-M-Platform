@@ -173,18 +173,28 @@ export async function snapshot(user,{productId='',pageId='',category='',q='',aiC
   else if(user?.role==='admin'&&(can(user,'offers.read')||can(user,'offers.edit')||can(user,'publish')||can(user,'requests.edit')))supplySources=(await rows('supply_sources')).filter(open).map(r=>({...ownSource(r),supplierId:r.owner_id}));
   if(user?.role==='admin'){
     const readRequests=can(user,'requests.read')||can(user,'requests.edit')||can(user,'translate')||can(user,'publish')||can(user,'trash')||can(user,'moderate');
-    const readOffers=can(user,'offers.read')||can(user,'offers.create')||can(user,'offers.edit')||can(user,'translate')||can(user,'publish')||can(user,'trash')||can(user,'moderate');
-    const readAccounts=readRequests||readOffers||can(user,'accounts.read')||can(user,'accounts.manage')||can(user,'team')||can(user,'moderate');
+    const readOffers=can(user,'offers.read')||can(user,'offers.edit')||can(user,'translate')||can(user,'publish')||can(user,'trash')||can(user,'moderate');
+    const createOffers=can(user,'offers.create');
+    const readAccounts=can(user,'accounts.read')||can(user,'accounts.manage')||can(user,'team');
     [settings,requests,quotes,publicOffers,interests,accounts]=await Promise.all([
       one('settings','site'),
       readRequests?rows('requests'):[],
       readOffers?rows('quotes'):[],
-      readOffers?rows('public_offers'):[],
+      readOffers?rows('public_offers'):createOffers?rows('public_offers',`owner_id=eq.${encodeURIComponent(user.id)}`):[],
       (readOffers||readRequests)?rows('interests'):[],
       readAccounts?rows('profiles'):[]
     ]);
-    accounts=readAccounts?accounts.map(p=>can(user,'accounts.read')||can(user,'accounts.manage')&&p.role!=='admin'||p.id===user.id||p.role==='admin'&&can(user,'team')?profile(p):{id:p.id,role:p.role,version:p.version,name:`#${p.id.slice(0,8)}`,blockedAt:p.blocked_at,deletedAt:p.deleted_at}):[profile(user)];
-    return {user:profile(user),supplySources,accounts,requests:requests.map(r=>unpack(r,'requests')),quotes:quotes.map(r=>{const parent=requests.find(p=>p.id===r.request_id);return {...unpack(r,'quotes'),...(parent?.data.deletedAt&&!r.data.deletedAt?{deletedAt:parent.data.deletedAt,deletedWithOrder:parent.id}:{})};}),publicOffers:publicOffers.map(r=>unpack(r,'publicOffers')),interests:interests.map(r=>unpack(r,'interests')),settings:{...(can(user,'settings')?upgradeSettings(settings.data):Object.fromEntries(Object.entries(upgradeSettings(settings.data)).filter(([k])=>k!=='studioDraft'))),_version:settings.version}};
+    accounts=readAccounts?accounts.map(p=>can(user,'accounts.read')||(can(user,'accounts.manage')&&p.role!=='admin')||p.id===user.id||(p.role==='admin'&&can(user,'team'))?profile(p):{id:p.id,role:p.role,version:p.version,name:`#${p.id.slice(0,8)}`,blockedAt:p.blocked_at,deletedAt:p.deleted_at}):[profile(user)];
+    // Product-entry personnel need taxonomy to build products, not bank accounts,
+    // private store drafts, supplier/contact rosters, or any unrelated settings.
+    const siteSettings=upgradeSettings(settings.data);
+    const safeSettings=can(user,'settings')?siteSettings:{
+      categories:siteSettings.categories||[],
+      subcategories:siteSettings.subcategories||[],
+      supplyCountries:siteSettings.supplyCountries||[],
+      logoText:siteSettings.logoText||'IMSG'
+    };
+    return {user:profile(user),supplySources,accounts,requests:requests.map(r=>unpack(r,'requests')),quotes:quotes.map(r=>{const parent=requests.find(p=>p.id===r.request_id);return {...unpack(r,'quotes'),...(parent?.data.deletedAt&&!r.data.deletedAt?{deletedAt:parent.data.deletedAt,deletedWithOrder:parent.id}:{})};}),publicOffers:publicOffers.map(r=>unpack(r,'publicOffers')),interests:interests.map(r=>unpack(r,'interests')),settings:{...safeSettings,_version:settings.version}};
   }
 
   if(user?.role==='client'){

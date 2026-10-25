@@ -6,9 +6,10 @@
  */
 const isIosSafari = () => {
   const ua = navigator.userAgent || '';
-  const appleTouch = /iPad|iPhone|iPod/.test(ua) ||
+  // All iOS browsers can present the system select picker, not just Safari.
+  // Do not depend on the WebKit UA token (some embedded browsers omit it).
+  return /iPad|iPhone|iPod|CriOS|FxiOS|EdgiOS|OPiOS/i.test(ua) ||
     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  return appleTouch && /AppleWebKit/.test(ua);
 };
 
 export function installIosSelectFix() {
