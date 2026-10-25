@@ -38,3 +38,30 @@ test('admin-only listing, editing and customer notes require permissions',async(
  await assert.rejects(rfqRoute(null,request,{action:'customer-note',customerId:'be69f6ce-c8cb-47e5-9692-9c4b7e51f111',notes:'private'},null),{status:403});
  await assert.rejects(rfqRoute({role:'client',id:'bad'},request,{...base,source:'admin'},null),{status:403});
 });
+
+
+test('anonymous custom sourcing RFQ sends validated specifications but no catalog items',async()=>{
+ const before={...process.env},old=global.fetch;let payload=null;
+ try{
+  Object.assign(process.env,{SUPABASE_URL:'https://rfq-fixture.invalid',SUPABASE_ANON_KEY:'anon',SUPABASE_SERVICE_ROLE_KEY:'testing-service-secret',APP_ORIGIN:'https://www.imsgsource.com'});
+  global.fetch=async(_url,options)=>{payload=JSON.parse(options.body).p_payload;return Response.json({number:'RFQ-10002',id:'custom'});};
+  const result=await rfqRoute(null,request,{...base,requestType:'custom',items:[],customDetails:{productName:'Private-label charger',specifications:'USB-C 20 W charger with packaging',quantity:1000,image:''}},new URL('https://www.imsgsource.com/api/v1/rfq'));
+  assert.equal(result.number,'RFQ-10002');
+  assert.equal(payload.requestType,'custom');
+  assert.deepEqual(payload.items,[]);
+  assert.equal(payload.customDetails.quantity,1000);
+  assert.equal(payload.customDetails.productName,'Private-label charger');
+ }finally{global.fetch=old;for(const key of ['SUPABASE_URL','SUPABASE_ANON_KEY','SUPABASE_SERVICE_ROLE_KEY','APP_ORIGIN']){if(before[key]===undefined)delete process.env[key];else process.env[key]=before[key];}}
+});
+test('rejects malformed custom RFQs without creating a request',async()=>{
+ const details={productName:'Charger',specifications:'20W with type C output',quantity:100};
+ const cases=[
+  {...base,requestType:'custom',items:[{offerId:'demo-product',quantity:1}],customDetails:details},
+  {...base,requestType:'custom',items:[],customDetails:{...details,productName:''}},
+  {...base,requestType:'custom',items:[],customDetails:{...details,quantity:0}},
+  {...base,requestType:'custom',items:[],customDetails:{...details,image:'data:image/svg+xml;base64,PHN2Zz4='}},
+  {...base,requestType:'custom',items:[],customDetails:{...details,image:'data:image/png;base64,'+'x'.repeat(480001)}},
+  {...base,requestType:'anything',items:[]}
+ ];
+ for(const payload of cases)await assert.rejects(rfqRoute(null,request,payload,new URL('https://www.imsgsource.com/api/v1/rfq')),{status:400});
+});
