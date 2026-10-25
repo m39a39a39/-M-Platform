@@ -609,7 +609,7 @@ function publicOfferEditor(x){
     <h3>${esc(tr('تعديل المنتج','Edit product'))}</h3>
     <label><span>${esc(tr('اسم المنتج الأصلي','Original product name'))}</span><input name="product" required maxlength="300" value="${esc(x.product||'')}"></label>
     <label><span>${esc(tr('الوصف الأصلي','Original description'))}</span><textarea name="specs" required maxlength="10000">${esc(x.specs||'')}</textarea></label>
-    <div class="form-two"><label><span>${esc(tr('السعر','Price'))}</span><input name="unitPrice" type="number" step="0.01" min="0.01" required value="${esc(x.unitPrice||'')}"></label><label><span>${esc(tr('العملة','Currency'))}</span><select name="currency">${['USD','SAR','AED','CNY','EUR'].map(v=>`<option ${x.currency===v?'selected':''}>${v}</option>`).join('')}</select></label></div>
+    <div class="form-two"><label><span>${esc(tr('السعر (اختياري)','Price (optional)'))}</span><input name="unitPrice" type="number" step="0.01" min="0.01" value="${esc(x.unitPrice||'')}"></label><label><span>${esc(tr('العملة','Currency'))}</span><select name="currency">${['USD','SAR','AED','CNY','EUR'].map(v=>`<option ${x.currency===v?'selected':''}>${v}</option>`).join('')}</select></label></div>
     <div class="form-two"><label><span>${esc(tr('الحد الأدنى','MOQ'))}</span><input name="moq" type="number" min="1" required value="${esc(x.moq||'')}"></label><label><span>${esc(tr('الكمية عند تتبع المخزون','Quantity when tracking stock'))}</span><input name="stock" type="number" min="0" step="1" value="${esc(x.stock||'')}"></label></div>
     <label class="admin-category-toggle-label"><input name="stockUnlimited" type="checkbox" ${x.stockUnlimited!==false?'checked':''}><span>${esc(tr('مخزون غير محدود — المنتج يبقى متاحًا للطلب','Unlimited inventory — product remains available to order'))}</span></label>
     <div class="form-two"><label><span>${esc(tr('مدة الإنتاج بالأيام','Production time (days)'))}</span><input name="leadTime" type="number" min="1" required value="${esc(x.leadTime||'')}"></label><label><span>${esc(tr('دولة التوريد','Supply country'))}</span><select name="country" required><option value="">—</option>${countries.map(v=>`<option value="${esc(v.id)}" ${x.country===v.id?'selected':''}>${esc(taxonomyLabel(v,lang()))}</option>`).join('')}</select></label></div>
@@ -651,7 +651,7 @@ async function savePublicOffer(form){
     if(!images.length)throw new Error(tr('يجب الإبقاء على صورة واحدة على الأقل.','Keep at least one image.'));
     const patch={
       product:form.product.value.trim(),specs:form.specs.value.trim(),
-      unitPrice:form.unitPrice.value,currency:form.currency.value,moq:form.moq.value,
+      unitPrice:form.unitPrice.value.trim()===''?null:form.unitPrice.value,currency:form.currency.value,moq:form.moq.value,
       stock:form.stock.value.trim(),stockUnlimited:form.stockUnlimited.checked,leadTime:form.leadTime.value,country:form.country.value.trim(),
       validUntil:form.validUntil.value,categoryId:form.categoryId.value,subcategoryId:form.subcategoryId.value,images
     };

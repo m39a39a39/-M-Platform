@@ -29,7 +29,7 @@ test('private notes and audit never appear in customer records',()=>{
 test('checkout rejects missing delivery details; pricing tiers are ordered and bounded',()=>{
  assert.throws(()=>checkoutDetails({name:'N'}));assert.throws(()=>checkoutDetails({name:'N',phone:'1',country:'SA',address:' '.repeat(100)}));
  assert.deepEqual(normalizeTiers([{min:10,price:5}],2,8),[{min:10,price:5}]);assert.throws(()=>normalizeTiers([{min:10,price:9}],2,8));assert.throws(()=>normalizeTiers([{min:2,price:5}],2,8));
- assert.equal(priceForQuantity({unitPrice:8,tiers:[{min:10,price:5}]},10),5);
+ assert.equal(priceForQuantity({unitPrice:8,tiers:[{min:10,price:5}]},10),5);assert.equal(priceForQuantity({unitPrice:null,tiers:[]},50),null);
 });
 test('store config cannot accept executable asset URLs or arbitrary fields',()=>{
  const s={theme:{name:'M',tagline:'',announcement:'',color:'#123456',round:8,logo:''},sections:[],banners:[],pages:[],links:[],collections:[],secret:'never public'};
@@ -88,6 +88,10 @@ test('single product save persists draft images and publication across refreshes
  const published={...draft,version:row.version,nameEn:'Test product',description:'وصف المنتج',descriptionEn:'Product description',status:'active'};
  await saveStudioProduct(admin,{product:published,redactionConfirmed:true});
  row=db.state.public_offers[0];assert.equal(row.data.status,'published');assert.equal(row.data.translation.titleEn,'Test product');assert.deepEqual(row.data.images,[image]);
+ const unpriced={...published,version:row.version,price:null,moq:50,leadDays:7};
+ await saveStudioProduct(admin,{product:unpriced,redactionConfirmed:true});
+ row=db.state.public_offers[0];assert.equal(row.data.unitPrice,null);assert.equal(row.data.moq,50);assert.equal(row.data.leadTime,'7');assert.equal(row.data.status,'published');
+ await assert.rejects(()=>saveStudioProduct(admin,{product:{...unpriced,version:row.version,price:0},redactionConfirmed:true}),e=>e.status===400);
 }));
 
 test('homepage visibility and bilingual content survive normalization with strict validation',()=>{

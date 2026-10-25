@@ -14,7 +14,7 @@
     return data;
   }
   function unitPrice(product,quantity){
-    if(product.pricingMode==='rfq'||!Number.isInteger(quantity)||quantity<product.moq)return null;
+    if(product.pricingMode==='rfq'||product.price==null||product.price===''||!Number.isInteger(quantity)||quantity<product.moq)return null;
     let price=Number(product.price);
     for(const tier of [...(product.tiers||[])].sort((a,b)=>a.min-b.min))if(quantity>=tier.min)price=tier.price;
     return price;
@@ -22,6 +22,7 @@
   function validatePricing(p){
     if(!Number.isSafeInteger(p.moq)||p.moq<1)throw Error('الحد الأدنى للطلب يجب أن يكون عددًا صحيحًا أكبر من صفر.');
     if(p.pricingMode==='rfq')return;
+    if(p.price==null||p.price===''){if((p.tiers||[]).length)throw Error('حدد السعر قبل إضافة شرائح أسعار.');return;}
     if(!Number.isFinite(p.price)||p.price<=0)throw Error('أدخل سعرًا أساسيًا أكبر من صفر.');
     let lastMin=p.moq,lastPrice=p.price;
     for(const tier of [...p.tiers].sort((a,b)=>a.min-b.min)){

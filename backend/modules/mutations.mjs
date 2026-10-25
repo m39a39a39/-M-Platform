@@ -157,7 +157,8 @@ export async function assertProductTaxonomy(data,{required=false,activeOnly=fals
   assert(country&&(!activeOnly||country.active!==false),400,'دولة التوريد غير متاحة / Supply country unavailable');
 }
 export function validateContent(kind,d){
-  for(const key of kind==='requests'?['quantity']:['unitPrice','moq','leadTime'])assert(Number.isFinite(Number(d[key]))&&Number(d[key])>0&&Number(d[key])<=1e9,400,'تحقق من الكمية والسعر ومدة الإنتاج / Invalid quantities or price');
+  for(const key of kind==='requests'?['quantity']:kind==='publicOffers'&&d.storeOwned?['moq','leadTime']:['unitPrice','moq','leadTime'])assert(Number.isFinite(Number(d[key]))&&Number(d[key])>0&&Number(d[key])<=1e9,400,'تحقق من الكمية والسعر ومدة الإنتاج / Invalid quantities or price');
+  if(kind==='publicOffers'&&d.storeOwned&&d.unitPrice!=null&&String(d.unitPrice).trim()!=='')assert(Number.isFinite(Number(d.unitPrice))&&Number(d.unitPrice)>0&&Number(d.unitPrice)<=1e9,400,'السعر غير صالح / Invalid price');
   if(kind!=='requests')assert(['USD','SAR','AED','CNY','EUR'].includes(d.currency),400,'عملة غير مدعومة / Unsupported currency');
   for(const k of ['product','specs','notes','sampleCost'])if(d[k]!==undefined)assert(typeof d[k]==='string'&&d[k].length<=10000&&!contact(d[k]),400,'احذف بيانات التواصل وتحقق من طول النص / Check text and remove contact details');
   if(kind!=='quotes')assert(d.product?.trim()&&d.specs?.trim(),400,'أكمل اسم المنتج والوصف / Product and description required');
@@ -702,7 +703,7 @@ export async function bulkUpdatePublicOffers(user,body={}){
       data.moderationHistory=[...(data.moderationHistory||[]),{action:'delete',reason:'Bulk product delete',at:now,actorId:user.id}].slice(-200);
     }else{
       for(const key of keys){
-        if(editable.has(key)){assert(can(user,'offers.edit'),403);data[key]=patch[key];}
+        if(editable.has(key)){assert(can(user,'offers.edit'),403);data[key]=key==='unitPrice'&&(patch[key]==null||patch[key]==='')?null:patch[key];}
         else if(key==='translation'){
           assert(can(user,'translate'),403);
           assert(patch.translation&&typeof patch.translation==='object'&&!Array.isArray(patch.translation),400,'ترجمة غير صالحة / Invalid translation');
