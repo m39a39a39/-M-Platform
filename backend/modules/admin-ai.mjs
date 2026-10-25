@@ -217,8 +217,8 @@ export function buildProductDraftReference(state={}){
   return {categories,subcategories,supplyCountries};
 }
 
-async function generateProductDraft(user,body,{apiKey,model,state}){
-  assert(can(user,'offers.edit'),403,'لا تملك صلاحية إضافة المنتجات / Product edit permission required');
+export async function generateProductDraft(user,body,{apiKey,model,state}){
+  assert(can(user,'offers.edit')||can(user,'offers.create'),403,'لا تملك صلاحية إضافة المنتجات / Product permission required');
   const images=Array.isArray(body.images)?body.images.slice(0,3).map(safeAiImage):[];
   assert(images.length>0,400,'أضف صورة واحدة على الأقل / Add at least one product image');
   const notes=clamp(body.notes,1800);
