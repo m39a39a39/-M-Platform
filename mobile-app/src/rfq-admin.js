@@ -109,7 +109,7 @@ function showEditor(original=null,duplicate=null,customerPrefill=null){
  const base=original||duplicate||{},rowCustomer=customerPrefill||base.customer||{},selected=base.items?.map(item=>({offerId:item.offerId,quantity:item.quantity,snapshot:item.snapshot}))||[],itemMap=new Map(selected.map(item=>[item.offerId,item]));
  const edit=!!original,copy=!!duplicate,defaultType=isCustom(base)?'custom':'catalog';
  modal(edit?T('تعديل الطلب','Edit request'):copy?T('نسخ الطلب','Duplicate request'):T('إنشاء طلب جديد','Create request'),'<form id="imsg-rfq-editor" class="imsg-rfq-editor">'+
- '<label>'+T('نوع الطلب','Request type')+'<select name="requestType"><option value="catalog" '+(defaultType==='catalog'?'selected':'')+'>'+T('منتجات الكتالوج','Catalog products')+'</option><option value="custom" '+(defaultType==='custom'?'selected':'')+'>'+T('طلب عرض خاص','Custom sourcing')+'</option></select></label>'+
+ '<label>'+T('نوع الطلب','Request type')+'<select name="requestType" '+(edit?'disabled':'')+'><option value="catalog" '+(defaultType==='catalog'?'selected':'')+'>'+T('منتجات الكتالوج','Catalog products')+'</option><option value="custom" '+(defaultType==='custom'?'selected':'')+'>'+T('طلب عرض خاص','Custom sourcing')+'</option></select></label>'+
  '<label>'+T('بحث عن عميل موجود','Find customer')+'<input type="search" data-rfq-customer-search placeholder="'+T('الاسم أو رقم واتساب','Name or WhatsApp')+'"></label><div class="imsg-rfq-pick-list" data-rfq-customer-results></div>'+
  '<div class="imsg-rfq-contact-grid">'+
  '<label>'+T('الاسم','Name')+' *<input name="name" maxlength="140" minlength="2" value="'+x(rowCustomer.name||'')+'" required></label>'+
