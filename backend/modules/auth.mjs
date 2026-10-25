@@ -96,7 +96,9 @@ export async function authRoute(action,req,res,body){
     const token=bearer||String(body.accessToken||''),password=String(body.password||'');
     assert(token.length>=20&&token.length<=8192,400,'رابط الاستعادة غير صالح أو منتهي / Recovery link is invalid or expired');
     assert(password.length>=8&&password.length<=128,400,'كلمة المرور يجب أن تكون 8 أحرف على الأقل / Password must be at least 8 characters');
-    await sb('/auth/v1/user',{token,publicKey:true});
+    const identity=await sb('/auth/v1/user',{token,publicKey:true});
+    const account=identity?.id?await one('profiles',identity.id):null;
+    assert(account?.role==='admin'&&!account.blocked_at&&!account.deleted_at,403,'إنشاء كلمة المرور مخصص لحسابات الإدارة فقط / Admin accounts only');
     await sb('/auth/v1/user',{method:'PUT',token,publicKey:true,body:{password}});
     try{await sb('/auth/v1/logout',{method:'POST',token,publicKey:true});}catch{}
     return {ok:true};

@@ -2,7 +2,7 @@ const form=document.getElementById('resetForm'),message=document.getElementById(
 const hash=new URLSearchParams(location.hash.replace(/^#/,'')),query=new URLSearchParams(location.search);
 const type=hash.get('type')||query.get('type');
 const token=hash.get('access_token')||query.get('access_token')||'';
-if(type!=='recovery'||token.length<20){
+if(!['invite','recovery'].includes(type)||token.length<20){
  form.hidden=true;message.textContent='رابط الاستعادة غير صالح أو منتهي. اطلب رابطًا جديدًا من إدارة المتجر.';
 }
 form.addEventListener('submit',async event=>{
@@ -16,6 +16,6 @@ form.addEventListener('submit',async event=>{
   const result=await response.json().catch(()=>({}));
   if(!response.ok)throw new Error(result?.error||'تعذر تغيير كلمة المرور.');
   form.hidden=true;history.replaceState(null,'','/reset-password.html');
-  message.textContent='تم تغيير كلمة المرور. يمكنك الآن تسجيل دخول الإدارة.';
+  message.textContent=type==='invite'?'تم تفعيل حساب الإدارة وإنشاء كلمة المرور. يمكنك الآن تسجيل الدخول.':'تم تغيير كلمة المرور. يمكنك الآن تسجيل دخول الإدارة.';
  }catch(error){message.textContent=error.message||'تعذر الاتصال. حاول مجددًا.';button.disabled=false;}
 });

@@ -502,19 +502,30 @@ function teamDialog(id=''){
   const current=id?(state?.accounts||[]).find(a=>a.id===id&&a.role==='admin'):null,u=me();
   const allowed=TEAM_PERMISSION_LABELS.filter(([p])=>u?.isOwner||(p!=='team'&&u?.permissions?.includes(p)));
   const selected=new Set(current?.permissions||[]);
-  modal(current?tr('تعديل صلاحيات المدير','Edit manager permissions'):tr('إضافة مدير','Add manager'),tr('فريق الإدارة','Admin team'),
+  modal(current?tr('تعديل صلاحيات المدير','Edit admin permissions'):tr('دعوة مدير جديد','Invite new administrator'),tr('فريق الإدارة','Admin team'),
     '<form id="adminTeamForm" class="form-stack" data-id="'+esc(current?.id||'')+'">'+
-    '<label><span>'+esc(tr('البريد الإلكتروني','Email'))+'</span><input name="email" type="email" required maxlength="254" value="'+esc(current?.email||'')+'" '+(current?'readonly':'')+'></label>'+
+    (current?'':'<label><span>'+esc(tr('اسم المستخدم','Full name'))+'</span><input name="name" autocomplete="name" maxlength="120" minlength="2" required></label>')+
+    '<label><span>'+esc(tr('البريد الإلكتروني','Email'))+'</span><input name="email" type="email" required maxlength="254" autocomplete="email" value="'+esc(current?.email||'')+'" '+(current?'readonly':'')+'></label>'+
     '<div class="admin-check-list">'+allowed.map(([p,ar,en])=>'<label><input type="checkbox" name="permission" value="'+esc(p)+'" '+(selected.has(p)?'checked':'')+'><span>'+esc(tr(ar,en))+'</span></label>').join('')+'</div>'+
-    '<small>'+esc(tr('يجب أن يكون الحساب مسجلًا في المنصة أولًا.','The account must already be registered on the platform.'))+'</small>'+
-    '<button class="primary-btn" type="submit">'+esc(tr('حفظ المدير وصلاحياته','Save manager & permissions'))+'</button></form>');
+    '<small>'+esc(current?tr('حدد صلاحيات المدير واحفظ التغييرات.','Select permissions and save changes.'):tr('سيُنشأ الحساب تلقائيًا، وسنرسل دعوة إلى البريد ليحدد المستخدم كلمة مروره. لا حاجة إلى Supabase.','An account will be created and an email invitation sent to set a password. No Supabase dashboard needed.'))+'</small>'+
+    '<button class="primary-btn" type="submit">'+esc(current?tr('حفظ الصلاحيات','Save permissions'):tr('إرسال الدعوة وإنشاء الحساب','Create account & send invitation'))+'</button></form>');
 }
 async function submitTeam(form){
+  if(form.dataset.submitting==='1')return;
   const id=form.dataset.id||undefined,permissions=[...form.querySelectorAll('[name="permission"]:checked')].map(x=>x.value);
+  if(!id&&!permissions.length){toast(tr('اختر صلاحية واحدة على الأقل.','Select at least one permission.'));return;}
+  const button=form.querySelector('button[type="submit"]');
+  form.dataset.submitting='1';if(button)button.disabled=true;
   try{
-    await api('/api/v1/team',{method:'POST',body:{id,email:form.email.value.trim(),permissions,action:'save'}});
-    await reload();closeModal();schedule();toast(tr('تم حفظ المدير وصلاحياته.','Manager and permissions saved.'));
-  }catch(e){toast(e.message);}
+    await api('/api/v1/team',{method:'POST',body:{id,name:id?undefined:form.elements.name.value.trim(),email:form.elements.email.value.trim(),permissions,action:id?'save':'invite'}});
+    await reload();closeModal();schedule();
+    toast(id?tr('تم حفظ صلاحيات المدير.','Admin permissions saved.'):tr('تم إنشاء المدير وإرسال دعوة البريد.','Administrator created and invitation email sent.'));
+  }catch(e){
+    toast(e.message);
+  }finally{
+    if(button?.isConnected)button.disabled=false;
+    form.dataset.submitting='0';
+  }
 }
 function teamToggleDialog(id){
   const a=(state?.accounts||[]).find(x=>x.id===id&&x.role==='admin');if(!a||a.isOwner||a.id===me()?.id||!can('team'))return;
