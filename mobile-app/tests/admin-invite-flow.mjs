@@ -18,7 +18,7 @@ for(const engine of [chromium,webkit]){
   await page.locator('[name=password]').fill('ExamplePass1234!');
   await page.locator('[name=confirm]').fill('ExamplePass1234!');
   await page.locator('#resetForm button').click();
-  await page.locator('#message').getByText('تم تفعيل حساب الإدارة', {exact:false}).waitFor();
+  await page.waitForFunction(()=>document.querySelector('#message')?.textContent?.includes('تم تفعيل حساب الإدارة'));
   assert.deepEqual(submissions,[{accessToken:token,password:'ExamplePass1234!'}]);
   assert.equal(await page.locator('#resetForm').isVisible(),false);
   await page.goto(base+'/reset-password.html#access_token='+token+'&type=recovery');
