@@ -1,10 +1,18 @@
 const form=document.getElementById('resetForm'),message=document.getElementById('message');
-const hash=new URLSearchParams(location.hash.replace(/^#/,'')),query=new URLSearchParams(location.search);
-const type=hash.get('type')||query.get('type');
-const token=hash.get('access_token')||query.get('access_token')||'';
-if(!['invite','recovery'].includes(type)||token.length<20){
- form.hidden=true;message.textContent='رابط الاستعادة غير صالح أو منتهي. اطلب رابطًا جديدًا من إدارة المتجر.';
+let type='',token='';
+function readInviteLink(){
+ const hash=new URLSearchParams(location.hash.replace(/^#/,'')),query=new URLSearchParams(location.search);
+ type=hash.get('type')||query.get('type')||'';
+ token=hash.get('access_token')||query.get('access_token')||'';
+ const valid=['invite','recovery'].includes(type)&&token.length>=20;
+ form.hidden=!valid;
+ const button=form.querySelector('button[type="submit"]');
+ if(button)button.disabled=false;
+ message.textContent=valid?'':'رابط الاستعادة غير صالح أو منتهي. اطلب رابطًا جديدًا من إدارة المتجر.';
 }
+readInviteLink();
+// A second invitation opened in the same tab may change only the URL fragment.
+window.addEventListener('hashchange',readInviteLink);
 form.addEventListener('submit',async event=>{
  event.preventDefault();
  const fd=new FormData(form),password=String(fd.get('password')||''),confirm=String(fd.get('confirm')||''),button=form.querySelector('button');
