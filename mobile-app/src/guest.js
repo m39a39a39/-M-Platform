@@ -472,9 +472,9 @@ async function openGuestCustomRequest(){
   event.preventDefault();
   const form=event.currentTarget,submit=form.querySelector('[type="submit"]'),message=form.querySelector('[data-custom-rfq-message]');
   if(submit.disabled)return;
-  const f=new FormData(form),national=String(f.get('phone')||'').replace(/[\\s()\\-.]/g,'').replace(/^0+/,'');
+  const f=new FormData(form),national=String(f.get('phone')||'').replace(/[\s()\-.]/g,'').replace(/^0+/,'');
   const whatsapp=String(f.get('dial'))+national,quantity=Number(f.get('quantity'));
-  if(!/^\\+[1-9]\\d{7,14}$/.test(whatsapp)){
+  if(!/^\+[1-9]\d{7,14}$/.test(whatsapp)){
    message.textContent=label('أدخل رقم واتساب صحيحًا','Enter a valid WhatsApp number');return;
   }
   if(!Number.isSafeInteger(quantity)||quantity<1||quantity>1000000000){
