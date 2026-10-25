@@ -78,12 +78,24 @@ function renderOriginalProductEditorPage(){
     button.disabled=true;message.textContent='';
     try{
       const fd=new FormData(form);
-    const images=await $('#edit-form').productImages.save(readImage);
+      // Validate product identity/copy before uploading images or calling the API.
+      // The same rules apply to owner and employees who can only create products.
+      const required=[['name','اسم المنتج'],['description','الوصف العربي'],['sku','رمز المنتج']];
+      if(fd.get('status')==='active')required.push(['nameEn','الاسم بالإنجليزية'],['descriptionEn','الوصف الإنجليزي'],['categoryId','التصنيف'],['country','بلد التوريد']);
+      const missing=required.find(([field])=>!String(fd.get(field)||'').trim());
+      if(missing){
+        const input=form.elements.namedItem(missing[0]);
+        message.textContent='أكمل '+missing[1]+' قبل حفظ المنتج.';
+        input?.focus({preventScroll:false});
+        button.disabled=false;
+        return;
+      }
+    const images=await form.productImages.save(readImage);
     const item={...p,...Object.fromEntries(['name','nameEn','sku','supplierId','categoryId','subcategoryId','status','currency','country','shortDescription','description','descriptionEn','technicalSpecs','options','notes'].map(k=>[k,String(fd.get(k)||'').trim()])),price:String(fd.get('price')??'').trim()===''?null:Number(fd.get('price')),moq:Number(fd.get('moq')),stock:fd.get('stock')===''?null:Number(fd.get('stock')),leadDays:Number(fd.get('leadDays')),images,image:images[0]||'',tiers:String(fd.get('tiers')).trim().split('\n').filter(Boolean).map(l=>{const [min,price]=l.split(':').map(Number);return {min,price}})};
 
     item.category=state.draft.categories.find(c=>c.id===item.categoryId)?.name||'';
     const issue=StoreRules.validatePricing(item);if(issue)throw Error(typeof issue==='string'?issue:'تحقق من شرائح الأسعار');
-    const taxonomyProposal=$('#edit-form').dataset.taxonomyProposal?JSON.parse($('#edit-form').dataset.taxonomyProposal):undefined;
+    const taxonomyProposal=form.dataset.taxonomyProposal?JSON.parse(form.dataset.taxonomyProposal):undefined;
     await api('studio-product',{product:item,taxonomyProposal,redactionConfirmed:item.status==='active'});
 
     liveState=await window.MStudioSession.state();settingsVersion=liveState.settings._version;

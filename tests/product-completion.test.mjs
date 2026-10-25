@@ -41,6 +41,9 @@ test('completion uses high-detail inline images and taxonomy; unreadable images 
   assert.equal(result.proposal.technicalSpecs,'');assert.equal(result.proposal.titleAr,source.titleAr);assert.equal(result.needsMoreImages,undefined);
   assert.equal(requests[0].messages[1].content[1].image_url.detail,'high');assert.equal(JSON.parse(requests[0].messages[1].content[0].text).TAXONOMY_JSON.categories[0].id,'cat');
   const noImages=await productCopy(admin,{mode:'complete',source});assert.equal(noImages.proposal.titleEn,'AMAYA charger');
+  const creator={id:ids.admin,role:'admin',permissions:['offers.create']};
+  const creatorResult=await productCopy(creator,{mode:'complete',source,images:['data:image/png;base64,AAAA']});
+  assert.equal(creatorResult.proposal.titleAr,source.titleAr);
  }finally{global.fetch=old;for(const key of Object.keys(process.env))if(!(key in env))delete process.env[key];Object.assign(process.env,env);}
 });
 const product=id=>({id,version:0,name:'سماعة',nameEn:'Headphones',sku:'HP-'+id.slice(-5),description:'سماعة للاستخدام اليومي',descriptionEn:'Headphones for daily use',shortDescription:'',technicalSpecs:'',options:'',notes:'',categoryId:'ai-new-category',subcategoryId:'ai-new-subcategory',status:'active',price:35,currency:'SAR',moq:1,stock:10,leadDays:3,country:'China',images:[],tiers:[]});

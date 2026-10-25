@@ -23,7 +23,11 @@ export function validateCopy(value,mode){
   return proposal;
 }
 export async function productCopy(user,body={}){
-  assert(can(user,'offers.edit'),403,'تحتاج صلاحية تعديل المنتجات / Product edit permission required');
+  // Creation-only staff may request AI assistance for an unsaved product.
+  // Reading an existing product by ID remains restricted to editors.
+  const readsExistingProduct=Boolean(body.productId);
+  assert(readsExistingProduct?can(user,'offers.edit'):(can(user,'offers.create')||can(user,'offers.edit')),
+    403,readsExistingProduct?'تحتاج صلاحية تعديل المنتجات / Product edit permission required':'تحتاج صلاحية إضافة المنتجات / Product create permission required');
   const mode=body.mode||'both';
   assert(['title','description','shorten','both','complete'].includes(mode),400,'اختر نوع التحسين / Choose an improvement');
   let source;

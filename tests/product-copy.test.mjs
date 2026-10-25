@@ -21,12 +21,22 @@ test('copy source excludes commercial, contact and account fields; output only c
  assert.deepEqual(validateCopy({...copy,stock:0},'title'),{titleAr:copy.titleAr,titleEn:copy.titleEn});
  for(const bad of ['', '<script>alert(1)</script>','https://supplier.test','x'.repeat(101)])assert.throws(()=>validateCopy({...copy,titleAr:bad},'title'));
 });
-test('generation requires edit permission and usable product identity before contacting provider',async()=>{
+test('generation checks create permission for new products and edit permission for existing product IDs',async()=>{
  await mock(async calls=>{
   await assert.rejects(productCopy({role:'client'},{source:{name:'a'}}),{status:403});
   await assert.rejects(productCopy({role:'admin',permissions:['settings']},{source:{name:'a'}}),{status:403});
+  await assert.rejects(productCopy({role:'admin',id:user.id,permissions:['offers.create']},{productId,version:2,source:{name:'Existing product'}}),{status:403});
   await assert.rejects(productCopy(user,{source:{description:'unknown'}}),{status:400});
   await assert.rejects(productCopy(user,{mode:'publish',source:{name:'a'}}),{status:400});assert.equal(calls.length,0);
+ });
+});
+test('creation-only employee can generate suggestions for an unsaved product',async()=>{
+ await mock(async calls=>{
+  const creator={id:user.id,role:'admin',permissions:['offers.create']};
+  const result=await productCopy(creator,{mode:'both',source:{name:'شاحن AMAYA 20W'}});
+  assert.equal(result.proposal.titleAr,copy.titleAr);
+  assert.ok(calls.some(call=>call.url.includes('openai.com')));
+  assert.ok(!calls.some(call=>call.url.includes('/public_offers?')));
  });
 });
 test('inline generation uses unsaved text and strict schema, records usage without product writes',async()=>{
