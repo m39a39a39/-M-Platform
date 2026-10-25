@@ -5,7 +5,7 @@ import {defaultOptions,safeStoreLink} from '../../shared/storefront-model.mjs';
 import {upgradeStore} from './storefront-upgrade.mjs';
 import {one,db,rpc,assert} from '../lib/supabase.mjs';
 import {can} from './auth.mjs';
-import {checkImages,validateContent,normalizeCategories,normalizeSubcategories} from './mutations.mjs';
+import {checkImages,validateContent,assertProductTaxonomy,normalizeCategories,normalizeSubcategories} from './mutations.mjs';
 
 const text=(v,max=10000)=>{assert(typeof v==='string'&&v.length<=max,400,'نص غير صالح أو طويل جدًا');return v.trim();};
 const list=(v,max)=>{assert(Array.isArray(v)&&v.length<=max,400,'عدد العناصر يتجاوز الحد المسموح');return v;};
@@ -86,7 +86,7 @@ export async function saveStudioProduct(user,body={}){
   id(p.id);assert(['draft','active','archived'].includes(p.status),400,'حالة المنتج غير صالحة / Invalid product status');
   const old=await one('public_offers',p.id);
   assert(old?can(user,'offers.edit'):(can(user,'offers.create')||can(user,'offers.edit')),403,'لا تملك صلاحية إنشاء أو تعديل المنتجات / Product permission denied');
-  if(!old&&!can(user,'offers.edit'))assert(p.status==='draft',403,'إضافة المنتجات لا تمنح صلاحية النشر / Create permission does not allow publishing');
+  if(!old&&!can(user,'offers.edit'))assert(['draft','active'].includes(p.status),403,'يسمح بإضافة المنتج أو نشره فقط / Only create or publish a new product');
   assert(!old?.data?.deletedAt,409,'المنتج محذوف / Product deleted');
   assert(Number(p.version||0)===(old?.version||0),409,'تغيّر المنتج؛ حدّث الصفحة / Product changed; refresh');
   const settings=await one('settings','site');assert(settings,409,'إعدادات المتجر غير متاحة / Store settings unavailable');
@@ -97,6 +97,7 @@ export async function saveStudioProduct(user,body={}){
   const now=new Date().toISOString(),published=p.status==='active';
   const d={...old?.data,storeOwned:true,sku:text(String(p.sku||''),80),product:text(String(p.name||''),100),specs:text(String(p.description||'')),country:text(String(p.country||''),80),unitPrice:p.price==null||String(p.price).trim()===''?null:Number(p.price),currency:String(p.currency||'').toUpperCase(),moq:Number(p.moq),stock:p.stock==null?'':String(p.stock),stockUnlimited:p.stockUnlimited!==false,leadTime:String(p.leadDays),categoryId:String(p.categoryId||''),subcategoryId:String(p.subcategoryId||''),images:list(p.images||[],5),translation:{titleAr:text(String(p.name||''),100),titleEn:text(String(p.nameEn||''),100),descriptionAr:text(String(p.description||'')),descriptionEn:text(String(p.descriptionEn||''))},status:published?'published':(old?'review':'pending'),studioArchived:p.status==='archived',shortDescription:text(String(p.shortDescription||''),500),productNotes:text(String(p.notes||''),2000),options:text(String(p.options||''),1000),technicalSpecs:text(String(p.technicalSpecs||''),5000),tiers:normalizeTiers(p.tiers||[],Number(p.moq),Number(p.price)),createdAt:old?.data?.createdAt||now,updatedAt:now};
   if(taxonomy){d.categoryId=taxonomy.categoryId;d.subcategoryId=taxonomy.subcategoryId;}
+  if(!old)d.createdByAdmin=user.id;
   const publicText=[...Object.values(d.translation),d.shortDescription,d.productNotes,d.options,d.technicalSpecs];
   for(const value of publicText)assert(!/(?:https?:\/\/|www\.|wa\.me|@[a-z0-9]|[\w.+-]+@[\w.-]+\.[a-z]{2,}|(?:\+|00)\d[\d\s()-]{7,})/i.test(value),400,'احذف بيانات التواصل من المحتوى العام');
   assert(d.product&&/^[A-Za-z0-9._-]{1,80}$/.test(d.sku),400,'أكمل اسم المنتج وتحقق من SKU / Complete product name and SKU');
@@ -106,8 +107,9 @@ export async function saveStudioProduct(user,body={}){
   assert(d.country.length<=80&&d.categoryId.length<=80&&d.subcategoryId.length<=80,400,'بيانات التصنيف أو دولة التوريد غير صالحة / Invalid taxonomy or supply country');
   await checkImages(d.images,user,old?.data?.images||[]);
   if(published){
-    assert(can(user,'publish')&&can(user,'translate'),403,'لا تملك صلاحية النشر / Publishing not allowed');
+    assert(can(user,'publish')&&can(user,'translate')||!old&&can(user,'offers.create'),403,'لا يمكنك نشر منتجات الآخرين / Cannot publish other products');
     assert(body.redactionConfirmed===true,400,'أكد مراجعة النصوص والصور قبل النشر / Confirm content review before publishing');
+    assert(d.images.length>0,400,'أضف صورة للمنتج قبل النشر / Add product image before publishing');
     validateContent('publicOffers',d);
     assert(countries.some(c=>c.id===d.country&&c.active!==false),400,'اختر دولة توريد معتمدة / Choose an active supply country');
     assert(categories.some(c=>c.id===d.categoryId&&c.active!==false),400,'اختر تصنيفًا فعالًا / Choose an active category');
@@ -134,6 +136,26 @@ export async function saveStudioProduct(user,body={}){
   if(settingsChanged)changes.push({table:'settings',id:'site',version:settings.version,data:settingsData,action:taxonomy?.changed?'product_category_create':'studio_product_draft_clear'});
   await rpc('commit_changes',{actor:user.id,changes});
   return {ok:true,status:d.status};
+}
+
+export async function publishCreatedProduct(user,body={}){
+  assert(user?.role==='admin'&&can(user,'offers.create'),403,'غير مصرح / Unauthorized');
+  const productId=id(String(body.id||''));
+  assert(body.redactionConfirmed===true,400,'أكد مراجعة النصوص والصور قبل النشر / Confirm privacy review');
+  const row=await one('public_offers',productId);
+  assert(row&&row.owner_id===user.id&&row.data?.storeOwned===true&&
+    (!row.data.createdByAdmin||row.data.createdByAdmin===user.id)&&!row.data.deletedAt,
+    403,'يمكنك نشر المنتجات التي أضفتها فقط / Publish only your own products');
+  assert(['pending','review'].includes(row.data.status),409,'المنتج غير جاهز للنشر / Product is not pending publication');
+  const data=structuredClone(row.data);
+  validateContent('publicOffers',data);
+  assert(Array.isArray(data.images)&&data.images.length>0,400,'أضف صورة قبل النشر / Product image required');
+  assert(['titleAr','titleEn','descriptionAr','descriptionEn'].every(k=>typeof data.translation?.[k]==='string'&&data.translation[k].trim()),400,'أكمل الاسم والوصف باللغتين / Complete both languages');
+  await assertProductTaxonomy(data,{required:true,activeOnly:true});
+  const now=new Date().toISOString();
+  data.status='published';data.publishedAt=now;data.updatedAt=now;
+  await rpc('commit_changes',{actor:user.id,changes:[{table:'public_offers',id:row.id,version:row.version,ownerId:row.owner_id,data,action:'studio_product_self_publish'}]});
+  return {ok:true,status:'published'};
 }
 
 function normalizeCatalog(raw={},options={}){
