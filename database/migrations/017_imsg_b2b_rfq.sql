@@ -3,7 +3,7 @@ create sequence if not exists public.imsg_rfq_number_seq start with 10001 increm
 
 create table if not exists public.imsg_rfq_customers (
   id uuid primary key default gen_random_uuid(),
-  whatsapp text not null unique check (whatsapp ~ '^\\+[1-9][0-9]{7,14}$'),
+  whatsapp text not null unique check (whatsapp ~ '^\+[1-9][0-9]{7,14}$'),
   name text not null,
   country text not null,
   company text not null default '',
@@ -95,7 +95,7 @@ declare
   v_version integer := nullif(p_payload->>'expectedVersion','')::integer;
 begin
   if v_name = '' or length(v_name)>140 or v_country='' or length(v_country)>120
-     or v_phone !~ '^\\+[1-9][0-9]{7,14}$' or length(v_company)>200
+     or v_phone !~ '^\+[1-9][0-9]{7,14}$' or length(v_company)>200
      or length(coalesce(p_payload->>'notes',''))>2000
      or length(coalesce(p_payload->>'internalNotes',''))>4000 then
     raise exception 'Invalid customer or note data' using errcode='22023';
