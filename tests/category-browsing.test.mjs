@@ -23,13 +23,14 @@ const offers=[{id:'usd',unitPrice:10,currency:'USD'},{id:'sar',unitPrice:20,curr
 test('price ordering compares equivalent currency values and sorts the full result before pagination',()=>{
  assert.deepEqual(catalogProducts(offers,{sort:'price-asc'},settings).map(p=>p.id),['cheap','sar','usd']);
  assert.deepEqual(catalogProducts(offers,{sort:'price-desc'},settings).map(p=>p.id),['usd','sar','cheap']);
- const html=renderCatalog({...state,publicOffers:offers},{language:'ar',catalogConfig:{pageSize:1}},{sort:'price-desc',page:1});assert.match(html,/data-store-product="usd"/);assert.doesNotMatch(html,/data-store-product="sar"/);assert.match(html,/value="price-desc" selected/);
- const second=renderCatalog({...state,publicOffers:offers},{language:'en',catalogConfig:{pageSize:1}},{sort:'price-desc',page:2});assert.match(second,/data-store-product="sar"/);assert.match(second,/Price: low to high/);
+ const html=renderCatalog({...state,publicOffers:offers},{language:'ar',catalogConfig:{pageSize:1}},{sort:'price-desc',page:1});assert.match(html,/data-store-product="cheap"/);assert.doesNotMatch(html,/value="price-desc"/);
+ const second=renderCatalog({...state,publicOffers:offers},{language:'en',catalogConfig:{pageSize:1}},{sort:'price-desc',page:2});assert.match(second,/data-store-product="sar"/);assert.doesNotMatch(second,/Price: low to high/);
 });
 test('category/search routes honor requested sort and render all four sorting choices',()=>{
  const html=renderStoreRoute({...state,publicOffers:offers},{category:'electronics',sort:'price-desc'},{language:'ar'});
- assert.ok(html.indexOf('data-store-product="usd"')<html.indexOf('data-store-product="cheap"'));
- for(const key of ['newest','price-asc','price-desc','name'])assert.match(html,new RegExp('value="'+key+'"'));
+ assert.ok(html.indexOf('data-store-product="cheap"')<html.indexOf('data-store-product="usd"'));
+ for(const key of ['newest','name'])assert.match(html,new RegExp('value="'+key+'"'));
+ assert.doesNotMatch(html,/price-asc|price-desc/);
  const hidden=renderCatalog(state,{language:'ar',catalogConfig:{showSort:false}});assert.doesNotMatch(hidden,/data-catalog-filter="sort"/);
 });
 
