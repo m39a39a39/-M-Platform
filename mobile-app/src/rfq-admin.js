@@ -107,21 +107,36 @@ function itemView(item,index){
 }
 function showEditor(original=null,duplicate=null,customerPrefill=null){
  const base=original||duplicate||{},rowCustomer=customerPrefill||base.customer||{},selected=base.items?.map(item=>({offerId:item.offerId,quantity:item.quantity,snapshot:item.snapshot}))||[],itemMap=new Map(selected.map(item=>[item.offerId,item]));
- const edit=!!original,copy=!!duplicate;
+ const edit=!!original,copy=!!duplicate,defaultType=isCustom(base)?'custom':'catalog';
  modal(edit?T('تعديل الطلب','Edit request'):copy?T('نسخ الطلب','Duplicate request'):T('إنشاء طلب جديد','Create request'),'<form id="imsg-rfq-editor" class="imsg-rfq-editor">'+
+ '<label>'+T('نوع الطلب','Request type')+'<select name="requestType"><option value="catalog" '+(defaultType==='catalog'?'selected':'')+'>'+T('منتجات الكتالوج','Catalog products')+'</option><option value="custom" '+(defaultType==='custom'?'selected':'')+'>'+T('طلب عرض خاص','Custom sourcing')+'</option></select></label>'+
  '<label>'+T('بحث عن عميل موجود','Find customer')+'<input type="search" data-rfq-customer-search placeholder="'+T('الاسم أو رقم واتساب','Name or WhatsApp')+'"></label><div class="imsg-rfq-pick-list" data-rfq-customer-results></div>'+
  '<div class="imsg-rfq-contact-grid">'+
  '<label>'+T('الاسم','Name')+' *<input name="name" maxlength="140" minlength="2" value="'+x(rowCustomer.name||'')+'" required></label>'+
  '<label>'+T('واتساب دولي (+966...)','International WhatsApp')+' *<input name="whatsapp" type="tel" inputmode="tel" dir="ltr" value="'+x(rowCustomer.whatsapp||'')+'" required></label>'+
  '<label>'+T('الدولة','Country')+' *<input name="country" maxlength="120" value="'+x(rowCustomer.country||'')+'" required></label>'+
  '<label>'+T('الشركة أو المتجر','Company or store')+'<input name="company" maxlength="200" value="'+x(rowCustomer.company||'')+'"></label></div>'+
- '<label>'+T('بحث عن المنتجات','Find products')+'<input type="search" data-rfq-product-search placeholder="'+T('الاسم أو الموديل أو SKU أو التصنيف','Name, model, SKU or category')+'"></label><div class="imsg-rfq-pick-list" data-rfq-product-results></div>'+
- '<div class="imsg-rfq-editor-items" data-rfq-selected-items></div>'+
+ '<div data-rfq-catalog-fields><label>'+T('بحث عن المنتجات','Find products')+'<input type="search" data-rfq-product-search placeholder="'+T('الاسم أو الموديل أو SKU أو التصنيف','Name, model, SKU or category')+'"></label><div class="imsg-rfq-pick-list" data-rfq-product-results></div>'+
+ '<div class="imsg-rfq-editor-items" data-rfq-selected-items></div></div>'+
+ '<div data-rfq-custom-fields class="imsg-rfq-custom-fields">'+
+ '<label>'+T('اسم المنتج المطلوب','Product name')+' *<input name="productName" maxlength="200" value="'+x(base.customDetails?.productName||'')+'"></label>'+
+ '<label>'+T('مواصفات المنتج','Product specifications')+' *<textarea name="specifications" rows="4" maxlength="2000">'+x(base.customDetails?.specifications||'')+'</textarea></label>'+
+ '<label>'+T('الكمية المطلوبة','Quantity')+' *<input name="customQuantity" type="number" inputmode="numeric" min="1" max="1000000000" step="1" value="'+x(base.customDetails?.quantity||'')+'"></label>'+
+ '<label>'+T('صورة المنتج (اختياري)','Product image (optional)')+'<input name="customImage" type="file" accept="image/jpeg,image/png,image/webp"></label>'+
+ (base.customDetails?.image?'<img class="imsg-rfq-custom-image" alt="" src="'+x(base.customDetails.image)+'">':'')+
+ '</div>'+
  '<label>'+T('حالة الطلب','Status')+'<select name="status">'+statuses.map(s=>'<option value="'+s[0]+'" '+(base.status===s[0]?'selected':'')+'>'+T(s[1],s[2])+'</option>').join('')+'</select></label>'+
  '<label>'+T('ملاحظات العميل','Customer notes')+'<textarea name="notes" maxlength="2000">'+x(base.notes||'')+'</textarea></label>'+
  '<label>'+T('ملاحظات الإدارة','Internal notes')+'<textarea name="internalNotes" maxlength="4000">'+x(base.internalNotes||'')+'</textarea></label>'+
  '<p data-rfq-editor-error role="status" class="imsg-rfq-error"></p><button type="submit" class="primary-btn">'+T('حفظ الطلب','Save request')+'</button></form>');
  const form=dialog.querySelector('#imsg-rfq-editor'),selectedNode=form.querySelector('[data-rfq-selected-items]');
+ const typeSelect=form.elements.requestType,refreshType=()=>{
+  const custom=typeSelect.value==='custom';
+  form.querySelector('[data-rfq-catalog-fields]').hidden=custom;
+  form.querySelector('[data-rfq-custom-fields]').hidden=!custom;
+  for(const name of ['productName','specifications','customQuantity'])form.elements[name].required=custom;
+ };
+ typeSelect.addEventListener('change',refreshType);refreshType();
  const repaint=()=>{selectedNode.innerHTML=[...itemMap.values()].map(itemView).join('')||'<p>'+T('أضف منتجًا واحدًا على الأقل','Add at least one product')+'</p>';};
  repaint();
  selectedNode.onchange=e=>{const input=e.target.closest('[data-rfq-item-qty]');if(input){const item=[...itemMap.values()][Number(input.dataset.rfqItemQty)];if(item)item.quantity=Number(input.value);}};
@@ -135,16 +150,27 @@ function showEditor(original=null,duplicate=null,customerPrefill=null){
  form.onsubmit=async event=>{
   event.preventDefault();if(busy)return;
   const values=[...itemMap.values()],error=form.querySelector('[data-rfq-editor-error]'),submit=form.querySelector('[type="submit"]');
-  if(!values.length){error.textContent=T('أضف منتجًا واحدًا على الأقل','Add a product');return;}
-  if(values.some(v=>!Number.isSafeInteger(v.quantity)||v.quantity<Math.max(1,Math.ceil(Number((listProducts().find(p=>p.id===v.offerId)||v.snapshot)?.moq)||1)))){error.textContent=T('تحقق من الكميات والحد الأدنى','Check quantities and MOQ');return;}
+  const custom=typeSelect.value==='custom';
+  if(!custom&&!values.length){error.textContent=T('أضف منتجًا واحدًا على الأقل','Add a product');return;}
+  if(!custom&&values.some(v=>!Number.isSafeInteger(v.quantity)||v.quantity<Math.max(1,Math.ceil(Number((listProducts().find(p=>p.id===v.offerId)||v.snapshot)?.moq)||1)))){error.textContent=T('تحقق من الكميات والحد الأدنى','Check quantities and MOQ');return;}
   const f=new FormData(form),payload={
    source:'admin',customer:{name:f.get('name'),whatsapp:f.get('whatsapp'),country:f.get('country'),company:f.get('company')},
    status:f.get('status'),notes:f.get('notes'),internalNotes:f.get('internalNotes'),
-   items:values.map(v=>({offerId:v.offerId,quantity:v.quantity}))
+   requestType:custom?'custom':'catalog',
+   items:custom?[]:values.map(v=>({offerId:v.offerId,quantity:v.quantity})),
+   customDetails:custom?{productName:f.get('productName'),specifications:f.get('specifications'),quantity:Number(f.get('customQuantity')),image:base.customDetails?.image||''}:{}
   };
   if(edit){payload.requestId=original.id;payload.expectedVersion=original.version;}
   busy=true;submit.disabled=true;error.textContent=T('جارٍ الحفظ...','Saving...');
   try{
+   if(custom&&form.elements.customImage?.files?.length){
+    const photo=form.elements.customImage.files[0];
+    if(!['image/jpeg','image/png','image/webp'].includes(photo.type))throw Error(T('صيغة الصورة غير مدعومة','Unsupported image format'));
+    const {filesToCompressedSources}=await import('./image-upload.js');
+    const image=(await filesToCompressedSources(form.elements.customImage,{maxFiles:1,targetBytes:240*1024,maxDimension:1200}))[0]||'';
+    if(image.length>480000)throw Error(T('الصورة كبيرة جدًا','Image is too large'));
+    payload.customDetails.image=image;
+   }
    const result=await api('/api/v1/rfq',{method:'POST',body:payload});
    if(!result?.number)throw new Error('Invalid response');
    await loadRecords();dialog?.remove();dialog=null;
