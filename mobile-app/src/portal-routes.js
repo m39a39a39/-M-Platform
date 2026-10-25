@@ -1,5 +1,5 @@
 export const portalPaths = Object.freeze({client:'/customer.html',supplier:'/supplier.html',admin:'/admin.html'});
-const screens={client:['home','requests','offers','notifications','account'],supplier:['home','orders','requests','offers','notifications','account'],admin:['overview','orders','settings','notifications','conversations']};
+const screens={client:['home','requests','offers','notifications','account'],supplier:['home','orders','requests','offers','notifications','account'],admin:['overview','requests','settings','notifications','conversations']};
 export function portalRole(pathname){
   const path=String(pathname).replace(/\/$/,'');
   if(['/customer','/customer.html'].includes(path))return 'client';
