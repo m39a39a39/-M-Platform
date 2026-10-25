@@ -31,7 +31,7 @@ test('editing approved terms requires re-review; removing a source preserves its
  const a=await submitSupplySource(supplier,{terms,proposal});
  const approved=await reviewSupplySource(admin,{id:a.sourceId,version:1,action:'approve',salePrice:20,currency:'SAR',translation:{titleAr:'منتج',titleEn:'Product',descriptionAr:'وصف',descriptionEn:'Description'},redactionConfirmed:true});
  await bulkSupplySources(admin,{items:[{id:a.sourceId,version:2,patch:{terms:{unitPrice:8}}}]});
- assert.equal((await snapshot(admin)).supplySources[0].status,'pending');assert.equal((await snapshot(null)).publicOffers[0].unitPrice,20);
+ assert.equal((await snapshot(admin)).supplySources[0].status,'pending');assert.equal('unitPrice' in (await snapshot(null)).publicOffers[0],false);
  await assert.rejects(()=>approvedSource(approved.productId,supplier.id),e=>e.status===409);
  await reviewSupplySource(admin,{id:a.sourceId,version:3,action:'approve'});
  await bulkSupplySources(admin,{items:[{id:a.sourceId,version:4,delete:true}]});
