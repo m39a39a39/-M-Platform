@@ -111,7 +111,7 @@ function draw(){
  '<label>'+esc(tr('تغيير تصنيف المحدد','Set selected category'))+' <select data-bulk-category>'+selectOptions(categories(),state.selectedCategory,tr('اختر','Choose'))+'</select></label><button type="button" data-bulk-action="apply-category">'+esc(tr('تطبيق','Apply'))+'</button></div>'+
  '<div class="table-wrap bulk-ai-table"><table><thead><tr>'+[tr('تحديد','Select'),tr('الصورة','Image'),tr('الاسم العربي','Arabic name'),tr('الاسم الإنجليزي','English name'),tr('التصنيف','Category'),tr('الفرعي','Subcategory'),tr('الموديل','Model / SKU'),tr('الحالة','Status'),tr('الإجراء','Action')].map(x=>'<th>'+esc(x)+'</th>').join('')+'</tr></thead><tbody>'+rows.map(rowHtml).join('')+'</tbody></table></div>'+
  '<div class="bulk-ai-pagination"><button type="button" data-bulk-action="prev" '+(state.page?'':'disabled')+'>'+esc(tr('السابق','Previous'))+'</button> '+(state.page+1)+' / '+Math.max(1,Math.ceil(filtered.length/PER_PAGE))+' <button type="button" data-bulk-action="next" '+((state.page+1)*PER_PAGE<filtered.length?'':'disabled')+'>'+esc(tr('التالي','Next'))+'</button></div>'+
- '<p class="bulk-ai-foot">'+esc(tr('البيانات محفوظة محليًا في IndexedDB؛ لن تظهر تلقائيًا على جهاز آخر. عند حذف بيانات المتصفح تُفقد المسودات المحلية. الصور الأصلية لا تُرسل إلى الذكاء الاصطناعي؛ تُرسل نسخة مضغوطة للتحليل، ويُرفع الأصل إلى المتجر عند الحفظ ضمن حدود الرفع الحالية.','Drafts are stored locally in IndexedDB and do not sync across devices. Clearing browser data removes them. AI receives a compressed preview. The image uploaded for the product follows the store’s existing upload limits.'))+'</p></section>';
+ '<p class="bulk-ai-foot">'+esc(tr('البيانات محفوظة محليًا في IndexedDB؛ لن تظهر تلقائيًا على جهاز آخر. عند حذف بيانات المتصفح تُفقد المسودات المحلية. الصور الأصلية لا تُرسل إلى الذكاء الاصطناعي؛ تُرسل نسخة مضغوطة للتحليل، وتُرفع الصورة الأصلية حتى 5MB، أما الأكبر فتُضغط وفق حدود رفع المتجر الحالية.','Drafts are stored locally in IndexedDB and do not sync across devices. Clearing browser data removes them. AI receives a compressed preview. Images up to 5MB are uploaded in their original supported format; larger files are compressed to the store’s 5MB limit.'))+'</p></section>';
  stats();
 }
 function style(){
@@ -160,7 +160,7 @@ async function unpackZip(file){
   const name=new TextDecoder('utf-8').decode(new Uint8Array(bytes,pos+46,nameLen));
   pos+=46+nameLen+extraLen+commentLen;
   if(!fileType(name)||name.includes('__MACOSX/')||name.split('/').at(-1).startsWith('.'))continue;
-  total+=raw;if(raw>MAX_FILE||total>MAX_ITEMS*MAX_FILE)throw Error(tr('ZIP يحتوي صورًا كبيرة جدًا','ZIP contains oversized images'));
+  total+=raw;if(raw>MAX_FILE||total>200*1024*1024)throw Error(tr('ZIP يحتوي صورًا كبيرة جدًا','ZIP contains oversized images'));
   if(local+30>length||data.getUint32(local,true)!==0x04034b50||!([0,8].includes(method)))throw Error(tr('طريقة ضغط ZIP غير مدعومة','Unsupported ZIP compression'));
   const start=local+30+data.getUint16(local+26,true)+data.getUint16(local+28,true);
   if(start+compressed>length)throw Error('Corrupt ZIP image');
@@ -221,9 +221,11 @@ async function saveOne(row){
  if(existing.saved){await update(row,{status:'saved',error:''});return;}
  let imageSrc=row.imageSrc||'';
  if(!imageSrc){
-  const sources=await window.MStudioImages.filesToCompressedSources({files:[row.file]},{targetBytes:4*1024*1024,maxDimension:2400});
-  if(!sources?.[0])throw Error(tr('تعذر تجهيز صورة المنتج','Image preparation failed'));
-  const upload=await window.MStudioSession.request('/api/v1/uploads',{auth:true,method:'POST',body:{source:sources[0]}});
+  let source='';
+  if(row.file.size<=5*1024*1024){source=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result||''));reader.onerror=()=>reject(reader.error);reader.readAsDataURL(row.file);});}
+  else{const sources=await window.MStudioImages.filesToCompressedSources({files:[row.file]},{targetBytes:4*1024*1024,maxDimension:2400});source=sources?.[0]||'';}
+  if(!source)throw Error(tr('تعذر تجهيز صورة المنتج','Image preparation failed'));
+  const upload=await window.MStudioSession.request('/api/v1/uploads',{auth:true,method:'POST',body:{source}});
   if(!upload?.src)throw Error(tr('تعذر رفع صورة المنتج','Image upload failed'));
   imageSrc=upload.src;await update(row,{imageSrc});
  }
