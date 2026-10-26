@@ -77,6 +77,20 @@ function dupMatch(row){
  if(match)return tr('⚠ قد يكون موجودًا بالمتجر: ','⚠ Possible existing product: ')+esc(match.translation?.titleAr||match.product||'')+' ('+esc(match.id)+')';
  return '';
 }
+function existingDuplicate(row){
+ const d=row.draft||{},name=cleanName(d.name),en=cleanName(d.nameEn),sku=cleanName(d.sku);
+ return inStore().find(p=>!p.deletedAt&&(sku&&sku===cleanName(p.sku)||
+   name&&name.length>5&&[p.product,p.translation?.titleAr,p.translation?.titleEn].some(v=>cleanName(v)===name)||
+   en&&en.length>5&&[p.product,p.translation?.titleAr,p.translation?.titleEn].some(v=>cleanName(v)===en)));
+}
+function duplicateComparison(row){
+ const match=existingDuplicate(row);if(!match)return '';
+ const image=(match.images||[]).find(src=>/^\/api\/media\/[a-f0-9-]{36}$/.test(src));
+ return '<div class="bulk-ai-duplicate-compare"><strong>'+esc(tr('قد يكون هذا المنتج موجودًا بالفعل في المتجر','This product may already exist in the store'))+'</strong>'+
+ (image?'<img src="'+esc(image)+'" alt="'+esc(match.product||'existing product')+'" loading="lazy">':'')+
+ '<span>'+esc(match.translation?.titleAr||match.product||match.sku||'')+'</span>'+
+ '<small>SKU: '+esc(match.sku||'—')+' · ID: '+esc(match.id)+'</small></div>';
+}
 function rowHtml(row){
  const d=row.draft||{},editable=row.status!=='saved',selected=row.selected!==false;
  return '<tr data-bulk-row="'+esc(row.id)+'"><td><input type="checkbox" data-bulk-select="'+esc(row.id)+'" '+(selected?'checked':'')+' '+(row.status==='saved'?'disabled':'')+'></td><td>'+imageTag(row)+'</td>'+
@@ -89,7 +103,7 @@ function rowHtml(row){
  '<td><button type="button" data-bulk-action="retry-one" data-bulk-id="'+esc(row.id)+'" '+(state.busy||row.status==='saved'?'disabled':'')+'>'+esc(tr('تحليل','Analyze'))+'</button><button type="button" data-bulk-action="delete-one" data-bulk-id="'+esc(row.id)+'" '+(state.busy?'disabled':'')+'>'+esc(tr('حذف','Remove'))+'</button></td></tr>'+
  '<tr><td colspan="9" class="bulk-ai-expanded"><details><summary>'+esc(tr('تفاصيل المنتج','Product details'))+' · '+esc(row.fileName)+(row.duplicate?'<small> · '+dupMatch(row)+'</small>':'')+'</summary><div class="bulk-ai-details">'+
  [['shortDescription',tr('الوصف المختصر','Short description')],['description',tr('الوصف العربي','Arabic description')],['descriptionEn',tr('English description','English description')],['technicalSpecs',tr('المميزات الواضحة','Visible features')],['options',tr('الخيارات','Options')]].map(([field,title])=>'<label>'+esc(title)+'<textarea data-bulk-field="'+field+'" data-bulk-id="'+esc(row.id)+'" rows="3" '+(editable?'':'disabled')+'>'+esc(d[field]||'')+'</textarea></label>').join('')+
- (dupMatch(row)?'<p class="bulk-ai-warning">'+dupMatch(row)+'</p>':'')+'</div></details></td></tr>';
+ (dupMatch(row)?'<p class="bulk-ai-warning">'+dupMatch(row)+'</p>':'')+duplicateComparison(row)+'</div></details></td></tr>';
 }
 function draw(){
  if(!root?.isConnected)return;
@@ -122,7 +136,7 @@ function style(){
  '.bulk-ai-table{overflow:auto}.bulk-ai-table table{width:100%;min-width:1030px;border-collapse:collapse}.bulk-ai-table th,.bulk-ai-table td{padding:8px;border-bottom:1px solid #e3e8f1;vertical-align:top;white-space:normal}',
  '.bulk-ai-table input:not([type=checkbox]),.bulk-ai-table select{min-width:120px;width:100%;max-width:230px;box-sizing:border-box}.bulk-ai-thumb{border:0;padding:0;background:transparent}.bulk-ai-thumb img{width:64px;height:64px;object-fit:contain;border-radius:8px}',
  '.bulk-ai-error{display:block;color:#b42318;max-width:180px}.bulk-ai-warning{color:#a05c05}.bulk-ai-expanded{background:#fafbfd}.bulk-ai-details{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;padding:12px}.bulk-ai-details label{display:grid;gap:6px}.bulk-ai-details textarea{width:100%;box-sizing:border-box}',
- '.bulk-ai-pagination{text-align:center}.bulk-ai-notice{color:#145c42}.bulk-ai-status{font-weight:600}.bulk-ai-shell [disabled]{opacity:.5;cursor:not-allowed}.bulk-ai-upload.is-over{background:#eff6ff}'
+ '.bulk-ai-duplicate-compare{display:flex;gap:6px;flex-direction:column;align-items:flex-start;border:1px solid #f3d6a3;padding:12px;border-radius:9px;background:#fff9e9}.bulk-ai-duplicate-compare img{width:130px;height:100px;object-fit:contain}.bulk-ai-pagination{text-align:center}.bulk-ai-notice{color:#145c42}.bulk-ai-status{font-weight:600}.bulk-ai-shell [disabled]{opacity:.5;cursor:not-allowed}.bulk-ai-upload.is-over{background:#eff6ff}'
  ].join('');document.head.append(el);
 }
 async function fileHash(file){
