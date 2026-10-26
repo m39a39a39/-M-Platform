@@ -72,14 +72,14 @@ function dupMatch(row){
  if(!row.draft)return '';
  const own=state.rows.find(x=>x.id!==row.id&&x.hash&&x.hash===row.hash);
  const title=cleanName(row.draft.name),sku=cleanName(row.draft.sku);
- const match=inStore().find(p=>!p.deletedAt&&(sku&&cleanName(p.sku)===sku||title&&title.length>5&&[p.product,p.translation?.titleAr,p.translation?.titleEn].some(n=>cleanName(n)===title)));
+ const match=inStore().find(p=>p.id!==row.id&&!p.deletedAt&&(sku&&cleanName(p.sku)===sku||title&&title.length>5&&[p.product,p.translation?.titleAr,p.translation?.titleEn].some(n=>cleanName(n)===title)));
  if(own)return tr('⚠ صورة مكررة في الدفعة؛ سيبقى منتجًا مستقلًا','⚠ Same image in batch; remains independent');
  if(match)return tr('⚠ قد يكون موجودًا بالمتجر: ','⚠ Possible existing product: ')+esc(match.translation?.titleAr||match.product||'')+' ('+esc(match.id)+')';
  return '';
 }
 function existingDuplicate(row){
  const d=row.draft||{},name=cleanName(d.name),en=cleanName(d.nameEn),sku=cleanName(d.sku);
- return inStore().find(p=>!p.deletedAt&&(sku&&sku===cleanName(p.sku)||
+ return inStore().find(p=>p.id!==row.id&&!p.deletedAt&&(sku&&sku===cleanName(p.sku)||
    name&&name.length>5&&[p.product,p.translation?.titleAr,p.translation?.titleEn].some(v=>cleanName(v)===name)||
    en&&en.length>5&&[p.product,p.translation?.titleAr,p.translation?.titleEn].some(v=>cleanName(v)===en)));
 }
