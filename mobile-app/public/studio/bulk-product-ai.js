@@ -127,6 +127,7 @@ function draw(){
  '<div class="bulk-ai-pagination"><button type="button" data-bulk-action="prev" '+(state.page?'':'disabled')+'>'+esc(tr('السابق','Previous'))+'</button> '+(state.page+1)+' / '+Math.max(1,Math.ceil(filtered.length/PER_PAGE))+' <button type="button" data-bulk-action="next" '+((state.page+1)*PER_PAGE<filtered.length?'':'disabled')+'>'+esc(tr('التالي','Next'))+'</button></div>'+
  '<p class="bulk-ai-foot">'+esc(tr('البيانات محفوظة محليًا في IndexedDB؛ لن تظهر تلقائيًا على جهاز آخر. عند حذف بيانات المتصفح تُفقد المسودات المحلية. الصور الأصلية لا تُرسل إلى الذكاء الاصطناعي؛ تُرسل نسخة مضغوطة للتحليل، وتُرفع الصورة الأصلية حتى 5MB، أما الأكبر فتُضغط وفق حدود رفع المتجر الحالية.','Drafts are stored locally in IndexedDB and do not sync across devices. Clearing browser data removes them. AI receives a compressed preview. Images up to 5MB are uploaded in their original supported format; larger files are compressed to the store’s 5MB limit.'))+'</p></section>';
  stats();
+ if(typeof hydrateStudioImages==='function')void hydrateStudioImages();
 }
 function style(){
  if(document.getElementById('bulk-ai-styles'))return;
