@@ -17,7 +17,7 @@ export async function bulkProductAi(user,body={}){
     const apiKey=String(process.env.OPENAI_API_KEY||'').trim();
     assert(apiKey,503,'خدمة الذكاء الاصطناعي غير مهيأة / AI is not configured');
     const model=String(process.env.OPENAI_ADMIN_MODEL||process.env.OPENAI_CHAT_MODEL||'gpt-6-luna').replace(/^openai\//,'');
-    const result=await generateProductDraft(user,{images:[body.image],notes:'',sku:''},{apiKey,model,state:{settings}});
+    const result=await generateProductDraft(user,{images:[body.image],notes:'Prioritize the most specific visible product type and a clear retail-ready title in Arabic and English. Do not use generic electronic product labels when the type is identifiable. Never invent attributes, brands or model numbers.',sku:''},{apiKey,model,state:{settings}});
     const draft=result.draft||{},ref=buildProductDraftReference({settings});
     return {draft:{...draft,sku:/^MG-AI-/.test(draft.sku||'')?'':draft.sku},taxonomy:ref,needsReview:!draft.name||!draft.categoryId||result.needsMoreImages};
   }
