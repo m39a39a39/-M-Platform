@@ -32,12 +32,17 @@ function store(mode,work){
 }
 const put=row=>store('readwrite',object=>object.put({...row,owner:state.owner,updatedAt:Date.now()}));
 const remove=id=>store('readwrite',object=>object.delete(id));
+const removeMany=ids=>store('readwrite',object=>{for(const id of ids)object.delete(id);});
 async function load(){
  const all=await new Promise((resolve,reject)=>{
   const tx=database.transaction('rows','readonly'),req=tx.objectStore('rows').getAll();
   req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);
  });
- state.rows=all.filter(x=>x.owner===state.owner).sort((a,b)=>a.createdAt-b.createdAt);
+ // Published products belong to the catalog, never the upload queue.
+ const mine=all.filter(x=>x.owner===state.owner);
+ state.rows=mine.filter(x=>x.status!=='published').sort((a,b)=>a.createdAt-b.createdAt);
+ const completed=mine.filter(x=>x.status==='published');
+ if(completed.length)try{await removeMany(completed.map(x=>x.id));}catch{/* Retry cleanup on next visit; completed rows remain hidden. */}
  let dirty=false;
  for(const row of state.rows)if(['analyzing','saving','publishing'].includes(row.status)){
   row.status=row.status==='analyzing'?'pending':row.status==='publishing'?'publish_failed':'save_failed';
@@ -47,6 +52,39 @@ async function load(){
 }
 async function update(row,changes){
  Object.assign(row,changes);await put(row);queueDraw();
+}
+// Keep successful publications in the catalog and automatically remove them from the local batch.
+async function finishRow(row,published=false){
+ if(published){
+  // Mark as completed first so interrupted cleanup will not restore the item on reload.
+  await update(row,{status:'published',error:'',selected:false});
+  try{await remove(row.id);}catch{/* The completed marker is pruned on next visit. */}
+  state.rows=state.rows.filter(x=>x.id!==row.id);
+  queueDraw();
+  return 'published';
+ }
+ await update(row,{status:'saved',error:'',selected:false});
+ return 'saved';
+}
+// Only the device's upload queue is touched, not actual catalog records.
+async function deleteFromQueue(rows){
+ if(state.busy)return;
+ const ids=new Set(rows.filter(x=>x&&x.status!=='published').map(x=>x.id));
+ const targets=state.rows.filter(x=>ids.has(x.id));
+ if(!targets.length){state.error=tr('لا توجد منتجات محددة للحذف','No products selected to remove');stats();return;}
+ const saved=targets.filter(x=>x.status==='saved').length;
+ const message=tr('حذف ','Remove ')+targets.length+
+  tr(' منتج من قائمة الإضافة على هذا الجهاز؟',' products from this device’s upload queue?')+
+  (saved?tr(' يوجد '+saved+' منتج محفوظ كمسودة في الكتالوج؛ حذفها من هذه القائمة لن يحذفها من الكتالوج.',' '+saved+' saved drafts remain in the catalog. This action will not delete any catalog product.'):'')+
+  tr(' لا يمكن استعادة بيانات قائمة الإضافة بعد الحذف.',' Deleted upload-list data cannot be recovered.');
+ if(!window.confirm(message))return;
+ state.busy=true;state.error='';draw();
+ try{
+  await removeMany([...ids]);
+  state.rows=state.rows.filter(x=>!ids.has(x.id));
+  state.notice=tr('تم حذف ','Removed ')+targets.length+tr(' من قائمة الإضافة فقط.',' from the upload list only.');
+ }catch(error){state.error=String(error.message||error);}
+ finally{state.busy=false;draw();}
 }
 function queueDraw(){
  clearTimeout(redrawTimer);redrawTimer=setTimeout(()=>{
@@ -60,6 +98,11 @@ function stats(){
  if(!root?.isConnected)return;
  const el=root.querySelector('[data-bulk-counts]');
  if(el)el.textContent=tr('الإجمالي: ','Total: ')+state.rows.length+' | '+Object.keys(statusName).map(s=>label(s)+': '+count(s)).join(' | ');
+ const selected=state.rows.filter(x=>x.selected!==false&&x.status!=='published').length;
+ const selectedLabel=root.querySelector('[data-bulk-selected-count]');
+ if(selectedLabel)selectedLabel.textContent=tr('المحدد: ','Selected: ')+selected;
+ const deleteButton=root.querySelector('[data-bulk-action="delete-selected"]');
+ if(deleteButton)deleteButton.disabled=state.busy||!selected;
  const notice=root.querySelector('[data-bulk-notice]');if(notice)notice.textContent=state.error||state.notice||'';
 }
 function selectOptions(list,value,empty){
@@ -101,7 +144,7 @@ function rowHtml(row){
  '<td><select data-bulk-field="subcategoryId" data-bulk-id="'+esc(row.id)+'" aria-label="التصنيف الفرعي" '+(editable?'':'disabled')+'>'+selectOptions(subcategories(d.categoryId),d.subcategoryId||'',tr('بدون','None'))+'</select></td>'+
  '<td><input data-bulk-field="sku" data-bulk-id="'+esc(row.id)+'" maxlength="80" aria-label="الموديل" value="'+esc(d.sku||'')+'" '+(editable?'':'disabled')+'></td>'+
  '<td><span class="bulk-ai-status">'+esc(label(row.status))+'</span>'+(row.error?'<small class="bulk-ai-error">'+esc(row.error)+'</small>':'')+'</td>'+
- '<td><button type="button" data-bulk-action="retry-one" data-bulk-id="'+esc(row.id)+'" '+(state.busy||['saved','published'].includes(row.status)?'disabled':'')+'>'+esc(tr('تحليل','Analyze'))+'</button><button type="button" data-bulk-action="delete-one" data-bulk-id="'+esc(row.id)+'" '+(state.busy||['saved','published'].includes(row.status)?'disabled':'')+'>'+esc(tr('حذف','Remove'))+'</button></td></tr>'+
+ '<td><button type="button" data-bulk-action="retry-one" data-bulk-id="'+esc(row.id)+'" '+(state.busy||['saved','published'].includes(row.status)?'disabled':'')+'>'+esc(tr('تحليل','Analyze'))+'</button><button type="button" data-bulk-action="delete-one" data-bulk-id="'+esc(row.id)+'" '+(state.busy||row.status==='published'?'disabled':'')+' title="'+esc(tr('إزالة من قائمة الإضافة فقط','Remove from upload queue only'))+'">'+esc(tr('حذف','Remove'))+'</button></td></tr>'+
  '<tr><td colspan="9" class="bulk-ai-expanded"><details><summary>'+esc(tr('تفاصيل المنتج','Product details'))+' · '+esc(row.fileName)+(row.duplicate?'<small> · '+dupMatch(row)+'</small>':'')+'</summary><div class="bulk-ai-details">'+
  [['shortDescription',tr('الوصف المختصر','Short description')],['description',tr('الوصف العربي','Arabic description')],['descriptionEn',tr('English description','English description')],['technicalSpecs',tr('المميزات الواضحة','Visible features')],['options',tr('الخيارات','Options')]].map(([field,title])=>'<label>'+esc(title)+'<textarea data-bulk-field="'+field+'" data-bulk-id="'+esc(row.id)+'" rows="3" '+(editable?'':'disabled')+'>'+esc(d[field]||'')+'</textarea></label>').join('')+
  (dupMatch(row)?'<p class="bulk-ai-warning">'+dupMatch(row)+'</p>':'')+duplicateComparison(row)+'</div></details></td></tr>';
@@ -113,19 +156,22 @@ function draw(){
  state.page=Math.max(0,Math.min(state.page,Math.max(0,Math.ceil(filtered.length/PER_PAGE)-1)));
  const rows=filtered.slice(state.page*PER_PAGE,(state.page+1)*PER_PAGE);
  root.innerHTML='<section class="bulk-ai-shell">'+
- '<div class="bulk-ai-intro"><h2>'+esc(tr('إضافة المنتجات الجماعية بالذكاء الاصطناعي','AI bulk product creation'))+'</h2><p>'+esc(tr('كل صورة = منتج مستقل. بعد المراجعة اختر حفظ مسودات أو نشر المنتجات المحددة مباشرة في المتجر. الذكاء الاصطناعي لا ينشر تلقائيًا.','Each image represents one product. After reviewing, either save drafts or explicitly publish selected products to the store. AI never auto-publishes products.'))+'</p></div>'+
+ '<div class="bulk-ai-intro"><h2>'+esc(tr('إضافة المنتجات الجماعية بالذكاء الاصطناعي','AI bulk product creation'))+'</h2><p>'+esc(tr('كل صورة = منتج مستقل. بعد المراجعة احفظ مسودات أو انشر المحدد مباشرة. المنشور يختفي من هنا ويظهر في كتالوج المنتجات. الحذف هنا لا يحذف من الكتالوج.','Each image represents one product. After review, save drafts or publish selected products. Published products leave this list and appear in the catalog. Removing items here never deletes catalog products.'))+'</p></div>'+
  '<div class="bulk-ai-upload" data-bulk-drop><input type="file" id="bulk-ai-files" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" multiple hidden><input type="file" id="bulk-ai-zip" accept=".zip,application/zip" hidden>'+
  '<button type="button" data-bulk-action="choose">'+esc(tr('اختيار الصور','Choose images'))+'</button> <button type="button" data-bulk-action="zip">'+esc(tr('رفع ZIP','Upload ZIP'))+'</button><p>'+esc(tr('اسحب الصور هنا · JPG / PNG / WEBP · بحد 10MB لكل صورة · حتى 400 صورة لكل جهاز','Drag images here · JPG / PNG / WEBP · 10MB each · up to 400 images per device'))+'</p></div>'+
  '<div class="bulk-ai-controls"><button class="primary" type="button" data-bulk-action="analyze" '+(state.busy?'disabled':'')+'>'+esc(tr('بدء التحليل الذكي','Start AI analysis'))+'</button>'+
  '<button type="button" data-bulk-action="retry" '+(state.busy?'disabled':'')+'>'+esc(tr('إعادة تحليل الفاشلة','Retry failed analyses'))+'</button>'+
  '<button type="button" data-bulk-action="save" '+(state.busy?'disabled':'')+'>'+esc(tr('إضافة المنتجات المحددة كمسودات','Save selected as drafts'))+'</button>'+
  (permitted('offers.create')?'<button class="primary" type="button" data-bulk-action="publish" '+(state.busy?'disabled':'')+'>'+esc(tr('نشر المنتجات المحددة مباشرة في المتجر','Publish selected products to store'))+'</button>':'')+
+ '<button type="button" class="danger" data-bulk-action="delete-selected" '+(state.busy?'disabled':'')+'>'+esc(tr('حذف المحدد من القائمة','Remove selected from list'))+'</button>'+
+ '<button type="button" data-bulk-action="catalog" '+(state.busy?'disabled':'')+'>'+esc(tr('الانتقال إلى كتالوج المنتجات','Go to product catalog'))+'</button>'+
  (state.busy?'<button type="button" data-bulk-action="stop">'+esc(tr('إيقاف بعد المهمة الحالية','Stop after current tasks'))+'</button>':'')+'</div>'+
  '<p data-bulk-counts class="bulk-ai-counts" role="status"></p><p data-bulk-notice role="status" class="bulk-ai-notice"></p>'+
  '<div class="bulk-ai-toolbar"><label>'+esc(tr('بحث','Search'))+' <input type="search" data-bulk-query value="'+esc(state.query)+'"></label><label>'+esc(tr('الحالة','Status'))+' <select data-bulk-filter><option value="all">'+esc(tr('كل الحالات','All statuses'))+'</option>'+Object.keys(statusName).map(s=>'<option value="'+s+'" '+(s===state.filter?'selected':'')+'>'+esc(label(s))+'</option>').join('')+'</select></label>'+
+ '<strong data-bulk-selected-count aria-live="polite"></strong>'+
  '<button type="button" data-bulk-action="select-all">'+esc(tr('تحديد الكل','Select all'))+'</button><button type="button" data-bulk-action="select-none">'+esc(tr('إلغاء التحديد','Clear selection'))+'</button>'+
  '<label>'+esc(tr('تغيير تصنيف المحدد','Set selected category'))+' <select data-bulk-category>'+selectOptions(categories(),state.selectedCategory,tr('اختر','Choose'))+'</select></label><button type="button" data-bulk-action="apply-category">'+esc(tr('تطبيق','Apply'))+'</button></div>'+
- '<div class="table-wrap bulk-ai-table"><table><thead><tr>'+[tr('تحديد','Select'),tr('الصورة','Image'),tr('الاسم العربي','Arabic name'),tr('الاسم الإنجليزي','English name'),tr('التصنيف','Category'),tr('الفرعي','Subcategory'),tr('الموديل','Model / SKU'),tr('الحالة','Status'),tr('الإجراء','Action')].map(x=>'<th>'+esc(x)+'</th>').join('')+'</tr></thead><tbody>'+rows.map(rowHtml).join('')+'</tbody></table></div>'+
+ '<div class="table-wrap bulk-ai-table"><table><thead><tr>'+[tr('تحديد','Select'),tr('الصورة','Image'),tr('الاسم العربي','Arabic name'),tr('الاسم الإنجليزي','English name'),tr('التصنيف','Category'),tr('الفرعي','Subcategory'),tr('الموديل','Model / SKU'),tr('الحالة','Status'),tr('الإجراء','Action')].map(x=>'<th>'+esc(x)+'</th>').join('')+'</tr></thead><tbody>'+(rows.length?rows.map(rowHtml).join(''):'<tr><td colspan="9" class="bulk-ai-empty">'+esc(tr('القائمة فارغة. المنتجات المنشورة أصبحت في كتالوج المنتجات.','The upload list is empty. Published products are now in the product catalog.'))+'</td></tr>')+'</tbody></table></div>'+
  '<div class="bulk-ai-pagination"><button type="button" data-bulk-action="prev" '+(state.page?'':'disabled')+'>'+esc(tr('السابق','Previous'))+'</button> '+(state.page+1)+' / '+Math.max(1,Math.ceil(filtered.length/PER_PAGE))+' <button type="button" data-bulk-action="next" '+((state.page+1)*PER_PAGE<filtered.length?'':'disabled')+'>'+esc(tr('التالي','Next'))+'</button></div>'+
  '<p class="bulk-ai-foot">'+esc(tr('البيانات محفوظة محليًا في IndexedDB؛ لن تظهر تلقائيًا على جهاز آخر. عند حذف بيانات المتصفح تُفقد المسودات المحلية. الصور الأصلية لا تُرسل إلى الذكاء الاصطناعي؛ تُرسل نسخة مضغوطة للتحليل، وتُرفع الصورة الأصلية حتى 5MB، أما الأكبر فتُضغط وفق حدود رفع المتجر الحالية.','Drafts are stored locally in IndexedDB and do not sync across devices. Clearing browser data removes them. AI receives a compressed preview. Images up to 5MB are uploaded in their original supported format; larger files are compressed to the store’s 5MB limit.'))+'</p></section>';
  stats();
@@ -138,7 +184,7 @@ function style(){
  '.bulk-ai-intro p,.bulk-ai-foot{color:#596678}.bulk-ai-upload{text-align:center;border-style:dashed;padding:28px}.bulk-ai-controls,.bulk-ai-toolbar{display:flex;gap:9px;flex-wrap:wrap;align-items:center}.bulk-ai-toolbar label{display:flex;gap:6px;align-items:center;flex-wrap:wrap}',
  '.bulk-ai-table{overflow:auto}.bulk-ai-table table{width:100%;min-width:1030px;border-collapse:collapse}.bulk-ai-table th,.bulk-ai-table td{padding:8px;border-bottom:1px solid #e3e8f1;vertical-align:top;white-space:normal}',
  '.bulk-ai-table input:not([type=checkbox]),.bulk-ai-table select{min-width:120px;width:100%;max-width:230px;box-sizing:border-box}.bulk-ai-thumb{border:0;padding:0;background:transparent}.bulk-ai-thumb img{width:64px;height:64px;object-fit:contain;border-radius:8px}',
- '.bulk-ai-error{display:block;color:#b42318;max-width:180px}.bulk-ai-warning{color:#a05c05}.bulk-ai-expanded{background:#fafbfd}.bulk-ai-details{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;padding:12px}.bulk-ai-details label{display:grid;gap:6px}.bulk-ai-details textarea{width:100%;box-sizing:border-box}',
+ '.bulk-ai-empty{text-align:center;padding:32px!important;color:#607086}.bulk-ai-shell .danger{border:1px solid #d92d20;color:#b42318;background:#fff}.bulk-ai-error{display:block;color:#b42318;max-width:180px}.bulk-ai-warning{color:#a05c05}.bulk-ai-expanded{background:#fafbfd}.bulk-ai-details{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;padding:12px}.bulk-ai-details label{display:grid;gap:6px}.bulk-ai-details textarea{width:100%;box-sizing:border-box}',
  '.bulk-ai-duplicate-compare{display:flex;gap:6px;flex-direction:column;align-items:flex-start;border:1px solid #f3d6a3;padding:12px;border-radius:9px;background:#fff9e9}.bulk-ai-duplicate-compare img{width:130px;height:100px;object-fit:contain}.bulk-ai-pagination{text-align:center}.bulk-ai-notice{color:#145c42}.bulk-ai-status{font-weight:600}.bulk-ai-shell [disabled]{opacity:.5;cursor:not-allowed}.bulk-ai-upload.is-over{background:#eff6ff}'
  ].join('');document.head.append(el);
 }
@@ -194,7 +240,7 @@ async function unpackZip(file){
 }
 async function sendImage(row){
  const current=await api({action:'status',id:row.id});
- if(current.saved){await update(row,{status:current.published?'published':'saved',error:'',selected:false});return;}
+ if(current.saved){await finishRow(row,!!current.published);return;}
  const sources=await window.MStudioImages.filesToCompressedSources({files:[row.file]},{targetBytes:260*1024,maxDimension:1400});
  if(!sources?.[0]||sources[0].length>480000)throw Error(tr('تعذر ضغط الصورة للتحليل','Image compression failed'));
  const result=await api({action:'analyze',image:sources[0]});
@@ -213,14 +259,14 @@ async function queue(mode,oneId){
    mode==='publish'?r.selected!==false&&['ready','review','save_failed','publish_failed','saved'].includes(r.status):
    r.selected!==false&&['ready','review','save_failed'].includes(r.status));
   if(!targets.length){state.notice=tr('لا توجد عناصر لهذه العملية','No eligible items');return;}
-  let cursor=0;
+  let cursor=0,publishedCount=0,savedCount=0;
   const worker=async()=>{
    while(!state.stop&&cursor<targets.length){
     const row=targets[cursor++];
     try{
      await update(row,{status:mode==='publish'?'publishing':mode==='save'?'saving':'analyzing',error:''});
-     if(mode==='publish')await saveOne(row,{publish:true});
-     else if(mode==='save')await saveOne(row);
+     if(mode==='publish'){if(await saveOne(row,{publish:true})==='published')publishedCount++;}
+     else if(mode==='save'){if(await saveOne(row)==='saved')savedCount++;}
      else await sendImage(row);
     }catch(e){
      await update(row,{status:mode==='publish'?'publish_failed':mode==='save'?'save_failed':'failed',error:String(e.message||e).slice(0,250)});
@@ -229,8 +275,11 @@ async function queue(mode,oneId){
    }
   };
   await Promise.all(Array.from({length:Math.min(['save','publish'].includes(mode)?2:3,targets.length)},worker));
-  state.notice=tr('انتهت العملية. تحقق من حالات المنتجات ونتائج النشر.','Finished. Review each product’s status and publication result.');
-  if(['save','publish'].includes(mode)&&targets.some(r=>['saved','published'].includes(r.status))){try{await syncCatalog();}catch{}}
+  state.notice=mode==='publish'?
+   tr('تم نشر ','Published ')+publishedCount+tr(' منتج ونقلها إلى كتالوج المنتجات وإزالتها من قائمة الإضافة.',' products to the catalog and removed them from the upload list.'):
+   mode==='save'?tr('تم حفظ ','Saved ')+savedCount+tr(' منتج كمسودات في الكتالوج.',' products as catalog drafts.'):
+   tr('انتهت العملية. تحقق من نتائج التحليل.','Finished. Review the AI analysis results.');
+  if(['save','publish'].includes(mode)&&(publishedCount||savedCount)){try{await syncCatalog();}catch{}}
  }finally{state.busy=false;state.stop=false;draw();}
 }
 async function saveOne(row,{publish=false}={}){
@@ -245,8 +294,7 @@ async function saveOne(row,{publish=false}={}){
    const response=await api({action:'publish',id:row.id,redactionConfirmed:true});
    if(!response.published)throw Error(tr('لم يتم تأكيد النشر','Publication could not be confirmed'));
   }
-  await update(row,{status:publish||existing.published?'published':'saved',error:'',selected:false});
-  return;
+  return finishRow(row,publish||existing.published);
  }
  let imageSrc=row.imageSrc||'';
  if(!imageSrc){
@@ -260,7 +308,7 @@ async function saveOne(row,{publish=false}={}){
  }
  const result=await api({action:'save',id:row.id,publish,redactionConfirmed:publish,product:{...d,id:row.id,images:[imageSrc]}});
  if(publish&&!result.published)throw Error(tr('لم يتم تأكيد نشر المنتج','Product publication not confirmed'));
- await update(row,{status:publish||result.published?'published':'saved',error:'',selected:false});
+ return finishRow(row,publish||result.published);
 }
 async function openPanel(host){
  root=host;style();
@@ -287,7 +335,9 @@ document.addEventListener('click',async e=>{
   void queue('publish');
  }
  if(action==='analyze'||action==='retry'||action==='save'||action==='retry-one')void queue(action==='retry-one'?'single':action,id);
- if(action==='delete-one'&&!state.busy){const row=state.rows.find(x=>x.id===id);if(['saved','published'].includes(row?.status))return;if(row){await remove(id);state.rows=state.rows.filter(x=>x.id!==id);draw();}}
+ if(action==='delete-selected')void deleteFromQueue(state.rows.filter(x=>x.selected!==false));
+ if(action==='delete-one')void deleteFromQueue(state.rows.filter(x=>x.id===id));
+ if(action==='catalog'&&!state.busy){view='products';render();return;}
  if(action==='select-all'||action==='select-none'){
   const selected=action==='select-all';for(const r of state.rows.filter(x=>x.status!=='published')){r.selected=selected;await put(r);}draw();
  }
@@ -307,7 +357,7 @@ document.addEventListener('change',async e=>{
  }
  if(e.target.matches('[data-bulk-filter]')){state.filter=e.target.value;state.page=0;draw();return;}
  if(e.target.matches('[data-bulk-category]')){state.selectedCategory=e.target.value;return;}
- if(e.target.matches('[data-bulk-select]')){const row=state.rows.find(r=>r.id===e.target.dataset.bulkSelect);if(row){row.selected=e.target.checked;await put(row);}return;}
+ if(e.target.matches('[data-bulk-select]')){const row=state.rows.find(r=>r.id===e.target.dataset.bulkSelect);if(row){row.selected=e.target.checked;await put(row);stats();}return;}
  if(e.target.matches('[data-bulk-field]')){
   const row=state.rows.find(r=>r.id===e.target.dataset.bulkId);if(!row||['saved','published'].includes(row.status))return;
   row.draft||={};row.draft[e.target.dataset.bulkField]=String(e.target.value);
