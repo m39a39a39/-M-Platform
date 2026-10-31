@@ -19,6 +19,6 @@ window.MStudioSession=session;
 window.MKnowledgeBase=knowledgeBase;
 const STUDIO_ASSET_VERSION='20261026-bulk-ai-batch-cleanup-v3';
 for(const file of ['domain.js','app.js','studio.js','product-copy.js','product-complete.js','product-images.js','live.js','ai-catalog.js','admin-ai.js','unified.js','supply-bulk.js','catalog-bulk.js','bulk-product-ai.js','storefront-controls.js','advanced.js','theme-editor.js','store-design.js']){
-  await new Promise((resolve,reject)=>{const script=document.createElement('script');script.src='/studio/'+file+'?v='+STUDIO_ASSET_VERSION;script.onload=resolve;script.onerror=reject;document.body.append(script);});
+  await new Promise((resolve,reject)=>{const script=document.createElement('script');script.src='/studio/'+file+'?v='+(file==='bulk-product-ai.js'?'20261031-country-moq-v1':STUDIO_ASSET_VERSION);script.onload=resolve;script.onerror=reject;document.body.append(script);});
 }
 
