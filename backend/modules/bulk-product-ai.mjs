@@ -62,15 +62,21 @@ export async function bulkProductAi(user,body={}){
     assert(Array.isArray(p.images)&&p.images.length===1,400,'صورة واحدة لكل منتج / One image per product');
     assert(String(p.name||'').trim()&&String(p.nameEn||'').trim()&&String(p.categoryId||'').trim(),400,'أكمل الاسم باللغتين والتصنيف / Complete names and category');
     const settings=(await one('settings','site'))?.data||{};
-    const countries=Array.isArray(settings.supplyCountries)?settings.supplyCountries.filter(x=>x.active!==false):[];
-    const country=countries.find(x=>x.id==='China')?.id||countries[0]?.id||'China';
+    const countries=Array.isArray(settings.supplyCountries)&&settings.supplyCountries.length
+      ?settings.supplyCountries.filter(x=>x.active!==false)
+      :[{id:'China'},{id:'United Arab Emirates'}];
+    const defaultCountry=countries.find(x=>x.id==='China')?.id||countries[0]?.id||'China';
+    const country=p.country===undefined||p.country===null||p.country===''?defaultCountry:String(p.country);
+    assert(countries.some(x=>x.id===country),400,'اختر دولة توريد معتمدة / Choose an active supply country');
+    const moq=p.moq===undefined||p.moq===null||p.moq===''?1:Number(p.moq);
+    assert(Number.isSafeInteger(moq)&&moq>0,400,'أدخل حدًا أدنى صحيحًا للطلب / Enter a valid MOQ');
     if(publishNow)assert(String(p.description||'').trim()&&String(p.descriptionEn||'').trim(),400,'أكمل الوصف بالعربية والإنجليزية قبل النشر / Complete both descriptions before publishing');
     const product={id:body.id,version:0,status:publishNow?'active':'draft',name:p.name,nameEn:p.nameEn,
       sku:p.sku||'BULK-AI-'+body.id.slice(-12).replaceAll('-','').toUpperCase(),
       shortDescription:p.shortDescription||'',description:p.description||'',descriptionEn:p.descriptionEn||'',
       technicalSpecs:p.technicalSpecs||'',options:p.options||'',notes:'',categoryId:p.categoryId,
       subcategoryId:p.subcategoryId||'',images:p.images,
-      country,price:null,currency:'SAR',moq:1,stock:'',stockUnlimited:true,leadDays:7,tiers:[]};
+      country,price:null,currency:'SAR',moq,stock:'',stockUnlimited:true,leadDays:7,tiers:[]};
     try{await saveStudioProduct(user,{product,redactionConfirmed:publishNow});}
     catch(error){
       // A concurrent retry may have committed successfully before this request returned.
