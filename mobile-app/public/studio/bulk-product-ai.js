@@ -5,7 +5,7 @@ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const tr=(ar,en)=>document.documentElement.lang==='en'?en:ar;
 const api=body=>window.MStudioSession.request('/api/v1/bulk-product-ai',{auth:true,method:'POST',body});
 const token=()=>String(typeof liveState!=='undefined'?liveState?.user?.id||'':'');
-const state={owner:'',rows:[],busy:false,stop:false,page:0,filter:'all',query:'',notice:'',error:'',selectedCategory:'',loading:false,open:false};
+const state={owner:'',rows:[],busy:false,stop:false,page:0,filter:'all',query:'',notice:'',error:'',selectedCategory:'',selectedCountry:'',selectedMoq:'',loading:false,open:false};
 let root=null,database=null,urls=[],redrawTimer=null;
 const key=id=>'imsg-bulk-ai-'+id;
 const statusName={pending:['بانتظار التحليل','Pending'],analyzing:['قيد التحليل','Analyzing'],ready:['جاهز','Ready'],review:['يحتاج مراجعة','Needs review'],failed:['فشل التحليل','Analysis failed'],saving:['جاري الحفظ','Saving'],save_failed:['فشل الحفظ','Save failed'],saved:['محفوظ كمسودة','Saved draft'],publishing:['جارٍ النشر','Publishing'],publish_failed:['فشل النشر','Publish failed'],published:['منشور في المتجر','Published in store']};
@@ -14,6 +14,14 @@ const fileType=name=>/\.jpe?g$/i.test(name)?'image/jpeg':/\.png$/i.test(name)?'i
 const cleanName=s=>String(s||'').toLowerCase().replace(/[\s\p{P}\p{S}]+/gu,' ').trim();
 const inStore=()=>typeof liveState!=='undefined'&&Array.isArray(liveState?.publicOffers)?liveState.publicOffers:[];
 const categories=()=>typeof liveState!=='undefined'&&Array.isArray(liveState?.settings?.categories)?liveState.settings.categories.filter(x=>x.active!==false):[];
+const supplyCountries=()=>{
+ const configured=typeof liveState!=='undefined'?liveState?.settings?.supplyCountries:null;
+ return (Array.isArray(configured)&&configured.length?configured:[
+  {id:'China',nameAr:'الصين',nameEn:'China'},
+  {id:'United Arab Emirates',nameAr:'الإمارات العربية المتحدة',nameEn:'United Arab Emirates'}
+ ]).filter(x=>x.active!==false);
+};
+const defaultCountry=()=>supplyCountries().find(x=>x.id==='China')?.id||supplyCountries()[0]?.id||'China';
 const subcategories=id=>(typeof liveState!=='undefined'?liveState?.settings?.subcategories||[]:[]).filter(x=>x.parentId===id&&x.active!==false);
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 function dbOpen(){
@@ -142,10 +150,12 @@ function rowHtml(row){
  '<td><input data-bulk-field="nameEn" data-bulk-id="'+esc(row.id)+'" aria-label="الاسم الإنجليزي" maxlength="100" value="'+esc(d.nameEn||'')+'" '+(editable?'':'disabled')+'></td>'+
  '<td><select data-bulk-field="categoryId" data-bulk-id="'+esc(row.id)+'" aria-label="التصنيف الرئيسي" '+(editable?'':'disabled')+'>'+selectOptions(categories(),d.categoryId||'',tr('اختر تصنيفًا','Select category'))+'</select></td>'+
  '<td><select data-bulk-field="subcategoryId" data-bulk-id="'+esc(row.id)+'" aria-label="التصنيف الفرعي" '+(editable?'':'disabled')+'>'+selectOptions(subcategories(d.categoryId),d.subcategoryId||'',tr('بدون','None'))+'</select></td>'+
+ '<td><select data-bulk-field="country" data-bulk-id="'+esc(row.id)+'" aria-label="'+esc(tr('دولة التوريد','Supply country'))+'" '+(editable?'':'disabled')+'>'+selectOptions(supplyCountries(),d.country||defaultCountry(),tr('اختر الدولة','Choose country'))+'</select></td>'+
+ '<td><input type="number" min="1" step="1" data-bulk-field="moq" data-bulk-id="'+esc(row.id)+'" aria-label="MOQ" value="'+esc(d.moq??1)+'" '+(editable?'':'disabled')+'></td>'+
  '<td><input data-bulk-field="sku" data-bulk-id="'+esc(row.id)+'" maxlength="80" aria-label="الموديل" value="'+esc(d.sku||'')+'" '+(editable?'':'disabled')+'></td>'+
  '<td><span class="bulk-ai-status">'+esc(label(row.status))+'</span>'+(row.error?'<small class="bulk-ai-error">'+esc(row.error)+'</small>':'')+'</td>'+
  '<td><button type="button" data-bulk-action="retry-one" data-bulk-id="'+esc(row.id)+'" '+(state.busy||['saved','published'].includes(row.status)?'disabled':'')+'>'+esc(tr('تحليل','Analyze'))+'</button><button type="button" data-bulk-action="delete-one" data-bulk-id="'+esc(row.id)+'" '+(state.busy||row.status==='published'?'disabled':'')+' title="'+esc(tr('إزالة من قائمة الإضافة فقط','Remove from upload queue only'))+'">'+esc(tr('حذف','Remove'))+'</button></td></tr>'+
- '<tr><td colspan="9" class="bulk-ai-expanded"><details><summary>'+esc(tr('تفاصيل المنتج','Product details'))+' · '+esc(row.fileName)+(row.duplicate?'<small> · '+dupMatch(row)+'</small>':'')+'</summary><div class="bulk-ai-details">'+
+ '<tr><td colspan="11" class="bulk-ai-expanded"><details><summary>'+esc(tr('تفاصيل المنتج','Product details'))+' · '+esc(row.fileName)+(row.duplicate?'<small> · '+dupMatch(row)+'</small>':'')+'</summary><div class="bulk-ai-details">'+
  [['shortDescription',tr('الوصف المختصر','Short description')],['description',tr('الوصف العربي','Arabic description')],['descriptionEn',tr('English description','English description')],['technicalSpecs',tr('المميزات الواضحة','Visible features')],['options',tr('الخيارات','Options')]].map(([field,title])=>'<label>'+esc(title)+'<textarea data-bulk-field="'+field+'" data-bulk-id="'+esc(row.id)+'" rows="3" '+(editable?'':'disabled')+'>'+esc(d[field]||'')+'</textarea></label>').join('')+
  (dupMatch(row)?'<p class="bulk-ai-warning">'+dupMatch(row)+'</p>':'')+duplicateComparison(row)+'</div></details></td></tr>';
 }
@@ -170,8 +180,10 @@ function draw(){
  '<div class="bulk-ai-toolbar"><label>'+esc(tr('بحث','Search'))+' <input type="search" data-bulk-query value="'+esc(state.query)+'"></label><label>'+esc(tr('الحالة','Status'))+' <select data-bulk-filter><option value="all">'+esc(tr('كل الحالات','All statuses'))+'</option>'+Object.keys(statusName).map(s=>'<option value="'+s+'" '+(s===state.filter?'selected':'')+'>'+esc(label(s))+'</option>').join('')+'</select></label>'+
  '<strong data-bulk-selected-count aria-live="polite"></strong>'+
  '<button type="button" data-bulk-action="select-all">'+esc(tr('تحديد الكل','Select all'))+'</button><button type="button" data-bulk-action="select-none">'+esc(tr('إلغاء التحديد','Clear selection'))+'</button>'+
- '<label>'+esc(tr('تغيير تصنيف المحدد','Set selected category'))+' <select data-bulk-category>'+selectOptions(categories(),state.selectedCategory,tr('اختر','Choose'))+'</select></label><button type="button" data-bulk-action="apply-category">'+esc(tr('تطبيق','Apply'))+'</button></div>'+
- '<div class="table-wrap bulk-ai-table"><table><thead><tr>'+[tr('تحديد','Select'),tr('الصورة','Image'),tr('الاسم العربي','Arabic name'),tr('الاسم الإنجليزي','English name'),tr('التصنيف','Category'),tr('الفرعي','Subcategory'),tr('الموديل','Model / SKU'),tr('الحالة','Status'),tr('الإجراء','Action')].map(x=>'<th>'+esc(x)+'</th>').join('')+'</tr></thead><tbody>'+(rows.length?rows.map(rowHtml).join(''):'<tr><td colspan="9" class="bulk-ai-empty">'+esc(tr('القائمة فارغة. المنتجات المنشورة أصبحت في كتالوج المنتجات.','The upload list is empty. Published products are now in the product catalog.'))+'</td></tr>')+'</tbody></table></div>'+
+ '<label>'+esc(tr('تغيير تصنيف المحدد','Set selected category'))+' <select data-bulk-category>'+selectOptions(categories(),state.selectedCategory,tr('اختر','Choose'))+'</select></label><button type="button" data-bulk-action="apply-category">'+esc(tr('تطبيق','Apply'))+'</button>'+
+ '<label>'+esc(tr('تغيير دولة التوريد للمحدد','Set selected supply country'))+' <select data-bulk-country>'+selectOptions(supplyCountries(),state.selectedCountry,tr('اختر الدولة','Choose country'))+'</select></label><button type="button" data-bulk-action="apply-country" '+(state.busy?'disabled':'')+'>'+esc(tr('تطبيق','Apply'))+'</button>'+
+ '<label>'+esc(tr('تغيير MOQ للمحدد','Set selected MOQ'))+' <input type="number" min="1" step="1" inputmode="numeric" data-bulk-moq value="'+esc(state.selectedMoq)+'" placeholder="MOQ"></label><button type="button" data-bulk-action="apply-moq" '+(state.busy?'disabled':'')+'>'+esc(tr('تطبيق','Apply'))+'</button></div>'+
+ '<div class="table-wrap bulk-ai-table"><table><thead><tr>'+[tr('تحديد','Select'),tr('الصورة','Image'),tr('الاسم العربي','Arabic name'),tr('الاسم الإنجليزي','English name'),tr('التصنيف','Category'),tr('الفرعي','Subcategory'),tr('دولة التوريد','Supply country'),'MOQ',tr('الموديل','Model / SKU'),tr('الحالة','Status'),tr('الإجراء','Action')].map(x=>'<th>'+esc(x)+'</th>').join('')+'</tr></thead><tbody>'+(rows.length?rows.map(rowHtml).join(''):'<tr><td colspan="11" class="bulk-ai-empty">'+esc(tr('القائمة فارغة. المنتجات المنشورة أصبحت في كتالوج المنتجات.','The upload list is empty. Published products are now in the product catalog.'))+'</td></tr>')+'</tbody></table></div>'+
  '<div class="bulk-ai-pagination"><button type="button" data-bulk-action="prev" '+(state.page?'':'disabled')+'>'+esc(tr('السابق','Previous'))+'</button> '+(state.page+1)+' / '+Math.max(1,Math.ceil(filtered.length/PER_PAGE))+' <button type="button" data-bulk-action="next" '+((state.page+1)*PER_PAGE<filtered.length?'':'disabled')+'>'+esc(tr('التالي','Next'))+'</button></div>'+
  '<p class="bulk-ai-foot">'+esc(tr('البيانات محفوظة محليًا في IndexedDB؛ لن تظهر تلقائيًا على جهاز آخر. عند حذف بيانات المتصفح تُفقد المسودات المحلية. الصور الأصلية لا تُرسل إلى الذكاء الاصطناعي؛ تُرسل نسخة مضغوطة للتحليل، وتُرفع الصورة الأصلية حتى 5MB، أما الأكبر فتُضغط وفق حدود رفع المتجر الحالية.','Drafts are stored locally in IndexedDB and do not sync across devices. Clearing browser data removes them. AI receives a compressed preview. Images up to 5MB are uploaded in their original supported format; larger files are compressed to the store’s 5MB limit.'))+'</p></section>';
  stats();
@@ -288,6 +300,8 @@ async function saveOne(row,{publish=false}={}){
  if(publish&&(!d.description?.trim()||!d.descriptionEn?.trim()))
   throw Error(tr('النشر يتطلب وصفًا عربيًا وإنجليزيًا. راجع بيانات المنتج ثم أعد المحاولة.','Publishing requires Arabic and English descriptions. Review the product and retry.'));
  if(d.subcategoryId&&!subcategories(d.categoryId).some(x=>x.id===d.subcategoryId))throw Error(tr('التصنيف الفرعي لا يطابق الرئيسي','Subcategory does not match category'));
+  if(d.country&&!supplyCountries().some(x=>x.id===d.country))throw Error(tr('اختر دولة توريد معتمدة','Choose an active supply country'));
+  if(d.moq!==undefined&&(!Number.isSafeInteger(Number(d.moq))||Number(d.moq)<1))throw Error(tr('أدخل MOQ صحيحًا أكبر من صفر','Enter a valid MOQ greater than zero'));
  const existing=await api({action:'status',id:row.id});
  if(existing.saved){
   if(publish&&!existing.published){
@@ -345,7 +359,18 @@ document.addEventListener('click',async e=>{
   if(!state.selectedCategory)return;
   for(const r of state.rows.filter(x=>x.selected!==false&&!['saved','published'].includes(x.status)&&x.draft)){r.draft.categoryId=state.selectedCategory;r.draft.subcategoryId='';if(r.status==='review'&&r.draft.name&&r.draft.nameEn)r.status='ready';await put(r);}draw();
  }
- if(action==='prev'||action==='next'){state.page+=action==='next'?1:-1;draw();}
+ if(action==='apply-country'&&!state.busy){
+   if(!state.selectedCountry||!supplyCountries().some(x=>x.id===state.selectedCountry)){state.error=tr('اختر دولة توريد من القائمة','Choose a supply country');stats();return;}
+   for(const r of state.rows.filter(x=>x.selected!==false&&!['saved','published'].includes(x.status)&&x.draft)){r.draft.country=state.selectedCountry;await put(r);}
+   state.error='';draw();
+  }
+  if(action==='apply-moq'&&!state.busy){
+   const moq=Number(state.selectedMoq);
+   if(!state.selectedMoq||!Number.isSafeInteger(moq)||moq<1){state.error=tr('أدخل MOQ صحيحًا أكبر من صفر','Enter a valid MOQ greater than zero');stats();return;}
+   for(const r of state.rows.filter(x=>x.selected!==false&&!['saved','published'].includes(x.status)&&x.draft)){r.draft.moq=moq;await put(r);}
+   state.error='';draw();
+  }
+  if(action==='prev'||action==='next'){state.page+=action==='next'?1:-1;draw();}
  const preview=e.target.closest('[data-bulk-preview]');if(preview&&root.contains(preview)){const row=state.rows.find(x=>x.id===preview.dataset.bulkPreview);if(row){const src=URL.createObjectURL(row.file),dlg=document.createElement('dialog');dlg.className='bulk-ai-photo-dialog';dlg.innerHTML='<button type="button">'+esc(tr('إغلاق','Close'))+' ×</button><img alt="'+esc(row.fileName)+'" style="max-width:90vw;max-height:82vh;object-fit:contain" src="'+esc(src)+'">';document.body.append(dlg);dlg.querySelector('button').onclick=()=>dlg.close();dlg.onclose=()=>{URL.revokeObjectURL(src);dlg.remove();};dlg.showModal();}}
 });
 document.addEventListener('change',async e=>{
@@ -357,6 +382,8 @@ document.addEventListener('change',async e=>{
  }
  if(e.target.matches('[data-bulk-filter]')){state.filter=e.target.value;state.page=0;draw();return;}
  if(e.target.matches('[data-bulk-category]')){state.selectedCategory=e.target.value;return;}
+  if(e.target.matches('[data-bulk-country]')){state.selectedCountry=e.target.value;return;}
+  if(e.target.matches('[data-bulk-moq]')){state.selectedMoq=e.target.value;return;}
  if(e.target.matches('[data-bulk-select]')){const row=state.rows.find(r=>r.id===e.target.dataset.bulkSelect);if(row){row.selected=e.target.checked;await put(row);stats();}return;}
  if(e.target.matches('[data-bulk-field]')){
   const row=state.rows.find(r=>r.id===e.target.dataset.bulkId);if(!row||['saved','published'].includes(row.status))return;
