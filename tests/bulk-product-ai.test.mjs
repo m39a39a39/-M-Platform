@@ -73,3 +73,33 @@ test('bulk publish denies edit-only staff and unrelated product identities',asyn
   });
  }finally{await pg.close();}
 });
+
+test('bulk AI saves selected supply country and MOQ and rejects invalid choices',async()=>{
+ const pg=await createStoreDB();
+ const selectedId='bulkai-44444444-4444-4444-8444-444444444444';
+ try{
+  await pg.query('update media set owner_id=$1 where id=$2',[ids.admin,ids.media]);
+  await pg.query('update settings set data=$1',[JSON.stringify({
+   categories:[{id:'cat',nameAr:'منتجات',nameEn:'Products',active:true}],
+   subcategories:[],
+   supplyCountries:[
+    {id:'China',nameAr:'الصين',nameEn:'China',active:true},
+    {id:'United Arab Emirates',nameAr:'الإمارات',nameEn:'United Arab Emirates',active:true}
+   ]
+  })]);
+  await withLocalAPI(pg,async()=>{
+   const owner={id:ids.admin,role:'admin',is_owner:true,permissions:[]};
+   const supplied=newProduct(selectedId,{country:'United Arab Emirates',moq:120});
+   const saved=await bulkProductAi(owner,{action:'save',id:selectedId,product:supplied});
+   assert.equal(saved.saved,true);
+   const data=(await pg.query('select data from public_offers where id=$1',[selectedId])).rows[0].data;
+   assert.equal(data.country,'United Arab Emirates');
+   assert.equal(data.moq,120);
+   assert.equal(data.unitPrice,null);
+   const invalidId='bulkai-55555555-5555-4555-8555-555555555555';
+   await assert.rejects(bulkProductAi(owner,{action:'save',id:invalidId,product:newProduct(invalidId,{country:'Unknown',moq:10})}),{status:400});
+   await assert.rejects(bulkProductAi(owner,{action:'save',id:invalidId,product:newProduct(invalidId,{country:'China',moq:0})}),{status:400});
+   await assert.rejects(bulkProductAi(owner,{action:'save',id:invalidId,product:newProduct(invalidId,{country:'China',moq:1.5})}),{status:400});
+  });
+ }finally{await pg.close();}
+});
