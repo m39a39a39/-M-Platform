@@ -54,6 +54,18 @@ export function renderStorefront(state,channel='web',options={}){
  const blocks=sectionsForPage(config,options.designPage||'home').filter(s=>s.visible&&(s.channel==='both'||s.channel===channel)).map((raw,index)=>{
   const s={...raw,...normalizeSectionLayout(raw)},heading=`${s.showTitle?`<${index===0&&s.type==='hero'?'h1':'h2'}>${esc(localized(s,'title'))}</${index===0&&s.type==='hero'?'h1':'h2'}>`:''}${s.showSubtitle?`<p>${esc(localized(s,'subtitle'))}</p>`:''}`;
   let content='';
+  if(s.type==='imagePair'){
+   const categories=[...(state.settings?.categories||[]),...(state.settings?.subcategories||[])];
+   const tiles=Array.isArray(s.imageTiles)?s.imageTiles:[];
+   content=`<section class="sf-square-pair" aria-label="${en?'Featured categories':'أقسام مختارة'}">${Array.from({length:2},(_,i)=>{
+    const tile=tiles[i]||{},src=media(tile.image),category=categories.find(c=>c.id===tile.categoryId&&c.active!==false);
+    if(!src)return `<div class="sf-square-pair-tile sf-square-pair-placeholder"><span>${en?'Square image':'صورة مربعة'}</span></div>`;
+    const picture=img(src,'',index===0&&i===0);
+    if(!category)return `<div class="sf-square-pair-tile sf-square-pair-inert">${picture}</div>`;
+    const name=category[en?'nameEn':'nameAr']||category.nameAr||category.name||'';
+    return `<a class="sf-square-pair-tile" href="/?category=${encodeURIComponent(category.id)}" aria-label="${esc((en?'Browse ':'تصفح ')+name)}">${picture}</a>`;
+   }).join('')}</section>`;
+  }
   if(s.type==='imageBanner')content=`<section class="sf-image-only-banner sf-clickable-surface">${img(s.image,'',index===0)}${hit({...s,clickable:true})}</section>`;
   if(s.type==='hero'||s.type==='image')content=`<section class="sf-image-section sf-clickable-surface ${s.type==='hero'?'sf-custom-hero':''}">${hit(s)}${s.showImage?img(s.image,'',index===0):''}<div>${heading}<div class="sf-section-actions">${button(s)}${s.showAllProducts&&!(button(s)&&s.buttonTarget==='products'&&(s.productSource||'latest')==='latest')?allButton(s):''}</div></div></section>`;
   if(s.type==='text'||s.type==='cta')content=`<section class="sf-text-section">${heading}${button(s)}</section>`;
