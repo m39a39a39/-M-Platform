@@ -41,3 +41,14 @@ test('section library groups types and disables the existing singleton',()=>{
  const c=editor();c.addSection();assert.match(c.dialog,/الصور والعروض/);assert.match(c.dialog,/المنتجات والتصفح/);assert.match(c.dialog,/data-type="catalog" disabled/);
  assert.equal((c.dialog.match(/data-type="imageBanner"/g)||[]).length,1);
 });
+
+test('two-square-image editor offers two independent uploads and category selectors',()=>{
+ const c=editor();c.state.draft.categories=[{id:'phones',name:'الجوالات',active:true},{id:'audio',name:'السماعات',active:true}];
+ const html=c.sectionSettings({id:'pair',type:'imagePair',imageTiles:[{image:'',categoryId:'phones'},{image:'',categoryId:'audio'}]});
+ assert.match(html,/1200 × 1200/);
+ assert.equal((html.match(/data-image-pair-upload=/g)||[]).length,2);
+ assert.equal((html.match(/data-image-pair-category=/g)||[]).length,2);
+ assert.match(html,/value="phones" selected/);assert.match(html,/value="audio" selected/);
+ assert.doesNotMatch(html,/data-section-field="title"|data-section-field="button"/);
+ c.addSection();assert.match(c.dialog,/data-type="imagePair"/);
+});
