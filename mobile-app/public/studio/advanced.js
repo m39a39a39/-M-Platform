@@ -1,5 +1,5 @@
 'use strict';
-Object.assign(types,{imageBanner:['بنر صورة فقط','image'],catalog:['تصفح المنتجات والبحث والفلاتر','box'],footer:['الفوتر — الشركة والروابط والتواصل','text'],benefits:['مزايا وخدمات','grid'],steps:['خطوات العمل','layers'],faq:['أسئلة شائعة','file'],cta:['دعوة لاتخاذ إجراء','link'],image:['صورة مع وصف','image'],divider:['فاصل بصري','layers'],spacer:['مساحة فارغة','layers']});
+Object.assign(types,{imageBanner:['بنر صورة فقط','image'],imagePair:['صورتان مربعتان','image'],catalog:['تصفح المنتجات والبحث والفلاتر','box'],footer:['الفوتر — الشركة والروابط والتواصل','text'],benefits:['مزايا وخدمات','grid'],steps:['خطوات العمل','layers'],faq:['أسئلة شائعة','file'],cta:['دعوة لاتخاذ إجراء','link'],image:['صورة مع وصف','image'],divider:['فاصل بصري','layers'],spacer:['مساحة فارغة','layers']});
 const sectionInspectorOpen=new Map();
 document.addEventListener('toggle',e=>{if(e.target.matches?.('[data-inspector-group]'))sectionInspectorOpen.set(e.target.dataset.inspectorGroup,e.target.open);},true);
 function parseSectionItems(value=''){
@@ -21,6 +21,16 @@ function sectionSettings(s){
  const choice=(k,label,values)=>`<label class="field">${label}<select data-section-field="${k}">${values.map(([v,t])=>`<option value="${v}" ${value(k)===v?'selected':''}>${esc(t)}</option>`).join('')}</select></label>`;
  const toggle=(k,label)=>`<label class="checkline"><input type="checkbox" data-section-field="${k}" ${value(k)?'checked':''}>${label}</label>`;
  const group=(key,label,body,open=false)=>body?`<details class="inspector-group" data-inspector-group="${s.id}:${key}" ${(sectionInspectorOpen.get(s.id+':'+key)??open)?'open':''}><summary>${label}</summary><div class="inspector-group-body">${body}</div></details>`:'';
+ if(s.type==='imagePair'){
+  const tiles=Array.isArray(s.imageTiles)?s.imageTiles:[{},{}],categories=state.draft.categories.filter(c=>c.active!==false);
+  const mediaContent=Array.from({length:2},(_,i)=>{
+   const tile=tiles[i]||{},number=i+1;
+   return `<div class="image-pair-editor-slot"><strong>الصورة ${number}</strong><p class="help">المقاس المقترح 1200 × 1200 بكسل (مربع 1:1)</p><label class="field">رفع الصورة ${number}<input type="file" data-image-pair-upload="${i}" accept="image/png,image/jpeg,image/webp"></label>${tile.image?`<img src="${esc(tile.image)}" alt="معاينة الصورة ${number}" class="image-pair-editor-preview"><button type="button" data-image-pair-remove="${i}">إزالة الصورة</button>`:''}<label class="field">القسم الذي يفتح عند النقر<select data-image-pair-category="${i}"><option value="">اختر القسم</option>${categories.map(c=>`<option value="${esc(c.id)}" ${tile.categoryId===c.id?'selected':''}>${esc(c.parent?(state.draft.categories.find(x=>x.id===c.parent)?.name||'')+' / '+c.name:c.name)}</option>`).join('')}</select></label></div>`;
+  }).join('');
+  const layout=choice('width','عرض القسم',[['contained','محدد'],['full','كامل']])+`<div class="layout-input-grid">${num('padding','المسافة الداخلية',0,120)}${num('gap','المسافة بين الصورتين',0,64)}${num('radius','استدارة الزوايا',0,48)}</div>`;
+  const visibility=choice('channel','مكان الظهور',[['both','الموقع والتطبيق'],['web','الموقع'],['app','التطبيق']])+toggle('visible','إظهار القسم')+toggle('desktopVisible','الكمبيوتر والتابلت')+toggle('mobileVisible','الجوال');
+  return `<div class="inspector-title"><span class="section-icon">${icon('image')}</span><div><h3>صورتان مربعتان</h3><small>ارفع صورتين، واختر قسمًا مستقلًا لكل صورة</small></div></div>`+group('media','الصور والتصنيفات',mediaContent,true)+group('layout','التخطيط والمسافات',layout)+group('visibility','الظهور والأجهزة',visibility)+`<div class="inspector-danger">${btn('حذف هذا القسم','delete-section','trash','danger',`data-id="${s.id}"`)}</div>`;
+ }
  let html='';
  if(hasText)html+=text('title','العنوان بالعربية')+text('titleEn','Title in English')+text('subtitle','الوصف بالعربية',true)+text('subtitleEn','Description in English',true);
  const content=html;html='';
@@ -52,13 +62,23 @@ function sectionSettings(s){
  return `<div class="inspector-title"><span class="section-icon">${icon(types[s.type]?.[1]||'grid')}</span><div><h3>${esc(types[s.type]?.[0]||s.type)}</h3><small>تعديلات هذا القسم فقط</small></div></div>`+group('content','المحتوى والنصوص',content,true)+group('media','الصور والمحتوى الإضافي',mediaContent,!hasText)+group('catalog-controls','اختيار التصنيفات وعناصر الكتالوج',storefrontSectionControls(s),true)+group('products','اختيار المنتجات',products,false)+group('actions',s.type==='imageBanner'?'وجهة النقر':'الروابط والأزرار',actions,s.type==='imageBanner')+group('layout','التخطيط والمسافات',layout)+group('appearance','الألوان والعناصر',appearance)+group('visibility','الظهور والأجهزة',visibility)+`<div class="inspector-danger">${btn('حذف هذا القسم','delete-section','trash','danger',`data-id="${s.id}"`)}</div>`;
 }
 function addSection(){
- const groups=[['الصور والعروض',['hero','imageBanner','image','banners']],['المنتجات والتصفح',['products','categories','catalog']],['المحتوى والخدمات',['text','benefits','steps','faq','cta','footer']],['تنسيق الصفحة',['divider','spacer']]];
- const descriptions={hero:'صورة وعنوان وزر رئيسي',imageBanner:'صورة قابلة للنقر دون نصوص',image:'صورة مع محتوى تعريفي',banners:'عرض الإعلانات النشطة والمجدولة',products:'منتجات مختارة أو حسب التصنيف',categories:'روابط تصنيفات المتجر',catalog:'المنتجات مع البحث والفلاتر والترتيب',text:'عنوان ووصف قابلان للتعديل',benefits:'مزايا المتجر وخدماته',steps:'شرح خطوات الشراء أو التوريد',faq:'إجابات مختصرة قابلة للفتح',cta:'دعوة واضحة مع زر إجراء',footer:'بيانات التواصل في نهاية الصفحة',divider:'خط يفصل بين الأقسام',spacer:'مسافة بين مجموعات المحتوى'};
+ const groups=[['الصور والعروض',['hero','imageBanner','imagePair','image','banners']],['المنتجات والتصفح',['products','categories','catalog']],['المحتوى والخدمات',['text','benefits','steps','faq','cta','footer']],['تنسيق الصفحة',['divider','spacer']]];
+ const descriptions={hero:'صورة وعنوان وزر رئيسي',imageBanner:'صورة قابلة للنقر دون نصوص',imagePair:'صورتان 1200×1200 مع رابط قسم لكل صورة',image:'صورة مع محتوى تعريفي',banners:'عرض الإعلانات النشطة والمجدولة',products:'منتجات مختارة أو حسب التصنيف',categories:'روابط تصنيفات المتجر',catalog:'المنتجات مع البحث والفلاتر والترتيب',text:'عنوان ووصف قابلان للتعديل',benefits:'مزايا المتجر وخدماته',steps:'شرح خطوات الشراء أو التوريد',faq:'إجابات مختصرة قابلة للفتح',cta:'دعوة واضحة مع زر إجراء',footer:'بيانات التواصل في نهاية الصفحة',divider:'خط يفصل بين الأقسام',spacer:'مسافة بين مجموعات المحتوى'};
  modal('إضافة قسم للصفحة',`<div class="dialog-body section-library-groups"><p class="help">اختر وظيفة القسم، ثم خصّص محتواه من لوحة الإعدادات.</p>${groups.map(([label,list])=>`<section><h3>${label}</h3><div class="section-library">${list.map(type=>{const exists=['catalog','footer'].includes(type)&&state.draft.sections.some(s=>s.type===type);return `<button type="button" class="choice" data-action="choose-section" data-type="${type}" ${exists?'disabled':''}>${icon(types[type][1])}<strong>${esc(types[type][0])}</strong><small>${exists?'موجود في الصفحة بالفعل':descriptions[type]}</small></button>`;}).join('')}</div></section>`).join('')}</div>`);
 }
 document.addEventListener('change',async e=>{const el=e.target,s=state.draft.sections.find(s=>s.id===selected);if(!s)return;
+ if(el.dataset.imagePairUpload!==undefined&&s.type==='imagePair'){
+  const index=Number(el.dataset.imagePairUpload);if(index!==0&&index!==1)return;
+  try{const image=await readImage(el.files[0]);if(image&&state.draft.sections.includes(s)){s.imageTiles??=[{image:'',categoryId:''},{image:'',categoryId:''}];s.imageTiles[index]={...s.imageTiles[index],image};rememberMedia(image,'صورة مربعة '+(index+1));changed('تم تحديث الصورة '+(index+1));}}catch(error){toast(error.message);}return;
+ }
+ if(el.dataset.imagePairCategory!==undefined&&s.type==='imagePair'){
+  const index=Number(el.dataset.imagePairCategory);if(index!==0&&index!==1)return;
+  s.imageTiles??=[{image:'',categoryId:''},{image:'',categoryId:''}];s.imageTiles[index]={...s.imageTiles[index],categoryId:el.value};changed('تم تحديث رابط الصورة');return;
+ }
+
  if(el.dataset.sectionField==='categoryId'&&s.productSource==='category'){s.subcategoryId='';changed();}
  if(el.dataset.sectionProduct){s.productIds||=[];s.productIds=el.checked?[...s.productIds,el.dataset.sectionProduct]:s.productIds.filter(id=>id!==el.dataset.sectionProduct);persist();$('#live-store').innerHTML=storeHtml(state.draft,device,true);}if(el.dataset.categoryImage){try{const src=await readImage(el.files[0]);if(src){s.categoryImages||={};s.categoryImages[el.dataset.categoryImage]=src;changed();}}catch(error){toast(error.message);}}});
+document.addEventListener('click',e=>{const el=e.target.closest('[data-image-pair-remove]');if(!el)return;const s=state.draft.sections.find(s=>s.id===selected),index=Number(el.dataset.imagePairRemove);if(s?.type!=='imagePair'||(index!==0&&index!==1))return;s.imageTiles[index]={...s.imageTiles[index],image:''};changed('تم حذف الصورة من القسم');});
 document.addEventListener('click',e=>{const el=e.target.closest('[data-remove-category-image]');if(el){const s=state.draft.sections.find(s=>s.id===selected);delete s.categoryImages[el.dataset.removeCategoryImage];changed();}});
 document.addEventListener('click',e=>{const block=e.target.closest('#live-store [data-layout-section]');if(block&&view==='design'&&!e.target.closest('button,a,input,select,textarea,summary')){e.preventDefault();e.stopImmediatePropagation();selected=block.dataset.layoutSection;if(window.MThemeOpenInspector)window.MThemeOpenInspector();else render();}},true);
 document.addEventListener('input',e=>{
