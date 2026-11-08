@@ -35,7 +35,7 @@ sectionSettings=function(s){
  return html;
 };
 const sectionLibraryDescriptions={
- hero:'بنر كبير بصورة ونص وزر',imageBanner:'صورة فقط قابلة للنقر',banners:'سلايدر لعدة بنرات',
+ hero:'بنر كبير بصورة ونص وزر',imageBanner:'صورة فقط قابلة للنقر',imagePair:'صورتان مربعتان 1200×1200، لكل صورة تصنيف عند النقر',banners:'سلايدر لعدة بنرات',
  products:'مجموعة منتجات مختارة أو تلقائية',catalog:'كتالوج كامل مع البحث والفلاتر',categories:'تصنيفات مصورة',
  text:'عنوان ووصف تعريفي',image:'صورة مع محتوى',cta:'دعوة واضحة مع زر',
  benefits:'مزايا وخدمات على شكل بطاقات',steps:'خطوات مرتبة بالتسلسل',faq:'أسئلة وأجوبة قابلة للفتح',
@@ -43,7 +43,7 @@ const sectionLibraryDescriptions={
 };
 const sectionLibraryGroups=()=>themePage==='product'
  ?[['products','المنتجات',['related','recommended']],['content','المحتوى',['text','image','cta']],['layout','التنسيق',['divider','spacer']]]
- :[['banner','البنرات',['hero','imageBanner','banners']],['products','المنتجات',['products','catalog']],['categories','التصنيفات',['categories']],['content','المحتوى',['text','image','cta']],['elements','العناصر',['benefits','steps','faq']],['layout','التنسيق',['divider','spacer']]];
+ :[['banner','البنرات',['hero','imageBanner','imagePair','banners']],['products','المنتجات',['products','catalog']],['categories','التصنيفات',['categories']],['content','المحتوى',['text','image','cta']],['elements','العناصر',['benefits','steps','faq']],['layout','التنسيق',['divider','spacer']]];
 function openSectionLibraryGroup(key){
  const group=sectionLibraryGroups().find(([id])=>id===key);if(!group)return;
  const [,label,list]=group;
