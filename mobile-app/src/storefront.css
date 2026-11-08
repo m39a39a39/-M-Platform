@@ -203,3 +203,11 @@ body.app-modal-open .sf-product-page .sf-buy-bar{display:none!important}
 .published-storefront .sf-layout-block .sf-all-products:visited {
   color:inherit;
 }
+
+/* Two independent square category images in the store builder. */
+.sf-square-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--section-gap,12px);width:100%;min-width:0}
+.sf-square-pair-tile{display:block;position:relative;min-width:0;width:100%;aspect-ratio:1/1;overflow:hidden;border-radius:var(--section-radius,16px);background:#f2f5f7;text-decoration:none;color:inherit}
+.sf-square-pair-tile>img{display:block;width:100%;height:100%;aspect-ratio:1/1;object-fit:cover}
+.sf-square-pair a.sf-square-pair-tile:focus-visible{outline:3px solid var(--store-accent,#193d43);outline-offset:3px}
+.sf-square-pair-placeholder{display:grid;place-items:center;border:1px dashed #c8d5d5;color:#64748b;font-size:13px}
+@container(max-width:600px){.sf-square-pair{gap:min(var(--section-gap,12px),12px)}.sf-square-pair-placeholder{font-size:11px}}

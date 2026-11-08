@@ -38,3 +38,11 @@
 @media(max-width:1100px){.theme-workbench.editor{grid-template-columns:minmax(270px,310px) minmax(0,1fr)}.section-repeat-grid{grid-template-columns:1fr}}
 @media(max-width:900px){.theme-workbench.editor{display:flex;flex-direction:column}.theme-sidebar{width:100%}.theme-workbench .preview-frame{order:2}.section-library-hubs{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.section-library-hubs,.section-library-step .section-library{grid-template-columns:1fr}.section-repeat-grid{grid-template-columns:1fr}.theme-workbench .sections-panel .panel-body{display:block;overflow:visible}.theme-workbench .section-item{min-width:0;margin-bottom:8px}}
+
+/* Focused controls for the two-square-image section. */
+.image-pair-editor-slot{padding:14px 12px;margin-bottom:14px;border:1px solid var(--line);border-radius:12px;min-width:0}
+.image-pair-editor-slot>strong{display:block;margin-bottom:6px}
+.image-pair-editor-slot .help{font-size:11px;line-height:1.65;margin:0 0 12px}
+.image-pair-editor-slot input[type=file]{width:100%;min-width:0;max-width:100%;font-size:12px}
+.image-pair-editor-preview{display:block;width:min(100%,180px);aspect-ratio:1/1;object-fit:cover;border-radius:10px;margin:10px 0}
+.image-pair-editor-slot>button{margin:0 0 12px}
