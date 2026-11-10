@@ -57,7 +57,8 @@ test('custom sourcing CTA offers independent title and description sizes for des
  const html=editor().sectionSettings({id:'sourcing',type:'cta',buttonTarget:'request'});
  for(const [key,label] of [
   ['titleSize','حجم العنوان — الكمبيوتر'],['subtitleSize','حجم الوصف — الكمبيوتر'],
-  ['mobileTitleSize','حجم العنوان — الجوال'],['mobileSubtitleSize','حجم الوصف — الجوال']
+  ['mobileTitleSize','حجم العنوان — الجوال'],['mobileSubtitleSize','حجم الوصف — الجوال'],
+  ['buttonTextSize','حجم نص الزر — الكمبيوتر'],['mobileButtonTextSize','حجم نص الزر — الجوال']
  ]){
   assert.match(html,new RegExp('data-section-field="'+key+'"'));
   assert.ok(html.includes(label),label);

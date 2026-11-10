@@ -214,7 +214,9 @@ body.app-modal-open .sf-product-page .sf-buy-bar{display:none!important}
 
 /* Adjustable typography for the shared sourcing call-to-action only. */
 .sf-cta-block .sf-text-section>p{font-size:var(--section-subtitle)}
+.sf-cta-block .sf-text-section>.sf-primary{font-size:var(--section-button-text)}
 @container(max-width:600px){
  .sf-cta-block .sf-text-section>h2{font-size:var(--section-title-mobile)}
  .sf-cta-block .sf-text-section>p{font-size:var(--section-subtitle-mobile)}
+ .sf-cta-block .sf-text-section>.sf-primary{font-size:var(--section-button-text-mobile)}
 }

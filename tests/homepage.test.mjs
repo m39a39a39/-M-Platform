@@ -111,21 +111,21 @@ test('homepage product section shows ten matching products and View all targets 
 
 test('CTA text size controls survive normalization and render consistently on home and listings',async()=>{
  const store=defaultStore(),cta=store.sections.find(s=>s.type==='cta');
- Object.assign(cta,{titleSize:38,subtitleSize:19,mobileTitleSize:24,mobileSubtitleSize:15});
+ Object.assign(cta,{titleSize:38,subtitleSize:19,mobileTitleSize:24,mobileSubtitleSize:15,buttonTextSize:17,mobileButtonTextSize:14});
  const saved=normalizeStore(store),section=saved.sections.find(s=>s.type==='cta');
- assert.deepEqual([section.titleSize,section.subtitleSize,section.mobileTitleSize,section.mobileSubtitleSize],[38,19,24,15]);
+ assert.deepEqual([section.titleSize,section.subtitleSize,section.mobileTitleSize,section.mobileSubtitleSize,section.buttonTextSize,section.mobileButtonTextSize],[38,19,24,15,17,14]);
  const state={settings:{storefront:saved,categories:[],subcategories:[]},publicOffers:products};
  for(const html of [renderStorefront(state,'web',{language:'ar',route:{}}),renderStoreRoute(state,{page:'products'},{language:'ar'})]){
   assert.match(html,/sf-cta-block/);
-  for(const variable of ['--section-title:38px','--section-subtitle:19px','--section-title-mobile:24px','--section-subtitle-mobile:15px'])
+  for(const variable of ['--section-title:38px','--section-subtitle:19px','--section-title-mobile:24px','--section-subtitle-mobile:15px','--section-button-text:17px','--section-button-text-mobile:14px'])
    assert.ok(html.includes(variable),variable);
  }
  const css=await readFile(new URL('../mobile-app/src/storefront.css',import.meta.url),'utf8');
  assert.match(css,/sf-cta-block \.sf-text-section>h2\{font-size:var\(--section-title-mobile\)\}/);
  assert.match(css,/sf-cta-block \.sf-text-section>p\{font-size:var\(--section-subtitle-mobile\)\}/);
  const legacy=normalizeSectionLayout({type:'cta',titleSize:48});
- assert.equal(legacy.mobileTitleSize,30);assert.equal(legacy.subtitleSize,16);assert.equal(legacy.mobileSubtitleSize,16);
- for(const key of ['subtitleSize','mobileTitleSize','mobileSubtitleSize']){
+ assert.equal(legacy.mobileTitleSize,30);assert.equal(legacy.subtitleSize,16);assert.equal(legacy.mobileSubtitleSize,16);assert.equal(legacy.buttonTextSize,16);assert.equal(legacy.mobileButtonTextSize,16);
+ for(const key of ['subtitleSize','mobileTitleSize','mobileSubtitleSize','buttonTextSize','mobileButtonTextSize']){
   assert.throws(()=>normalizeSectionLayout({type:'cta',[key]:999}));
  }
 });
