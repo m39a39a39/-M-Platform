@@ -5,7 +5,8 @@ import {defaultStore,selectSectionProducts} from '../shared/storefront-model.mjs
 import {normalizeStore} from '../backend/modules/studio.mjs';
 import {upgradeStore} from '../backend/modules/storefront-upgrade.mjs';
 import {homepageOfferPlan} from '../backend/modules/records.mjs';
-import {renderStorefront} from '../mobile-app/src/storefront.js';
+import {renderStorefront,renderStoreRoute} from '../mobile-app/src/storefront.js';
+import {normalizeSectionLayout} from '../shared/section-layout.mjs';
 const products=[{id:'a',status:'published',categoryId:'c',createdAt:'2026-01-01',translation:{titleAr:'منتج',titleEn:'Product'},unitPrice:4},{id:'b',status:'published',categoryId:'d',createdAt:'2026-02-01',translation:{titleAr:'آخر',titleEn:'Other'},unitPrice:5},{id:'secret',status:'review'}];
 test('section removal persists without reintroducing builtins, including an empty homepage',()=>{
  const input={...defaultStore(),sections:[]},output=normalizeStore(input);assert.deepEqual(output.sections.filter(s=>s.page==='home'),[]);assert.deepEqual(upgradeStore(output).sections,output.sections);
@@ -106,4 +107,25 @@ test('homepage product section shows ten matching products and View all targets 
  const manual=renderStorefront(state,'web',{language:'ar'});
  assert.match(manual,/class="sf-all-products" data-store-browse="power"/);
  assert.equal((manual.match(/class="sf-product"/g)||[]).length,2);
+});
+
+test('CTA text size controls survive normalization and render consistently on home and listings',async()=>{
+ const store=defaultStore(),cta=store.sections.find(s=>s.type==='cta');
+ Object.assign(cta,{titleSize:38,subtitleSize:19,mobileTitleSize:24,mobileSubtitleSize:15});
+ const saved=normalizeStore(store),section=saved.sections.find(s=>s.type==='cta');
+ assert.deepEqual([section.titleSize,section.subtitleSize,section.mobileTitleSize,section.mobileSubtitleSize],[38,19,24,15]);
+ const state={settings:{storefront:saved,categories:[],subcategories:[]},publicOffers:products};
+ for(const html of [renderStorefront(state,'web',{language:'ar',route:{}}),renderStoreRoute(state,{page:'products'},{language:'ar'})]){
+  assert.match(html,/sf-cta-block/);
+  for(const variable of ['--section-title:38px','--section-subtitle:19px','--section-title-mobile:24px','--section-subtitle-mobile:15px'])
+   assert.ok(html.includes(variable),variable);
+ }
+ const css=await readFile(new URL('../mobile-app/src/storefront.css',import.meta.url),'utf8');
+ assert.match(css,/sf-cta-block \.sf-text-section>h2\{font-size:var\(--section-title-mobile\)\}/);
+ assert.match(css,/sf-cta-block \.sf-text-section>p\{font-size:var\(--section-subtitle-mobile\)\}/);
+ const legacy=normalizeSectionLayout({type:'cta',titleSize:48});
+ assert.equal(legacy.mobileTitleSize,30);assert.equal(legacy.subtitleSize,16);assert.equal(legacy.mobileSubtitleSize,16);
+ for(const key of ['subtitleSize','mobileTitleSize','mobileSubtitleSize']){
+  assert.throws(()=>normalizeSectionLayout({type:'cta',[key]:999}));
+ }
 });

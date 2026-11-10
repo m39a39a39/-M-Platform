@@ -52,3 +52,16 @@ test('two-square-image editor offers two independent uploads and category select
  assert.doesNotMatch(html,/data-section-field="title"|data-section-field="button"/);
  c.addSection();assert.match(c.dialog,/data-type="imagePair"/);
 });
+
+test('custom sourcing CTA offers independent title and description sizes for desktop and mobile',()=>{
+ const html=editor().sectionSettings({id:'sourcing',type:'cta',buttonTarget:'request'});
+ for(const [key,label] of [
+  ['titleSize','حجم العنوان — الكمبيوتر'],['subtitleSize','حجم الوصف — الكمبيوتر'],
+  ['mobileTitleSize','حجم العنوان — الجوال'],['mobileSubtitleSize','حجم الوصف — الجوال']
+ ]){
+  assert.match(html,new RegExp('data-section-field="'+key+'"'));
+  assert.ok(html.includes(label),label);
+ }
+ assert.match(html,/أحجام النص — الكمبيوتر والجوال/);
+ assert.doesNotMatch(editor().sectionSettings({id:'banner',type:'hero'}),/data-section-field="mobileTitleSize"/);
+});

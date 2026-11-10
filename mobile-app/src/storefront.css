@@ -211,3 +211,10 @@ body.app-modal-open .sf-product-page .sf-buy-bar{display:none!important}
 .sf-square-pair a.sf-square-pair-tile:focus-visible{outline:3px solid var(--store-accent,#193d43);outline-offset:3px}
 .sf-square-pair-placeholder{display:grid;place-items:center;border:1px dashed #c8d5d5;color:#64748b;font-size:13px}
 @container(max-width:600px){.sf-square-pair{gap:min(var(--section-gap,12px),12px)}.sf-square-pair-placeholder{font-size:11px}}
+
+/* Adjustable typography for the shared sourcing call-to-action only. */
+.sf-cta-block .sf-text-section>p{font-size:var(--section-subtitle)}
+@container(max-width:600px){
+ .sf-cta-block .sf-text-section>h2{font-size:var(--section-title-mobile)}
+ .sf-cta-block .sf-text-section>p{font-size:var(--section-subtitle-mobile)}
+}
