@@ -108,6 +108,14 @@ export function renderCatalog(state,options={},filters={}){
  const rows=catalogProducts(state.publicOffers||[],f,state.settings),pages=Math.max(1,Math.ceil(rows.length/c.pageSize)),page=Math.max(1,Math.min(Number(f.page)||1,pages)),shown=rows.slice((page-1)*c.pageSize,page*c.pageSize),label=r=>r[en?'nameEn':'nameAr']||r.nameAr||r.id;
  return `<div class="sf-catalog-results">${c.showSort?`<label class="sf-catalog-sort">${en?'Sort by':'ترتيب حسب'} <select data-catalog-filter="sort" aria-label="${en?'Sort by':'ترتيب حسب'}">${[['newest',en?'Newest first':'الأحدث أولًا'],['name',en?'Name: A–Z':'الاسم: أبجديًا']].map(([value,label])=>`<option value="${value}" ${f.sort===value?'selected':''}>${label}</option>`).join('')}</select></label>`:''}${c.showCount?`<p role="status">${rows.length} ${en?'products':'منتج'}</p>`:''}<div class="sf-products">${shown.map(p=>storeProductCard(p,c,options.money,en?'en':'ar')).join('')||`<p>${en?'No matching products.':'لا توجد منتجات مطابقة.'}</p>`}</div>${pages>1?`<nav class="product-pagination">${c.showPagination?`<button data-catalog-page="${page-1}" ${page===1?'disabled':''}>${en?'Previous':'السابق'}</button><span>${page} / ${pages}</span><button data-catalog-page="${page+1}" ${page===pages?'disabled':''}>${en?'Next':'التالي'}</button>`:`${page<pages?`<button data-catalog-page="${page+1}">${en?'Next products':'المنتجات التالية'}</button>`:''}${page>1?`<button data-catalog-page="${page-1}">${en?'Previous products':'المنتجات السابقة'}</button>`:''}`}</nav>`:''}</div>`;
 }
+// Reuse the configured home sourcing section on product-listing routes only.
+function renderHomeSourcingOnListing(state,options={}){
+ const store=state.settings?.storefront||defaultStore(),channel=options.channel||'web';
+ const request=sectionsForPage(store,'home').find(s=>s.visible&&s.buttonTarget==='request'&&['cta','text','hero','image'].includes(s.type)&&(!s.channel||s.channel==='both'||s.channel===channel));
+ if(!request)return '';
+ const scoped={...state,settings:{...state.settings,storefront:{...store,sections:[{...request,page:'home'}]}}};
+ return `<div data-store-sourcing-cta style="margin-top:32px">${renderStorefront(scoped,channel,{...options,route:{},designPage:'home',chrome:false})}</div>`;
+}
 export function renderStoreRoute(state,route,options={}){
  const lang=options.language||document.documentElement.lang,en=lang==='en',config=ensureThemePages(state.settings?.storefront||defaultStore()),accent=/^#[0-9a-f]{6}$/i.test(config.theme?.color)?config.theme.color:'#0b2236';let content='',page=route.product?'product':route.category?'category':'search';
  const categories=[...(state.settings.categories||[]),...(state.settings.subcategories||[])],category=categories.find(c=>c.id===route.category&&c.active!==false&&(!c.parentId||state.settings.categories?.some(p=>p.id===c.parentId&&p.active!==false))),product=(state.publicOffers||[]).find(p=>p.id===route.product&&p.status==='published'&&!p.deletedAt&&!p.studioArchived);
@@ -126,6 +134,7 @@ export function renderStoreRoute(state,route,options={}){
    if(!html&&!['categoryNav','productCategories','catalog',...Object.keys(PRODUCT_BLOCKS)].includes(s.type))html=renderStorefront({...state,settings:{...state.settings,storefront:{...config,sections:[s]}}},'web',{...options,route:{},designPage:page,chrome:false});
    return html?`<section class="sf-template-block sf-layout-${s.layout||'grid'} sf-block-${s.type} ${s.desktopVisible===false?'sf-hide-desktop':''} ${s.mobileVisible===false?'sf-hide-mobile':''}" data-layout-section="${esc(s.id)}" style="--section-columns:${Number(s.columns)||3};--section-mobile-columns:${Number(s.mobileColumns)||2};--section-gap:${Number(s.gap)||16}px;padding:${Number(s.padding)||0}px">${html}</section>`:'';
   }).join('');
+  if(!sectionsForPage(config,page).some(s=>s.visible&&s.buttonTarget==='request'))content+=renderHomeSourcingOnListing(state,options);
  }else{const p=config.pages?.find(p=>p.id===route.page&&p.active);content=p?`<h1>${esc(p[en?'titleEn':'title']||p.title)}</h1><div class="sf-policy-content">${esc(p[en?'contentEn':'content']||p.content)}</div>`:`<h1>${en?'Page unavailable':'الصفحة غير متاحة'}</h1>`;}
  return `<div class="published-storefront" lang="${lang}" dir="${en?'ltr':'rtl'}" style="--store-accent:${accent}">${options.chrome===false?'':renderStoreHeader(state,options)}<main class="sf-route ${product?'sf-product-page':''}" ${product?`data-detail-product="${esc(product.id)}"`:''}>${content}</main>${options.chrome===false?'':renderStoreFooter(state,options)}</div>`;
 }

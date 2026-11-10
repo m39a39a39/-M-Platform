@@ -22,3 +22,21 @@ test('page catalogs keep independent settings and channel visibility; footer tit
  assert.match(html,/Our products/);assert.doesNotMatch(html,/Hidden link/);
 });
 
+
+test('the existing sourcing CTA appears below product listings without affecting product details',()=>{
+ const state=fixture(),request=state.settings.storefront.sections.find(s=>s.id==='request');
+ request.showButton=true;request.buttonTarget='request';request.button='اطلب توريدًا خاصًا';request.buttonEn='Request sourcing';
+ for(const route of [{page:'products'},{category:'electronics'},{page:'search',q:'headphones'}]){
+  const html=renderStoreRoute(state,route,{language:'ar'});
+  const listing=html.indexOf('data-store-catalog-slot'),cta=html.indexOf('data-store-sourcing-cta'),footer=html.indexOf('<footer');
+  assert.ok(listing>=0&&cta>listing&&footer>cta,'sourcing CTA must follow catalog and precede footer');
+  assert.equal((html.match(/data-store-sourcing-cta/g)||[]).length,1);
+  assert.match(html,/data-store-action="request"/);
+  assert.match(html,/اطلب توريدًا خاصًا/);
+ }
+ const en=renderStoreRoute(state,{page:'products'},{language:'en'});
+ assert.match(en,/Request sourcing/);
+ assert.doesNotMatch(renderStoreRoute(state,{product:'one'},{language:'en'}),/data-store-sourcing-cta/);
+ request.visible=false;
+ assert.doesNotMatch(renderStoreRoute(state,{page:'products'},{language:'ar'}),/data-store-sourcing-cta/);
+});
