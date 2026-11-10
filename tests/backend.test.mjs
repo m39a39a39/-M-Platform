@@ -2,7 +2,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {can,isNativeClient} from '../backend/modules/auth.mjs';
-import {anonymous,ownRecord,supplierInterest} from '../backend/modules/records.mjs';
+import {anonymous,ownRecord,supplierInterest,publicSettingsForView} from '../backend/modules/records.mjs';
+import {defaultStore} from '../shared/storefront-model.mjs';
 import {validateContent,normalizeCategories,normalizeSubcategories,normalizeSupplyCountries,TRACKING_STATUSES,READY_TRACKING_STATUSES,requiresRedaction,allowedAdminTrackingTransition,TRACKING_FLOW,READY_TRACKING_FLOW,cartTermsMatch} from '../backend/modules/mutations.mjs';
 import {decodeImage,decodePaymentReceipt} from '../backend/modules/media.mjs';
 import {notificationPayload} from '../backend/modules/notifications.mjs';
@@ -204,4 +205,19 @@ test('final invoice snapshot is marked PAID',()=>{
  assert.equal(invoice.status,'PAID');
  assert.equal(invoice.number,'INV-2026-10001');
  assert.equal(invoice.total,100);
+});
+
+test('public listing state includes only the existing visible home sourcing CTA',()=>{
+ const store=defaultStore();
+ const home={storefront:store};
+ for(const route of [{pageId:'products'},{pageId:'search',q:'cable'},{category:'electronics'}]){
+  const sections=publicSettingsForView(home,route).storefront.sections;
+  assert.ok(sections.some(s=>s.id==='request'&&s.buttonTarget==='request'));
+  assert.ok(sections.some(s=>s.id==='footer'));
+  assert.ok(!sections.some(s=>s.id==='welcome'),'unrelated homepage hero should remain excluded');
+ }
+ const details=publicSettingsForView(home,{productId:'one'}).storefront.sections;
+ assert.ok(!details.some(s=>s.id==='request'),'product detail routes are unchanged');
+ store.sections.find(s=>s.id==='request').visible=false;
+ assert.ok(!publicSettingsForView(home,{pageId:'products'}).storefront.sections.some(s=>s.id==='request'));
 });

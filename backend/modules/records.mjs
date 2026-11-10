@@ -40,13 +40,14 @@ function publicSectionForView(section={}){
   if(!['hero','image','products'].includes(type)){delete next.showAllProducts;delete next.showImage;}
   return compactPublicValue(next)||{id:section.id,type};
 }
-function publicSettingsForView(data={},route={}){
+export function publicSettingsForView(data={},route={}){
   const {pageId='',productId='',category='',q='',aiPolicies=false,aiKnowledge=false}=route,safe=publicSettings(upgradeSettings(data),{includeKnowledge:aiKnowledge});
   if(safe.storefront){
     const routePage=aiPolicies?'':productId?'product':category?'category':(q||['products','search'].includes(pageId))?'search':pageId?'':'home';
     const sections=(safe.storefront.sections||[]).filter(section=>{
       const page=section.page||(['header','footer'].includes(section.type)?'global':'home');
-      return page==='global'||(aiKnowledge&&section.visible!==false)||(routePage&&page===routePage);
+      const homeSourcingOnListing=(routePage==='search'||routePage==='category')&&page==='home'&&section.visible&&section.buttonTarget==='request'&&['cta','text','hero','image'].includes(section.type);
+      return page==='global'||(aiKnowledge&&section.visible!==false)||(routePage&&page===routePage)||homeSourcingOnListing;
     }).map(publicSectionForView);
     safe.storefront={...safe.storefront,
       pages:(safe.storefront.pages||[]).map(page=>{
