@@ -13,6 +13,12 @@
     data.sections.forEach(s=>{if(s.type==='products'){s.collectionId??='';s.limit??=6}});
     return data;
   }
+  // Store-design saves should not resend the whole product catalog or media library.
+  // Only changed products are submitted separately by the Studio save endpoint.
+  function storeDocument(draft){
+    const {products:_products,media:_media,...settings}=draft;
+    return settings;
+  }
   function unitPrice(product,quantity){
     if(product.pricingMode==='rfq'||product.price==null||product.price===''||!Number.isInteger(quantity)||quantity<product.moq)return null;
     let price=Number(product.price);
@@ -47,6 +53,6 @@
     }
     return result;
   }
-  const api={normalize,unitPrice,validatePricing,differences};
+  const api={normalize,unitPrice,validatePricing,differences,storeDocument};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.StoreRules=api;
 })(typeof window==='undefined'?globalThis:window);

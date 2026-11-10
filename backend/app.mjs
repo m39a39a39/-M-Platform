@@ -48,9 +48,9 @@ const setNativeCors=(req,res,isV1)=>{
 };
 
 export async function readBody(req,maxBytes=1800000){
-  const size=Number(req.headers['content-length']||0);assert(size<=maxBytes,413);
-  if(req.body!==undefined){const data=typeof req.body==='string'?JSON.parse(req.body):req.body;assert(Buffer.byteLength(JSON.stringify(data))<=maxBytes,413);return data;}
-  let text='';for await(const chunk of req){text+=chunk;assert(Buffer.byteLength(text)<=maxBytes,413);}
+  const size=Number(req.headers['content-length']||0);assert(size<=maxBytes,413,'حجم البيانات المرسلة يتجاوز الحد المسموح / Request payload too large');
+  if(req.body!==undefined){const data=typeof req.body==='string'?JSON.parse(req.body):req.body;assert(Buffer.byteLength(JSON.stringify(data))<=maxBytes,413,'حجم البيانات المرسلة يتجاوز الحد المسموح / Request payload too large');return data;}
+  let text='';for await(const chunk of req){text+=chunk;assert(Buffer.byteLength(text)<=maxBytes,413,'حجم البيانات المرسلة يتجاوز الحد المسموح / Request payload too large');}
   try{return text?JSON.parse(text):{};}catch{throw new HttpError(400,'Invalid JSON');}
 }
 
